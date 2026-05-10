@@ -102,10 +102,10 @@ function LoginPage() {
           </p>
         </div>
 
-        <p className="text-center text-xs text-muted-foreground mt-4">
+        {/* <p className="text-center text-xs text-muted-foreground mt-4">
           Demo: <code className="bg-muted px-1 rounded">mrvu</code> /{" "}
           <code className="bg-muted px-1 rounded">Mrvu@1102</code>
-        </p>
+        </p> */}
       </div>
     </div>
   );
