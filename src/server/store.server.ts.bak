@@ -1,0 +1,118 @@
+import type {
+  Branch, Category, Product, Stock, StockMovement,
+  Customer, Employee, Order, OrderItem, ActivityLog, User,
+} from "../lib/types";
+
+type DB = {
+  branches: Branch[];
+  categories: Category[];
+  products: Product[];
+  stock: Stock[];
+  movements: StockMovement[];
+  customers: Customer[];
+  employees: Employee[];
+  orders: Order[];
+  order_items: OrderItem[];
+  logs: ActivityLog[];
+  users: (User & { password: string })[];
+};
+
+const now = () => new Date().toISOString();
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+function seed(): DB {
+  const b1: Branch = { id: "b1", name: "Cửa hàng chính", address: "123 Lý Thường Kiệt, Q.10, TP.HCM", phone: "0909000001", created_at: now() };
+  const b2: Branch = { id: "b2", name: "Chi nhánh Hà Nội", address: "55 Trường Chinh, Đống Đa, HN", phone: "0909000002", created_at: now() };
+
+  const cats: Category[] = [
+    { id: "c1", name: "Quạt trần cánh gỗ" },
+    { id: "c2", name: "Quạt trần đèn LED" },
+    { id: "c3", name: "Quạt trần công nghiệp" },
+    { id: "c4", name: "Linh kiện & phụ kiện" },
+  ];
+
+  const products: Product[] = [
+    { id: "p1", sku: "QT-MIT-001", name: "Quạt trần Mitsubishi C56-RA5", category_id: "c1", brand: "Mitsubishi", power: "75W", color: "Nâu gỗ", blade_size: '56"', cost_price: 2200000, sale_price: 2890000, min_stock: 5, created_at: now() },
+    { id: "p2", sku: "QT-PAN-002", name: "Quạt trần đèn Panasonic F-60TDN", category_id: "c2", brand: "Panasonic", power: "65W", color: "Trắng", blade_size: '60"', cost_price: 3100000, sale_price: 4150000, min_stock: 4, created_at: now() },
+    { id: "p3", sku: "QT-KDK-003", name: "Quạt trần KDK K15Y0", category_id: "c1", brand: "KDK", power: "82W", color: "Đen", blade_size: '60"', cost_price: 2700000, sale_price: 3490000, min_stock: 6, created_at: now() },
+    { id: "p4", sku: "QT-CN-004", name: "Quạt trần công nghiệp HVLS 12ft", category_id: "c3", brand: "MaxAir", power: "550W", color: "Xám", blade_size: '144"', cost_price: 18500000, sale_price: 24900000, min_stock: 2, created_at: now() },
+    { id: "p5", sku: "PK-RM-001", name: "Remote điều khiển quạt trần", category_id: "c4", brand: "Universal", power: "-", color: "Trắng", blade_size: "-", cost_price: 120000, sale_price: 220000, min_stock: 20, created_at: now() },
+  ];
+
+  const stock: Stock[] = [
+    { product_id: "p1", branch_id: "b1", qty: 12 },
+    { product_id: "p1", branch_id: "b2", qty: 4 },
+    { product_id: "p2", branch_id: "b1", qty: 3 },
+    { product_id: "p3", branch_id: "b1", qty: 10 },
+    { product_id: "p4", branch_id: "b1", qty: 1 },
+    { product_id: "p5", branch_id: "b1", qty: 35 },
+    { product_id: "p5", branch_id: "b2", qty: 18 },
+  ];
+
+  const customers: Customer[] = [
+    { id: "k1", name: "Anh Tuấn (khách lẻ)", phone: "0912345678", address: "Q.3, TP.HCM", group_name: "le", debt: 0, created_at: now() },
+    { id: "k2", name: "Đại lý Minh Phát", phone: "0987111222", address: "Bình Dương", group_name: "dai_ly", debt: 5400000, created_at: now() },
+    { id: "k3", name: "Công trình Sunrise Tower", phone: "0933555666", address: "Q.7, TP.HCM", group_name: "cong_trinh", debt: 12500000, created_at: now() },
+    { id: "k4", name: "Chị Hoa (VIP)", phone: "0901222333", address: "Q.1, TP.HCM", group_name: "vip", debt: 0, created_at: now() },
+  ];
+
+  const employees: Employee[] = [
+    { id: "e1", name: "Nguyễn Văn A", phone: "0900000001", role: "admin", branch_id: "b1", created_at: now() },
+    { id: "e2", name: "Trần Thị B", phone: "0900000002", role: "cashier", branch_id: "b1", created_at: now() },
+    { id: "e3", name: "Lê Văn C", phone: "0900000003", role: "warehouse", branch_id: "b1", created_at: now() },
+    { id: "e4", name: "Phạm D", phone: "0900000004", role: "manager", branch_id: "b2", created_at: now() },
+  ];
+
+  const o1: Order = {
+    id: "o1", code: "HD000001", customer_id: "k2", branch_id: "b1", employee_id: "e2",
+    status: "completed", subtotal: 5780000, discount: 280000, total: 5500000,
+    deposit: 0, paid: 5500000, note: "Giao tận đại lý", created_at: now(),
+  };
+
+  // ── USERS (thêm mới) ──────────────────────────────────────
+  const users: (User & { password: string })[] = [
+    {
+      id: "u1", full_name: "Mr. Vũ (Admin)", username: "mrvu",
+      password: "Mrvu@1102",   // plain text cho demo — production dùng bcrypt
+      phone: "0900000000", role: "admin", branch_id: undefined,
+      created_at: now(),
+    },
+    {
+      id: "u2", full_name: "Nhân viên B1", username: "nhanvien_b1",
+      password: "123456",
+      phone: "0900000011", role: "cashier", branch_id: "b1",
+      created_at: now(),
+    },
+    {
+      id: "u3", full_name: "Nhân viên B2", username: "nhanvien_b2",
+      password: "123456",
+      phone: "0900000022", role: "warehouse", branch_id: "b2",
+      created_at: now(),
+    },
+  ];
+
+  return {
+    branches: [b1, b2],
+    categories: cats,
+    products,
+    stock,
+    movements: [
+      { id: uid(), type: "in", product_id: "p1", to_branch: "b1", qty: 16, unit_cost: 2200000, note: "Nhập từ NCC Mitsubishi", created_at: now() },
+      { id: uid(), type: "out", product_id: "p1", from_branch: "b1", qty: 2, note: "Bán lẻ HD000001", created_at: now() },
+    ],
+    customers,
+    employees,
+    orders: [o1],
+    order_items: [
+      { id: uid(), order_id: "o1", product_id: "p1", qty: 2, unit_price: 2890000, discount: 280000, total: 5500000 },
+    ],
+    logs: [
+      { id: uid(), employee_id: "e2", action: "create_order", detail: "HD000001", created_at: now() },
+    ],
+    users,
+  };
+}
+
+const g = globalThis as unknown as { __qtdb?: DB };
+export const db: DB = g.__qtdb ?? (g.__qtdb = seed());
+export const helpers = { uid, now };
