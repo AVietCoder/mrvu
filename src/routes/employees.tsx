@@ -1,224 +1,470 @@
-
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { listEmployees, upsertEmployee, deleteEmployee } from "@/lib/staff.functions";
+import {
+  listUsersFn, registerFn, deleteUserFn,
+  updateUserPermsFn, getFormOptionsFn,
+} from "@/lib/auth.functions";
+import { useAuth } from "@/context/AuthContext";
 import { AppShell, Card } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader,
+  DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Plus, Trash2, ShieldCheck, ShieldOff,
+  Building2, Users, ChevronRight,
+} from "lucide-react";
 import { toast } from "sonner";
+import { ALL_PERMISSIONS, type Permission } from "@/lib/types";
 
 export const Route = createFileRoute("/employees")({
   head: () => ({ meta: [{ title: "Nhân viên — QuatTran POS" }] }),
   component: Page,
 });
 
-const roleLabel: Record<string, string> = {
-  admin: "Quản trị",
-  manager: "Quản lý CH",
-  cashier: "Thu ngân",
-  warehouse: "Nhân viên kho",
-};
-
-type Form = {
-  id?: string;
-  name: string;
-  phone: string;
-  role: "admin" | "manager" | "cashier" | "warehouse";
-  branch_id: string;
-};
-
-const empty: Form = {
-  name: "",
-  phone: "",
-  role: "cashier",
-  branch_id: "",
-};
-
 function Page() {
-  const list = useServerFn(listEmployees);
-  const upsert = useServerFn(upsertEmployee);
-  const del = useServerFn(deleteEmployee);
+  const { user: me, isAdmin } = useAuth();
+  const listUsers = useServerFn(listUsersFn);
+  const doRegister = useServerFn(registerFn);
+  const doDelete = useServerFn(deleteUserFn);
+  const doUpdatePerms = useServerFn(updateUserPermsFn);
+  const getOptions = useServerFn(getFormOptionsFn);
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ["employees"], queryFn: () => list() });
 
-  const [form, setForm] = useState<Form>(empty);
-  const [open, setOpen] = useState(false);
+  const { data: users } = useQuery({ queryKey: ["users"], queryFn: () => listUsers() });
+  const { data: opts } = useQuery({ queryKey: ["form-options"], queryFn: () => getOptions() });
 
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("name");
-  const [filterRole, setFilterRole] = useState("");
-  const [filterBranch, setFilterBranch] = useState("");
 
-  const filteredEmployees = useMemo(() => {
-    const employees = data?.employees ?? [];
+  // ── Dialog thêm nhân viên ──────────────────────────────────
+  const [addOpen, setAddOpen] = useState(false);
+  const [addLoading, setAddLoading] = useState(false);
+  const [addForm, setAddForm] = useState({
+    full_name: "", phone: "", username: "", password: "123456",
+    branch_ids: [] as string[],
+  });
 
-    return employees
-      .filter((e) => {
-        const branchName = data?.branches.find((b) => b.id === e.branch_id)?.name ?? "";
-        const q = search.toLowerCase();
+  // ── Dialog cấp quyền (có thể chọn nhiều user) ─────────────
+  const [permOpen, setPermOpen] = useState(false);
+  const [permLoading, setPermLoading] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [grantPerms, setGrantPerms] = useState<Permission[]>([]);
+  const [grantBranches, setGrantBranches] = useState<string[]>([]);
 
-        const matchSearch =
-          e.name.toLowerCase().includes(q) ||
-          (e.phone ?? "").includes(q) ||
-          branchName.toLowerCase().includes(q);
-
-        const matchRole = !filterRole || e.role === filterRole;
-        const matchBranch = !filterBranch || e.branch_id === filterBranch;
-
-        return matchSearch && matchRole && matchBranch;
-      })
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return (users ?? [])
+      .filter((u) => !u.is_admin) // admin không hiển thị ở đây
+      .filter((u) =>
+        u.full_name.toLowerCase().includes(q) ||
+        u.username.toLowerCase().includes(q)
+      )
       .sort((a, b) => {
-        if (sortBy === "role") return a.role.localeCompare(b.role);
-        return a.name.localeCompare(b.name);
+        if (sortBy === "name") return a.full_name.localeCompare(b.full_name);
+        if (sortBy === "perm") return b.permissions.length - a.permissions.length;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
-  }, [data, search, sortBy, filterRole, filterBranch]);
+  }, [users, search, sortBy]);
 
-  async function save() {
+  // Toggle branch trong form thêm nhân viên
+  function toggleAddBranch(bid: string) {
+    setAddForm((f) => ({
+      ...f,
+      branch_ids: f.branch_ids.includes(bid)
+        ? f.branch_ids.filter((x) => x !== bid)
+        : [...f.branch_ids, bid],
+    }));
+  }
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!addForm.full_name || !addForm.username || !addForm.password)
+      return toast.error("Vui lòng điền đủ thông tin");
+    setAddLoading(true);
     try {
-      await upsert({
+      await doRegister({ data: addForm });
+      toast.success("Đã tạo tài khoản nhân viên");
+      setAddOpen(false);
+      setAddForm({ full_name: "", phone: "", username: "", password: "123456", branch_ids: [] });
+      qc.invalidateQueries({ queryKey: ["users"] });
+    } catch (err: any) {
+      toast.error(err?.message ?? "Lỗi");
+    } finally {
+      setAddLoading(false);
+    }
+  }
+
+  // Mở dialog cấp quyền (1 hoặc nhiều user)
+  function openPermDialog(userIds: string[]) {
+    setSelectedUsers(userIds);
+    // Nếu chỉ 1 user → load quyền hiện tại của họ
+    if (userIds.length === 1) {
+      const u = users?.find((x) => x.id === userIds[0]);
+      setGrantPerms(u?.permissions ?? []);
+      setGrantBranches(u?.branch_ids ?? []);
+    } else {
+      setGrantPerms([]);
+      setGrantBranches([]);
+    }
+    setPermOpen(true);
+  }
+
+  function togglePerm(p: Permission) {
+    setGrantPerms((prev) =>
+      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
+    );
+  }
+
+  function toggleBranch(bid: string) {
+    setGrantBranches((prev) =>
+      prev.includes(bid) ? prev.filter((x) => x !== bid) : [...prev, bid]
+    );
+  }
+
+  async function handleSavePerms() {
+    setPermLoading(true);
+    try {
+      await doUpdatePerms({
         data: {
-          id: form.id,
-          name: form.name.trim(),
-          phone: form.phone || undefined,
-          role: form.role,
-          branch_id: form.branch_id || undefined,
+          user_ids: selectedUsers,
+          permissions: grantPerms,
+          branch_ids: grantBranches,
         },
       });
-
-      toast.success("Đã lưu");
-      setOpen(false);
-      qc.invalidateQueries({ queryKey: ["employees"] });
-    } catch (e: any) {
-      toast.error(e?.message ?? "Lỗi");
+      toast.success(
+        selectedUsers.length > 1
+          ? `Đã cập nhật quyền cho ${selectedUsers.length} nhân viên`
+          : "Đã cập nhật quyền"
+      );
+      setPermOpen(false);
+      qc.invalidateQueries({ queryKey: ["users"] });
+    } catch (err: any) {
+      toast.error(err?.message ?? "Lỗi");
+    } finally {
+      setPermLoading(false);
     }
+  }
+
+  async function handleDelete(id: string, name: string) {
+    if (!confirm(`Xóa tài khoản "${name}"? Hành động này không thể hoàn tác.`)) return;
+    try {
+      await doDelete({ data: { id } });
+      toast.success("Đã xóa tài khoản");
+      qc.invalidateQueries({ queryKey: ["users"] });
+    } catch (err: any) {
+      toast.error(err?.message ?? "Lỗi");
+    }
+  }
+
+  // Chọn tất cả để cấp quyền hàng loạt
+  const [bulkSelect, setBulkSelect] = useState<string[]>([]);
+  function toggleBulk(id: string) {
+    setBulkSelect((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
   }
 
   return (
     <AppShell title="Quản lý nhân viên">
-      <Card className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm text-muted-foreground">
-            {filteredEmployees.length} nhân viên
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+        <Card>
+          <div className="text-xs text-muted-foreground uppercase">Tổng nhân viên</div>
+          <div className="text-2xl font-semibold mt-1">{filtered.length}</div>
+        </Card>
+        <Card>
+          <div className="text-xs text-muted-foreground uppercase">Đã cấp quyền</div>
+          <div className="text-2xl font-semibold mt-1">
+            {filtered.filter((u) => u.permissions.length > 0).length}
           </div>
+        </Card>
+        <Card>
+          <div className="text-xs text-muted-foreground uppercase">Chưa cấp quyền</div>
+          <div className="text-2xl font-semibold mt-1">
+            {filtered.filter((u) => u.permissions.length === 0).length}
+          </div>
+        </Card>
+      </div>
 
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => setForm(empty)}>
-                <Plus className="h-4 w-4 mr-1" />
-                Thêm nhân viên
-              </Button>
-            </DialogTrigger>
-          </Dialog>
+      <Card>
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <div className="font-medium flex items-center gap-2 flex-1">
+            <Users className="h-4 w-4" /> Danh sách nhân viên
+          </div>
+          {/* Cấp quyền hàng loạt */}
+          {bulkSelect.length > 0 && (
+            <Button
+              size="sm" variant="secondary"
+              onClick={() => openPermDialog(bulkSelect)}
+            >
+              <ShieldCheck className="h-4 w-4 mr-1" />
+              Cấp quyền cho {bulkSelect.length} người
+            </Button>
+          )}
+          {isAdmin && (
+            <Button size="sm" onClick={() => setAddOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Thêm nhân viên
+            </Button>
+          )}
         </div>
 
         <SearchFilter
-          search={search}
-          onSearch={setSearch}
-          placeholder="Tìm tên, SĐT, chi nhánh..."
+          search={search} onSearch={setSearch}
+          placeholder="Tìm tên, username..."
           sortOptions={[
             { value: "name", label: "Tên A→Z" },
-            { value: "role", label: "Vai trò" },
+            { value: "perm", label: "Nhiều quyền nhất" },
+            { value: "date", label: "Mới nhất" },
           ]}
-          sortValue={sortBy}
-          onSort={setSortBy}
-          filterSlot={
-            <div className="flex gap-2">
-              <select
-                className="h-9 rounded-md border bg-background px-2 text-sm"
-                value={filterRole}
-                onChange={(e) => setFilterRole(e.target.value)}
-              >
-                <option value="">Tất cả vai trò</option>
-                {Object.entries(roleLabel).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-
-              <select
-                className="h-9 rounded-md border bg-background px-2 text-sm"
-                value={filterBranch}
-                onChange={(e) => setFilterBranch(e.target.value)}
-              >
-                <option value="">Tất cả chi nhánh</option>
-                {data?.branches.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
-          }
-          total={filteredEmployees.length}
-          totalLabel="nhân viên"
+          sortValue={sortBy} onSort={setSortBy}
+          total={filtered.length} totalLabel="nhân viên"
         />
 
-        <table className="w-full text-sm">
-          <thead className="text-left text-muted-foreground border-b">
-            <tr>
-              <th className="py-2">Tên</th>
-              <th>SĐT</th>
-              <th>Vai trò</th>
-              <th>Chi nhánh</th>
-              <th></th>
-            </tr>
-          </thead>
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-muted-foreground border-b">
+              <tr>
+                {isAdmin && <th className="py-2 pr-3 w-8">
+                  <input type="checkbox"
+                    checked={bulkSelect.length === filtered.length && filtered.length > 0}
+                    onChange={(e) => setBulkSelect(e.target.checked ? filtered.map((u) => u.id) : [])}
+                  />
+                </th>}
+                <th className="py-2 pr-3">Họ tên</th>
+                <th className="pr-3">Username</th>
+                <th className="pr-3">SĐT</th>
+                <th className="pr-3">Chi nhánh</th>
+                <th className="pr-3">Quyền được cấp</th>
+                {isAdmin && <th className="text-right">Thao tác</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((u) => {
+                const branchNames = u.branch_ids.length === 0
+                  ? "Tất cả chi nhánh"
+                  : u.branch_ids
+                      .map((bid) => opts?.branches.find((b: any) => b.id === bid)?.name ?? bid)
+                      .join(", ");
 
-          <tbody>
-            {filteredEmployees.map((e) => {
-              const br = data?.branches.find((b) => b.id === e.branch_id)?.name ?? "—";
-
-              return (
-                <tr key={e.id} className="border-b last:border-0">
-                  <td className="py-2 font-medium">{e.name}</td>
-                  <td>{e.phone}</td>
-                  <td>
-                    <span className="rounded px-2 py-0.5 text-xs bg-secondary">
-                      {roleLabel[e.role]}
-                    </span>
-                  </td>
-                  <td>{br}</td>
-                  <td className="text-right">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => {
-                        setForm({
-                          id: e.id,
-                          name: e.name,
-                          phone: e.phone ?? "",
-                          role: e.role,
-                          branch_id: e.branch_id ?? "",
-                        });
-
-                        setOpen(true);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={async () => {
-                        if (confirm("Xóa?")) {
-                          await del({ data: { id: e.id } });
-                          qc.invalidateQueries({ queryKey: ["employees"] });
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                return (
+                  <tr key={u.id} className="border-b last:border-0 hover:bg-muted/30">
+                    {isAdmin && (
+                      <td className="py-2 pr-3">
+                        <input type="checkbox"
+                          checked={bulkSelect.includes(u.id)}
+                          onChange={() => toggleBulk(u.id)}
+                        />
+                      </td>
+                    )}
+                    <td className="py-2 pr-3 font-medium">{u.full_name}</td>
+                    <td className="pr-3 font-mono text-xs">{u.username}</td>
+                    <td className="pr-3 text-muted-foreground">{u.phone ?? "—"}</td>
+                    <td className="pr-3 text-xs text-muted-foreground max-w-[140px] truncate">
+                      <span className="flex items-center gap-1">
+                        <Building2 className="h-3 w-3 shrink-0" /> {branchNames}
+                      </span>
+                    </td>
+                    <td className="pr-3">
+                      {u.permissions.length === 0 ? (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <ShieldOff className="h-3 w-3" /> Chỉ xem cơ bản
+                        </span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {u.permissions.slice(0, 3).map((p) => {
+                            const def = ALL_PERMISSIONS.find((x) => x.key === p);
+                            return (
+                              <span key={p} className="text-xs bg-primary/10 text-primary rounded-full px-2 py-0.5">
+                                {def?.label ?? p}
+                              </span>
+                            );
+                          })}
+                          {u.permissions.length > 3 && (
+                            <span className="text-xs bg-muted text-muted-foreground rounded-full px-2 py-0.5">
+                              +{u.permissions.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    {isAdmin && (
+                      <td className="text-right">
+                        <Button
+                          size="sm" variant="outline"
+                          className="mr-1"
+                          onClick={() => openPermDialog([u.id])}
+                        >
+                          <ShieldCheck className="h-3 w-3 mr-1" /> Cấp quyền
+                        </Button>
+                        <Button
+                          size="icon" variant="ghost"
+                          onClick={() => handleDelete(u.id, u.full_name)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                    Chưa có nhân viên nào
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
+
+      {/* ── Dialog thêm nhân viên ─────────────────────────────── */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Thêm nhân viên mới</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAdd} className="space-y-3">
+            <div>
+              <Label>Họ và tên *</Label>
+              <Input className="mt-1" placeholder="Nguyễn Văn A"
+                value={addForm.full_name}
+                onChange={(e) => setAddForm({ ...addForm, full_name: e.target.value })} />
+            </div>
+            <div>
+              <Label>Số điện thoại</Label>
+              <Input className="mt-1" placeholder="0901234567"
+                value={addForm.phone}
+                onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })} />
+            </div>
+            <div>
+              <Label>Username *</Label>
+              <Input className="mt-1" placeholder="username_nhanvien"
+                value={addForm.username}
+                onChange={(e) => setAddForm({ ...addForm, username: e.target.value })} />
+            </div>
+            <div>
+              <Label>Mật khẩu mặc định</Label>
+              <Input className="mt-1"
+                value={addForm.password}
+                onChange={(e) => setAddForm({ ...addForm, password: e.target.value })} />
+            </div>
+            <div>
+              <Label>Chi nhánh hoạt động</Label>
+              <div className="mt-1 space-y-1 border rounded-md p-2">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input type="checkbox"
+                    checked={addForm.branch_ids.length === 0}
+                    onChange={() => setAddForm({ ...addForm, branch_ids: [] })}
+                  />
+                  <span className="font-medium">Tất cả chi nhánh (mặc định)</span>
+                </label>
+                <hr className="border-border" />
+                {opts?.branches.map((b: any) => (
+                  <label key={b.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox"
+                      checked={addForm.branch_ids.includes(b.id)}
+                      onChange={() => toggleAddBranch(b.id)}
+                    />
+                    {b.name}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Bỏ chọn tất cả = nhân viên hoạt động ở mọi chi nhánh
+              </p>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Hủy</Button>
+              <Button type="submit" disabled={addLoading}>
+                {addLoading ? "Đang tạo..." : "Tạo tài khoản"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog cấp quyền ─────────────────────────────────── */}
+      <Dialog open={permOpen} onOpenChange={setPermOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              {selectedUsers.length > 1
+                ? `Cấp quyền cho ${selectedUsers.length} nhân viên`
+                : `Cấp quyền — ${users?.find((u) => u.id === selectedUsers[0])?.full_name}`}
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedUsers.length > 1 && (
+            <div className="text-xs text-muted-foreground bg-muted/50 rounded-md p-2 mb-2">
+              ⚠️ Quyền bạn chọn sẽ <strong>thay thế hoàn toàn</strong> quyền hiện tại của tất cả nhân viên được chọn.
+            </div>
+          )}
+
+          {/* Quyền */}
+          <div>
+            <div className="text-sm font-medium mb-2">Quyền thực hiện</div>
+            <div className="space-y-2">
+              {ALL_PERMISSIONS.filter((p) => p.key !== "manage_users").map((p) => (
+                <label key={p.key}
+                  className="flex items-start gap-3 p-2 rounded-md border cursor-pointer hover:bg-muted/40 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={grantPerms.includes(p.key)}
+                    onChange={() => togglePerm(p.key)}
+                  />
+                  <div>
+                    <div className="text-sm font-medium">{p.label}</div>
+                    <div className="text-xs text-muted-foreground">{p.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Chi nhánh */}
+          <div className="mt-4">
+            <div className="text-sm font-medium mb-2 flex items-center gap-1">
+              <Building2 className="h-4 w-4" /> Chi nhánh hoạt động
+            </div>
+            <div className="space-y-1 border rounded-md p-2">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox"
+                  checked={grantBranches.length === 0}
+                  onChange={() => setGrantBranches([])}
+                />
+                <span className="font-medium">Tất cả chi nhánh</span>
+              </label>
+              <hr />
+              {opts?.branches.map((b: any) => (
+                <label key={b.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input type="checkbox"
+                    checked={grantBranches.includes(b.id)}
+                    onChange={() => toggleBranch(b.id)}
+                  />
+                  {b.name}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPermOpen(false)}>Hủy</Button>
+            <Button onClick={handleSavePerms} disabled={permLoading}>
+              {permLoading ? "Đang lưu..." : "Lưu quyền"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
