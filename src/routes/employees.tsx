@@ -391,80 +391,248 @@ function Page() {
       </Dialog>
 
       {/* ── Dialog cấp quyền ─────────────────────────────────── */}
-      <Dialog open={permOpen} onOpenChange={setPermOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-primary" />
-              {selectedUsers.length > 1
-                ? `Cấp quyền cho ${selectedUsers.length} nhân viên`
-                : `Cấp quyền — ${users?.find((u) => u.id === selectedUsers[0])?.full_name}`}
-            </DialogTitle>
-          </DialogHeader>
+<Dialog open={permOpen} onOpenChange={setPermOpen}>
+  <DialogContent
+    className="
+      w-[95vw]
+      max-w-3xl
+      max-h-[90vh]
+      p-0
+      overflow-hidden
+      rounded-2xl
+    "
+  >
+    <div className="flex flex-col max-h-[90vh]">
 
-          {selectedUsers.length > 1 && (
-            <div className="text-xs text-muted-foreground bg-muted/50 rounded-md p-2 mb-2">
-              ⚠️ Quyền bạn chọn sẽ <strong>thay thế hoàn toàn</strong> quyền hiện tại của tất cả nhân viên được chọn.
+      {/* Header */}
+      <DialogHeader className="px-6 py-4 border-b bg-background sticky top-0 z-10">
+        <DialogTitle className="flex items-center gap-2 text-lg">
+          <ShieldCheck className="h-5 w-5 text-primary" />
+
+          {selectedUsers.length > 1
+            ? `Cấp quyền cho ${selectedUsers.length} nhân viên`
+            : `Cấp quyền — ${
+                users?.find((u) => u.id === selectedUsers[0])?.full_name
+              }`}
+        </DialogTitle>
+
+        <p className="text-sm text-muted-foreground mt-1">
+          Quản lý quyền thao tác và chi nhánh hoạt động của nhân viên.
+        </p>
+      </DialogHeader>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
+        {/* Warning */}
+        {selectedUsers.length > 1 && (
+          <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-3 text-sm">
+            <div className="font-medium text-yellow-700 dark:text-yellow-400">
+              ⚠️ Cập nhật hàng loạt
             </div>
-          )}
 
-          {/* Quyền */}
-          <div>
-            <div className="text-sm font-medium mb-2">Quyền thực hiện</div>
-            <div className="space-y-2">
-              {ALL_PERMISSIONS.filter((p) => p.key !== "manage_users").map((p) => (
-                <label key={p.key}
-                  className="flex items-start gap-3 p-2 rounded-md border cursor-pointer hover:bg-muted/40 transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={grantPerms.includes(p.key)}
-                    onChange={() => togglePerm(p.key)}
-                  />
-                  <div>
-                    <div className="text-sm font-medium">{p.label}</div>
-                    <div className="text-xs text-muted-foreground">{p.desc}</div>
-                  </div>
-                </label>
-              ))}
+            <div className="text-muted-foreground mt-1">
+              Quyền bạn chọn sẽ thay thế hoàn toàn quyền hiện tại
+              của tất cả nhân viên được chọn.
+            </div>
+          </div>
+        )}
+
+        {/* Permissions */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            <div className="font-medium">
+              Quyền thực hiện
             </div>
           </div>
 
-          {/* Chi nhánh */}
-          <div className="mt-4">
-            <div className="text-sm font-medium mb-2 flex items-center gap-1">
-              <Building2 className="h-4 w-4" /> Chi nhánh hoạt động
-            </div>
-            <div className="space-y-1 border rounded-md p-2">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input type="checkbox"
-                  checked={grantBranches.length === 0}
-                  onChange={() => setGrantBranches([])}
-                />
-                <span className="font-medium">Tất cả chi nhánh</span>
-              </label>
-              <hr />
-              {opts?.branches.map((b: any) => (
-                <label key={b.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="checkbox"
-                    checked={grantBranches.includes(b.id)}
-                    onChange={() => toggleBranch(b.id)}
-                  />
-                  {b.name}
-                </label>
-              ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+            {ALL_PERMISSIONS
+              .filter(
+                (p) =>
+                  p.key !== "manage_users" &&
+                  p.key !== "view_reports"
+              )
+              .map((p) => {
+
+                const checked = grantPerms.includes(p.key);
+
+                return (
+                  <label
+                    key={p.key}
+                    className={`
+                      group
+                      relative
+                      flex gap-3
+                      rounded-xl
+                      border
+                      p-4
+                      cursor-pointer
+                      transition-all
+                      hover:border-primary/40
+                      hover:bg-muted/40
+                      hover:shadow-sm
+                      ${checked
+                        ? "border-primary bg-primary/5"
+                        : "border-border"
+                      }
+                    `}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 shrink-0"
+                      checked={checked}
+                      onChange={() => togglePerm(p.key)}
+                    />
+
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium">
+                        {p.label}
+                      </div>
+
+                      <div className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                        {p.desc}
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+          </div>
+        </div>
+
+        {/* Branches */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Building2 className="h-4 w-4 text-primary" />
+
+            <div className="font-medium">
+              Chi nhánh hoạt động
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPermOpen(false)}>Hủy</Button>
-            <Button onClick={handleSavePerms} disabled={permLoading}>
-              {permLoading ? "Đang lưu..." : "Lưu quyền"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <div className="rounded-xl border bg-muted/20 p-4 space-y-2">
+
+            {/* All branches */}
+            <label
+              className="
+                flex items-center gap-3
+                rounded-lg
+                border
+                bg-background
+                px-3 py-2
+                cursor-pointer
+                hover:bg-muted/40
+                transition-colors
+              "
+            >
+              <input
+                type="checkbox"
+                checked={grantBranches.length === 0}
+                onChange={() => setGrantBranches([])}
+              />
+
+              <div>
+                <div className="text-sm font-medium">
+                  Tất cả chi nhánh
+                </div>
+
+                <div className="text-xs text-muted-foreground">
+                  Nhân viên có thể hoạt động ở mọi chi nhánh
+                </div>
+              </div>
+            </label>
+
+            {/* Branch list */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2">
+
+              {opts?.branches.map((b: any) => {
+
+                const checked = grantBranches.includes(b.id);
+
+                return (
+                  <label
+                    key={b.id}
+                    className={`
+                      flex items-center gap-3
+                      rounded-lg
+                      border
+                      px-3 py-2
+                      cursor-pointer
+                      transition-all
+                      hover:bg-muted/40
+                      ${checked
+                        ? "border-primary bg-primary/5"
+                        : "bg-background"
+                      }
+                    `}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleBranch(b.id)}
+                    />
+
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">
+                        {b.name}
+                      </div>
+
+                      {b.address && (
+                        <div className="text-xs text-muted-foreground truncate">
+                          {b.address}
+                        </div>
+                      )}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <DialogFooter
+        className="
+          border-t
+          bg-background
+          px-6 py-4
+          sticky bottom-0
+          flex-row
+          justify-between
+        "
+      >
+        <div className="text-xs text-muted-foreground hidden md:block">
+          {grantPerms.length} quyền •{" "}
+          {grantBranches.length === 0
+            ? "Tất cả chi nhánh"
+            : `${grantBranches.length} chi nhánh`}
+        </div>
+
+        <div className="flex gap-2 ml-auto">
+          <Button
+            variant="outline"
+            onClick={() => setPermOpen(false)}
+          >
+            Hủy
+          </Button>
+
+          <Button
+            onClick={handleSavePerms}
+            disabled={permLoading}
+            className="min-w-[120px]"
+          >
+            {permLoading
+              ? "Đang lưu..."
+              : "Lưu quyền"}
+          </Button>
+        </div>
+      </DialogFooter>
+    </div>
+  </DialogContent>
+</Dialog>
     </AppShell>
   );
 }

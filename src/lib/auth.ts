@@ -1,5 +1,5 @@
 // Helpers để lưu/đọc session từ sessionStorage
-import type { AuthSession, User } from "./types";
+import type { AuthSession } from "./types";
 
 const KEY = "qt_session";
 
@@ -20,18 +20,6 @@ export function clearSession() {
   sessionStorage.removeItem(KEY);
 }
 
-// Kiểm tra user có được phép xem branch không
-export function canViewBranch(user: User, branchId: string): boolean {
-  if (user.role === "admin") return true;       // admin xem tất cả
-  if (!user.branch_id) return true;
-  return user.branch_id === branchId;
-}
-
-// Filter data theo branch của user
-export function filterByUserBranch<T extends { branch_id?: string }>(
-  items: T[],
-  user: User
-): T[] {
-  if (user.role === "admin") return items;
-  return items.filter((item) => item.branch_id === user.branch_id);
-}
+// ⚠️ Các helper canViewBranch / filterByUserBranch cũ đã bị XÓA
+// vì dùng field `role` và `branch_id` (số ít) không còn tồn tại trong User.
+// Dùng `hasPermission` và `canViewBranch` mới từ `@/lib/types` thay thế.

@@ -21,10 +21,11 @@ const nav: NavItem[] = [
   { to: "/inventory", label: "Tồn kho",     icon: Boxes },
   { to: "/orders",    label: "Bán hàng",    icon: ShoppingCart,  permission: "create_order" },
   { to: "/customers", label: "Khách hàng",  icon: Users },
-  { to: "/employees", label: "Nhân viên",   icon: UserCog },
-  { to: "/reports",   label: "Báo cáo",     icon: BarChart3,     permission: "view_reports" },
+  { to: "/employees", label: "Nhân viên",   icon: UserCog,       permission: "admin" }, // ✏️ chỉ admin
+  { to: "/reports",   label: "Báo cáo",     icon: BarChart3,     permission: "admin" }, // ✏️ doanh thu = admin-only
   { to: "/branches",  label: "Chi nhánh",   icon: Building2,     permission: "manage_branches" },
 ];
+
 
 export function AppShell({ children, title }: { children: ReactNode; title: string }) {
   const loc = useLocation();

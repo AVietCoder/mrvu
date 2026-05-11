@@ -3,15 +3,16 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { listInventory, createMovement } from "@/lib/inventory.functions";
-import { AppShell, Card, fmt } from "@/components/AppShell";
+import { AppShell, Card } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ArrowDownToLine, ArrowUpFromLine, Repeat, Plus, Trash2, FileText } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Repeat, Plus, Trash2, FileText, ShieldOff } from "lucide-react";
 import { toast } from "sonner";
+import { hasPermission } from "@/lib/types"; // ✏️ FIX 1: import helper
 
 export const Route = createFileRoute("/inventory")({
   head: () => ({ meta: [{ title: "Tồn kho — QuatTran POS" }] }),
@@ -21,17 +22,26 @@ export const Route = createFileRoute("/inventory")({
 type TransferItem = { product_id: string; qty: number };
 
 function Page() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const list = useServerFn(listInventory);
   const move = useServerFn(createMovement);
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["inventory"], queryFn: () => list() });
 
+  // ✏️ FIX 2: derive permissions một lần, dùng nhiều chỗ
+  const canIn       = !!user && (isAdmin || hasPermission(user, "stock_in"));
+  const canOut      = !!user && (isAdmin || hasPermission(user, "stock_out"));
+  const canTransfer = !!user && (isAdmin || hasPermission(user, "stock_transfer"));
+  const canAnyMove  = canIn || canOut || canTransfer;
+
   const [type, setType] = useState<"in" | "out" | "transfer">("in");
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [filterBranch, setFilterBranch] = useState(user?.branch_id ?? "");
+  // ✏️ FIX 3: dùng branch_ids (mảng) thay vì branch_id (cũ, undefined)
+  const [filterBranch, setFilterBranch] = useState(user?.branch_ids?.[0] ?? "");
   const [sortBy, setSortBy] = useState("name");
+  // ✏️ FIX 4: KHAI BÁO stockBy TRƯỚC useMemo bên dưới (đây là nguyên nhân crash TDZ)
+  const [stockBy, setStockBy] = useState("stock_desc");
 
   // Single-product form (in/out)
   const [singleForm, setSingleForm] = useState({ product_id: "", branch: "", qty: "1", unit_cost: "0", note: "" });
@@ -43,6 +53,11 @@ function Page() {
   const [transferItems, setTransferItems] = useState<TransferItem[]>([{ product_id: "", qty: 1 }]);
 
   function startAction(t: "in" | "out" | "transfer") {
+    // ✏️ FIX 5: chặn ngay từ client nếu thiếu quyền
+    if (t === "in" && !canIn) return toast.error("Bạn không có quyền nhập kho");
+    if (t === "out" && !canOut) return toast.error("Bạn không có quyền xuất kho");
+    if (t === "transfer" && !canTransfer) return toast.error("Bạn không có quyền chuyển kho");
+
     setType(t);
     const p0 = data?.products[0]?.id ?? "";
     const b0 = data?.branches[0]?.id ?? "";
@@ -63,6 +78,7 @@ function Page() {
         qty: Number(singleForm.qty),
         unit_cost: Number(singleForm.unit_cost) || undefined,
         note: singleForm.note || undefined,
+        actor_id: user?.id, // ✏️ FIX 6: gửi actor để server validate quyền
       }});
       toast.success("Đã ghi nhận phiếu kho");
       setOpen(false);
@@ -75,7 +91,6 @@ function Page() {
     if (validItems.length === 0) return toast.error("Vui lòng chọn ít nhất 1 sản phẩm");
     if (transferFrom === transferTo) return toast.error("Chi nhánh nguồn và đích không được giống nhau");
     try {
-      // Tạo từng movement cho mỗi sản phẩm
       await Promise.all(validItems.map((item) =>
         move({ data: {
           type: "transfer",
@@ -84,6 +99,7 @@ function Page() {
           to_branch: transferTo,
           qty: item.qty,
           note: transferNote || undefined,
+          actor_id: user?.id,
         }})
       ));
       toast.success(`Đã chuyển ${validItems.length} sản phẩm`);
@@ -92,7 +108,6 @@ function Page() {
     } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
   }
 
-  // Xuất phiếu chuyển kho .docx (plain text fallback)
   function exportTransferDocx() {
     const validItems = transferItems.filter((i) => i.product_id && i.qty > 0);
     const fromName = data?.branches.find((b) => b.id === transferFrom)?.name ?? transferFrom;
@@ -112,8 +127,6 @@ function Page() {
       "",
       "Người lập phiếu: _______________    Người nhận: _______________",
     ].join("\n");
-
-    // Tạo file .txt (để xem nội dung; nếu cần .docx thật cần thêm thư viện docx)
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -124,7 +137,6 @@ function Page() {
     toast.success("Đã xuất phiếu chuyển kho");
   }
 
-  // Filter inventory table
   const products = data?.products ?? [];
   const branches = data?.branches ?? [];
 
@@ -137,27 +149,44 @@ function Page() {
       .sort((a, b) => {
         if (sortBy === "name") return a.name.localeCompare(b.name);
         if (sortBy === "sku") return a.sku.localeCompare(b.sku);
-        // sort by total stock descending
         const stockA = (data?.stock ?? []).filter((s) => s.product_id === a.id).reduce((x, y) => x + y.qty, 0);
         const stockB = (data?.stock ?? []).filter((s) => s.product_id === b.id).reduce((x, y) => x + y.qty, 0);
         return stockBy === "stock_asc" ? stockA - stockB : stockB - stockA;
       });
-  }, [products, search, sortBy, data?.stock]);
+    // stockBy giờ đã được khai báo bên trên ✅
+  }, [products, search, sortBy, stockBy, data?.stock]);
 
-  const [stockBy, setStockBy] = useState("stock_desc");
-
-  // Branch filter for columns
   const visibleBranches = filterBranch
     ? branches.filter((b) => b.id === filterBranch)
     : branches;
 
   return (
     <AppShell title="Quản lý tồn kho">
-      <div className="flex flex-wrap gap-2 mb-4">
-        <Button onClick={() => startAction("in")}><ArrowDownToLine className="h-4 w-4 mr-1" />Nhập kho</Button>
-        <Button variant="secondary" onClick={() => startAction("out")}><ArrowUpFromLine className="h-4 w-4 mr-1" />Xuất kho</Button>
-        <Button variant="outline" onClick={() => startAction("transfer")}><Repeat className="h-4 w-4 mr-1" />Chuyển kho</Button>
-      </div>
+      {/* ✏️ FIX 7: chỉ render nút theo quyền — nhân viên không quyền sẽ thấy hint */}
+      {canAnyMove ? (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {canIn && (
+            <Button onClick={() => startAction("in")}>
+              <ArrowDownToLine className="h-4 w-4 mr-1" />Nhập kho
+            </Button>
+          )}
+          {canOut && (
+            <Button variant="secondary" onClick={() => startAction("out")}>
+              <ArrowUpFromLine className="h-4 w-4 mr-1" />Xuất kho
+            </Button>
+          )}
+          {canTransfer && (
+            <Button variant="outline" onClick={() => startAction("transfer")}>
+              <Repeat className="h-4 w-4 mr-1" />Chuyển kho
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="mb-4 flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          <ShieldOff className="h-4 w-4" />
+          Bạn chỉ có quyền xem tồn kho. Liên hệ quản trị viên để được cấp quyền nhập/xuất/chuyển kho.
+        </div>
+      )}
 
       <Card className="mb-6">
         <div className="font-medium mb-3">Tồn kho theo sản phẩm × chi nhánh</div>
@@ -201,9 +230,6 @@ function Page() {
                   const cells = visibleBranches.map((b) =>
                     data?.stock.find((s) => s.product_id === p.id && s.branch_id === b.id)?.qty ?? 0
                   );
-                  const reserved = (data?.stock ?? [])
-                    .filter((s) => s.product_id === p.id)
-                    .reduce((a, s) => a + 0, 0); // placeholder — reserved từ orders
                   const total = cells.reduce((a, b) => a + b, 0);
                   return (
                     <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30">
@@ -212,7 +238,7 @@ function Page() {
                       {cells.map((c, i) => (
                         <td key={i} className={`text-right pr-3 ${c <= p.min_stock ? "text-destructive font-medium" : ""}`}>{c}</td>
                       ))}
-                      <td className="text-right pr-3 text-muted-foreground">{reserved}</td>
+                      <td className="text-right pr-3 text-muted-foreground">0</td>
                       <td className="text-right font-semibold">{total}</td>
                     </tr>
                   );
@@ -223,7 +249,6 @@ function Page() {
         )}
       </Card>
 
-      {/* Lịch sử */}
       <Card>
         <div className="font-medium mb-3">Lịch sử phiếu kho gần đây</div>
         {data && (
@@ -256,7 +281,7 @@ function Page() {
         )}
       </Card>
 
-      {/* Dialog */}
+      {/* Dialog giữ nguyên — phần JSX bên dưới copy từ bản cũ */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -266,7 +291,6 @@ function Page() {
           </DialogHeader>
 
           {type !== "transfer" ? (
-            /* Single product: in / out */
             <div className="space-y-3">
               <div><Label>Sản phẩm</Label>
                 <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
@@ -287,7 +311,6 @@ function Page() {
               </DialogFooter>
             </div>
           ) : (
-            /* Multi-product transfer */
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div><Label>Từ chi nhánh</Label>
@@ -301,7 +324,6 @@ function Page() {
                     {data?.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select></div>
               </div>
-
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Label>Danh sách sản phẩm</Label>
@@ -332,9 +354,7 @@ function Page() {
                   </div>
                 ))}
               </div>
-
               <div><Label>Ghi chú</Label><Input className="mt-1" value={transferNote} onChange={(e) => setTransferNote(e.target.value)} /></div>
-
               <DialogFooter className="flex-col sm:flex-row gap-2">
                 <Button variant="outline" size="sm" onClick={exportTransferDocx} className="flex items-center gap-1">
                   <FileText className="h-4 w-4" /> Xuất phiếu .txt

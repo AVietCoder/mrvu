@@ -1,3 +1,4 @@
+"use server";
 import { createServerFn } from "@tanstack/react-start";
 import db from "@/server/db.server";
 
@@ -68,12 +69,16 @@ export const getReports = createServerFn({ method: "GET" }).handler(async () => 
   `).all();
 
   // Theo nhân viên
-  const byEmployee = db.prepare(`
-    SELECT e.name, COALESCE(SUM(o.total),0) as revenue
-    FROM employees e
-    LEFT JOIN orders o ON o.employee_id = e.id AND o.status='completed'
-    GROUP BY e.id ORDER BY revenue DESC
-  `).all();
+    const byEmployee = db.prepare(`
+      SELECT u.full_name as name,
+            COALESCE(SUM(o.total),0) as revenue
+      FROM users u
+      LEFT JOIN orders o
+        ON o.employee_id = u.id
+      AND o.status='completed'
+      GROUP BY u.id
+      ORDER BY revenue DESC
+    `).all();
 
   return {
     totalRevenue, totalOrders, totalDebt,
