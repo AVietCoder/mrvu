@@ -1,28 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import db, { uid, now } from "@/server/db.server";
-import type { Permission } from "./types";
 
 function adjustStock(productId: string, branchId: string, delta: number) {
-  const row = db.prepare("SELECT qty FROM stock WHERE product_id=? AND branch_id=?")
-    .get(productId, branchId);
+  const row = db.prepare("SELECT qty FROM stock WHERE product_id=? AND branch_id=?").get(productId, branchId);
   if (row) {
-    db.prepare("UPDATE stock SET qty=qty+? WHERE product_id=? AND branch_id=?")
-      .run(delta, productId, branchId);
+    db.prepare("UPDATE stock SET qty=qty+? WHERE product_id=? AND branch_id=?").run(delta, productId, branchId);
   } else {
-    db.prepare("INSERT INTO stock (product_id,branch_id,qty) VALUES (?,?,?)")
-      .run(productId, branchId, Math.max(0, delta));
+    db.prepare("INSERT INTO stock (product_id,branch_id,qty) VALUES (?,?,?)").run(productId, branchId, Math.max(0, delta));
   }
-}
-
-// ✏️ Helper: kiểm tra actor có quyền không
-function requirePerm(actorId: string | undefined, perm: Permission) {
-  if (!actorId) throw new Error("Chưa đăng nhập");
-  const u = db.prepare("SELECT is_admin FROM users WHERE id=?").get(actorId) as any;
-  if (!u) throw new Error("Tài khoản không tồn tại");
-  if (u.is_admin === 1) return; // admin luôn được
-  const has = db.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission=?")
-    .get(actorId, perm);
-  if (!has) throw new Error("Bạn không có quyền thực hiện thao tác này");
 }
 
 export const listInventory = createServerFn({ method: "GET" }).handler(async () => {
@@ -30,47 +15,90 @@ export const listInventory = createServerFn({ method: "GET" }).handler(async () 
     products: db.prepare("SELECT * FROM products ORDER BY name").all(),
     branches: db.prepare("SELECT * FROM branches ORDER BY name").all(),
     stock: db.prepare("SELECT * FROM stock").all(),
-    movements: db.prepare(
-      "SELECT * FROM stock_movements ORDER BY created_at DESC LIMIT 100"
-    ).all(),
+    movements: db.prepare("SELECT * FROM stock_movements ORDER BY created_at DESC LIMIT 100").all(),
+    transfers: db.prepare("SELECT * FROM stock_transfers ORDER BY created_at DESC").all(),
+    transfer_items: db.prepare("SELECT * FROM stock_transfer_items").all(),
   };
 });
 
+// Nhập / Xuất kho đơn giản (không cần xác nhận)
 export const createMovement = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: {
-    type: "in" | "out" | "transfer";
-    product_id: string;
-    from_branch?: string;
-    to_branch?: string;
-    qty: number;
-    unit_cost?: number;
-    note?: string;
-    actor_id?: string; // ✏️ ai đang thao tác
+    type: "in" | "out";
+    product_id: string; branch_id: string;
+    qty: number; unit_cost?: number; note?: string; created_by?: string;
   }}) => {
-    // ✏️ Check quyền server-side
-    if (data.type === "in")       requirePerm(data.actor_id, "stock_in");
-    if (data.type === "out")      requirePerm(data.actor_id, "stock_out");
-    if (data.type === "transfer") requirePerm(data.actor_id, "stock_transfer");
-
-    if (data.type === "in" && data.to_branch) {
-      adjustStock(data.product_id, data.to_branch, data.qty);
-    } else if (data.type === "out" && data.from_branch) {
-      adjustStock(data.product_id, data.from_branch, -data.qty);
-    } else if (data.type === "transfer" && data.from_branch && data.to_branch) {
-      adjustStock(data.product_id, data.from_branch, -data.qty);
-      adjustStock(data.product_id, data.to_branch, data.qty);
-    } else {
-      throw new Error("Thiếu thông tin chi nhánh");
-    }
-
+    const delta = data.type === "in" ? data.qty : -data.qty;
+    adjustStock(data.product_id, data.branch_id, delta);
     db.prepare(`INSERT INTO stock_movements
       (id,type,product_id,from_branch,to_branch,qty,unit_cost,note,created_at,created_by)
       VALUES (?,?,?,?,?,?,?,?,?,?)`)
-      .run(
-        uid(), data.type, data.product_id,
-        data.from_branch || null, data.to_branch || null,
-        data.qty, data.unit_cost || 0, data.note || null, now(),
-        data.actor_id || null
-      );
+      .run(uid(), data.type, data.product_id,
+        data.type === "out" ? data.branch_id : null,
+        data.type === "in"  ? data.branch_id : null,
+        data.qty, data.unit_cost || 0, data.note || null, now(), data.created_by || null);
+    return { ok: true };
+  });
+
+// Tạo phiếu chuyển kho (kho gửi trừ ngay, kho nhận chờ xác nhận)
+export const createTransfer = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: {
+    from_branch: string; to_branch: string;
+    items: { product_id: string; qty: number }[];
+    note?: string; created_by?: string;
+  }}) => {
+    if (data.from_branch === data.to_branch) throw new Error("Chi nhánh nguồn và đích không được giống nhau");
+    const tid = uid();
+    const t = db.transaction(() => {
+      db.prepare(`INSERT INTO stock_transfers (id,from_branch,to_branch,status,note,created_by,created_at)
+        VALUES (?,?,?,'pending',?,?,?)`)
+        .run(tid, data.from_branch, data.to_branch, data.note || null, data.created_by || null, now());
+      for (const item of data.items) {
+        db.prepare("INSERT INTO stock_transfer_items (id,transfer_id,product_id,qty) VALUES (?,?,?,?)")
+          .run(uid(), tid, item.product_id, item.qty);
+        // Trừ kho gửi ngay
+        adjustStock(item.product_id, data.from_branch, -item.qty);
+        // Ghi movement
+        db.prepare(`INSERT INTO stock_movements (id,type,product_id,from_branch,to_branch,qty,note,created_at,created_by) VALUES (?,?,?,?,?,?,?,?,?)`)
+          .run(uid(), "transfer", item.product_id, data.from_branch, data.to_branch, item.qty, `Phiếu chuyển kho ${tid}`, now(), data.created_by || null);
+      }
+    });
+    t();
+    return { id: tid };
+  });
+
+// Chi nhánh nhận bấm xác nhận → kho nhận tăng lên
+export const confirmTransfer = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: { transfer_id: string }}) => {
+    const transfer = db.prepare("SELECT * FROM stock_transfers WHERE id=?").get(data.transfer_id) as any;
+    if (!transfer) throw new Error("Không tìm thấy phiếu chuyển kho");
+    if (transfer.status !== "pending") throw new Error("Phiếu này đã được xử lý");
+
+    const items = db.prepare("SELECT * FROM stock_transfer_items WHERE transfer_id=?").all(data.transfer_id) as any[];
+    const t = db.transaction(() => {
+      for (const item of items) {
+        adjustStock(item.product_id, transfer.to_branch, item.qty);
+      }
+      db.prepare("UPDATE stock_transfers SET status='confirmed', confirmed_at=? WHERE id=?")
+        .run(now(), data.transfer_id);
+    });
+    t();
+    return { ok: true };
+  });
+
+export const cancelTransfer = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: { transfer_id: string }}) => {
+    const transfer = db.prepare("SELECT * FROM stock_transfers WHERE id=?").get(data.transfer_id) as any;
+    if (!transfer || transfer.status !== "pending") throw new Error("Không thể hủy phiếu này");
+
+    const items = db.prepare("SELECT * FROM stock_transfer_items WHERE transfer_id=?").all(data.transfer_id) as any[];
+    const t = db.transaction(() => {
+      // Hoàn lại kho gửi
+      for (const item of items) {
+        adjustStock(item.product_id, transfer.from_branch, item.qty);
+      }
+      db.prepare("UPDATE stock_transfers SET status='cancelled' WHERE id=?").run(data.transfer_id);
+    });
+    t();
     return { ok: true };
   });
