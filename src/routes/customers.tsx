@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, TrendingDown } from "lucide-react";
+import { Plus, Pencil, Trash2, TrendingDown, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/customers")({
@@ -26,8 +26,32 @@ const groupColor: Record<string, string> = {
   vip: "bg-yellow-100 text-yellow-700", cong_trinh: "bg-purple-100 text-purple-700",
 };
 
-type FormState = { id?: string; name: string; phone: string; address: string; group_name: string; debt: string };
-const empty: FormState = { name: "", phone: "", address: "", group_name: "le", debt: "0" };
+// Danh sách tỉnh/thành phố Việt Nam
+const PROVINCES = [
+  "An Giang","Bà Rịa - Vũng Tàu","Bắc Giang","Bắc Kạn","Bạc Liêu","Bắc Ninh",
+  "Bến Tre","Bình Định","Bình Dương","Bình Phước","Bình Thuận","Cà Mau",
+  "Cần Thơ","Cao Bằng","Đà Nẵng","Đắk Lắk","Đắk Nông","Điện Biên","Đồng Nai",
+  "Đồng Tháp","Gia Lai","Hà Giang","Hà Nam","Hà Nội","Hà Tĩnh","Hải Dương",
+  "Hải Phòng","Hậu Giang","Hòa Bình","Hưng Yên","Khánh Hòa","Kiên Giang",
+  "Kon Tum","Lai Châu","Lâm Đồng","Lạng Sơn","Lào Cai","Long An","Nam Định",
+  "Nghệ An","Ninh Bình","Ninh Thuận","Phú Thọ","Phú Yên","Quảng Bình",
+  "Quảng Nam","Quảng Ngãi","Quảng Ninh","Quảng Trị","Sóc Trăng","Sơn La",
+  "Tây Ninh","Thái Bình","Thái Nguyên","Thanh Hóa","Thừa Thiên Huế",
+  "Tiền Giang","TP. Hồ Chí Minh","Trà Vinh","Tuyên Quang","Vĩnh Long",
+  "Vĩnh Phúc","Yên Bái",
+];
+
+type FormState = {
+  id?: string; name: string; phone: string;
+  province: string; district: string; ward: string; address: string;
+  group_name: string; debt: string;
+};
+const empty: FormState = {
+  name: "", phone: "", province: "", district: "", ward: "", address: "",
+  group_name: "le", debt: "0",
+};
+
+type ViewCustomer = { id: string } | null;
 
 function CustomersPage() {
   const { user } = useAuth();
@@ -39,12 +63,14 @@ function CustomersPage() {
   const { data, isLoading } = useQuery({ queryKey: ["customers"], queryFn: () => list() });
   const [form, setForm] = useState<FormState>(empty);
   const [open, setOpen] = useState(false);
+  const [viewId, setViewId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("name");
   const [filterGroup, setFilterGroup] = useState("");
   const [filterDebt, setFilterDebt] = useState("all");
 
   const customers = data?.customers ?? [];
+  const orders = data?.orders ?? [];
 
   const filtered = useMemo(() => {
     return customers
@@ -68,7 +94,12 @@ function CustomersPage() {
 
   function startEdit(id: string) {
     const c = customers.find((x) => x.id === id)!;
-    setForm({ id: c.id, name: c.name, phone: c.phone ?? "", address: c.address ?? "", group_name: c.group_name, debt: String(c.debt) });
+    setForm({
+      id: c.id, name: c.name, phone: c.phone ?? "",
+      province: c.province ?? "", district: c.district ?? "",
+      ward: c.ward ?? "", address: c.address ?? "",
+      group_name: c.group_name, debt: String(c.debt),
+    });
     setOpen(true);
   }
 
@@ -76,7 +107,7 @@ function CustomersPage() {
     e.preventDefault();
     try {
       await upsert({ data: { ...form, debt: Number(form.debt) || 0 } });
-      toast.success(form.id ? "Đã cập nhật" : "Đã thêm khách hàng");
+      toast.success(form.id ? "Đã cập nhật khách hàng thành công!" : "Đã thêm khách hàng thành công!");
       setOpen(false); setForm(empty);
       qc.invalidateQueries({ queryKey: ["customers"] });
     } catch (err: any) { toast.error(err?.message ?? "Lỗi"); }
@@ -90,6 +121,14 @@ function CustomersPage() {
       qc.invalidateQueries({ queryKey: ["customers"] });
     } catch (err: any) { toast.error(err?.message ?? "Lỗi"); }
   }
+
+  // Thông tin khách đang xem
+  const viewCustomer = viewId ? customers.find((c) => c.id === viewId) : null;
+  const customerOrders = viewId
+    ? orders.filter((o) => o.customer_id === viewId)
+    : [];
+  const completedOrders = customerOrders.filter((o) => o.status === "completed");
+  const pendingOrders = customerOrders.filter((o) => o.status !== "completed" && o.status !== "cancelled");
 
   return (
     <AppShell title="Khách hàng">
@@ -145,7 +184,7 @@ function CustomersPage() {
               <tr>
                 <th className="py-2 pr-3">Tên khách hàng</th>
                 <th className="pr-3">SĐT</th>
-                <th className="pr-3">Địa chỉ</th>
+                <th className="pr-3">Tỉnh/Thành phố</th>
                 <th className="pr-3">Nhóm</th>
                 <th className="text-right pr-3">Công nợ</th>
                 <th className="text-right">Thao tác</th>
@@ -156,7 +195,7 @@ function CustomersPage() {
                 <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30">
                   <td className="py-2 pr-3 font-medium">{c.name}</td>
                   <td className="pr-3 text-muted-foreground">{c.phone ?? "—"}</td>
-                  <td className="pr-3 text-muted-foreground text-xs max-w-[150px] truncate">{c.address ?? "—"}</td>
+                  <td className="pr-3 text-muted-foreground text-xs max-w-[150px] truncate">{c.province ?? c.address ?? "—"}</td>
                   <td className="pr-3">
                     <span className={`text-xs rounded-full px-2 py-0.5 ${groupColor[c.group_name]}`}>
                       {groupLabel[c.group_name]}
@@ -166,6 +205,7 @@ function CustomersPage() {
                     {c.debt > 0 ? fmt(c.debt) : "—"}
                   </td>
                   <td className="text-right">
+                    <button className="p-1 hover:text-blue-600" title="Xem chi tiết" onClick={() => setViewId(c.id)}><Eye className="h-4 w-4" /></button>
                     <button className="p-1 hover:text-primary" onClick={() => startEdit(c.id)}><Pencil className="h-4 w-4" /></button>
                     <button className="p-1 hover:text-destructive" onClick={() => handleDelete(c.id, c.name)}><Trash2 className="h-4 w-4" /></button>
                   </td>
@@ -179,13 +219,39 @@ function CustomersPage() {
         </div>
       </Card>
 
+      {/* Dialog thêm/sửa khách hàng */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{form.id ? "Sửa khách hàng" : "Thêm khách hàng"}</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-3">
-            <div><Label>Tên *</Label><Input className="mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+            <div><Label>Tên *</Label><Input className="mt-1" value={form.name} required onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
             <div><Label>Điện thoại</Label><Input className="mt-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-            <div><Label>Địa chỉ</Label><Input className="mt-1" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+
+            {/* Địa chỉ — 3 cấp */}
+            <div>
+              <Label>Tỉnh / Thành phố</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={form.province}
+                onChange={(e) => setForm({ ...form, province: e.target.value, district: "", ward: "" })}
+              >
+                <option value="">— Chọn tỉnh/thành phố —</option>
+                {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label>Quận / Huyện</Label>
+              <Input className="mt-1" placeholder="Nhập quận/huyện" value={form.district} onChange={(e) => setForm({ ...form, district: e.target.value })} />
+            </div>
+            <div>
+              <Label>Phường / Xã</Label>
+              <Input className="mt-1" placeholder="Nhập phường/xã" value={form.ward} onChange={(e) => setForm({ ...form, ward: e.target.value })} />
+            </div>
+            <div>
+              <Label>Địa chỉ chi tiết</Label>
+              <Input className="mt-1" placeholder="Số nhà, tên đường..." value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+            </div>
+
             <div><Label>Nhóm</Label>
               <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                 value={form.group_name} onChange={(e) => setForm({ ...form, group_name: e.target.value })}>
@@ -198,6 +264,88 @@ function CustomersPage() {
               <Button type="submit">Lưu</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog xem chi tiết khách hàng */}
+      <Dialog open={!!viewId} onOpenChange={(o) => { if (!o) setViewId(null); }}>
+        <DialogContent className="max-w-2xl">
+          {viewCustomer && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <span>{viewCustomer.name}</span>
+                  <span className={`text-xs rounded-full px-2 py-0.5 ${groupColor[viewCustomer.group_name]}`}>
+                    {groupLabel[viewCustomer.group_name]}
+                  </span>
+                </DialogTitle>
+              </DialogHeader>
+
+              {/* Thông tin cơ bản */}
+              <div className="grid grid-cols-2 gap-3 text-sm mb-4">
+                <div><span className="text-muted-foreground">SĐT:</span> {viewCustomer.phone ?? "—"}</div>
+                <div><span className="text-muted-foreground">Công nợ:</span> <span className={viewCustomer.debt > 0 ? "text-destructive font-medium" : ""}>{viewCustomer.debt > 0 ? fmt(viewCustomer.debt) : "Không có"}</span></div>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground">Địa chỉ: </span>
+                  {[viewCustomer.address, viewCustomer.ward, viewCustomer.district, viewCustomer.province].filter(Boolean).join(", ") || "—"}
+                </div>
+              </div>
+
+              {/* Tab liên kết */}
+              <div className="border-t pt-3">
+                <div className="font-medium mb-2 text-sm">Đơn hàng đang chờ / đặt trước ({pendingOrders.length})</div>
+                {pendingOrders.length === 0 ? (
+                  <div className="text-muted-foreground text-sm">Không có đơn đang chờ</div>
+                ) : (
+                  <div className="space-y-1">
+                    {pendingOrders.map((o) => (
+                      <div key={o.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
+                        <span className="font-mono">{o.code}</span>
+                        <span className="text-muted-foreground text-xs">{new Date(o.created_at).toLocaleDateString("vi-VN")}</span>
+                        <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded">{o.status === "reserved" ? "Đặt trước" : "Nháp"}</span>
+                        <span className="font-medium">{fmt(o.total)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t pt-3">
+                <div className="font-medium mb-2 text-sm">Hóa đơn đã hoàn tất ({completedOrders.length})</div>
+                {completedOrders.length === 0 ? (
+                  <div className="text-muted-foreground text-sm">Chưa có hóa đơn</div>
+                ) : (
+                  <div className="overflow-auto max-h-48">
+                    <table className="w-full text-sm">
+                      <thead className="text-muted-foreground border-b">
+                        <tr>
+                          <th className="py-1 text-left">Mã đơn</th>
+                          <th className="text-left">Ngày</th>
+                          <th className="text-right">Tổng tiền</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {completedOrders.map((o) => (
+                          <tr key={o.id} className="border-b last:border-0">
+                            <td className="py-1 font-mono">{o.code}</td>
+                            <td className="text-xs text-muted-foreground">{new Date(o.created_at).toLocaleDateString("vi-VN")}</td>
+                            <td className="text-right font-medium">{fmt(o.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setViewId(null); startEdit(viewCustomer.id); }}>
+                  <Pencil className="h-4 w-4 mr-1" /> Chỉnh sửa
+                </Button>
+                <Button onClick={() => setViewId(null)}>Đóng</Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </AppShell>

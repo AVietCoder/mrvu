@@ -21,22 +21,31 @@ export const listInventory = createServerFn({ method: "GET" }).handler(async () 
   };
 });
 
-// Nhập / Xuất kho đơn giản (không cần xác nhận)
+// Nhập / Xuất kho — nhận branch_id (cho cả nhập và xuất)
 export const createMovement = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: {
     type: "in" | "out";
-    product_id: string; branch_id: string;
-    qty: number; unit_cost?: number; note?: string; created_by?: string;
+    product_id: string;
+    branch_id: string;
+    qty: number;
+    unit_cost?: number;
+    note?: string;
+    created_by?: string;
+    actor_id?: string;  // alias
   }}) => {
+    const branchId = data.branch_id;
+    const createdBy = data.created_by || data.actor_id || null;
     const delta = data.type === "in" ? data.qty : -data.qty;
-    adjustStock(data.product_id, data.branch_id, delta);
+    adjustStock(data.product_id, branchId, delta);
     db.prepare(`INSERT INTO stock_movements
       (id,type,product_id,from_branch,to_branch,qty,unit_cost,note,created_at,created_by)
       VALUES (?,?,?,?,?,?,?,?,?,?)`)
-      .run(uid(), data.type, data.product_id,
-        data.type === "out" ? data.branch_id : null,
-        data.type === "in"  ? data.branch_id : null,
-        data.qty, data.unit_cost || 0, data.note || null, now(), data.created_by || null);
+      .run(
+        uid(), data.type, data.product_id,
+        data.type === "out" ? branchId : null,
+        data.type === "in"  ? branchId : null,
+        data.qty, data.unit_cost || 0, data.note || null, now(), createdBy
+      );
     return { ok: true };
   });
 

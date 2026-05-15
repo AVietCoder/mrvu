@@ -8,14 +8,10 @@ import { SearchFilter } from "@/components/SearchFilter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, X } from "lucide-react";
+import { Plus, X, ShoppingBag, Clock } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
@@ -31,30 +27,35 @@ type LineItem = {
   discount: number;
 };
 
+// Helper: format số tiền input (thêm dấu chấm, chỉ giữ số)
+function fmtInput(val: string): string {
+  const num = val.replace(/\D/g, "");
+  if (!num) return "";
+  return new Intl.NumberFormat("vi-VN").format(Number(num));
+}
+function parseInput(val: string): number {
+  return Number(val.replace(/\D/g, "")) || 0;
+}
+
 function Page() {
   const list = useServerFn(listOrders);
   const create = useServerFn(createOrder);
   const updateStatus = useServerFn(updateOrderStatus);
   const qc = useQueryClient();
 
-  const { data } = useQuery({
-    queryKey: ["orders"],
-    queryFn: () => list(),
-  });
-
+  const { data } = useQuery({ queryKey: ["orders"], queryFn: () => list() });
 
   const [open, setOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"orders" | "reserved">("orders");
 
   const [items, setItems] = useState<LineItem[]>([]);
   const [customer, setCustomer] = useState("");
   const [branch, setBranch] = useState("");
   const [employee, setEmployee] = useState("");
-  const [status, setStatus] = useState<"completed" | "reserved" | "draft">(
-    "completed"
-  );
-  const [discount, setDiscount] = useState("0");
-  const [deposit, setDeposit] = useState("0");
-  const [paid, setPaid] = useState("0");
+  const [status, setStatus] = useState<"completed" | "reserved" | "draft">("completed");
+  const [discountRaw, setDiscountRaw] = useState("0");
+  const [depositRaw, setDepositRaw] = useState("0");
+  const [paidRaw, setPaidRaw] = useState("0");
   const [note, setNote] = useState("");
 
   const [search, setSearch] = useState("");
@@ -62,61 +63,43 @@ function Page() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterBranch, setFilterBranch] = useState("");
 
+  const discount = parseInput(discountRaw);
+  const deposit = parseInput(depositRaw);
+  const paid = parseInput(paidRaw);
+
   const subtotal = useMemo(
-    () =>
-      items.reduce(
-        (s, i) => s + i.qty * i.unit_price - i.discount,
-        0
-      ),
+    () => items.reduce((s, i) => s + i.qty * i.unit_price - i.discount, 0),
     [items]
   );
+  const total = Math.max(0, subtotal - discount);
 
-  const total = Math.max(0, subtotal - (Number(discount) || 0));
+  // Tất cả đơn
+  const allOrders = data?.orders ?? [];
 
-  const filteredOrders = useMemo(() => {
-    const orders = data?.orders ?? [];
+  // Tab "Hóa đơn bán hàng" — không phải reserved
+  const invoiceOrders = useMemo(() => allOrders.filter((o) => o.status !== "reserved"), [allOrders]);
+  // Tab "Đơn đặt hàng" — chỉ reserved
+  const reservedOrders = useMemo(() => allOrders.filter((o) => o.status === "reserved"), [allOrders]);
 
-    return orders
+  function applyFilter(list: typeof allOrders) {
+    return list
       .filter((o) => {
-        const customerName =
-          data?.customers.find((c) => c.id === o.customer_id)?.name ?? "";
-
+        const customerName = data?.customers.find((c) => c.id === o.customer_id)?.name ?? "";
         const q = search.toLowerCase();
-
-        const matchSearch =
-          o.code.toLowerCase().includes(q) ||
-          customerName.toLowerCase().includes(q);
-
-        const matchStatus =
-          !filterStatus || o.status === filterStatus;
-
-        const matchBranch =
-          !filterBranch || o.branch_id === filterBranch;
-
+        const matchSearch = o.code.toLowerCase().includes(q) || customerName.toLowerCase().includes(q);
+        const matchStatus = !filterStatus || o.status === filterStatus;
+        const matchBranch = !filterBranch || o.branch_id === filterBranch;
         return matchSearch && matchStatus && matchBranch;
       })
       .sort((a, b) => {
-        if (sortBy === "total_desc") {
-          return b.total - a.total;
-        }
-
-        if (sortBy === "total_asc") {
-          return a.total - b.total;
-        }
-
-        if (sortBy === "oldest") {
-          return (
-            new Date(a.created_at).getTime() -
-            new Date(b.created_at).getTime()
-          );
-        }
-
-        return (
-          new Date(b.created_at).getTime() -
-          new Date(a.created_at).getTime()
-        );
+        if (sortBy === "total_desc") return b.total - a.total;
+        if (sortBy === "total_asc") return a.total - b.total;
+        if (sortBy === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
-  }, [data, search, sortBy, filterStatus, filterBranch]);
+  }
+
+  const filteredOrders = useMemo(() => applyFilter(activeTab === "reserved" ? reservedOrders : invoiceOrders), [data, search, sortBy, filterStatus, filterBranch, activeTab]);
 
   function reset() {
     setItems([]);
@@ -124,37 +107,21 @@ function Page() {
     setBranch(data?.branches[0]?.id ?? "");
     setEmployee("");
     setStatus("completed");
-    setDiscount("0");
-    setDeposit("0");
-    setPaid("0");
+    setDiscountRaw("0");
+    setDepositRaw("0");
+    setPaidRaw("0");
     setNote("");
   }
 
   function addItem() {
     const p = data?.products[0];
-
     if (!p) return;
-
-    setItems([
-      ...items,
-      {
-        product_id: p.id,
-        qty: 1,
-        unit_price: p.sale_price,
-        discount: 0,
-      },
-    ]);
+    setItems([...items, { product_id: p.id, qty: 1, unit_price: p.sale_price, discount: 0 }]);
   }
 
   async function submit() {
-    if (items.length === 0) {
-      return toast.error("Đơn chưa có sản phẩm");
-    }
-
-    if (!branch) {
-      return toast.error("Chọn chi nhánh");
-    }
-
+    if (items.length === 0) return toast.error("Đơn chưa có sản phẩm");
+    if (!branch) return toast.error("Chọn chi nhánh");
     try {
       const r = await create({
         data: {
@@ -162,487 +129,288 @@ function Page() {
           branch_id: branch,
           employee_id: employee || undefined,
           status,
-          discount: Number(discount) || 0,
-          deposit: Number(deposit) || 0,
-          paid: status === "completed"
-            ? Number(paid) || 0
-            : 0,
+          discount,
+          deposit,
+          paid: status === "completed" ? paid : 0,
           note: note || undefined,
           items,
         },
       });
-
       toast.success("Tạo đơn " + r.code);
-
       reset();
       setOpen(false);
+      qc.invalidateQueries({ queryKey: ["orders"] });
+    } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
+  }
 
-      qc.invalidateQueries({
-        queryKey: ["orders"],
-      });
-    } catch (e: any) {
-      toast.error(e?.message ?? "Lỗi");
-    }
+  const statusLabel: Record<string, string> = {
+    completed: "Hoàn tất", reserved: "Đặt trước", draft: "Nháp", cancelled: "Hủy",
+  };
+  const statusColor: Record<string, string> = {
+    completed: "bg-green-100 text-green-700",
+    reserved: "bg-yellow-100 text-yellow-700",
+    draft: "bg-gray-100 text-gray-700",
+    cancelled: "bg-red-100 text-red-700",
+  };
+
+  function OrderTable({ rows }: { rows: typeof allOrders }) {
+    return (
+      <table className="w-full text-sm">
+        <thead className="text-left text-muted-foreground border-b">
+          <tr>
+            <th className="py-2">Mã đơn</th>
+            <th>Ngày</th>
+            <th>Khách hàng</th>
+            <th>Chi nhánh</th>
+            <th>NV</th>
+            <th className="text-right">Tổng</th>
+            <th>Trạng thái</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((o) => {
+            const cust = data?.customers.find((c) => c.id === o.customer_id)?.name ?? "Khách lẻ";
+            const br = data?.branches.find((b) => b.id === o.branch_id)?.name ?? "—";
+            const emp = data?.employees.find((e) => e.id === o.employee_id)?.name ?? "—";
+            return (
+              <tr key={o.id} className="border-b last:border-0 hover:bg-muted/30">
+                <td className="py-2 font-mono">{o.code}</td>
+                <td className="text-xs text-muted-foreground">
+                  {new Date(o.created_at).toLocaleString("vi-VN")}
+                </td>
+                <td>{cust}</td>
+                <td>{br}</td>
+                <td>{emp}</td>
+                <td className="text-right font-medium">{fmt(o.total)}</td>
+                <td>
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs ${statusColor[o.status] ?? "bg-secondary"}`}>
+                    {statusLabel[o.status]}
+                  </span>
+                </td>
+                <td className="text-right">
+                  {(o.status === "reserved" || o.status === "draft") && (
+                    <Button
+                      size="sm" variant="outline"
+                      onClick={async () => {
+                        await updateStatus({ data: { id: o.id, status: "completed" } });
+                        toast.success("Đã hoàn tất đơn " + o.code);
+                        qc.invalidateQueries({ queryKey: ["orders"] });
+                      }}
+                    >
+                      Hoàn tất
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+          {rows.length === 0 && (
+            <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">Không có đơn nào</td></tr>
+          )}
+        </tbody>
+      </table>
+    );
   }
 
   return (
     <AppShell title="Bán hàng">
-      <div className="mb-4">
-        <Dialog
-          open={open}
-          onOpenChange={(o) => {
-            setOpen(o);
-
-            if (o) {
-              reset();
-            }
-          }}
-        >
+      {/* Header + nút tạo đơn */}
+      <div className="mb-4 flex items-center gap-3">
+        <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (o) reset(); }}>
           <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-1" />
-              Tạo đơn hàng
-            </Button>
+            <Button><Plus className="h-4 w-4 mr-1" />Tạo đơn hàng</Button>
           </DialogTrigger>
-
           <DialogContent className="max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Tạo đơn hàng</DialogTitle>
-            </DialogHeader>
-
+            <DialogHeader><DialogTitle>Tạo đơn hàng</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Khách hàng</Label>
-
-                  <select
-                    className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                    value={customer}
-                    onChange={(e) => setCustomer(e.target.value)}
-                  >
+                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={customer} onChange={(e) => setCustomer(e.target.value)}>
                     <option value="">Khách lẻ</option>
-
-                    {data?.customers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
+                    {data?.customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
-
                 <div>
                   <Label>Chi nhánh</Label>
-
-                  <select
-                    className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                    value={branch}
-                    onChange={(e) => setBranch(e.target.value)}
-                  >
-                    {data?.branches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
+                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={branch} onChange={(e) => setBranch(e.target.value)}>
+                    {data?.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Nhân viên</Label>
+                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={employee} onChange={(e) => setEmployee(e.target.value)}>
+                    <option value="">---</option>
+                    {data?.employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <Label>Trạng thái</Label>
+                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={status}
+                    onChange={(e) => setStatus(e.target.value as "completed" | "reserved" | "draft")}>
+                    <option value="completed">Hoàn tất</option>
+                    <option value="reserved">Đặt trước (chưa giao)</option>
+                    <option value="draft">Nháp</option>
                   </select>
                 </div>
               </div>
 
-              <div>
-                <Label>Nhân viên</Label>
-
-                <select
-                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  value={employee}
-                  onChange={(e) => setEmployee(e.target.value)}
-                >
-                  <option value="">---</option>
-
-                  {data?.employees.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <Label>Trạng thái</Label>
-
-                <select
-                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  value={status}
-                  onChange={(e) =>
-                    setStatus(
-                      e.target.value as
-                        | "completed"
-                        | "reserved"
-                        | "draft"
-                    )
-                  }
-                >
-                  <option value="completed">
-                    Hoàn tất
-                  </option>
-
-                  <option value="reserved">
-                    Đặt trước
-                  </option>
-
-                  <option value="draft">
-                    Nháp
-                  </option>
-                </select>
-              </div>
-
+              {/* Sản phẩm */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Label>Sản phẩm</Label>
-
-                  <Button
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                    onClick={addItem}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Thêm SP
+                  <Button size="sm" type="button" variant="outline" onClick={addItem}>
+                    <Plus className="h-4 w-4 mr-1" />Thêm SP
                   </Button>
                 </div>
-
                 <div className="space-y-2">
-                  {items.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="grid grid-cols-12 gap-2"
-                    >
-                      <select
-                        className="col-span-5 h-9 rounded-md border bg-background px-3 text-sm"
-                        value={item.product_id}
-                        onChange={(e) => {
-                          const next = [...items];
-
-                          next[idx].product_id =
-                            e.target.value;
-
-                          setItems(next);
-                        }}
-                      >
-                        {data?.products.map((p) => (
-                          <option
-                            key={p.id}
-                            value={p.id}
-                          >
-                            {p.sku} — {p.name}
-                          </option>
-                        ))}
-                      </select>
-
-                      <Input
-                        type="number"
-                        className="col-span-2"
-                        value={item.qty}
-                        onChange={(e) => {
-                          const next = [...items];
-
-                          next[idx].qty = Number(
-                            e.target.value
-                          );
-
-                          setItems(next);
-                        }}
-                      />
-
-                      <Input
-                        type="number"
-                        className="col-span-3"
-                        value={item.unit_price}
-                        onChange={(e) => {
-                          const next = [...items];
-
-                          next[idx].unit_price = Number(
-                            e.target.value
-                          );
-
-                          setItems(next);
-                        }}
-                      />
-
-                      <button
-                        type="button"
-                        className="col-span-2 flex items-center justify-center rounded-md border hover:text-destructive"
-                        onClick={() =>
-                          setItems(
-                            items.filter(
-                              (_, i) => i !== idx
-                            )
-                          )
-                        }
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
+                  {items.length === 0 && <div className="text-muted-foreground text-sm py-2">Chưa có sản phẩm. Bấm "Thêm SP".</div>}
+                  {items.map((item, idx) => {
+                    const lineTotal = item.qty * item.unit_price - item.discount;
+                    return (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                        <select
+                          className="col-span-5 h-9 rounded-md border bg-background px-2 text-sm"
+                          value={item.product_id}
+                          onChange={(e) => {
+                            const p = data?.products.find((x) => x.id === e.target.value);
+                            const next = [...items];
+                            next[idx] = { ...next[idx], product_id: e.target.value, unit_price: p?.sale_price ?? 0 };
+                            setItems(next);
+                          }}
+                        >
+                          {data?.products.map((p) => <option key={p.id} value={p.id}>{p.sku} — {p.name}</option>)}
+                        </select>
+                        <Input type="number" className="col-span-1" placeholder="SL" value={item.qty}
+                          onChange={(e) => { const next = [...items]; next[idx].qty = Number(e.target.value); setItems(next); }} />
+                        {/* Giá bán — format có dấu chấm */}
+                        <Input className="col-span-3" placeholder="Đơn giá"
+                          value={item.unit_price === 0 ? "" : new Intl.NumberFormat("vi-VN").format(item.unit_price)}
+                          onChange={(e) => {
+                            const next = [...items];
+                            next[idx].unit_price = parseInput(e.target.value);
+                            setItems(next);
+                          }} />
+                        <div className="col-span-2 text-right text-xs font-medium text-muted-foreground pr-1">{fmt(lineTotal)}</div>
+                        <button type="button" className="col-span-1 flex items-center justify-center rounded-md border hover:text-destructive p-1"
+                          onClick={() => setItems(items.filter((_, i) => i !== idx))}>
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
+              {/* Giảm giá / Đặt cọc / Thanh toán — format có dấu chấm */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label>Giảm giá</Label>
-
-                  <Input
-                    type="number"
-                    className="mt-1"
-                    value={discount}
-                    onChange={(e) =>
-                      setDiscount(e.target.value)
-                    }
-                  />
+                  <Label>Giảm giá (₫)</Label>
+                  <Input className="mt-1" value={discountRaw}
+                    onChange={(e) => setDiscountRaw(fmtInput(e.target.value))}
+                    onFocus={(e) => e.target.select()} />
                 </div>
-
                 <div>
-                  <Label>Đặt cọc</Label>
-
-                  <Input
-                    type="number"
-                    className="mt-1"
-                    value={deposit}
-                    onChange={(e) =>
-                      setDeposit(e.target.value)
-                    }
-                  />
+                  <Label>Đặt cọc (₫)</Label>
+                  <Input className="mt-1" value={depositRaw}
+                    onChange={(e) => setDepositRaw(fmtInput(e.target.value))}
+                    onFocus={(e) => e.target.select()} />
                 </div>
-
                 <div>
-                  <Label>Đã thanh toán</Label>
-
-                  <Input
-                    type="number"
-                    className="mt-1"
-                    value={paid}
-                    onChange={(e) =>
-                      setPaid(e.target.value)
-                    }
-                  />
+                  <Label>Đã thanh toán (₫)</Label>
+                  <Input className="mt-1" value={paidRaw}
+                    onChange={(e) => setPaidRaw(fmtInput(e.target.value))}
+                    onFocus={(e) => e.target.select()} />
                 </div>
               </div>
 
-              <div>
-                <Label>Ghi chú</Label>
+              <div><Label>Ghi chú</Label><Input className="mt-1" value={note} onChange={(e) => setNote(e.target.value)} /></div>
 
-                <Input
-                  className="mt-1"
-                  value={note}
-                  onChange={(e) =>
-                    setNote(e.target.value)
-                  }
-                />
-              </div>
-
-              <div className="rounded-lg border p-4">
-                <div className="flex justify-between text-sm">
-                  <span>Tạm tính</span>
-                  <span>{fmt(subtotal)}</span>
+              {/* Tóm tắt */}
+              <div className="rounded-lg border p-4 bg-muted/30">
+                <div className="flex justify-between text-sm"><span>Tạm tính</span><span>{fmt(subtotal)}</span></div>
+                <div className="flex justify-between text-sm mt-1"><span>Giảm giá</span><span>- {fmt(discount)}</span></div>
+                <div className="flex justify-between font-semibold text-lg mt-2 pt-2 border-t">
+                  <span>Tổng cộng</span><span>{fmt(total)}</span>
                 </div>
-
-                <div className="flex justify-between text-sm mt-2">
-                  <span>Giảm giá</span>
-                  <span>{fmt(Number(discount) || 0)}</span>
-                </div>
-
-                <div className="flex justify-between font-semibold text-lg mt-3">
-                  <span>Tổng cộng</span>
-                  <span>{fmt(total)}</span>
-                </div>
+                {status === "reserved" && deposit > 0 && (
+                  <div className="flex justify-between text-sm mt-1 text-yellow-700"><span>Đặt cọc</span><span>{fmt(deposit)}</span></div>
+                )}
               </div>
 
               <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setOpen(false)}
-                >
-                  Hủy
-                </Button>
-
-                <Button onClick={submit}>
-                  Tạo đơn
-                </Button>
+                <Button variant="outline" onClick={() => setOpen(false)}>Hủy</Button>
+                <Button onClick={submit}>Tạo đơn</Button>
               </DialogFooter>
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Số lượng đơn đặt trước nếu có */}
+        {reservedOrders.length > 0 && (
+          <span className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1 flex items-center gap-1">
+            <Clock className="h-3 w-3" />{reservedOrders.length} đơn đặt trước chờ giao
+          </span>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-3 border-b">
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "orders" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setActiveTab("orders")}
+        >
+          <ShoppingBag className="h-4 w-4 inline mr-1" />
+          Hóa đơn bán hàng
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${activeTab === "reserved" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setActiveTab("reserved")}
+        >
+          <Clock className="h-4 w-4 inline mr-1" />
+          Đơn đặt hàng
+          {reservedOrders.length > 0 && (
+            <span className="ml-1 text-xs bg-yellow-100 text-yellow-700 rounded-full px-1.5 py-0.5">{reservedOrders.length}</span>
+          )}
+        </button>
       </div>
 
       <Card>
         <SearchFilter
-          search={search}
-          onSearch={setSearch}
+          search={search} onSearch={setSearch}
           placeholder="Tìm mã đơn, khách hàng..."
           sortOptions={[
-            {
-              value: "newest",
-              label: "Mới nhất",
-            },
-            {
-              value: "oldest",
-              label: "Cũ nhất",
-            },
-            {
-              value: "total_desc",
-              label: "Giá trị cao nhất",
-            },
-            {
-              value: "total_asc",
-              label: "Giá trị thấp nhất",
-            },
+            { value: "newest", label: "Mới nhất" },
+            { value: "oldest", label: "Cũ nhất" },
+            { value: "total_desc", label: "Giá trị cao nhất" },
+            { value: "total_asc", label: "Giá trị thấp nhất" },
           ]}
-          sortValue={sortBy}
-          onSort={setSortBy}
+          sortValue={sortBy} onSort={setSortBy}
           filterSlot={
             <div className="flex gap-2">
-              <select
-                className="h-9 rounded-md border bg-background px-2 text-sm"
-                value={filterStatus}
-                onChange={(e) =>
-                  setFilterStatus(e.target.value)
-                }
-              >
-                <option value="">
-                  Tất cả trạng thái
-                </option>
-
-                <option value="completed">
-                  Hoàn tất
-                </option>
-
-                <option value="reserved">
-                  Đặt trước
-                </option>
-
-                <option value="draft">
-                  Nháp
-                </option>
-              </select>
-
-              <select
-                className="h-9 rounded-md border bg-background px-2 text-sm"
-                value={filterBranch}
-                onChange={(e) =>
-                  setFilterBranch(e.target.value)
-                }
-              >
-                <option value="">
-                  Tất cả chi nhánh
-                </option>
-
-                {data?.branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
+              {activeTab === "orders" && (
+                <select className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                  <option value="">Tất cả trạng thái</option>
+                  <option value="completed">Hoàn tất</option>
+                  <option value="draft">Nháp</option>
+                  <option value="cancelled">Hủy</option>
+                </select>
+              )}
+              <select className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={filterBranch} onChange={(e) => setFilterBranch(e.target.value)}>
+                <option value="">Tất cả chi nhánh</option>
+                {data?.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
           }
           total={filteredOrders.length}
-          totalLabel="đơn hàng"
+          totalLabel={activeTab === "reserved" ? "đơn đặt hàng" : "đơn hàng"}
         />
-
-        <table className="w-full text-sm">
-          <thead className="text-left text-muted-foreground border-b">
-            <tr>
-              <th className="py-2">Mã đơn</th>
-              <th>Ngày</th>
-              <th>Khách hàng</th>
-              <th>Chi nhánh</th>
-              <th>NV</th>
-              <th className="text-right">Tổng</th>
-              <th>Trạng thái</th>
-              <th></th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {filteredOrders.map((o) => {
-              const cust =
-                data?.customers.find(
-                  (c) => c.id === o.customer_id
-                )?.name ?? "Khách lẻ";
-
-              const br =
-                data?.branches.find(
-                  (b) => b.id === o.branch_id
-                )?.name ?? "—";
-
-              const emp =
-                data?.employees.find(
-                  (e) => e.id === o.employee_id
-                )?.name ?? "—";
-
-              const labels: Record<string, string> = {
-                completed: "Hoàn tất",
-                reserved: "Đặt trước",
-                draft: "Nháp",
-                cancelled: "Hủy",
-              };
-
-              return (
-                <tr
-                  key={o.id}
-                  className="border-b last:border-0"
-                >
-                  <td className="py-2 font-mono">
-                    {o.code}
-                  </td>
-
-                  <td className="text-xs">
-                    {new Date(
-                      o.created_at
-                    ).toLocaleString("vi-VN")}
-                  </td>
-
-                  <td>{cust}</td>
-
-                  <td>{br}</td>
-
-                  <td>{emp}</td>
-
-                  <td className="text-right font-medium">
-                    {fmt(o.total)}
-                  </td>
-
-                  <td>
-                    <span className="inline-block rounded px-2 py-0.5 text-xs bg-secondary">
-                      {labels[o.status]}
-                    </span>
-                  </td>
-
-                  <td className="text-right">
-                    {o.status !== "completed" &&
-                      o.status !== "cancelled" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={async () => {
-                            await updateStatus({
-                              data: {
-                                id: o.id,
-                                status: "completed",
-                              },
-                            });
-
-                            qc.invalidateQueries({
-                              queryKey: ["orders"],
-                            });
-                          }}
-                        >
-                          Hoàn tất
-                        </Button>
-                      )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <OrderTable rows={filteredOrders} />
       </Card>
     </AppShell>
   );

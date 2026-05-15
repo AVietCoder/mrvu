@@ -5,18 +5,42 @@ export const listCustomers = createServerFn({ method: "GET" }).handler(async () 
   return {
     customers: db.prepare("SELECT * FROM customers ORDER BY name").all(),
     orders: db.prepare("SELECT * FROM orders ORDER BY created_at DESC").all(),
+    order_items: db.prepare("SELECT * FROM order_items").all(),
   };
 });
 
 export const upsertCustomer = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
     if (data.id) {
-      db.prepare(`UPDATE customers SET name=?,phone=?,address=?,group_name=?,debt=? WHERE id=?`)
-        .run(data.name, data.phone||null, data.address||null, data.group_name, data.debt||0, data.id);
+      db.prepare(
+        `UPDATE customers SET name=?,phone=?,ward=?,district=?,province=?,address=?,group_name=?,debt=? WHERE id=?`
+      ).run(
+        data.name,
+        data.phone || null,
+        data.ward || null,
+        data.district || null,
+        data.province || null,
+        data.address || null,
+        data.group_name,
+        data.debt || 0,
+        data.id
+      );
     } else {
-      db.prepare(`INSERT INTO customers (id,name,phone,address,group_name,debt,created_at)
-        VALUES (?,?,?,?,?,?,?)`)
-        .run(uid(), data.name, data.phone||null, data.address||null, data.group_name, data.debt||0, now());
+      db.prepare(
+        `INSERT INTO customers (id,name,phone,ward,district,province,address,group_name,debt,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`
+      ).run(
+        uid(),
+        data.name,
+        data.phone || null,
+        data.ward || null,
+        data.district || null,
+        data.province || null,
+        data.address || null,
+        data.group_name,
+        data.debt || 0,
+        now()
+      );
     }
     return { ok: true };
   });
