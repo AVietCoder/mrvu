@@ -9,9 +9,17 @@ export const listSchedules = createServerFn({ method: "GET" }).handler(async () 
     tech_fees: db.prepare("SELECT * FROM tech_fees").all(),
     work_difficulties: db.prepare("SELECT * FROM work_difficulties ORDER BY bonus DESC").all(),
     users: db.prepare("SELECT id, full_name, username FROM users ORDER BY full_name").all(),
-    customers: db.prepare("SELECT id, name, phone FROM customers ORDER BY name").all(),
+    customers: db.prepare("SELECT id, name, phone, address, ward, district, province FROM customers ORDER BY name").all(),
     branches: db.prepare("SELECT * FROM branches ORDER BY name").all(),
     products: db.prepare("SELECT id, sku, name, tech_fee FROM products ORDER BY name").all(),
+    orders: db.prepare(`
+      SELECT id, code, customer_id, branch_id, status, total, created_at
+      FROM orders
+      WHERE status IN ('reserved','draft','completed')
+      ORDER BY created_at DESC
+      LIMIT 200
+    `).all(),
+    order_items: db.prepare("SELECT order_id, product_id, qty FROM order_items").all(),
   };
 });
 

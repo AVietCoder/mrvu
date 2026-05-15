@@ -25,11 +25,17 @@ export const listOrders = createServerFn({ method: "GET" }).handler(async () => 
     products: db.prepare("SELECT * FROM products").all(),
     customers: db.prepare("SELECT * FROM customers ORDER BY name").all(),
     employees: db.prepare(`
-  SELECT id, full_name as name
-  FROM users
-  ORDER BY full_name
-`).all(),
+      SELECT id, full_name as name FROM users ORDER BY full_name
+    `).all(),
     branches: db.prepare("SELECT * FROM branches ORDER BY name").all(),
+    schedules: db.prepare(`
+      SELECT id, title, type, status, scheduled_date, scheduled_time, order_id
+      FROM schedules
+      WHERE order_id IS NOT NULL
+      ORDER BY scheduled_date DESC
+    `).all(),
+    schedule_assignments: db.prepare("SELECT * FROM schedule_assignments").all(),
+    users: db.prepare("SELECT id, full_name FROM users ORDER BY full_name").all(),
   };
 });
 

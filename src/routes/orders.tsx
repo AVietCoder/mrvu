@@ -8,7 +8,7 @@ import { SearchFilter } from "@/components/SearchFilter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, X, ShoppingBag, Clock } from "lucide-react";
+import { Plus, X, ShoppingBag, Clock, CalendarDays } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogTrigger, DialogFooter,
@@ -155,16 +155,18 @@ function Page() {
 
   function OrderTable({ rows }: { rows: typeof allOrders }) {
     return (
-      <table className="w-full text-sm">
+      <div className="overflow-x-auto -mx-2 md:mx-0">
+      <table className="w-full text-sm min-w-[760px]">
         <thead className="text-left text-muted-foreground border-b">
           <tr>
-            <th className="py-2">Mã đơn</th>
-            <th>Ngày</th>
-            <th>Khách hàng</th>
-            <th>Chi nhánh</th>
-            <th>NV</th>
-            <th className="text-right">Tổng</th>
-            <th>Trạng thái</th>
+            <th className="py-2 pr-2">Mã đơn</th>
+            <th className="pr-2">Ngày</th>
+            <th className="pr-2">Khách hàng</th>
+            <th className="pr-2">Chi nhánh</th>
+            <th className="pr-2">NV</th>
+            <th className="text-right pr-2">Tổng</th>
+            <th className="pr-2">Trạng thái</th>
+            <th className="pr-2">Lịch lắp</th>
             <th></th>
           </tr>
         </thead>
@@ -173,20 +175,35 @@ function Page() {
             const cust = data?.customers.find((c) => c.id === o.customer_id)?.name ?? "Khách lẻ";
             const br = data?.branches.find((b) => b.id === o.branch_id)?.name ?? "—";
             const emp = data?.employees.find((e) => e.id === o.employee_id)?.name ?? "—";
+            const linkedSchedules = (data?.schedules ?? []).filter((s: any) => s.order_id === o.id);
             return (
               <tr key={o.id} className="border-b last:border-0 hover:bg-muted/30">
-                <td className="py-2 font-mono">{o.code}</td>
-                <td className="text-xs text-muted-foreground">
+                <td className="py-2 font-mono pr-2">{o.code}</td>
+                <td className="text-xs text-muted-foreground pr-2">
                   {new Date(o.created_at).toLocaleString("vi-VN")}
                 </td>
-                <td>{cust}</td>
-                <td>{br}</td>
-                <td>{emp}</td>
-                <td className="text-right font-medium">{fmt(o.total)}</td>
-                <td>
+                <td className="pr-2">{cust}</td>
+                <td className="pr-2">{br}</td>
+                <td className="pr-2">{emp}</td>
+                <td className="text-right font-medium pr-2">{fmt(o.total)}</td>
+                <td className="pr-2">
                   <span className={`inline-block rounded-full px-2 py-0.5 text-xs ${statusColor[o.status] ?? "bg-secondary"}`}>
                     {statusLabel[o.status]}
                   </span>
+                </td>
+                <td className="pr-2">
+                  {linkedSchedules.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  ) : (
+                    <a
+                      href="/schedule"
+                      className="inline-flex items-center gap-1 text-xs rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 hover:bg-blue-100"
+                      title={linkedSchedules.map((s: any) => s.title).join("\n")}
+                    >
+                      <CalendarDays className="h-3 w-3" />
+                      {linkedSchedules.length} lịch
+                    </a>
+                  )}
                 </td>
                 <td className="text-right">
                   {(o.status === "reserved" || o.status === "draft") && (
@@ -206,10 +223,11 @@ function Page() {
             );
           })}
           {rows.length === 0 && (
-            <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">Không có đơn nào</td></tr>
+            <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">Không có đơn nào</td></tr>
           )}
         </tbody>
       </table>
+      </div>
     );
   }
 

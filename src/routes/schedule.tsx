@@ -17,10 +17,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CalendarDays, Plus, CheckCircle2, Clock, Trash2,
-  Wrench, ShieldOff, Settings, Pencil,
+  Wrench, ShieldOff, Settings, Pencil, Receipt, ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { hasPermission } from "@/lib/types";
+import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/schedule")({
   head: () => ({ meta: [{ title: "Lịch làm việc — QuatTran POS" }] }),
@@ -74,8 +75,28 @@ function Page() {
   const [createForm, setCreateForm] = useState({
     title: "", type: "install", scheduled_date: "",
     scheduled_time: "", customer_id: "", branch_id: "",
+    order_id: "",
     address: "", note: "",
   });
+
+  // Khi chọn đơn → auto-fill khách hàng / chi nhánh / địa chỉ + tiêu đề gợi ý
+  function pickOrder(orderId: string) {
+    const order: any = (data?.orders ?? []).find((o: any) => o.id === orderId);
+    if (!order) {
+      setCreateForm((f) => ({ ...f, order_id: "" }));
+      return;
+    }
+    const cust: any = (data?.customers ?? []).find((c: any) => c.id === order.customer_id);
+    const addrParts = cust ? [cust.address, cust.ward, cust.district, cust.province].filter(Boolean) : [];
+    setCreateForm((f) => ({
+      ...f,
+      order_id: orderId,
+      customer_id: order.customer_id || f.customer_id,
+      branch_id: order.branch_id || f.branch_id,
+      address: addrParts.join(", ") || f.address,
+      title: f.title || `Lắp đặt - ${order.code}${cust ? ` - ${cust.name}` : ""}`,
+    }));
+  }
 
   // ── Dialog duyệt lịch ─────────────────────────────────────
   const [approveOpen, setApproveOpen] = useState(false);
@@ -125,10 +146,17 @@ function Page() {
       await createFn({ data: { ...createForm, created_by: user.id,
         customer_id: createForm.customer_id || undefined,
         branch_id: createForm.branch_id || undefined,
+        order_id: createForm.order_id || undefined,
       }});
-      toast.success("Đã tạo lịch");
+      toast.success("Đã tạo lịch" + (createForm.order_id ? " (đã liên kết đơn hàng)" : ""));
       setCreateOpen(false);
+      setCreateForm({
+        title: "", type: "install", scheduled_date: "",
+        scheduled_time: "", customer_id: "", branch_id: "",
+        order_id: "", address: "", note: "",
+      });
       qc.invalidateQueries({ queryKey: ["schedules"] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
     } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
   }
 
@@ -242,11 +270,14 @@ function Page() {
                     const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id);
                     const techPay = isTech ? calcTechPay(s.id) : null;
                     const customer = data?.customers.find((c: any) => c.id === s.customer_id);
+                    const linkedOrder: any = s.order_id
+                      ? (data?.orders ?? []).find((o: any) => o.id === s.order_id)
+                      : null;
 
                     return (
                       <Card key={s.id} className="relative">
                         <div className="flex items-start justify-between gap-2 mb-2">
-                          <div>
+                          <div className="min-w-0">
                             <div className="font-medium text-sm">{s.title}</div>
                             {s.scheduled_time && (
                               <div className="text-xs text-muted-foreground flex items-center gap-1">
@@ -259,6 +290,19 @@ function Page() {
                             <span className={`text-xs rounded-full px-2 py-0.5 ${status?.color}`}>{status?.label}</span>
                           </div>
                         </div>
+
+                        {linkedOrder && (
+                          <Link
+                            to="/orders"
+                            className="mb-2 inline-flex items-center gap-1 text-xs rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 hover:bg-blue-100"
+                            title="Xem trong mục Bán hàng"
+                          >
+                            <Receipt className="h-3 w-3" />
+                            <span className="font-mono font-medium">{linkedOrder.code}</span>
+                            <span>· {fmtMoney(linkedOrder.total)}</span>
+                            <ExternalLink className="h-3 w-3 opacity-60" />
+                          </Link>
+                        )}
 
                         {customer && <div className="text-xs text-muted-foreground mb-1">👤 {customer.name}</div>}
                         {s.address && <div className="text-xs text-muted-foreground mb-1">📍 {s.address}</div>}
@@ -416,8 +460,32 @@ function Page() {
 
       {/* ── Dialog tạo lịch ── */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Tạo lịch làm việc</DialogTitle></DialogHeader>
+          {/* Đơn hàng liên kết — chọn trước để auto-fill */}
+          <div className="mb-3 rounded-md border bg-blue-50/50 p-3">
+            <Label className="flex items-center gap-1 text-blue-900">
+              <Receipt className="h-4 w-4" /> Liên kết với đơn hàng (tuỳ chọn)
+            </Label>
+            <select
+              className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+              value={createForm.order_id}
+              onChange={(e) => pickOrder(e.target.value)}
+            >
+              <option value="">— Không liên kết —</option>
+              {(data?.orders ?? []).map((o: any) => {
+                const c: any = (data?.customers ?? []).find((x: any) => x.id === o.customer_id);
+                return (
+                  <option key={o.id} value={o.id}>
+                    {o.code} · {c?.name ?? "Khách lẻ"} · {fmtMoney(o.total)} ({o.status})
+                  </option>
+                );
+              })}
+            </select>
+            <div className="text-xs text-muted-foreground mt-1">
+              Khi chọn đơn, khách hàng / chi nhánh / địa chỉ sẽ tự điền.
+            </div>
+          </div>
           <div className="space-y-3">
             <div><Label>Tiêu đề *</Label>
               <Input className="mt-1" value={createForm.title}
