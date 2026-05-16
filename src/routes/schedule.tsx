@@ -61,7 +61,7 @@ function Page() {
 
   const canCreate  = isAdmin || (!!user && hasPermission(user, "create_schedule"));
   const canApprove = isAdmin || (!!user && hasPermission(user, "approve_schedule"));
-  const isTech     = !isAdmin && !!user && hasPermission(user, "technician");
+  const isTech     = !!user && hasPermission(user, "technician");
 
   const { data } = useQuery({ queryKey: ["schedules"], queryFn: () => listFn() });
   const { data: diffData } = useQuery({ queryKey: ["work-difficulties"], queryFn: () => listDiff() });
@@ -112,18 +112,25 @@ function Page() {
   });
 
   // Filter + nhóm lịch
-  const mySchedules = useMemo(() => {
-    let list = data?.schedules ?? [];
-    if (isTech && user) {
-      const myIds = new Set(
-        (data?.assignments ?? []).filter((a: any) => a.user_id === user.id).map((a: any) => a.schedule_id)
-      );
-      list = list.filter((s: any) => myIds.has(s.id));
-    }
-    if (filterStatus) list = list.filter((s: any) => s.status === filterStatus);
-    if (filterType)   list = list.filter((s: any) => s.type === filterType);
-    return list;
-  }, [data, isTech, user, filterStatus, filterType]);
+    const onlyAssignedSchedules = isTech && !canCreate && !canApprove;
+
+    const mySchedules = useMemo(() => {
+      let list = data?.schedules ?? [];
+
+      if (onlyAssignedSchedules && user) {
+        const myIds = new Set(
+          (data?.assignments ?? [])
+            .filter((a: any) => a.user_id === user.id)
+            .map((a: any) => a.schedule_id)
+        );
+        list = list.filter((s: any) => myIds.has(s.id));
+      }
+
+      if (filterStatus) list = list.filter((s: any) => s.status === filterStatus);
+      if (filterType) list = list.filter((s: any) => s.type === filterType);
+
+      return list;
+    }, [data, onlyAssignedSchedules, user, filterStatus, filterType]);
 
   const grouped = useMemo(() => groupByDate(mySchedules), [mySchedules]);
 

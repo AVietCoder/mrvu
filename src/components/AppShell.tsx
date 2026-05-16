@@ -25,7 +25,7 @@ const nav: NavItem[] = [
   { to: "/employees", label: "Nhân viên",   icon: UserCog,       permission: "admin" }, // ✏️ chỉ admin
   { to: "/reports",   label: "Báo cáo",     icon: BarChart3,     permission: "admin" }, // ✏️ doanh thu = admin-only
   { to: "/branches",  label: "Chi nhánh",   icon: Building2,     permission: "manage_branches" },
-  { to: "/schedule", label: "Lịch làm việc", icon: CalendarDays, permission: "create_schedule" as Permission },
+  { to: "/schedule", label: "Lịch làm việc", icon: CalendarDays, permission: "create_schedule" as Permission }, // canSeeNav xử lý special cho schedule
 ];
 
 
@@ -49,6 +49,14 @@ export function AppShell({ children, title }: { children: ReactNode; title: stri
     if (!user) return false;
     if (isAdmin) return true;
     if (!item.permission) return true; // không yêu cầu quyền = ai cũng thấy
+    // Lịch làm việc: kỹ thuật viên, người duyệt lịch hoặc người tạo lịch đều được thấy
+    if (item.to === "/schedule") {
+      return (
+        user.permissions.includes("create_schedule") ||
+        user.permissions.includes("approve_schedule") ||
+        user.permissions.includes("technician")
+      );
+    }
     return user.permissions.includes(item.permission as Permission);
   }
 
