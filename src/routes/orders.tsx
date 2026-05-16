@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -8,26 +8,24 @@ import { SearchFilter } from "@/components/SearchFilter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, X, ShoppingBag, Clock, CalendarDays } from "lucide-react";
+import {
+  Plus, X, ShoppingBag, Clock, CalendarDays,
+  ChevronLeft, ChevronRight, ExternalLink,
+} from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute("/orders")({
   head: () => ({ meta: [{ title: "Bán hàng — QuatTran POS" }] }),
   component: Page,
 });
 
-type LineItem = {
-  product_id: string;
-  qty: number;
-  unit_price: number;
-  discount: number;
-};
+type LineItem = { product_id: string; qty: number; unit_price: number; discount: number };
 
-// Helper: format số tiền input (thêm dấu chấm, chỉ giữ số)
 function fmtInput(val: string): string {
   const num = val.replace(/\D/g, "");
   if (!num) return "";
@@ -37,17 +35,33 @@ function parseInput(val: string): number {
   return Number(val.replace(/\D/g, "")) || 0;
 }
 
+const PAGE_SIZE = 20;
+
+const STATUS_LABEL: Record<string, string> = {
+  completed: "Hoàn tất", reserved: "Đặt trước", draft: "Nháp", cancelled: "Hủy",
+};
+const STATUS_COLOR: Record<string, string> = {
+  completed: "bg-green-100 text-green-700",
+  reserved: "bg-yellow-100 text-yellow-700",
+  draft: "bg-gray-100 text-gray-700",
+  cancelled: "bg-red-100 text-red-700",
+};
+
 function Page() {
-  const list = useServerFn(listOrders);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const listFn = useServerFn(listOrders);
   const create = useServerFn(createOrder);
   const updateStatus = useServerFn(updateOrderStatus);
   const qc = useQueryClient();
 
-  const { data } = useQuery({ queryKey: ["orders"], queryFn: () => list() });
+  const { data } = useQuery({ queryKey: ["orders"], queryFn: () => listFn() });
 
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"orders" | "reserved">("orders");
+  const [page, setPage] = useState(1);
 
+  // Form tạo đơn
   const [items, setItems] = useState<LineItem[]>([]);
   const [customer, setCustomer] = useState("");
   const [branch, setBranch] = useState("");
@@ -58,54 +72,63 @@ function Page() {
   const [paidRaw, setPaidRaw] = useState("0");
   const [note, setNote] = useState("");
 
+  // Filter / sort
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("newest");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterBranch, setFilterBranch] = useState("");
 
   const discount = parseInput(discountRaw);
-  const deposit = parseInput(depositRaw);
-  const paid = parseInput(paidRaw);
+  const deposit  = parseInput(depositRaw);
+  const paid     = parseInput(paidRaw);
 
   const subtotal = useMemo(
     () => items.reduce((s, i) => s + i.qty * i.unit_price - i.discount, 0),
-    [items]
+    [items],
   );
   const total = Math.max(0, subtotal - discount);
 
-  // Tất cả đơn
-  const allOrders = data?.orders ?? [];
-
-  // Tab "Hóa đơn bán hàng" — không phải reserved
+  const allOrders    = data?.orders ?? [];
   const invoiceOrders = useMemo(() => allOrders.filter((o) => o.status !== "reserved"), [allOrders]);
-  // Tab "Đơn đặt hàng" — chỉ reserved
   const reservedOrders = useMemo(() => allOrders.filter((o) => o.status === "reserved"), [allOrders]);
 
   function applyFilter(list: typeof allOrders) {
     return list
       .filter((o) => {
-        const customerName = data?.customers.find((c) => c.id === o.customer_id)?.name ?? "";
+        const custName = (data?.customers ?? []).find((c: any) => c.id === o.customer_id)?.name ?? "";
         const q = search.toLowerCase();
-        const matchSearch = o.code.toLowerCase().includes(q) || customerName.toLowerCase().includes(q);
-        const matchStatus = !filterStatus || o.status === filterStatus;
-        const matchBranch = !filterBranch || o.branch_id === filterBranch;
-        return matchSearch && matchStatus && matchBranch;
+        return (
+          (o.code.toLowerCase().includes(q) || custName.toLowerCase().includes(q)) &&
+          (!filterStatus || o.status === filterStatus) &&
+          (!filterBranch || o.branch_id === filterBranch)
+        );
       })
       .sort((a, b) => {
         if (sortBy === "total_desc") return b.total - a.total;
-        if (sortBy === "total_asc") return a.total - b.total;
+        if (sortBy === "total_asc")  return a.total - b.total;
         if (sortBy === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
   }
 
-  const filteredOrders = useMemo(() => applyFilter(activeTab === "reserved" ? reservedOrders : invoiceOrders), [data, search, sortBy, filterStatus, filterBranch, activeTab]);
+  const filteredOrders = useMemo(
+    () => applyFilter(activeTab === "reserved" ? reservedOrders : invoiceOrders),
+    [data, search, sortBy, filterStatus, filterBranch, activeTab],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
+  const pagedOrders = filteredOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  function handleSearch(v: string) { setSearch(v); setPage(1); }
+  function handleSort(v: string)   { setSortBy(v); setPage(1); }
+  function handleTab(t: "orders" | "reserved") { setActiveTab(t); setPage(1); setSearch(""); setFilterStatus(""); }
 
   function reset() {
     setItems([]);
     setCustomer("");
     setBranch(data?.branches[0]?.id ?? "");
-    setEmployee("");
+    // Mặc định nhân viên là người đang đăng nhập
+    setEmployee(user?.id ?? "");
     setStatus("completed");
     setDiscountRaw("0");
     setDepositRaw("0");
@@ -116,7 +139,7 @@ function Page() {
   function addItem() {
     const p = data?.products[0];
     if (!p) return;
-    setItems([...items, { product_id: p.id, qty: 1, unit_price: p.sale_price, discount: 0 }]);
+    setItems([...items, { product_id: p.id, qty: 1, unit_price: (p as any).sale_price, discount: 0 }]);
   }
 
   async function submit() {
@@ -143,132 +166,118 @@ function Page() {
     } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
   }
 
-  const statusLabel: Record<string, string> = {
-    completed: "Hoàn tất", reserved: "Đặt trước", draft: "Nháp", cancelled: "Hủy",
-  };
-  const statusColor: Record<string, string> = {
-    completed: "bg-green-100 text-green-700",
-    reserved: "bg-yellow-100 text-yellow-700",
-    draft: "bg-gray-100 text-gray-700",
-    cancelled: "bg-red-100 text-red-700",
-  };
-
   function OrderTable({ rows }: { rows: typeof allOrders }) {
     return (
-      <div className="overflow-x-auto -mx-2 md:mx-0">
-      <table className="w-full text-sm min-w-[760px]">
-        <thead className="text-left text-muted-foreground border-b">
-          <tr>
-            <th className="py-2 pr-2">Mã đơn</th>
-            <th className="pr-2">Ngày</th>
-            <th className="pr-2">Khách hàng</th>
-            <th className="pr-2">Chi nhánh</th>
-            <th className="pr-2">NV</th>
-            <th className="text-right pr-2">Tổng</th>
-            <th className="pr-2">Trạng thái</th>
-            <th className="pr-2">Lịch lắp</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((o) => {
-            const cust = data?.customers.find((c) => c.id === o.customer_id)?.name ?? "Khách lẻ";
-            const br = data?.branches.find((b) => b.id === o.branch_id)?.name ?? "—";
-            const emp = data?.employees.find((e) => e.id === o.employee_id)?.name ?? "—";
-            const linkedSchedules = (data?.schedules ?? []).filter((s: any) => s.order_id === o.id);
-            return (
-              <tr key={o.id} className="border-b last:border-0 hover:bg-muted/30">
-                <td className="py-2 font-mono pr-2">{o.code}</td>
-                <td className="text-xs text-muted-foreground pr-2">
-                  {new Date(o.created_at).toLocaleString("vi-VN")}
-                </td>
-                <td className="pr-2">{cust}</td>
-                <td className="pr-2">{br}</td>
-                <td className="pr-2">{emp}</td>
-                <td className="text-right font-medium pr-2">{fmt(o.total)}</td>
-                <td className="pr-2">
-                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs ${statusColor[o.status] ?? "bg-secondary"}`}>
-                    {statusLabel[o.status]}
-                  </span>
-                </td>
-                <td className="pr-2">
-                  {linkedSchedules.length === 0 ? (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  ) : (
-                    <a
-                      href="/schedule"
-                      className="inline-flex items-center gap-1 text-xs rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 hover:bg-blue-100"
-                      title={linkedSchedules.map((s: any) => s.title).join("\n")}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[680px]">
+          <thead className="text-left text-muted-foreground border-b">
+            <tr>
+              <th className="py-2 pr-2 w-8 text-center">STT</th>
+              <th className="pr-2">Mã đơn</th>
+              <th className="pr-2">Ngày</th>
+              <th className="pr-2">Khách hàng</th>
+              <th className="pr-2">Chi nhánh</th>
+              <th className="text-right pr-2">Tổng</th>
+              <th className="pr-2">Trạng thái</th>
+              <th className="pr-2">Lịch lắp</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((o, idx) => {
+              const cust = (data?.customers ?? []).find((c: any) => c.id === o.customer_id)?.name ?? "Khách lẻ";
+              const br   = (data?.branches ?? []).find((b: any) => b.id === o.branch_id)?.name ?? "—";
+              const linked = (data?.schedules ?? []).filter((s: any) => s.order_id === o.id);
+              const globalIdx = (page - 1) * PAGE_SIZE + idx + 1;
+              return (
+                <tr
+                  key={o.id}
+                  className="border-b last:border-0 hover:bg-muted/40 cursor-pointer transition-colors"
+                  onClick={() => navigate({ to: "/orders/$id", params: { id: o.id } })}
+                >
+                  <td className="py-2 text-center text-xs text-muted-foreground pr-2">{globalIdx}</td>
+                  <td className="font-mono text-xs pr-2 font-medium">{o.code}</td>
+                  <td className="text-xs text-muted-foreground pr-2 whitespace-nowrap">
+                    {new Date(o.created_at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                  </td>
+                  <td className="pr-2 max-w-[140px] truncate">{cust}</td>
+                  <td className="pr-2 text-xs text-muted-foreground">{br}</td>
+                  <td className="text-right font-medium pr-2 whitespace-nowrap">{fmt(o.total)}</td>
+                  <td className="pr-2">
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs ${STATUS_COLOR[o.status] ?? "bg-secondary"}`}>
+                      {STATUS_LABEL[o.status]}
+                    </span>
+                  </td>
+                  <td className="pr-2" onClick={(e) => e.stopPropagation()}>
+                    {linked.length === 0 ? (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    ) : (
+                      <Link
+                        to="/schedule"
+                        className="inline-flex items-center gap-1 text-xs rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 hover:bg-blue-100"
+                      >
+                        <CalendarDays className="h-3 w-3" /> {linked.length} lịch
+                      </Link>
+                    )}
+                  </td>
+                  <td className="text-right" onClick={(e) => e.stopPropagation()}>
+                    <Link
+                      to="/orders/$id"
+                      params={{ id: o.id }}
+                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+                      title="Xem chi tiết"
                     >
-                      <CalendarDays className="h-3 w-3" />
-                      {linkedSchedules.length} lịch
-                    </a>
-                  )}
-                </td>
-                <td className="text-right">
-                  {(o.status === "reserved" || o.status === "draft") && (
-                    <Button
-                      size="sm" variant="outline"
-                      onClick={async () => {
-                        await updateStatus({ data: { id: o.id, status: "completed" } });
-                        toast.success("Đã hoàn tất đơn " + o.code);
-                        qc.invalidateQueries({ queryKey: ["orders"] });
-                      }}
-                    >
-                      Hoàn tất
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-          {rows.length === 0 && (
-            <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">Không có đơn nào</td></tr>
-          )}
-        </tbody>
-      </table>
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
+            {rows.length === 0 && (
+              <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">Không có đơn nào</td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
     );
   }
 
   return (
     <AppShell title="Bán hàng">
-      {/* Header + nút tạo đơn */}
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 flex items-center gap-3 flex-wrap">
+        {/* Dialog tạo đơn */}
         <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (o) reset(); }}>
           <DialogTrigger asChild>
             <Button><Plus className="h-4 w-4 mr-1" />Tạo đơn hàng</Button>
           </DialogTrigger>
-          <DialogContent className="max-w-3xl">
+          <DialogContent className="w-full max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Tạo đơn hàng</DialogTitle></DialogHeader>
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label>Khách hàng</Label>
                   <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={customer} onChange={(e) => setCustomer(e.target.value)}>
                     <option value="">Khách lẻ</option>
-                    {data?.customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {(data?.customers ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <Label>Chi nhánh</Label>
                   <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={branch} onChange={(e) => setBranch(e.target.value)}>
-                    {data?.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    {(data?.branches ?? []).map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Nhân viên</Label>
                   <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={employee} onChange={(e) => setEmployee(e.target.value)}>
                     <option value="">---</option>
-                    {data?.employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                    {(data?.employees ?? []).map((e: any) => <option key={e.id} value={e.id}>{e.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <Label>Trạng thái</Label>
                   <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={status}
-                    onChange={(e) => setStatus(e.target.value as "completed" | "reserved" | "draft")}>
+                    onChange={(e) => setStatus(e.target.value as any)}>
                     <option value="completed">Hoàn tất</option>
                     <option value="reserved">Đặt trước (chưa giao)</option>
                     <option value="draft">Nháp</option>
@@ -294,24 +303,19 @@ function Page() {
                           className="col-span-5 h-9 rounded-md border bg-background px-2 text-sm"
                           value={item.product_id}
                           onChange={(e) => {
-                            const p = data?.products.find((x) => x.id === e.target.value);
+                            const p = (data?.products ?? []).find((x: any) => x.id === e.target.value);
                             const next = [...items];
-                            next[idx] = { ...next[idx], product_id: e.target.value, unit_price: p?.sale_price ?? 0 };
+                            next[idx] = { ...next[idx], product_id: e.target.value, unit_price: (p as any)?.sale_price ?? 0 };
                             setItems(next);
                           }}
                         >
-                          {data?.products.map((p) => <option key={p.id} value={p.id}>{p.sku} — {p.name}</option>)}
+                          {(data?.products ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                         <Input type="number" className="col-span-1" placeholder="SL" value={item.qty}
-                          onChange={(e) => { const next = [...items]; next[idx].qty = Number(e.target.value); setItems(next); }} />
-                        {/* Giá bán — format có dấu chấm */}
+                          onChange={(e) => { const n = [...items]; n[idx].qty = Number(e.target.value); setItems(n); }} />
                         <Input className="col-span-3" placeholder="Đơn giá"
                           value={item.unit_price === 0 ? "" : new Intl.NumberFormat("vi-VN").format(item.unit_price)}
-                          onChange={(e) => {
-                            const next = [...items];
-                            next[idx].unit_price = parseInput(e.target.value);
-                            setItems(next);
-                          }} />
+                          onChange={(e) => { const n = [...items]; n[idx].unit_price = parseInput(e.target.value); setItems(n); }} />
                         <div className="col-span-2 text-right text-xs font-medium text-muted-foreground pr-1">{fmt(lineTotal)}</div>
                         <button type="button" className="col-span-1 flex items-center justify-center rounded-md border hover:text-destructive p-1"
                           onClick={() => setItems(items.filter((_, i) => i !== idx))}>
@@ -323,51 +327,39 @@ function Page() {
                 </div>
               </div>
 
-              {/* Giảm giá / Đặt cọc / Thanh toán — format có dấu chấm */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <Label>Giảm giá (₫)</Label>
-                  <Input className="mt-1" value={discountRaw}
-                    onChange={(e) => setDiscountRaw(fmtInput(e.target.value))}
-                    onFocus={(e) => e.target.select()} />
+                  <Input className="mt-1" value={discountRaw} onChange={(e) => setDiscountRaw(fmtInput(e.target.value))} onFocus={(e) => e.target.select()} />
                 </div>
                 <div>
                   <Label>Đặt cọc (₫)</Label>
-                  <Input className="mt-1" value={depositRaw}
-                    onChange={(e) => setDepositRaw(fmtInput(e.target.value))}
-                    onFocus={(e) => e.target.select()} />
+                  <Input className="mt-1" value={depositRaw} onChange={(e) => setDepositRaw(fmtInput(e.target.value))} onFocus={(e) => e.target.select()} />
                 </div>
                 <div>
                   <Label>Đã thanh toán (₫)</Label>
-                  <Input className="mt-1" value={paidRaw}
-                    onChange={(e) => setPaidRaw(fmtInput(e.target.value))}
-                    onFocus={(e) => e.target.select()} />
+                  <Input className="mt-1" value={paidRaw} onChange={(e) => setPaidRaw(fmtInput(e.target.value))} onFocus={(e) => e.target.select()} />
                 </div>
               </div>
 
               <div><Label>Ghi chú</Label><Input className="mt-1" value={note} onChange={(e) => setNote(e.target.value)} /></div>
 
-              {/* Tóm tắt */}
               <div className="rounded-lg border p-4 bg-muted/30">
                 <div className="flex justify-between text-sm"><span>Tạm tính</span><span>{fmt(subtotal)}</span></div>
                 <div className="flex justify-between text-sm mt-1"><span>Giảm giá</span><span>- {fmt(discount)}</span></div>
                 <div className="flex justify-between font-semibold text-lg mt-2 pt-2 border-t">
                   <span>Tổng cộng</span><span>{fmt(total)}</span>
                 </div>
-                {status === "reserved" && deposit > 0 && (
-                  <div className="flex justify-between text-sm mt-1 text-yellow-700"><span>Đặt cọc</span><span>{fmt(deposit)}</span></div>
-                )}
               </div>
 
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setOpen(false)}>Hủy</Button>
-                <Button onClick={submit}>Tạo đơn</Button>
+              <DialogFooter className="flex-col sm:flex-row gap-2">
+                <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>Hủy</Button>
+                <Button className="w-full sm:w-auto" onClick={submit}>Tạo đơn</Button>
               </DialogFooter>
             </div>
           </DialogContent>
         </Dialog>
 
-        {/* Số lượng đơn đặt trước nếu có */}
         {reservedOrders.length > 0 && (
           <span className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1 flex items-center gap-1">
             <Clock className="h-3 w-3" />{reservedOrders.length} đơn đặt trước chờ giao
@@ -376,42 +368,40 @@ function Page() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-3 border-b">
+      <div className="flex gap-1 mb-3 border-b overflow-x-auto">
         <button
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "orders" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          onClick={() => setActiveTab("orders")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "orders" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          onClick={() => handleTab("orders")}
         >
-          <ShoppingBag className="h-4 w-4 inline mr-1" />
-          Hóa đơn bán hàng
+          <ShoppingBag className="h-4 w-4 inline mr-1" />Hóa đơn bán hàng
         </button>
         <button
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${activeTab === "reserved" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          onClick={() => setActiveTab("reserved")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 whitespace-nowrap ${activeTab === "reserved" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          onClick={() => handleTab("reserved")}
         >
-          <Clock className="h-4 w-4 inline mr-1" />
-          Đơn đặt hàng
+          <Clock className="h-4 w-4 inline mr-1" />Đơn đặt hàng
           {reservedOrders.length > 0 && (
-            <span className="ml-1 text-xs bg-yellow-100 text-yellow-700 rounded-full px-1.5 py-0.5">{reservedOrders.length}</span>
+            <span className="text-xs bg-yellow-100 text-yellow-700 rounded-full px-1.5 py-0.5">{reservedOrders.length}</span>
           )}
         </button>
       </div>
 
       <Card>
         <SearchFilter
-          search={search} onSearch={setSearch}
+          search={search} onSearch={handleSearch}
           placeholder="Tìm mã đơn, khách hàng..."
           sortOptions={[
-            { value: "newest", label: "Mới nhất" },
-            { value: "oldest", label: "Cũ nhất" },
+            { value: "newest",     label: "Mới nhất" },
+            { value: "oldest",     label: "Cũ nhất" },
             { value: "total_desc", label: "Giá trị cao nhất" },
-            { value: "total_asc", label: "Giá trị thấp nhất" },
+            { value: "total_asc",  label: "Giá trị thấp nhất" },
           ]}
-          sortValue={sortBy} onSort={setSortBy}
+          sortValue={sortBy} onSort={handleSort}
           filterSlot={
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {activeTab === "orders" && (
                 <select className="h-9 rounded-md border bg-background px-2 text-sm"
-                  value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                  value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}>
                   <option value="">Tất cả trạng thái</option>
                   <option value="completed">Hoàn tất</option>
                   <option value="draft">Nháp</option>
@@ -419,16 +409,39 @@ function Page() {
                 </select>
               )}
               <select className="h-9 rounded-md border bg-background px-2 text-sm"
-                value={filterBranch} onChange={(e) => setFilterBranch(e.target.value)}>
+                value={filterBranch} onChange={(e) => { setFilterBranch(e.target.value); setPage(1); }}>
                 <option value="">Tất cả chi nhánh</option>
-                {data?.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {(data?.branches ?? []).map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
           }
           total={filteredOrders.length}
           totalLabel={activeTab === "reserved" ? "đơn đặt hàng" : "đơn hàng"}
         />
-        <OrderTable rows={filteredOrders} />
+
+        <OrderTable rows={pagedOrders} />
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 pt-3 border-t text-sm flex-wrap gap-2">
+            <span className="text-muted-foreground">
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filteredOrders.length)} / {filteredOrders.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button size="icon" variant="outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map((n) => (
+                <Button key={n} size="sm" variant={n === page ? "default" : "outline"} className="w-8 h-8 p-0" onClick={() => setPage(n)}>
+                  {n}
+                </Button>
+              ))}
+              <Button size="icon" variant="outline" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
     </AppShell>
   );

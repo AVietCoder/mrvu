@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CalendarDays, Plus, CheckCircle2, Clock, Trash2,
-  Wrench, ShieldOff, Settings, Pencil, Receipt, ExternalLink,
+  Wrench, ShieldOff, Settings, Pencil, Receipt, ExternalLink, UserCog,
 } from "lucide-react";
 import { toast } from "sonner";
 import { hasPermission } from "@/lib/types";
@@ -61,20 +61,24 @@ function Page() {
 
   const canCreate  = isAdmin || (!!user && hasPermission(user, "create_schedule"));
   const canApprove = isAdmin || (!!user && hasPermission(user, "approve_schedule"));
-  const isTech     = !!user && hasPermission(user, "technician");
+  const isTech     = !isAdmin && !!user && hasPermission(user, "technician");
 
   const { data } = useQuery({ queryKey: ["schedules"], queryFn: () => listFn() });
   const { data: diffData } = useQuery({ queryKey: ["work-difficulties"], queryFn: () => listDiff() });
 
-  const [tab, setTab] = useState<"calendar" | "list" | "difficulties">("calendar");
+  const [tab, setTab] = useState<"calendar" | "list" | "difficulties">("list");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterType, setFilterType]     = useState("");
+  const [filterDate, setFilterDate]     = useState(new Date().toISOString().slice(0, 10)); // mặc định hôm nay
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const nowTimeStr = new Date().toTimeString().slice(0, 5);
 
   // ── Dialog tạo lịch ───────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
-    title: "", type: "install", scheduled_date: "",
-    scheduled_time: "", customer_id: "", branch_id: "",
+    title: "", type: "install", scheduled_date: todayStr,
+    scheduled_time: nowTimeStr, customer_id: "", branch_id: "",
     order_id: "",
     address: "", note: "",
   });
@@ -112,25 +116,20 @@ function Page() {
   });
 
   // Filter + nhóm lịch
-    const onlyAssignedSchedules = isTech && !canCreate && !canApprove;
-
-    const mySchedules = useMemo(() => {
-      let list = data?.schedules ?? [];
-
-      if (onlyAssignedSchedules && user) {
-        const myIds = new Set(
-          (data?.assignments ?? [])
-            .filter((a: any) => a.user_id === user.id)
-            .map((a: any) => a.schedule_id)
-        );
-        list = list.filter((s: any) => myIds.has(s.id));
-      }
-
-      if (filterStatus) list = list.filter((s: any) => s.status === filterStatus);
-      if (filterType) list = list.filter((s: any) => s.type === filterType);
-
-      return list;
-    }, [data, onlyAssignedSchedules, user, filterStatus, filterType]);
+  const mySchedules = useMemo(() => {
+    let list = data?.schedules ?? [];
+    if (isTech && user) {
+      const myIds = new Set(
+        (data?.assignments ?? []).filter((a: any) => a.user_id === user.id).map((a: any) => a.schedule_id)
+      );
+      list = list.filter((s: any) => myIds.has(s.id));
+    }
+    if (filterStatus) list = list.filter((s: any) => s.status === filterStatus);
+    if (filterType)   list = list.filter((s: any) => s.type === filterType);
+    // Lọc theo ngày (tab Danh sách mặc định hiện hôm nay)
+    if (filterDate)   list = list.filter((s: any) => (s.scheduled_date ?? "").slice(0, 10) === filterDate);
+    return list;
+  }, [data, isTech, user, filterStatus, filterType, filterDate]);
 
   const grouped = useMemo(() => groupByDate(mySchedules), [mySchedules]);
 
@@ -158,8 +157,8 @@ function Page() {
       toast.success("Đã tạo lịch" + (createForm.order_id ? " (đã liên kết đơn hàng)" : ""));
       setCreateOpen(false);
       setCreateForm({
-        title: "", type: "install", scheduled_date: "",
-        scheduled_time: "", customer_id: "", branch_id: "",
+        title: "", type: "install", scheduled_date: todayStr,
+        scheduled_time: nowTimeStr, customer_id: "", branch_id: "",
         order_id: "", address: "", note: "",
       });
       qc.invalidateQueries({ queryKey: ["schedules"] });
@@ -232,11 +231,18 @@ function Page() {
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <TabsList>
-            <TabsTrigger value="calendar"><CalendarDays className="h-4 w-4 mr-1" />Thời khóa biểu</TabsTrigger>
             <TabsTrigger value="list">Danh sách</TabsTrigger>
+            <TabsTrigger value="calendar"><CalendarDays className="h-4 w-4 mr-1" />Thời khóa biểu</TabsTrigger>
             {isAdmin && <TabsTrigger value="difficulties"><Settings className="h-4 w-4 mr-1" />Tính chất CV</TabsTrigger>}
           </TabsList>
-          <div className="ml-auto flex gap-2">
+          <div className="ml-auto flex flex-wrap gap-2">
+            {/* Lọc theo ngày — mặc định hôm nay */}
+            <input
+              type="date"
+              className="h-9 rounded-md border bg-background px-2 text-sm"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+            />
             <select className="h-9 rounded-md border bg-background px-2 text-sm"
               value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
               <option value="">Tất cả trạng thái</option>
@@ -300,9 +306,10 @@ function Page() {
 
                         {linkedOrder && (
                           <Link
-                            to="/orders"
+                            to="/orders/$id"
+                            params={{ id: linkedOrder.id }}
                             className="mb-2 inline-flex items-center gap-1 text-xs rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 hover:bg-blue-100"
-                            title="Xem trong mục Bán hàng"
+                            title="Xem chi tiết đơn hàng"
                           >
                             <Receipt className="h-3 w-3" />
                             <span className="font-mono font-medium">{linkedOrder.code}</span>
@@ -467,9 +474,17 @@ function Page() {
 
       {/* ── Dialog tạo lịch ── */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Tạo lịch làm việc</DialogTitle></DialogHeader>
           {/* Đơn hàng liên kết — chọn trước để auto-fill */}
+          {/* Người tạo lịch — chính là người đang đăng nhập */}
+          {user && (
+            <div className="mb-3 rounded-md bg-muted/50 px-3 py-2 text-sm flex items-center gap-2">
+              <UserCog className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">Người tạo lịch:</span>
+              <span className="font-medium">{user.full_name}</span>
+            </div>
+          )}
           <div className="mb-3 rounded-md border bg-blue-50/50 p-3">
             <Label className="flex items-center gap-1 text-blue-900">
               <Receipt className="h-4 w-4" /> Liên kết với đơn hàng (tuỳ chọn)
@@ -540,7 +555,7 @@ function Page() {
 
       {/* ── Dialog duyệt lịch ── */}
       <Dialog open={approveOpen} onOpenChange={setApproveOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Duyệt lịch & Phân công</DialogTitle></DialogHeader>
           <div className="space-y-4">
             {/* Phân công người */}
@@ -630,7 +645,7 @@ function Page() {
 
       {/* ── Dialog tính chất CV ── */}
       <Dialog open={diffOpen} onOpenChange={setDiffOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="w-full max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{diffForm.id ? "Sửa" : "Thêm"} tính chất công việc</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Tên *</Label><Input className="mt-1" value={diffForm.name} onChange={(e) => setDiffForm({...diffForm, name: e.target.value})} /></div>
