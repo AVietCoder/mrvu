@@ -96,3 +96,37 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
     db.prepare("UPDATE orders SET status=? WHERE id=?").run(data.status, data.id);
     return { ok: true };
   });
+
+export const updateOrder = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: any }) => {
+    const subtotal = data.items.reduce(
+      (s: number, it: any) => s + it.qty * it.unit_price - (it.discount || 0), 0
+    );
+    const total = Math.max(0, subtotal - (data.discount || 0));
+
+    const transaction = db.transaction(() => {
+      db.prepare(`UPDATE orders SET
+        customer_id=?, branch_id=?, employee_id=?, status=?,
+        subtotal=?, discount=?, total=?, deposit=?, paid=?, note=?
+        WHERE id=?`)
+        .run(
+          data.customer_id || null, data.branch_id,
+          data.employee_id || null, data.status,
+          subtotal, data.discount || 0, total,
+          data.deposit || 0, data.paid || 0,
+          data.note || null, data.id
+        );
+
+      // Xóa items cũ, thêm lại
+      db.prepare("DELETE FROM order_items WHERE order_id=?").run(data.id);
+      for (const it of data.items) {
+        const itemTotal = it.qty * it.unit_price - (it.discount || 0);
+        db.prepare(`INSERT INTO order_items (id,order_id,product_id,qty,unit_price,discount,total)
+          VALUES (?,?,?,?,?,?,?)`)
+          .run(uid(), data.id, it.product_id, it.qty, it.unit_price, it.discount || 0, itemTotal);
+      }
+    });
+
+    transaction();
+    return { ok: true };
+  });

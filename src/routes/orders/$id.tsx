@@ -2,7 +2,7 @@ import { createFileRoute, useParams, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { listOrders, updateOrderStatus } from "@/lib/orders.functions";
+import { listOrders, updateOrderStatus, updateOrder } from "@/lib/orders.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import {
   ArrowLeft, CalendarDays, Receipt, Clock,
   CheckCircle2, Package, User, Building2, UserCog, FileText,
-  ExternalLink,
+  ExternalLink, Pencil, X, Plus, Save, Ban,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -39,21 +39,117 @@ const SCHEDULE_STATUS_LABELS: Record<string, { label: string; color: string }> =
   cancelled:   { label: "Đã hủy",     color: "bg-gray-100 text-gray-700" },
 };
 
+type LineItem = { product_id: string; qty: number; unit_price: number; discount: number };
+
+function fmtInput(val: string): string {
+  const num = val.replace(/\D/g, "");
+  if (!num) return "";
+  return new Intl.NumberFormat("vi-VN").format(Number(num));
+}
+function parseInput(val: string): number {
+  return Number(val.replace(/\D/g, "")) || 0;
+}
+
 function OrderDetailPage() {
   const { id } = useParams({ from: "/orders/$id" });
   const { isAdmin } = useAuth();
   const listFn = useServerFn(listOrders);
   const updateStatusFn = useServerFn(updateOrderStatus);
+  const updateOrderFn = useServerFn(updateOrder);
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({ queryKey: ["orders"], queryFn: () => listFn() });
 
   const order = useMemo(() => (data?.orders ?? []).find((o: any) => o.id === id), [data, id]);
-  const items = useMemo(() => (data?.items ?? []).filter((i: any) => i.order_id === id), [data, id]);
+  const orderItems = useMemo(() => (data?.items ?? []).filter((i: any) => i.order_id === id), [data, id]);
   const linkedSchedules = useMemo(
     () => (data?.schedules ?? []).filter((s: any) => s.order_id === id),
     [data, id],
   );
+
+  // ── Edit mode state ────────────────────────────────────────
+  const [editing, setEditing] = useState(false);
+  const [editItems, setEditItems] = useState<LineItem[]>([]);
+  const [editCustomer, setEditCustomer] = useState("");
+  const [editBranch, setEditBranch] = useState("");
+  const [editEmployee, setEditEmployee] = useState("");
+  const [editStatus, setEditStatus] = useState("");
+  const [editDiscount, setEditDiscount] = useState("0");
+  const [editDeposit, setEditDeposit] = useState("0");
+  const [editPaid, setEditPaid] = useState("0");
+  const [editNote, setEditNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  function startEdit() {
+    if (!order) return;
+    setEditItems(orderItems.map((i: any) => ({
+      product_id: i.product_id,
+      qty: i.qty,
+      unit_price: i.unit_price,
+      discount: i.discount ?? 0,
+    })));
+    setEditCustomer(order.customer_id ?? "");
+    setEditBranch(order.branch_id ?? "");
+    setEditEmployee(order.employee_id ?? "");
+    setEditStatus(order.status);
+    setEditDiscount(String(order.discount ?? 0));
+    setEditDeposit(String(order.deposit ?? 0));
+    setEditPaid(String(order.paid ?? 0));
+    setEditNote(order.note ?? "");
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    if (editItems.length === 0) return toast.error("Đơn chưa có sản phẩm");
+    setSaving(true);
+    try {
+      await updateOrderFn({
+        data: {
+          id,
+          customer_id: editCustomer || undefined,
+          branch_id: editBranch,
+          employee_id: editEmployee || undefined,
+          status: editStatus,
+          discount: parseInput(editDiscount),
+          deposit: parseInput(editDeposit),
+          paid: parseInput(editPaid),
+          note: editNote || undefined,
+          items: editItems,
+        },
+      });
+      toast.success("Đã cập nhật đơn hàng");
+      setEditing(false);
+      qc.invalidateQueries({ queryKey: ["orders"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi lưu");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function addEditItem() {
+    const p = (data?.products ?? [])[0];
+    if (!p) return;
+    setEditItems([...editItems, { product_id: p.id, qty: 1, unit_price: (p as any).sale_price, discount: 0 }]);
+  }
+
+  const editSubtotal = useMemo(
+    () => editItems.reduce((s, i) => s + i.qty * i.unit_price - i.discount, 0),
+    [editItems]
+  );
+  const editTotal = Math.max(0, editSubtotal - parseInput(editDiscount));
+
+  async function completeOrder() {
+    await updateStatusFn({ data: { id: order.id, status: "completed" } });
+    toast.success("Đã hoàn tất đơn " + order.code);
+    qc.invalidateQueries({ queryKey: ["orders"] });
+  }
+  async function cancelOrder() {
+    if (!confirm("Hủy đơn hàng này?")) return;
+    await updateStatusFn({ data: { id: order.id, status: "cancelled" } });
+    toast.success("Đã hủy đơn " + order.code);
+    qc.invalidateQueries({ queryKey: ["orders"] });
+  }
 
   if (isLoading) {
     return (
@@ -62,7 +158,6 @@ function OrderDetailPage() {
       </AppShell>
     );
   }
-
   if (!order) {
     return (
       <AppShell title="Chi tiết đơn hàng">
@@ -78,43 +173,67 @@ function OrderDetailPage() {
   const branch = (data?.branches ?? []).find((b: any) => b.id === order.branch_id);
   const emp = (data?.employees ?? []).find((e: any) => e.id === order.employee_id);
 
-  async function completeOrder() {
-    await updateStatusFn({ data: { id: order.id, status: "completed" } });
-    toast.success("Đã hoàn tất đơn " + order.code);
-    qc.invalidateQueries({ queryKey: ["orders"] });
-  }
-
-  async function cancelOrder() {
-    if (!confirm("Hủy đơn hàng này?")) return;
-    await updateStatusFn({ data: { id: order.id, status: "cancelled" } });
-    toast.success("Đã hủy đơn " + order.code);
-    qc.invalidateQueries({ queryKey: ["orders"] });
-  }
-
   return (
     <AppShell title={`Đơn hàng ${order.code}`}>
-      {/* Breadcrumb */}
-      <div className="mb-5 flex items-center gap-2 text-sm text-muted-foreground">
+      {/* Breadcrumb + actions */}
+      <div className="mb-5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
         <Link to="/orders" className="hover:text-foreground flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" /> Bán hàng
         </Link>
         <span>/</span>
-        <span className="text-foreground font-medium">{order.code}</span>
+        <span className="text-foreground font-medium font-mono">{order.code}</span>
+
+        {isAdmin && !editing && (
+          <Button size="sm" variant="outline" className="ml-auto" onClick={startEdit}>
+            <Pencil className="h-4 w-4 mr-1" /> Chỉnh sửa đơn
+          </Button>
+        )}
+        {editing && (
+          <div className="ml-auto flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setEditing(false)}>
+              <X className="h-4 w-4 mr-1" /> Hủy
+            </Button>
+            <Button size="sm" onClick={saveEdit} disabled={saving}>
+              <Save className="h-4 w-4 mr-1" /> {saving ? "Đang lưu..." : "Lưu thay đổi"}
+            </Button>
+          </div>
+        )}
       </div>
 
+      {editing && (
+        <div className="mb-4 rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm text-orange-800 flex items-center gap-2">
+          <Pencil className="h-4 w-4 shrink-0" />
+          Bạn đang chỉnh sửa đơn hàng. Nhớ nhấn <strong className="mx-1">Lưu thay đổi</strong> để áp dụng.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Cột trái: thông tin đơn hàng + sản phẩm */}
+        {/* ── Cột trái ── */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Header đơn hàng */}
+
+          {/* Header */}
           <Card>
             <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
               <div>
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
                   <Receipt className="h-5 w-5 text-primary" />
                   <h2 className="text-xl font-bold font-mono">{order.code}</h2>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLOR[order.status] ?? "bg-secondary"}`}>
-                    {STATUS_LABEL[order.status]}
-                  </span>
+                  {!editing ? (
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLOR[order.status] ?? "bg-secondary"}`}>
+                      {STATUS_LABEL[order.status]}
+                    </span>
+                  ) : (
+                    <select
+                      className="h-7 rounded-full border bg-background px-3 text-xs"
+                      value={editStatus}
+                      onChange={(e) => setEditStatus(e.target.value)}
+                    >
+                      <option value="completed">Hoàn tất</option>
+                      <option value="reserved">Đặt trước</option>
+                      <option value="draft">Nháp</option>
+                      <option value="cancelled">Hủy</option>
+                    </select>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground flex items-center gap-1">
                   <Clock className="h-3 w-3" />
@@ -122,8 +241,7 @@ function OrderDetailPage() {
                 </div>
               </div>
 
-              {/* Actions — admin */}
-              {isAdmin && (
+              {isAdmin && !editing && (
                 <div className="flex gap-2 flex-wrap">
                   {(order.status === "reserved" || order.status === "draft") && (
                     <Button size="sm" onClick={completeOrder}>
@@ -131,38 +249,76 @@ function OrderDetailPage() {
                     </Button>
                   )}
                   {order.status !== "cancelled" && order.status !== "completed" && (
-                    <Button size="sm" variant="destructive" onClick={cancelOrder}>Hủy đơn</Button>
+                    <Button size="sm" variant="destructive" onClick={cancelOrder}>
+                      <Ban className="h-4 w-4 mr-1" /> Hủy đơn
+                    </Button>
                   )}
                 </div>
               )}
             </div>
 
-            {/* Info grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <InfoBox icon={<User className="h-4 w-4" />} label="Khách hàng">
-                {cust ? (
-                  <div>
-                    <div className="font-medium">{cust.name}</div>
-                    {cust.phone && <div className="text-xs text-muted-foreground">{cust.phone}</div>}
-                    {(cust.address || cust.district) && (
-                      <div className="text-xs text-muted-foreground">
-                        {[cust.address, cust.ward, cust.district, cust.province].filter(Boolean).join(", ")}
-                      </div>
-                    )}
-                  </div>
-                ) : <span className="text-muted-foreground">Khách lẻ</span>}
-              </InfoBox>
+            {/* Info */}
+            {!editing ? (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <InfoBox icon={<User className="h-4 w-4" />} label="Khách hàng">
+                  {cust ? (
+                    <div>
+                      <Link to="/customers" className="font-medium hover:text-primary hover:underline">
+                        {cust.name}
+                      </Link>
+                      {cust.phone && <div className="text-xs text-muted-foreground">{cust.phone}</div>}
+                      {(cust.address || cust.district) && (
+                        <div className="text-xs text-muted-foreground">
+                          {[cust.address, cust.ward, cust.district, cust.province].filter(Boolean).join(", ")}
+                        </div>
+                      )}
+                    </div>
+                  ) : <span className="text-muted-foreground">Khách lẻ</span>}
+                </InfoBox>
+                <InfoBox icon={<Building2 className="h-4 w-4" />} label="Chi nhánh">
+                  <span className="font-medium">{branch?.name ?? "—"}</span>
+                </InfoBox>
+                <InfoBox icon={<UserCog className="h-4 w-4" />} label="Nhân viên bán">
+                  {emp ? (
+                    <Link to="/employees" className="font-medium hover:text-primary hover:underline">
+                      {emp.name}
+                    </Link>
+                  ) : <span className="text-muted-foreground">—</span>}
+                </InfoBox>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label>Khách hàng</Label>
+                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                    value={editCustomer} onChange={(e) => setEditCustomer(e.target.value)}>
+                    <option value="">Khách lẻ</option>
+                    {(data?.customers ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <Label>Chi nhánh</Label>
+                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                    value={editBranch} onChange={(e) => setEditBranch(e.target.value)}>
+                    {(data?.branches ?? []).map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <Label>Nhân viên</Label>
+                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                    value={editEmployee} onChange={(e) => setEditEmployee(e.target.value)}>
+                    <option value="">—</option>
+                    {(data?.employees ?? []).map((e: any) => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <Label>Ghi chú</Label>
+                  <Input className="mt-1" value={editNote} onChange={(e) => setEditNote(e.target.value)} />
+                </div>
+              </div>
+            )}
 
-              <InfoBox icon={<Building2 className="h-4 w-4" />} label="Chi nhánh">
-                <span className="font-medium">{branch?.name ?? "—"}</span>
-              </InfoBox>
-
-              <InfoBox icon={<UserCog className="h-4 w-4" />} label="Nhân viên bán">
-                <span className="font-medium">{emp?.name ?? "—"}</span>
-              </InfoBox>
-            </div>
-
-            {order.note && (
+            {!editing && order.note && (
               <div className="mt-3 rounded-md bg-muted/40 px-3 py-2 text-sm flex items-start gap-2">
                 <FileText className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
                 <span>{order.note}</span>
@@ -172,68 +328,145 @@ function OrderDetailPage() {
 
           {/* Sản phẩm */}
           <Card>
-            <div className="flex items-center gap-2 mb-3">
-              <Package className="h-4 w-4 text-primary" />
-              <h3 className="font-semibold">Sản phẩm ({items.length})</h3>
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-primary" />
+                <h3 className="font-semibold">
+                  Sản phẩm ({editing ? editItems.length : orderItems.length})
+                </h3>
+              </div>
+              {editing && (
+                <Button size="sm" variant="outline" onClick={addEditItem}>
+                  <Plus className="h-4 w-4 mr-1" /> Thêm SP
+                </Button>
+              )}
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[400px]">
-                <thead className="text-left text-muted-foreground border-b">
-                  <tr>
-                    <th className="py-2 pr-2">Sản phẩm</th>
-                    <th className="text-right pr-2">Đơn giá</th>
-                    <th className="text-right pr-2">SL</th>
-                    <th className="text-right pr-2">CK</th>
-                    <th className="text-right">Thành tiền</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item: any) => {
-                    const p = (data?.products ?? []).find((x: any) => x.id === item.product_id);
-                    return (
-                      <tr key={item.id ?? item.product_id} className="border-b last:border-0">
-                        <td className="py-2 pr-2 font-medium">{p?.name ?? item.product_id}</td>
-                        <td className="text-right pr-2 text-muted-foreground">{fmt(item.unit_price)}</td>
-                        <td className="text-right pr-2">{item.qty}</td>
-                        <td className="text-right pr-2 text-muted-foreground">
-                          {item.discount > 0 ? `- ${fmt(item.discount)}` : "—"}
-                        </td>
-                        <td className="text-right font-medium">{fmt(item.total)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+
+            {!editing ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[400px]">
+                  <thead className="text-left text-muted-foreground border-b">
+                    <tr>
+                      <th className="py-2 pr-2">Sản phẩm</th>
+                      <th className="text-right pr-2">Đơn giá</th>
+                      <th className="text-right pr-2">SL</th>
+                      <th className="text-right pr-2">CK</th>
+                      <th className="text-right">Thành tiền</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orderItems.map((item: any) => {
+                      const p = (data?.products ?? []).find((x: any) => x.id === item.product_id);
+                      return (
+                        <tr key={item.id ?? item.product_id} className="border-b last:border-0">
+                          <td className="py-2 pr-2 font-medium">{p?.name ?? item.product_id}</td>
+                          <td className="text-right pr-2 text-muted-foreground">{fmt(item.unit_price)}</td>
+                          <td className="text-right pr-2">{item.qty}</td>
+                          <td className="text-right pr-2 text-muted-foreground">
+                            {item.discount > 0 ? `- ${fmt(item.discount)}` : "—"}
+                          </td>
+                          <td className="text-right font-medium">{fmt(item.total)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {editItems.length === 0 && (
+                  <div className="text-sm text-muted-foreground py-2">Chưa có sản phẩm.</div>
+                )}
+                {editItems.map((item, idx) => {
+                  const lineTotal = item.qty * item.unit_price - item.discount;
+                  return (
+                    <div key={idx} className="grid grid-cols-12 gap-1.5 items-center">
+                      <select
+                        className="col-span-5 h-9 rounded-md border bg-background px-2 text-sm"
+                        value={item.product_id}
+                        onChange={(e) => {
+                          const p = (data?.products ?? []).find((x: any) => x.id === e.target.value);
+                          const next = [...editItems];
+                          next[idx] = { ...next[idx], product_id: e.target.value, unit_price: (p as any)?.sale_price ?? 0 };
+                          setEditItems(next);
+                        }}
+                      >
+                        {(data?.products ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      <Input type="number" className="col-span-1" placeholder="SL" value={item.qty}
+                        onChange={(e) => { const n = [...editItems]; n[idx].qty = Number(e.target.value); setEditItems(n); }} />
+                      <Input className="col-span-3" placeholder="Đơn giá"
+                        value={item.unit_price === 0 ? "" : new Intl.NumberFormat("vi-VN").format(item.unit_price)}
+                        onChange={(e) => { const n = [...editItems]; n[idx].unit_price = parseInput(e.target.value); setEditItems(n); }} />
+                      <div className="col-span-2 text-right text-xs font-medium text-muted-foreground">{fmt(lineTotal)}</div>
+                      <button type="button" className="col-span-1 flex items-center justify-center rounded-md border hover:text-destructive p-1"
+                        onClick={() => setEditItems(editItems.filter((_, i) => i !== idx))}>
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </Card>
         </div>
 
-        {/* Cột phải: thanh toán + lịch lắp đặt */}
+        {/* ── Cột phải ── */}
         <div className="space-y-4">
-          {/* Tóm tắt thanh toán */}
           <Card>
             <h3 className="font-semibold mb-3">Thanh toán</h3>
-            <div className="space-y-2 text-sm">
-              <Row label="Tạm tính" value={fmt(order.subtotal)} />
-              {order.discount > 0 && <Row label="Giảm giá" value={`- ${fmt(order.discount)}`} cls="text-red-600" />}
-              <div className="border-t pt-2 flex justify-between font-bold text-base">
-                <span>Tổng cộng</span>
-                <span className="text-primary">{fmt(order.total)}</span>
+            {!editing ? (
+              <div className="space-y-2 text-sm">
+                <Row label="Tạm tính" value={fmt(order.subtotal)} />
+                {order.discount > 0 && <Row label="Giảm giá" value={`- ${fmt(order.discount)}`} cls="text-red-600" />}
+                <div className="border-t pt-2 flex justify-between font-bold text-base">
+                  <span>Tổng cộng</span>
+                  <span className="text-primary">{fmt(order.total)}</span>
+                </div>
+                {order.deposit > 0 && <Row label="Đặt cọc" value={fmt(order.deposit)} cls="text-yellow-700" />}
+                {order.paid > 0 && <Row label="Đã thanh toán" value={fmt(order.paid)} cls="text-green-700" />}
+                {(() => {
+                  const remaining = order.total - order.paid;
+                  return remaining > 0 ? (
+                    <div className="rounded-md bg-red-50 px-3 py-2 flex justify-between text-red-700 font-medium">
+                      <span>Còn nợ</span><span>{fmt(remaining)}</span>
+                    </div>
+                  ) : null;
+                })()}
               </div>
-              {order.deposit > 0 && <Row label="Đặt cọc" value={fmt(order.deposit)} cls="text-yellow-700" />}
-              {order.paid > 0 && <Row label="Đã thanh toán" value={fmt(order.paid)} cls="text-green-700" />}
-              {(() => {
-                const remaining = order.total - order.paid;
-                return remaining > 0 ? (
-                  <div className="rounded-md bg-red-50 px-3 py-2 flex justify-between text-red-700 font-medium">
-                    <span>Còn nợ</span><span>{fmt(remaining)}</span>
-                  </div>
-                ) : null;
-              })()}
-            </div>
+            ) : (
+              <div className="space-y-3 text-sm">
+                <div className="rounded-md bg-muted/40 px-3 py-2 flex justify-between text-sm">
+                  <span>Tạm tính</span>
+                  <span className="font-medium">{fmt(editSubtotal)}</span>
+                </div>
+                <div>
+                  <Label>Giảm giá (₫)</Label>
+                  <Input className="mt-1" value={editDiscount}
+                    onChange={(e) => setEditDiscount(fmtInput(e.target.value))}
+                    onFocus={(e) => e.target.select()} />
+                </div>
+                <div className="rounded-md bg-primary/5 px-3 py-2 flex justify-between font-bold">
+                  <span>Tổng cộng</span>
+                  <span className="text-primary">{fmt(editTotal)}</span>
+                </div>
+                <div>
+                  <Label>Đặt cọc (₫)</Label>
+                  <Input className="mt-1" value={editDeposit}
+                    onChange={(e) => setEditDeposit(fmtInput(e.target.value))}
+                    onFocus={(e) => e.target.select()} />
+                </div>
+                <div>
+                  <Label>Đã thanh toán (₫)</Label>
+                  <Input className="mt-1" value={editPaid}
+                    onChange={(e) => setEditPaid(fmtInput(e.target.value))}
+                    onFocus={(e) => e.target.select()} />
+                </div>
+              </div>
+            )}
           </Card>
 
-          {/* Lịch lắp đặt liên kết */}
+          {/* Lịch lắp đặt */}
           <Card>
             <div className="flex items-center gap-2 mb-3">
               <CalendarDays className="h-4 w-4 text-primary" />
@@ -245,16 +478,13 @@ function OrderDetailPage() {
               )}
             </div>
             {linkedSchedules.length === 0 ? (
-              <div className="text-sm text-muted-foreground text-center py-4">
-                Chưa có lịch lắp đặt nào
-              </div>
+              <div className="text-sm text-muted-foreground text-center py-4">Chưa có lịch lắp đặt</div>
             ) : (
               <div className="space-y-2">
                 {linkedSchedules.map((s: any) => {
                   const typeInfo = SCHEDULE_TYPES.find((t) => t.value === s.type);
                   const statusInfo = SCHEDULE_STATUS_LABELS[s.status];
-                  const assignees = (data?.schedule_assignments ?? [])
-                    .filter((a: any) => a.schedule_id === s.id);
+                  const assignees = (data?.schedule_assignments ?? []).filter((a: any) => a.schedule_id === s.id);
                   return (
                     <div key={s.id} className="rounded-md border p-3 text-sm">
                       <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -265,9 +495,7 @@ function OrderDetailPage() {
                       </div>
                       <div className="flex flex-wrap gap-1 mb-1.5">
                         {typeInfo && (
-                          <span className={`rounded-full px-2 py-0.5 text-xs ${typeInfo.color}`}>
-                            {typeInfo.label}
-                          </span>
+                          <span className={`rounded-full px-2 py-0.5 text-xs ${typeInfo.color}`}>{typeInfo.label}</span>
                         )}
                         {s.scheduled_date && (
                           <span className="text-xs text-muted-foreground flex items-center gap-1">
@@ -281,11 +509,7 @@ function OrderDetailPage() {
                         <div className="flex flex-wrap gap-1 mb-1.5">
                           {assignees.map((a: any) => {
                             const u = (data?.users ?? []).find((u: any) => u.id === a.user_id);
-                            return (
-                              <span key={a.user_id} className="text-xs bg-muted rounded-full px-2 py-0.5">
-                                {u?.full_name ?? "?"}
-                              </span>
-                            );
+                            return <span key={a.user_id} className="text-xs bg-muted rounded-full px-2 py-0.5">{u?.full_name ?? "?"}</span>;
                           })}
                         </div>
                       )}
@@ -310,9 +534,7 @@ function OrderDetailPage() {
 function InfoBox({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
   return (
     <div className="rounded-md bg-muted/40 p-3">
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-        {icon}{label}
-      </div>
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">{icon}{label}</div>
       <div className="text-sm">{children}</div>
     </div>
   );

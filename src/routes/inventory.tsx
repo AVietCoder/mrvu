@@ -1,5 +1,3 @@
-// src/routes/inventory.tsx
-
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -146,14 +144,9 @@ function Page() {
   const [stockBy, setStockBy] =
     useState("stock_desc");
 
-  // shared
-  const [partnerName, setPartnerName] =
-    useState("");
-
   const [voucherNote, setVoucherNote] =
     useState("");
 
-  // IN
   const [inBranch, setInBranch] =
     useState("");
 
@@ -162,7 +155,6 @@ function Page() {
       createMovementItem(),
     ]);
 
-  // OUT
   const [outBranch, setOutBranch] =
     useState("");
 
@@ -171,7 +163,6 @@ function Page() {
       createMovementItem(),
     ]);
 
-  // TRANSFER
   const [transferFrom, setTransferFrom] =
     useState("");
 
@@ -218,7 +209,6 @@ function Page() {
     const b0 = branches[0]?.id ?? "";
     const b1 = branches[1]?.id ?? b0;
 
-    setPartnerName("");
     setVoucherNote("");
 
     setInBranch(b0);
@@ -242,20 +232,7 @@ function Page() {
   }
 
   function buildNote() {
-    const partner =
-      partnerName.trim()
-        ? `${
-            type === "in"
-              ? "NCC"
-              : type === "out"
-                ? "Khách hàng"
-                : "Đối tác"
-          }: ${partnerName.trim()}`
-        : "";
-
-    return [partner, voucherNote]
-      .filter(Boolean)
-      .join(" • ");
+    return voucherNote.trim();
   }
 
   const validInItems = inItems.filter(
@@ -851,15 +828,14 @@ function Page() {
           </div>
         )}
       </Card>
-        <Pagination
-          page={page}
-          pageSize={DEFAULT_PAGE_SIZE}
-          total={filteredProducts.length}
-          onPageChange={setPage}
-          label="sản phẩm"
-        />
+      <Pagination
+        page={page}
+        pageSize={DEFAULT_PAGE_SIZE}
+        total={filteredProducts.length}
+        onPageChange={setPage}
+        label="sản phẩm"
+      />
 
-      {/* HISTORY */}
       <Card className="mb-6">
         <div className="mb-4 flex items-center gap-2">
           <History className="h-4 w-4" />
@@ -976,46 +952,100 @@ function Page() {
         open={open}
         onOpenChange={setOpen}
       >
-        <DialogContent className="h-[95vh] w-[98vw] max-w-7xl overflow-hidden bg-[#fafafa] p-0 dark:bg-background sm:rounded-2xl">
-          <div className="border-b px-4 py-4 sm:px-6">
-            <DialogHeader>
-              <DialogTitle className="text-xl">
-                {voucherTitle}
-              </DialogTitle>
-            </DialogHeader>
+        <DialogContent className="
+          h-[100dvh]
+          w-[100vw]
+          max-w-none
+          overflow-hidden
+          border-0
+          bg-[#f4f6f8]
+          p-0
+          dark:bg-background
+          sm:h-[96vh]
+          sm:w-[98vw]
+          sm:max-w-[1600px]
+          sm:rounded-2xl
+        ">
+          <div className="border-b bg-white px-4 py-4 shadow-sm sm:px-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <DialogHeader>
+                  <DialogTitle className="text-2xl font-bold tracking-tight">
+                    {voucherTitle}
+                  </DialogTitle>
+                </DialogHeader>
 
-            <div className="mt-1 text-sm text-muted-foreground">
-              Voucher inventory UI
-            </div>
-
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              <div className="rounded-md border bg-muted/40 px-2 py-1">
-                Mã phiếu #
-                {Date.now()
-                  .toString()
-                  .slice(-6)}
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Inventory Voucher System
+                </div>
               </div>
 
-              <div className="rounded-md border bg-muted/40 px-2 py-1">
-                {new Date().toLocaleString(
-                  "vi-VN"
-                )}
-              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <div className="rounded-lg border bg-muted/40 px-3 py-2">
+                  <div className="text-muted-foreground">
+                    Mã phiếu
+                  </div>
 
-              <div className="rounded-md border bg-muted/40 px-2 py-1">
-                Người tạo:{" "}
-                {user?.name ||
-                  user?.email ||
-                  "—"}
+                  <div className="font-semibold">
+                    #
+                    {Date.now()
+                      .toString()
+                      .slice(-6)}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border bg-muted/40 px-3 py-2">
+                  <div className="text-muted-foreground">
+                    Thời gian
+                  </div>
+
+                  <div className="font-semibold">
+                    {new Date().toLocaleString(
+                      "vi-VN"
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border bg-muted/40 px-3 py-2">
+                  <div className="text-muted-foreground">
+                    Người tạo
+                  </div>
+
+                  <div className="font-semibold">
+                    {user?.full_name ||
+                      user?.email ||
+                      "—"}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="grid h-full min-h-0 lg:grid-cols-[minmax(0,1fr)_380px]">
-            {/* LEFT */}
-            <div className="min-h-0 overflow-y-auto border-b lg:border-b-0 lg:border-r">
+          <div className="
+            grid
+            h-full
+            min-h-0
+            bg-[#f4f6f8]
+            lg:grid-cols-[minmax(0,1fr)_420px]
+          ">
+            <div className="
+              min-h-0
+              overflow-hidden
+              border-b
+              bg-white
+              lg:border-b-0
+              lg:border-r
+            ">
               <div className="px-4 py-4 sm:px-6">
-                <div className="mb-4 flex items-center justify-between">
+                <div className="
+                  mb-4
+                  flex
+                  flex-col
+                  gap-3
+                  sm:flex-row
+                  sm:items-center
+                  sm:justify-between
+                ">
                   <div>
                     <div className="font-medium">
                       Danh sách sản phẩm
@@ -1078,9 +1108,22 @@ function Page() {
                   </Button>
                 </div>
 
-                <div className="overflow-x-auto rounded-2xl border bg-white">
+                <div className="
+                  overflow-auto
+                  rounded-2xl
+                  border
+                  bg-white
+                  shadow-sm
+                ">
                   <table className="w-full min-w-[920px] text-sm">
-                    <thead className="sticky top-0 z-10 bg-muted/40 backdrop-blur">
+                    <thead className="
+                      sticky
+                      top-0
+                      z-20
+                      bg-[#f8fafc]
+                      shadow-sm
+                      backdrop-blur
+                    ">
                       <tr className="border-b">
                         <th className="px-3 py-3 text-left">
                           #
@@ -1137,7 +1180,12 @@ function Page() {
                           return (
                             <tr
                               key={idx}
-                              className="border-b align-top hover:bg-muted/20"
+                              className="
+                                border-b
+                                align-top
+                                transition-colors
+                                hover:bg-blue-50/40
+                              "
                             >
                               <td className="px-3 py-3 text-muted-foreground">
                                 {idx + 1}
@@ -1492,7 +1540,6 @@ function Page() {
               </div>
             </div>
 
-            {/* RIGHT */}
             <div className="min-h-0 overflow-y-auto bg-muted/20 px-4 py-4 sm:px-6">
               <div className="space-y-4 pb-10">
                 <div className="rounded-2xl border bg-white p-5 shadow-sm">
@@ -1659,24 +1706,6 @@ function Page() {
 
                   <div className="mt-3">
                     <Label>
-                      Đối tác
-                    </Label>
-
-                    <Input
-                      className="mt-1"
-                      value={
-                        partnerName
-                      }
-                      onChange={(e) =>
-                        setPartnerName(
-                          e.target.value
-                        )
-                      }
-                    />
-                  </div>
-
-                  <div className="mt-3">
-                    <Label>
                       Ghi chú
                     </Label>
 
@@ -1742,310 +1771,305 @@ function Page() {
                     <Button
                       variant="outline"
                       onClick={() => {
-  const rows = (
-    type === "in"
-      ? validInItems
-      : type === "out"
-        ? validOutItems
-        : validTransferItems
-  )
-    .map((item: any, idx: number) => {
-      const p = products.find(
-        (x) => x.id === item.product_id
-      );
+                        const rows = (
+                          type === "in"
+                            ? validInItems
+                            : type === "out"
+                              ? validOutItems
+                              : validTransferItems
+                        )
+                          .map((item: any, idx: number) => {
+                            const p = products.find(
+                              (x) => x.id === item.product_id
+                            );
 
-      const total =
-        Number(item.qty || 0) *
-        Number(item.unit_cost || 0);
+                            const total =
+                              Number(item.qty || 0) *
+                              Number(item.unit_cost || 0);
 
-      return `
-        <tr>
-          <td>${idx + 1}</td>
-          <td>
-            <div style="font-weight:600">
-              ${p?.name || ""}
-            </div>
-            <div style="font-size:12px;color:#666">
-              ${p?.sku || ""}
-            </div>
-          </td>
-          <td style="text-align:right">
-            ${item.qty}
-          </td>
-          ${
-            type !== "transfer"
-              ? `
-            <td style="text-align:right">
-              ${formatMoney(
-                item.unit_cost || 0
-              )}
-            </td>
-            <td style="text-align:right;font-weight:600">
-              ${formatMoney(total)}
-            </td>
-          `
-              : ""
-          }
-        </tr>
-      `;
-    })
-    .join("");
+                            return `
+                              <tr>
+                                <td>${idx + 1}</td>
+                                <td>
+                                  <div style="font-weight:600">
+                                    ${p?.name || ""}
+                                  </div>
+                                  <div style="font-size:12px;color:#666">
+                                    ${p?.sku || ""}
+                                  </div>
+                                </td>
+                                <td style="text-align:right">
+                                  ${item.qty}
+                                </td>
+                                ${
+                                  type !== "transfer"
+                                    ? `
+                                  <td style="text-align:right">
+                                    ${formatMoney(
+                                      item.unit_cost || 0
+                                    )}
+                                  </td>
+                                  <td style="text-align:right;font-weight:600">
+                                    ${formatMoney(total)}
+                                  </td>
+                                `
+                                    : ""
+                                }
+                              </tr>
+                            `;
+                          })
+                          .join("");
 
-  const branchName =
-    type === "in"
-      ? branches.find(
-          (b) => b.id === inBranch
-        )?.name
-      : type === "out"
-        ? branches.find(
-            (b) => b.id === outBranch
-          )?.name
-        : `${branches.find(
-            (b) =>
-              b.id === transferFrom
-          )?.name} → ${
-            branches.find(
-              (b) =>
-                b.id === transferTo
-            )?.name
-          }`;
+                        const branchName =
+                          type === "in"
+                            ? branches.find(
+                                (b) => b.id === inBranch
+                              )?.name
+                            : type === "out"
+                              ? branches.find(
+                                  (b) => b.id === outBranch
+                                )?.name
+                              : `${branches.find(
+                                  (b) =>
+                                    b.id === transferFrom
+                                )?.name} → ${
+                                  branches.find(
+                                    (b) =>
+                                      b.id === transferTo
+                                  )?.name
+                                }`;
 
-  const printWindow =
-    window.open("", "_blank");
+                        const printWindow =
+                          window.open("", "_blank");
 
-  if (!printWindow) return;
+                        if (!printWindow) return;
 
-  printWindow.document.write(`
-    <html>
-      <head>
-        <title>${voucherTitle}</title>
+                        printWindow.document.write(`
+                          <html>
+                            <head>
+                              <title>${voucherTitle}</title>
 
-        <style>
-          *{
-            box-sizing:border-box;
-            font-family:Arial;
-          }
+                              <style>
+                                *{
+                                  box-sizing:border-box;
+                                  font-family:Arial;
+                                }
 
-          body{
-            padding:40px;
-            color:#111;
-          }
+                                body{
+                                  padding:40px;
+                                  color:#111;
+                                }
 
-          .header{
-            text-align:center;
-            margin-bottom:32px;
-          }
+                                .header{
+                                  text-align:center;
+                                  margin-bottom:32px;
+                                }
 
-          .title{
-            font-size:28px;
-            font-weight:700;
-            margin-bottom:8px;
-          }
+                                .title{
+                                  font-size:28px;
+                                  font-weight:700;
+                                  margin-bottom:8px;
+                                }
 
-          .sub{
-            color:#666;
-            font-size:13px;
-          }
+                                .sub{
+                                  color:#666;
+                                  font-size:13px;
+                                }
 
-          .section{
-            margin-bottom:24px;
-          }
+                                .section{
+                                  margin-bottom:24px;
+                                }
 
-          .info-grid{
-            display:grid;
-            grid-template-columns:1fr 1fr;
-            gap:12px;
-            font-size:14px;
-          }
+                                .info-grid{
+                                  display:grid;
+                                  grid-template-columns:1fr 1fr;
+                                  gap:12px;
+                                  font-size:14px;
+                                }
 
-          table{
-            width:100%;
-            border-collapse:collapse;
-            margin-top:12px;
-          }
+                                table{
+                                  width:100%;
+                                  border-collapse:collapse;
+                                  margin-top:12px;
+                                }
 
-          th,td{
-            border:1px solid #ddd;
-            padding:10px;
-            font-size:14px;
-            vertical-align:top;
-          }
+                                th,td{
+                                  border:1px solid #ddd;
+                                  padding:10px;
+                                  font-size:14px;
+                                  vertical-align:top;
+                                }
 
-          th{
-            background:#f5f5f5;
-            text-align:left;
-          }
+                                th{
+                                  background:#f5f5f5;
+                                  text-align:left;
+                                }
 
-          .total{
-            margin-top:20px;
-            text-align:right;
-          }
+                                .total{
+                                  margin-top:20px;
+                                  text-align:right;
+                                }
 
-          .total .money{
-            font-size:26px;
-            font-weight:700;
-          }
+                                .total .money{
+                                  font-size:26px;
+                                  font-weight:700;
+                                }
 
-          .sign{
-            margin-top:70px;
-            display:grid;
-            grid-template-columns:1fr 1fr;
-            gap:40px;
-            text-align:center;
-          }
+                                .sign{
+                                  margin-top:70px;
+                                  display:grid;
+                                  grid-template-columns:1fr 1fr;
+                                  gap:40px;
+                                  text-align:center;
+                                }
 
-          .sign-box{
-            padding-top:12px;
-          }
+                                .sign-box{
+                                  padding-top:12px;
+                                }
 
-          @media print{
-            body{
-              padding:0;
-            }
-          }
-        </style>
-      </head>
+                                @media print{
+                                  body{
+                                    padding:0;
+                                  }
+                                }
+                              </style>
+                            </head>
 
-      <body>
-        <div class="header">
-          <div class="title">
-            ${voucherTitle.toUpperCase()}
-          </div>
+                            <body>
+                              <div class="header">
+                                <div class="title">
+                                  ${voucherTitle.toUpperCase()}
+                                </div>
 
-          <div class="sub">
-            Mã phiếu #${Date.now()
-              .toString()
-              .slice(-6)}
-          </div>
-        </div>
+                                <div class="sub">
+                                  Mã phiếu #${Date.now()
+                                    .toString()
+                                    .slice(-6)}
+                                </div>
+                              </div>
 
-        <div class="section info-grid">
-          <div>
-            <strong>Ngày:</strong>
-            ${new Date().toLocaleString(
-              "vi-VN"
-            )}
-          </div>
+                              <div class="section info-grid">
+                                <div>
+                                  <strong>Ngày:</strong>
+                                  ${new Date().toLocaleString(
+                                    "vi-VN"
+                                  )}
+                                </div>
 
-          <div>
-            <strong>Người tạo:</strong>
-            ${
-              user?.name ||
-              user?.email ||
-              "—"
-            }
-          </div>
+                                <div>
+                                  <strong>Người tạo:</strong>
+                                  ${
+                                    user?.full_name ||
+                                    user?.email ||
+                                    "—"
+                                  }
+                                </div>
 
-          <div>
-            <strong>Chi nhánh:</strong>
-            ${branchName || "—"}
-          </div>
+                                <div>
+                                  <strong>Chi nhánh:</strong>
+                                  ${branchName || "—"}
+                                </div>
+                              </div>
 
-          <div>
-            <strong>Đối tác:</strong>
-            ${partnerName || "—"}
-          </div>
-        </div>
+                              <div class="section">
+                                <table>
+                                  <thead>
+                                    <tr>
+                                      <th style="width:60px">
+                                        STT
+                                      </th>
 
-        <div class="section">
-          <table>
-            <thead>
-              <tr>
-                <th style="width:60px">
-                  STT
-                </th>
+                                      <th>
+                                        Sản phẩm
+                                      </th>
 
-                <th>
-                  Sản phẩm
-                </th>
+                                      <th style="width:100px;text-align:right">
+                                        SL
+                                      </th>
 
-                <th style="width:100px;text-align:right">
-                  SL
-                </th>
+                                      ${
+                                        type !== "transfer"
+                                          ? `
+                                        <th style="width:140px;text-align:right">
+                                          Đơn giá
+                                        </th>
 
-                ${
-                  type !== "transfer"
-                    ? `
-                  <th style="width:140px;text-align:right">
-                    Đơn giá
-                  </th>
+                                        <th style="width:160px;text-align:right">
+                                          Thành tiền
+                                        </th>
+                                      `
+                                          : ""
+                                      }
+                                    </tr>
+                                  </thead>
 
-                  <th style="width:160px;text-align:right">
-                    Thành tiền
-                  </th>
-                `
-                    : ""
-                }
-              </tr>
-            </thead>
+                                  <tbody>
+                                    ${rows}
+                                  </tbody>
+                                </table>
+                              </div>
 
-            <tbody>
-              ${rows}
-            </tbody>
-          </table>
-        </div>
+                              ${
+                                type !== "transfer"
+                                  ? `
+                                <div class="total">
+                                  <div>Tổng thanh toán</div>
 
-        ${
-          type !== "transfer"
-            ? `
-          <div class="total">
-            <div>Tổng thanh toán</div>
+                                  <div class="money">
+                                    ${formatMoney(
+                                      totalMoney
+                                    )} đ
+                                  </div>
+                                </div>
+                              `
+                                  : ""
+                              }
 
-            <div class="money">
-              ${formatMoney(
-                totalMoney
-              )} đ
-            </div>
-          </div>
-        `
-            : ""
-        }
+                              ${
+                                voucherNote
+                                  ? `
+                                <div class="section" style="margin-top:30px">
+                                  <strong>Ghi chú:</strong>
+                                  ${voucherNote}
+                                </div>
+                              `
+                                  : ""
+                              }
 
-        ${
-          voucherNote
-            ? `
-          <div class="section" style="margin-top:30px">
-            <strong>Ghi chú:</strong>
-            ${voucherNote}
-          </div>
-        `
-            : ""
-        }
+                              <div class="sign">
+                                <div class="sign-box">
+                                  <div>
+                                    Người lập phiếu
+                                  </div>
 
-        <div class="sign">
-          <div class="sign-box">
-            <div>
-              Người lập phiếu
-            </div>
+                                  <div style="margin-top:70px;font-weight:600">
+                                    ${
+                                      user?.name ||
+                                      "................"
+                                    }
+                                  </div>
+                                </div>
 
-            <div style="margin-top:70px;font-weight:600">
-              ${
-                user?.name ||
-                "................"
-              }
-            </div>
-          </div>
+                                <div class="sign-box">
+                                  <div>
+                                    Người nhận
+                                  </div>
 
-          <div class="sign-box">
-            <div>
-              Người nhận
-            </div>
+                                  <div style="margin-top:70px">
+                                    ........................
+                                  </div>
+                                </div>
+                              </div>
+                            </body>
+                          </html>
+                        `);
 
-            <div style="margin-top:70px">
-              ........................
-            </div>
-          </div>
-        </div>
-      </body>
-    </html>
-  `);
+                        printWindow.document.close();
 
-  printWindow.document.close();
-
-  setTimeout(() => {
-    printWindow.print();
-  }, 300);
-}}
+                        setTimeout(() => {
+                          printWindow.print();
+                        }, 300);
+                      }}
                     >
                       <Printer className="mr-2 h-4 w-4" />
                       In phiếu
@@ -2063,15 +2087,6 @@ function Page() {
                         Xuất TXT
                       </Button>
                     )}
-{/* 
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        setOpen(false)
-                      }
-                    >
-                      Hủy
-                    </Button> */}
 
                     {type === "in" && (
                       <Button

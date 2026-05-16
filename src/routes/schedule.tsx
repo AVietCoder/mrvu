@@ -348,13 +348,15 @@ function Page() {
                           <Link
                             to="/orders/$id"
                             params={{ id: linkedOrder.id }}
-                            className="mb-2 inline-flex items-center gap-1 text-xs rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 hover:bg-blue-100"
+                            className="mb-2 flex items-center gap-1.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1.5 hover:bg-blue-100 transition-colors"
                             title="Xem chi tiết đơn hàng"
                           >
-                            <Receipt className="h-3 w-3" />
-                            <span className="font-mono font-medium">{linkedOrder.code}</span>
-                            <span>· {fmtMoney(linkedOrder.total)}</span>
-                            <ExternalLink className="h-3 w-3 opacity-60" />
+                            <Receipt className="h-3.5 w-3.5 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs font-mono font-semibold">{linkedOrder.code}</div>
+                              <div className="text-xs opacity-80">{fmtMoney(linkedOrder.total)} · {linkedOrder.status === "completed" ? "Hoàn tất" : linkedOrder.status === "reserved" ? "Đặt trước" : linkedOrder.status}</div>
+                            </div>
+                            <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
                           </Link>
                         )}
 
@@ -377,6 +379,17 @@ function Page() {
                             💰 Tiền công: {fmtMoney(techPay)}
                           </div>
                         )}
+
+                        {/* Người tạo lịch */}
+                        {s.created_by && (() => {
+                          const creator = data?.users.find((u: any) => u.id === s.created_by);
+                          return creator ? (
+                            <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                              <UserCog className="h-3 w-3" />
+                              <span>Người tạo: <span className="font-medium">{creator.full_name}</span></span>
+                            </div>
+                          ) : null;
+                        })()}
 
                         {/* Actions */}
                         <div className="flex gap-1 flex-wrap mt-2">
@@ -539,28 +552,36 @@ function Page() {
           <DialogHeader><DialogTitle>Tạo lịch làm việc</DialogTitle></DialogHeader>
           {/* Đơn hàng liên kết — chọn trước để auto-fill */}
           {/* Người bán đơn hàng được liên kết (nếu có), fallback về người đăng nhập */}
-          {(() => {
-            const linkedOrder: any = createForm.order_id
-              ? (data?.orders ?? []).find((o: any) => o.id === createForm.order_id)
-              : null;
-            const seller: any = linkedOrder?.employee_id
-              ? (data?.employees ?? []).find((e: any) => e.id === linkedOrder.employee_id)
-              : null;
-            const displayName = seller?.name ?? user?.full_name ?? "—";
-            const displayLabel = seller ? "Người bán đơn hàng" : "Người tạo lịch";
-            return (
-              <div className="mb-3 flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
-                <UserCog className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="text-muted-foreground">{displayLabel}:</span>
-                <span className="font-medium">{displayName}</span>
-                {seller && (
-                  <span className="ml-auto rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+          {/* Người tạo lịch — luôn hiển thị */}
+          <div className="mb-3 rounded-lg border bg-muted/30 px-3 py-2.5 text-sm space-y-1.5">
+            <div className="flex items-center gap-2">
+              <UserCog className="h-4 w-4 shrink-0 text-primary" />
+              <span className="text-muted-foreground font-medium">Người tạo lịch:</span>
+              <span className="font-semibold text-foreground">{user?.full_name ?? "—"}</span>
+              <span className="ml-auto rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs">
+                Bạn
+              </span>
+            </div>
+            {(() => {
+              const linkedOrder: any = createForm.order_id
+                ? (data?.orders ?? []).find((o: any) => o.id === createForm.order_id)
+                : null;
+              const seller: any = linkedOrder?.employee_id
+                ? (data?.employees ?? []).find((e: any) => e.id === linkedOrder.employee_id)
+                : null;
+              if (!seller) return null;
+              return (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground border-t pt-1.5">
+                  <UserCog className="h-3.5 w-3.5 shrink-0" />
+                  <span>Người bán đơn hàng:</span>
+                  <span className="font-medium text-foreground">{seller.name}</span>
+                  <span className="ml-auto rounded-full bg-blue-100 text-blue-700 px-2 py-0.5">
                     Auto từ đơn
                   </span>
-                )}
-              </div>
-            );
-          })()}
+                </div>
+              );
+            })()}
+          </div>
           <div className="mb-3 rounded-md border bg-blue-50/50 p-3">
             <Label className="flex items-center gap-1 text-blue-900">
               <Receipt className="h-4 w-4" /> Liên kết với đơn hàng (tuỳ chọn)
