@@ -22,6 +22,8 @@ import {
 import { toast } from "sonner";
 import { hasPermission } from "@/lib/types";
 import { Link } from "@tanstack/react-router";
+import { SearchFilter } from "@/components/SearchFilter";
+import { Pagination } from "@/components/Pagination";
 
 export const Route = createFileRoute("/schedule")({
   head: () => ({ meta: [{ title: "Lịch làm việc — QuatTran POS" }] }),
@@ -39,12 +41,23 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 // Format ngày thành nhóm theo tuần
 function groupByDate(schedules: any[]) {
   const map: Record<string, any[]> = {};
+
   for (const s of schedules) {
     const d = s.scheduled_date?.slice(0, 10) ?? "unknown";
     if (!map[d]) map[d] = [];
     map[d].push(s);
   }
-  return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+
+  return Object.entries(map)
+    .sort(([a], [b]) => b.localeCompare(a)) // ngày mới nhất lên trước
+    .map(([date, items]) => [
+      date,
+      [...items].sort((a: any, b: any) => {
+        const da = `${a.scheduled_date ?? ""} ${a.scheduled_time ?? "00:00"}`;
+        const db = `${b.scheduled_date ?? ""} ${b.scheduled_time ?? "00:00"}`;
+        return db.localeCompare(da); // trong ngày cũng sort mới nhất trước
+      }),
+    ] as [string, any[]]);
 }
 
 function Page() {
@@ -70,6 +83,12 @@ function Page() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterType, setFilterType]     = useState("");
   const [filterDate, setFilterDate]     = useState(new Date().toISOString().slice(0, 10)); // mặc định hôm nay
+
+  // Search / sort / pagination cho tab Danh sách
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 15;
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const nowTimeStr = new Date().toTimeString().slice(0, 5);
@@ -120,16 +139,37 @@ function Page() {
     let list = data?.schedules ?? [];
     if (isTech && user) {
       const myIds = new Set(
-        (data?.assignments ?? []).filter((a: any) => a.user_id === user.id).map((a: any) => a.schedule_id)
+        (data?.assignments ?? []).filter((a: any) => a.user_id === user.id).map((a: any) => a.schedule_id),
       );
       list = list.filter((s: any) => myIds.has(s.id));
     }
     if (filterStatus) list = list.filter((s: any) => s.status === filterStatus);
-    if (filterType)   list = list.filter((s: any) => s.type === filterType);
-    // Lọc theo ngày (tab Danh sách mặc định hiện hôm nay)
-    if (filterDate)   list = list.filter((s: any) => (s.scheduled_date ?? "").slice(0, 10) === filterDate);
+    if (filterType) list = list.filter((s: any) => s.type === filterType);
+    if (filterDate) list = list.filter((s: any) => (s.scheduled_date ?? "").slice(0, 10) === filterDate);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter((s: any) => {
+        const cust = (data?.customers ?? []).find((c: any) => c.id === s.customer_id);
+        return (
+          s.title?.toLowerCase().includes(q) ||
+          cust?.name?.toLowerCase().includes(q) ||
+          s.address?.toLowerCase().includes(q)
+        );
+      });
+    }
+    list = [...list].sort((a: any, b: any) => {
+      if (sortBy === "title") return (a.title ?? "").localeCompare(b.title ?? "");
+      const da = `${a.scheduled_date ?? ""} ${a.scheduled_time ?? ""}`;
+      const db = `${b.scheduled_date ?? ""} ${b.scheduled_time ?? ""}`;
+      return sortBy === "oldest" ? da.localeCompare(db) : db.localeCompare(da);
+    });
     return list;
-  }, [data, isTech, user, filterStatus, filterType, filterDate]);
+  }, [data, isTech, user, filterStatus, filterType, filterDate, search, sortBy]);
+
+  const pagedSchedules = useMemo(
+    () => mySchedules.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [mySchedules, page],
+  );
 
   const grouped = useMemo(() => groupByDate(mySchedules), [mySchedules]);
 
@@ -377,6 +417,20 @@ function Page() {
 
         {/* ── Danh sách ── */}
         <TabsContent value="list">
+          <SearchFilter
+            search={search}
+            onSearch={(v) => { setSearch(v); setPage(1); }}
+            placeholder="Tìm tiêu đề / khách / địa chỉ…"
+            sortOptions={[
+              { value: "newest", label: "Mới nhất" },
+              { value: "oldest", label: "Cũ nhất" },
+              { value: "title", label: "Tiêu đề A–Z" },
+            ]}
+            sortValue={sortBy}
+            onSort={(v) => { setSortBy(v as any); setPage(1); }}
+            total={mySchedules.length}
+            totalLabel="lịch"
+          />
           <Card>
             <div className="overflow-auto">
               <table className="w-full text-sm">
@@ -393,7 +447,7 @@ function Page() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mySchedules.map((s: any) => {
+                  {pagedSchedules.map((s: any) => {
                     const typeInfo = SCHEDULE_TYPES.find((t) => t.value === s.type);
                     const status = STATUS_LABELS[s.status];
                     const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id);
@@ -431,6 +485,13 @@ function Page() {
               </table>
             </div>
           </Card>
+          <Pagination
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={mySchedules.length}
+            onPageChange={setPage}
+            label="lịch"
+          />
         </TabsContent>
 
         {/* ── Tính chất công việc (admin only) ── */}
@@ -477,14 +538,29 @@ function Page() {
         <DialogContent className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Tạo lịch làm việc</DialogTitle></DialogHeader>
           {/* Đơn hàng liên kết — chọn trước để auto-fill */}
-          {/* Người tạo lịch — chính là người đang đăng nhập */}
-          {user && (
-            <div className="mb-3 rounded-md bg-muted/50 px-3 py-2 text-sm flex items-center gap-2">
-              <UserCog className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground">Người tạo lịch:</span>
-              <span className="font-medium">{user.full_name}</span>
-            </div>
-          )}
+          {/* Người bán đơn hàng được liên kết (nếu có), fallback về người đăng nhập */}
+          {(() => {
+            const linkedOrder: any = createForm.order_id
+              ? (data?.orders ?? []).find((o: any) => o.id === createForm.order_id)
+              : null;
+            const seller: any = linkedOrder?.employee_id
+              ? (data?.employees ?? []).find((e: any) => e.id === linkedOrder.employee_id)
+              : null;
+            const displayName = seller?.name ?? user?.full_name ?? "—";
+            const displayLabel = seller ? "Người bán đơn hàng" : "Người tạo lịch";
+            return (
+              <div className="mb-3 flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
+                <UserCog className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="text-muted-foreground">{displayLabel}:</span>
+                <span className="font-medium">{displayName}</span>
+                {seller && (
+                  <span className="ml-auto rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                    Auto từ đơn
+                  </span>
+                )}
+              </div>
+            );
+          })()}
           <div className="mb-3 rounded-md border bg-blue-50/50 p-3">
             <Label className="flex items-center gap-1 text-blue-900">
               <Receipt className="h-4 w-4" /> Liên kết với đơn hàng (tuỳ chọn)

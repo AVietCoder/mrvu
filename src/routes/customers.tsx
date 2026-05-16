@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { listCustomers, upsertCustomer, deleteCustomer } from "@/lib/customers.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
+import { Pagination, DEFAULT_PAGE_SIZE } from "@/components/Pagination";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +67,7 @@ function CustomersPage() {
   const [viewId, setViewId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("name");
+  const [page, setPage] = useState(1);
   const [filterGroup, setFilterGroup] = useState("");
   const [filterDebt, setFilterDebt] = useState("all");
 
@@ -89,6 +91,10 @@ function CustomersPage() {
       });
   }, [customers, search, sortBy, filterGroup, filterDebt]);
 
+  const paginated = useMemo(
+    () => filtered.slice((page - 1) * DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE),
+    [filtered, page],
+  );
   const totalDebt = useMemo(() => filtered.reduce((s, c) => s + c.debt, 0), [filtered]);
   const debtorCount = useMemo(() => filtered.filter((c) => c.debt > 0).length, [filtered]);
 
@@ -151,7 +157,7 @@ function CustomersPage() {
         </div>
 
         <SearchFilter
-          search={search} onSearch={setSearch}
+          search={search} onSearch={(v) => { setSearch(v); setPage(1); }}
           placeholder="Tìm tên, số điện thoại..."
           sortOptions={[
             { value: "name", label: "Tên A→Z" },
@@ -159,7 +165,7 @@ function CustomersPage() {
             { value: "debt_asc", label: "Nợ ít nhất" },
             { value: "date", label: "Mới nhất" },
           ]}
-          sortValue={sortBy} onSort={setSortBy}
+          sortValue={sortBy} onSort={(v) => { setSortBy(v); setPage(1); }}
           filterSlot={
             <div className="flex gap-2">
               <select className="h-9 rounded-md border bg-background px-2 text-sm"
@@ -191,7 +197,7 @@ function CustomersPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c) => (
+              {paginated.map((c) => (
                 <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30">
                   <td className="py-2 pr-3 font-medium">{c.name}</td>
                   <td className="pr-3 text-muted-foreground">{c.phone ?? "—"}</td>
@@ -218,6 +224,13 @@ function CustomersPage() {
           </table>
         </div>
       </Card>
+        <Pagination
+          page={page}
+          pageSize={DEFAULT_PAGE_SIZE}
+          total={filtered.length}
+          onPageChange={setPage}
+          label="khách hàng"
+        />
 
       {/* Dialog thêm/sửa khách hàng */}
       <Dialog open={open} onOpenChange={setOpen}>

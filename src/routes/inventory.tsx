@@ -15,6 +15,7 @@ import {
 
 import { AppShell, Card } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
+import { Pagination, DEFAULT_PAGE_SIZE } from "@/components/Pagination";
 import { useAuth } from "@/context/AuthContext";
 
 import { Button } from "@/components/ui/button";
@@ -134,6 +135,7 @@ function Page() {
   const [open, setOpen] = useState(false);
 
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   const [filterBranch, setFilterBranch] =
     useState(user?.branch_ids?.[0] ?? "");
@@ -519,6 +521,11 @@ function Page() {
     data?.stock,
   ]);
 
+  const paginatedProducts = useMemo(
+    () => filteredProducts.slice((page - 1) * DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE),
+    [filteredProducts, page],
+  );
+
   const visibleBranches = filterBranch
     ? branches.filter(
         (b) =>
@@ -694,7 +701,7 @@ function Page() {
 
         <SearchFilter
           search={search}
-          onSearch={setSearch}
+          onSearch={(v) => { setSearch(v); setPage(1); }}
           placeholder="Tìm SKU, tên sản phẩm..."
           sortOptions={[
             {
@@ -715,7 +722,7 @@ function Page() {
             },
           ]}
           sortValue={sortBy}
-          onSort={setSortBy}
+          onSort={(v) => { setSortBy(v as any); setPage(1); }}
           filterSlot={
             <select
               className="h-9 rounded-md border bg-background px-2 text-sm"
@@ -779,7 +786,7 @@ function Page() {
               </thead>
 
               <tbody>
-                {filteredProducts.map(
+                {paginatedProducts.map(
                   (p) => {
                     const cells =
                       visibleBranches.map(
@@ -844,6 +851,13 @@ function Page() {
           </div>
         )}
       </Card>
+        <Pagination
+          page={page}
+          pageSize={DEFAULT_PAGE_SIZE}
+          total={filteredProducts.length}
+          onPageChange={setPage}
+          label="sản phẩm"
+        />
 
       {/* HISTORY */}
       <Card className="mb-6">

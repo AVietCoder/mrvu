@@ -13,7 +13,6 @@ import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ProductsRouteImport } from './routes/products'
-import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as EmployeesRouteImport } from './routes/employees'
@@ -22,7 +21,8 @@ import { Route as ChangePasswordRouteImport } from './routes/change-password'
 import { Route as BranchesRouteImport } from './routes/branches'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as OrdersIdRouteImport } from './routes/orders.$id'
+import { Route as OrdersIndexRouteImport } from './routes/orders/index'
+import { Route as OrdersIdRouteImport } from './routes/orders/$id'
 
 const ScheduleRoute = ScheduleRouteImport.update({
   id: '/schedule',
@@ -42,11 +42,6 @@ const RegisterRoute = RegisterRouteImport.update({
 const ProductsRoute = ProductsRouteImport.update({
   id: '/products',
   path: '/products',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OrdersRoute = OrdersRouteImport.update({
-  id: '/orders',
-  path: '/orders',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -89,10 +84,15 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrdersIndexRoute = OrdersIndexRouteImport.update({
+  id: '/orders/',
+  path: '/orders/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrdersIdRoute = OrdersIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => OrdersRoute,
+  id: '/orders/$id',
+  path: '/orders/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -104,12 +104,12 @@ export interface FileRoutesByFullPath {
   '/employees': typeof EmployeesRoute
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
-  '/orders': typeof OrdersRouteWithChildren
   '/products': typeof ProductsRoute
   '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/schedule': typeof ScheduleRoute
   '/orders/$id': typeof OrdersIdRoute
+  '/orders/': typeof OrdersIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -120,12 +120,12 @@ export interface FileRoutesByTo {
   '/employees': typeof EmployeesRoute
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
-  '/orders': typeof OrdersRouteWithChildren
   '/products': typeof ProductsRoute
   '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/schedule': typeof ScheduleRoute
   '/orders/$id': typeof OrdersIdRoute
+  '/orders': typeof OrdersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -137,12 +137,12 @@ export interface FileRoutesById {
   '/employees': typeof EmployeesRoute
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
-  '/orders': typeof OrdersRouteWithChildren
   '/products': typeof ProductsRoute
   '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/schedule': typeof ScheduleRoute
   '/orders/$id': typeof OrdersIdRoute
+  '/orders/': typeof OrdersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -155,12 +155,12 @@ export interface FileRouteTypes {
     | '/employees'
     | '/inventory'
     | '/login'
-    | '/orders'
     | '/products'
     | '/register'
     | '/reports'
     | '/schedule'
     | '/orders/$id'
+    | '/orders/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -171,12 +171,12 @@ export interface FileRouteTypes {
     | '/employees'
     | '/inventory'
     | '/login'
-    | '/orders'
     | '/products'
     | '/register'
     | '/reports'
     | '/schedule'
     | '/orders/$id'
+    | '/orders'
   id:
     | '__root__'
     | '/'
@@ -187,12 +187,12 @@ export interface FileRouteTypes {
     | '/employees'
     | '/inventory'
     | '/login'
-    | '/orders'
     | '/products'
     | '/register'
     | '/reports'
     | '/schedule'
     | '/orders/$id'
+    | '/orders/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -204,11 +204,12 @@ export interface RootRouteChildren {
   EmployeesRoute: typeof EmployeesRoute
   InventoryRoute: typeof InventoryRoute
   LoginRoute: typeof LoginRoute
-  OrdersRoute: typeof OrdersRouteWithChildren
   ProductsRoute: typeof ProductsRoute
   RegisterRoute: typeof RegisterRoute
   ReportsRoute: typeof ReportsRoute
   ScheduleRoute: typeof ScheduleRoute
+  OrdersIdRoute: typeof OrdersIdRoute
+  OrdersIndexRoute: typeof OrdersIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -239,13 +240,6 @@ declare module '@tanstack/react-router' {
       path: '/products'
       fullPath: '/products'
       preLoaderRoute: typeof ProductsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/orders': {
-      id: '/orders'
-      path: '/orders'
-      fullPath: '/orders'
-      preLoaderRoute: typeof OrdersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -304,26 +298,22 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/orders/': {
+      id: '/orders/'
+      path: '/orders'
+      fullPath: '/orders/'
+      preLoaderRoute: typeof OrdersIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/orders/$id': {
       id: '/orders/$id'
-      path: '/$id'
+      path: '/orders/$id'
       fullPath: '/orders/$id'
       preLoaderRoute: typeof OrdersIdRouteImport
-      parentRoute: typeof OrdersRoute
+      parentRoute: typeof rootRouteImport
     }
   }
 }
-
-interface OrdersRouteChildren {
-  OrdersIdRoute: typeof OrdersIdRoute
-}
-
-const OrdersRouteChildren: OrdersRouteChildren = {
-  OrdersIdRoute: OrdersIdRoute,
-}
-
-const OrdersRouteWithChildren =
-  OrdersRoute._addFileChildren(OrdersRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -334,11 +324,12 @@ const rootRouteChildren: RootRouteChildren = {
   EmployeesRoute: EmployeesRoute,
   InventoryRoute: InventoryRoute,
   LoginRoute: LoginRoute,
-  OrdersRoute: OrdersRouteWithChildren,
   ProductsRoute: ProductsRoute,
   RegisterRoute: RegisterRoute,
   ReportsRoute: ReportsRoute,
   ScheduleRoute: ScheduleRoute,
+  OrdersIdRoute: OrdersIdRoute,
+  OrdersIndexRoute: OrdersIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

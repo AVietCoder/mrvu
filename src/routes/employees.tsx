@@ -9,6 +9,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { AppShell, Card } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
+import { Pagination, DEFAULT_PAGE_SIZE } from "@/components/Pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +43,7 @@ function Page() {
 
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("name");
+  const [page, setPage] = useState(1);
 
   // ── Dialog thêm nhân viên ──────────────────────────────────
   const [addOpen, setAddOpen] = useState(false);
@@ -72,6 +74,11 @@ function Page() {
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
   }, [users, search, sortBy]);
+
+  const paginated = useMemo(
+    () => filtered.slice((page - 1) * DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE),
+    [filtered, page],
+  );
 
   // Toggle branch trong form thêm nhân viên
   function toggleAddBranch(bid: string) {
@@ -214,14 +221,14 @@ function Page() {
         </div>
 
         <SearchFilter
-          search={search} onSearch={setSearch}
+          search={search} onSearch={(v) => { setSearch(v); setPage(1); }}
           placeholder="Tìm tên, username..."
           sortOptions={[
             { value: "name", label: "Tên A→Z" },
             { value: "perm", label: "Nhiều quyền nhất" },
             { value: "date", label: "Mới nhất" },
           ]}
-          sortValue={sortBy} onSort={setSortBy}
+          sortValue={sortBy} onSort={(v) => { setSortBy(v); setPage(1); }}
           total={filtered.length} totalLabel="nhân viên"
         />
 
@@ -244,7 +251,7 @@ function Page() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u) => {
+              {paginated.map((u) => {
                 const branchNames = u.branch_ids.length === 0
                   ? "Tất cả chi nhánh"
                   : u.branch_ids
@@ -323,6 +330,13 @@ function Page() {
           </table>
         </div>
       </Card>
+        <Pagination
+          page={page}
+          pageSize={DEFAULT_PAGE_SIZE}
+          total={filtered.length}
+          onPageChange={setPage}
+          label="nhân viên"
+        />
 
       {/* ── Dialog thêm nhân viên ─────────────────────────────── */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
