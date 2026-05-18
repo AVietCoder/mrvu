@@ -135,5 +135,3 @@ db/schema.sql             # schema PostgreSQL đầy đủ 11 bảng
 - **Có thể chạy offline trong cửa hàng?** Có — chạy `bun run dev` trên 1 PC trong mạng LAN, các máy khác truy cập qua IP.
 - **Có thể tự host trên VPS?** Có. Cài Node 20, `bun run build`, rồi chạy `node .output/server/index.mjs` (đặt sau Nginx + PM2).
 =======
-# mrvu
->>>>>>> ec4152531c33c169275c5f4c7ad2dd2359701155
