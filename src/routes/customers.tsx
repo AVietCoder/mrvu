@@ -2,18 +2,18 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
-import * as ExcelJS from "exceljs";
+import XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import {
   listCustomers,
   upsertCustomer,
   deleteCustomer,
-  importCustomersCsv,
+  importCustomersRows,
 } from "@/lib/customers.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
 import { Pagination, DEFAULT_PAGE_SIZE } from "@/components/Pagination";
-import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +36,7 @@ import {
   AlertTriangle,
   Upload,
   Download,
+  Coins,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -44,109 +45,17 @@ export const Route = createFileRoute("/customers")({
   component: CustomersPage,
 });
 
-const groupLabel: Record<string, string> = {
-  le: "Khách lẻ",
-  dai_ly: "Đại lý",
-  vip: "VIP",
-  cong_trinh: "Công trình",
-};
-
-const groupColor: Record<string, string> = {
-  le: "bg-gray-100 text-gray-700",
-  dai_ly: "bg-blue-100 text-blue-700",
-  vip: "bg-yellow-100 text-yellow-700",
-  cong_trinh: "bg-purple-100 text-purple-700",
-};
-
-const PROVINCES = [
-  "An Giang",
-  "Bà Rịa - Vũng Tàu",
-  "Bắc Giang",
-  "Bắc Kạn",
-  "Bạc Liêu",
-  "Bắc Ninh",
-  "Bến Tre",
-  "Bình Định",
-  "Bình Dương",
-  "Bình Phước",
-  "Bình Thuận",
-  "Cà Mau",
-  "Cần Thơ",
-  "Cao Bằng",
-  "Đà Nẵng",
-  "Đắk Lắk",
-  "Đắk Nông",
-  "Điện Biên",
-  "Đồng Nai",
-  "Đồng Tháp",
-  "Gia Lai",
-  "Hà Giang",
-  "Hà Nam",
-  "Hà Nội",
-  "Hà Tĩnh",
-  "Hải Dương",
-  "Hải Phòng",
-  "Hậu Giang",
-  "Hòa Bình",
-  "Hưng Yên",
-  "Khánh Hòa",
-  "Kiên Giang",
-  "Kon Tum",
-  "Lai Châu",
-  "Lâm Đồng",
-  "Lạng Sơn",
-  "Lào Cai",
-  "Long An",
-  "Nam Định",
-  "Nghệ An",
-  "Ninh Bình",
-  "Ninh Thuận",
-  "Phú Thọ",
-  "Phú Yên",
-  "Quảng Bình",
-  "Quảng Nam",
-  "Quảng Ngãi",
-  "Quảng Ninh",
-  "Quảng Trị",
-  "Sóc Trăng",
-  "Sơn La",
-  "Tây Ninh",
-  "Thái Bình",
-  "Thái Nguyên",
-  "Thanh Hóa",
-  "Thừa Thiên Huế",
-  "Tiền Giang",
-  "TP. Hồ Chí Minh",
-  "Trà Vinh",
-  "Tuyên Quang",
-  "Vĩnh Long",
-  "Vĩnh Phúc",
-  "Yên Bái",
-];
-
-type FormState = {
-  id?: string;
-  name: string;
-  phone: string;
-  province: string;
-  district: string;
-  ward: string;
-  address: string;
-  group_name: string;
-  debt: string;
-};
-
 type CustomerRow = {
   id: string;
   external_code?: string | null;
   name: string;
   phone?: string | null;
-  province?: string | null;
-  district?: string | null;
-  ward?: string | null;
   address?: string | null;
-  group_name: string;
-  debt: number;
+  ward?: string | null;
+  district?: string | null;
+  province?: string | null;
+  total_sales?: number | null;
+  debt?: number | null;
   created_at: string;
 };
 
@@ -159,27 +68,98 @@ type OrderRow = {
   created_at: string;
 };
 
+type FormState = {
+  id?: string;
+  external_code: string;
+  name: string;
+  phone: string;
+  address: string;
+  ward: string;
+  district: string;
+  province: string;
+  total_sales: string;
+  debt: string;
+};
+
 const empty: FormState = {
+  external_code: "",
   name: "",
   phone: "",
-  province: "",
-  district: "",
-  ward: "",
   address: "",
-  group_name: "le",
+  ward: "",
+  district: "",
+  province: "",
+  total_sales: "0",
   debt: "0",
 };
 
+const PROVINCES = [
+  "An Giang","Bà Rịa - Vũng Tàu","Bắc Giang","Bắc Kạn","Bạc Liêu","Bắc Ninh",
+  "Bến Tre","Bình Định","Bình Dương","Bình Phước","Bình Thuận","Cà Mau",
+  "Cần Thơ","Cao Bằng","Đà Nẵng","Đắk Lắk","Đắk Nông","Điện Biên","Đồng Nai",
+  "Đồng Tháp","Gia Lai","Hà Giang","Hà Nam","Hà Nội","Hà Tĩnh","Hải Dương",
+  "Hải Phòng","Hậu Giang","Hòa Bình","Hưng Yên","Khánh Hòa","Kiên Giang",
+  "Kon Tum","Lai Châu","Lâm Đồng","Lạng Sơn","Lào Cai","Long An","Nam Định",
+  "Nghệ An","Ninh Bình","Ninh Thuận","Phú Thọ","Phú Yên","Quảng Bình",
+  "Quảng Nam","Quảng Ngãi","Quảng Ninh","Quảng Trị","Sóc Trăng","Sơn La",
+  "Tây Ninh","Thái Bình","Thái Nguyên","Thanh Hóa","Thừa Thiên Huế",
+  "Tiền Giang","TP. Hồ Chí Minh","Trà Vinh","Tuyên Quang","Vĩnh Long",
+  "Vĩnh Phúc","Yên Bái",
+];
+
+function cleanText(value: unknown) {
+  return String(value ?? "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseMoney(value: unknown) {
+  const raw = cleanText(value).replace(/[^\d-]/g, "");
+  if (!raw) return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 0;
+  return Math.abs(n);
+}
+
+function normalizeHeader(text: string) {
+  return cleanText(text)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function getByHeader(row: Record<string, unknown>, candidates: string[]) {
+  const entries = Object.entries(row);
+  const normalizedMap = new Map<string, unknown>();
+  for (const [k, v] of entries) normalizedMap.set(normalizeHeader(k), v);
+
+  for (const candidate of candidates) {
+    const found = normalizedMap.get(normalizeHeader(candidate));
+    const value = cleanText(found);
+    if (value) return value;
+  }
+  return "";
+}
+
+function chunkArray<T>(arr: T[], size: number) {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    out.push(arr.slice(i, i + size));
+  }
+  return out;
+}
+
 function CustomersPage() {
-  const { user } = useAuth();
   const list = useServerFn(listCustomers);
   const upsert = useServerFn(upsertCustomer);
   const del = useServerFn(deleteCustomer);
-  const importCsv = useServerFn(importCustomersCsv);
+  const importRows = useServerFn(importCustomersRows);
   const qc = useQueryClient();
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data } = useQuery({
     queryKey: ["customers"],
     queryFn: () => list(),
   });
@@ -190,7 +170,6 @@ function CustomersPage() {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("name");
   const [page, setPage] = useState(1);
-  const [filterGroup, setFilterGroup] = useState("");
   const [filterDebt, setFilterDebt] = useState("all");
 
   const customers = (data?.customers ?? []) as CustomerRow[];
@@ -206,8 +185,6 @@ function CustomersPage() {
           (c.phone ?? "").toLowerCase().includes(q) ||
           (c.external_code ?? "").toLowerCase().includes(q);
 
-        const matchGroup = !filterGroup || c.group_name === filterGroup;
-
         const debtValue = Number(c.debt || 0);
         const matchDebt =
           filterDebt === "all"
@@ -216,19 +193,21 @@ function CustomersPage() {
               ? debtValue > 0
               : debtValue === 0;
 
-        return matchSearch && matchGroup && matchDebt;
+        return matchSearch && matchDebt;
       })
       .sort((a, b) => {
         if (sortBy === "name") return a.name.localeCompare(b.name);
+        if (sortBy === "sales_desc")
+          return Number(b.total_sales || 0) - Number(a.total_sales || 0);
+        if (sortBy === "sales_asc")
+          return Number(a.total_sales || 0) - Number(b.total_sales || 0);
         if (sortBy === "debt_desc")
           return Number(b.debt || 0) - Number(a.debt || 0);
         if (sortBy === "debt_asc")
           return Number(a.debt || 0) - Number(b.debt || 0);
-        return (
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
-  }, [customers, search, sortBy, filterGroup, filterDebt]);
+  }, [customers, search, sortBy, filterDebt]);
 
   const paginated = useMemo(
     () => filtered.slice((page - 1) * DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE),
@@ -245,19 +224,25 @@ function CustomersPage() {
     [filtered],
   );
 
+  const totalSales = useMemo(
+    () => filtered.reduce((s, c) => s + Number(c.total_sales || 0), 0),
+    [filtered],
+  );
+
   function startEdit(id: string) {
     const c = customers.find((x) => x.id === id);
     if (!c) return;
 
     setForm({
       id: c.id,
+      external_code: c.external_code ?? "",
       name: c.name,
       phone: c.phone ?? "",
-      province: c.province ?? "",
-      district: c.district ?? "",
-      ward: c.ward ?? "",
       address: c.address ?? "",
-      group_name: c.group_name || "le",
+      ward: c.ward ?? "",
+      district: c.district ?? "",
+      province: c.province ?? "",
+      total_sales: String(c.total_sales ?? 0),
       debt: String(c.debt ?? 0),
     });
     setOpen(true);
@@ -269,14 +254,12 @@ function CustomersPage() {
       await upsert({
         data: {
           ...form,
+          total_sales: Number(form.total_sales) || 0,
           debt: Number(form.debt) || 0,
         },
       });
 
-      toast.success(
-        form.id ? "Đã cập nhật khách hàng thành công!" : "Đã thêm khách hàng thành công!",
-      );
-
+      toast.success(form.id ? "Đã cập nhật khách hàng!" : "Đã thêm khách hàng!");
       setOpen(false);
       setForm(empty);
       qc.invalidateQueries({ queryKey: ["customers"] });
@@ -297,177 +280,95 @@ function CustomersPage() {
     }
   }
 
-  function readFileAsText(file: File, encoding: string) {
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsText(file, encoding);
+async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  try {
+    toast.loading("Đang import khách hàng...", { id: "import-customers" });
+
+    const XLSX = await import("xlsx");
+    const ext = file.name.split(".").pop()?.toLowerCase();
+
+    const workbook =
+      ext === "csv"
+        ? XLSX.read(new TextDecoder("windows-1258").decode(await file.arrayBuffer()), {
+            type: "string",
+          })
+        : XLSX.read(await file.arrayBuffer(), { type: "array" });
+
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: "",
+      raw: false,
     });
-  }
 
-  async function readCsvWithFallback(file: File) {
-    const encodings = ["windows-1258", "utf-8"] as const;
+    const normalized = rows
+      .map((row) => ({
+        external_code:
+          getByHeader(row, ["Mã khách hàng", "Ma khách hàng", "Mă khách hàng", "Mã KH"]) ||
+          null,
+        name: getByHeader(row, ["Tên khách hàng", "Khách hàng", "Họ tên"]),
+        phone: getByHeader(row, ["Điện thoại", "Số điện thoại", "So dien thoai"]) || null,
+        address: getByHeader(row, ["Địa chỉ", "Dia chi"]) || null,
+        ward: getByHeader(row, ["Phường/Xã", "Phuong/Xa"]) || null,
+        district: getByHeader(row, ["Khu vực giao hàng", "Quận/Huyện", "Quan/Huyen"]) || null,
+        province: getByHeader(row, ["Tỉnh/Thành phố", "Tinh/Thanh pho"]) || null,
+        total_sales: parseMoney(getByHeader(row, ["Tổng bán", "Tong ban"])),
+      }))
+      .filter((r) => r.name);
 
-    for (const encoding of encodings) {
-      try {
-        const text = await readFileAsText(file, encoding);
-        if (text.includes("Mã khách hàng") || text.includes("Tên khách hàng")) {
-          return text;
-        }
-      } catch {
-        // thử encoding tiếp theo
-      }
+    const chunks = chunkArray(normalized, 500);
+
+    let created = 0;
+    let updated = 0;
+
+    for (const chunk of chunks) {
+      const result = await importRows({ data: { rows: chunk } });
+      created += Number(result.created || 0);
+      updated += Number(result.updated || 0);
     }
 
-    const buffer = await file.arrayBuffer();
-    return new TextDecoder().decode(buffer);
+    toast.success("Import hoàn tất", {
+      id: "import-customers",
+      description: `Thêm mới: ${created} • Cập nhật: ${updated} • Tổng dòng: ${normalized.length}`,
+    });
+
+    qc.invalidateQueries({ queryKey: ["customers"] });
+  } catch (err: any) {
+    toast.error(err?.message ?? "Import thất bại", { id: "import-customers" });
+  } finally {
+    e.target.value = "";
   }
+}
 
-  async function handleImportCsv(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+async function handleExportExcel() {
+  try {
+    const XLSX = await import("xlsx");
 
-    try {
-      toast.loading("Đang import khách hàng...", {
-        id: "import-customers",
-      });
+    const rows = filtered.map((c, index) => ({
+      STT: index + 1,
+      "Mã KH": c.external_code || "",
+      "Tên khách hàng": c.name,
+      "Điện thoại": c.phone || "",
+      "Địa chỉ": c.address || "",
+      "Phường/Xã": c.ward || "",
+      "Khu vực giao hàng": c.district || "",
+      "Tổng bán": c.total_sales || 0,
+      "Công nợ hiện tại": c.debt || 0,
+      "Ngày tạo": new Date(c.created_at).toLocaleDateString("vi-VN"),
+    }));
 
-      const text = await readCsvWithFallback(file);
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "KhachHang");
 
-      const result = await importCsv({
-        data: { csv: text },
-      });
-
-      toast.success("Import hoàn tất", {
-        id: "import-customers",
-        description: `Thêm mới: ${result.created} • Cập nhật: ${result.updated} • Bỏ qua: ${result.skipped}`,
-      });
-
-      qc.invalidateQueries({ queryKey: ["customers"] });
-    } catch (err: any) {
-      toast.error(err?.message ?? "Import thất bại", {
-        id: "import-customers",
-      });
-    } finally {
-      e.target.value = "";
-    }
+    XLSX.writeFile(wb, "customers.xlsx");
+    toast.success(`Đã xuất ${filtered.length} khách hàng`);
+  } catch (err: any) {
+    toast.error(err?.message ?? "Xuất file thất bại");
   }
-
-  async function handleExportExcel() {
-    try {
-      if (!filtered.length) {
-        toast.error("Không có dữ liệu để xuất");
-        return;
-      }
-
-      const workbook = new ExcelJS.Workbook();
-      workbook.creator = "QuatTran POS";
-      workbook.created = new Date();
-
-      const ws = workbook.addWorksheet("KhachHang", {
-        views: [{ state: "frozen", ySplit: 1 }],
-      });
-
-      ws.columns = [
-        { header: "STT", key: "stt", width: 8 },
-        { header: "Mã KH", key: "external_code", width: 16 },
-        { header: "Tên khách hàng", key: "name", width: 28 },
-        { header: "Điện thoại", key: "phone", width: 18 },
-        { header: "Nhóm khách", key: "group_name", width: 16 },
-        { header: "Công nợ", key: "debt", width: 14 },
-        { header: "Địa chỉ", key: "address", width: 34 },
-        { header: "Phường/Xã", key: "ward", width: 18 },
-        { header: "Quận/Huyện", key: "district", width: 18 },
-        { header: "Tỉnh/Thành phố", key: "province", width: 22 },
-        { header: "Ngày tạo", key: "created_at", width: 14 },
-      ];
-
-      filtered.forEach((c, index) => {
-        const row = ws.addRow({
-          stt: index + 1,
-          external_code: c.external_code || "",
-          name: c.name,
-          phone: c.phone || "",
-          group_name: groupLabel[c.group_name] || c.group_name,
-          debt: Number(c.debt || 0),
-          address: c.address || "",
-          ward: c.ward || "",
-          district: c.district || "",
-          province: c.province || "",
-          created_at: new Date(c.created_at),
-        });
-
-        row.height = 20;
-
-        row.eachCell((cell, colNumber) => {
-          cell.border = {
-            top: { style: "thin", color: { argb: "FFE5E7EB" } },
-            left: { style: "thin", color: { argb: "FFE5E7EB" } },
-            bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
-            right: { style: "thin", color: { argb: "FFE5E7EB" } },
-          };
-          cell.alignment = { vertical: "middle", wrapText: true };
-
-          if (colNumber === 6) {
-            cell.numFmt = '#,##0 "₫"';
-            cell.alignment = { vertical: "middle", horizontal: "right" };
-          }
-
-          if (colNumber === 11) {
-            cell.numFmt = "dd/mm/yyyy";
-          }
-        });
-
-        if (index % 2 === 1) {
-          row.eachCell((cell) => {
-            cell.fill = {
-              type: "pattern",
-              pattern: "solid",
-              fgColor: { argb: "FFF9FAFB" },
-            };
-          });
-        }
-      });
-
-      const header = ws.getRow(1);
-      header.height = 22;
-      header.font = {
-        bold: true,
-        color: { argb: "FFFFFFFF" },
-      };
-      header.alignment = { vertical: "middle", horizontal: "center" };
-      header.eachCell((cell) => {
-        cell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: { argb: "FF1F2937" },
-        };
-        cell.border = {
-          top: { style: "thin", color: { argb: "FF111827" } },
-          left: { style: "thin", color: { argb: "FF111827" } },
-          bottom: { style: "thin", color: { argb: "FF111827" } },
-          right: { style: "thin", color: { argb: "FF111827" } },
-        };
-      });
-
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], {
-        type:
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-
-      const fileName = `DanhSachKhachHang_${new Date()
-        .toLocaleDateString("vi-VN")
-        .replaceAll("/", "-")}.xlsx`;
-
-      saveAs(blob, fileName);
-      toast.success(`Đã xuất ${filtered.length} khách hàng`);
-    } catch (err: any) {
-      toast.error(err?.message ?? "Xuất file thất bại");
-    }
-  }
-
+}
   const viewCustomer = viewId ? customers.find((c) => c.id === viewId) : null;
   const customerOrders = viewId ? orders.filter((o) => o.customer_id === viewId) : [];
   const completedOrders = customerOrders.filter((o) => o.status === "completed");
@@ -489,15 +390,24 @@ function CustomersPage() {
 
         <Card>
           <div className="flex items-center gap-2 mb-1">
+            <Coins className="h-4 w-4 text-primary" />
+            <div className="text-xs text-muted-foreground uppercase">Tổng bán</div>
+          </div>
+          <div className="text-2xl font-semibold">{fmt(totalSales)}</div>
+        </Card>
+
+        <Card>
+          <div className="flex items-center gap-2 mb-1">
             <AlertTriangle className="h-4 w-4 text-destructive" />
             <div className="text-xs text-muted-foreground uppercase">Còn công nợ</div>
           </div>
           <div className="text-2xl font-semibold text-destructive">{debtorCount}</div>
         </Card>
 
-        <Card className="md:col-span-2">
-          <div className="text-xs text-muted-foreground uppercase flex items-center gap-1 mb-1">
-            <TrendingDown className="h-3 w-3" /> Tổng công nợ phải thu (đang lọc)
+        <Card>
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingDown className="h-4 w-4 text-destructive" />
+            <div className="text-xs text-muted-foreground uppercase">Tổng công nợ</div>
           </div>
           <div className="text-2xl font-semibold text-destructive">{fmt(totalDebt)}</div>
         </Card>
@@ -511,9 +421,9 @@ function CustomersPage() {
             <input
               ref={importInputRef}
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx,.xls"
               className="hidden"
-              onChange={handleImportCsv}
+              onChange={handleImportFile}
             />
 
             <Button
@@ -522,7 +432,7 @@ function CustomersPage() {
               onClick={() => importInputRef.current?.click()}
             >
               <Upload className="h-4 w-4 mr-1" />
-              Import CSV
+              Import Excel
             </Button>
 
             <Button size="sm" variant="outline" onClick={handleExportExcel}>
@@ -549,9 +459,11 @@ function CustomersPage() {
             setSearch(v);
             setPage(1);
           }}
-          placeholder="Tìm tên, số điện thoại..."
+          placeholder="Tìm tên, số điện thoại, mã khách..."
           sortOptions={[
             { value: "name", label: "Tên A→Z" },
+            { value: "sales_desc", label: "Tổng bán nhiều nhất" },
+            { value: "sales_asc", label: "Tổng bán ít nhất" },
             { value: "debt_desc", label: "Nợ nhiều nhất" },
             { value: "debt_asc", label: "Nợ ít nhất" },
             { value: "date", label: "Mới nhất" },
@@ -562,45 +474,30 @@ function CustomersPage() {
             setPage(1);
           }}
           filterSlot={
-            <div className="flex gap-2">
-              <select
-                className="h-9 rounded-md border bg-background px-2 text-sm"
-                value={filterGroup}
-                onChange={(e) => setFilterGroup(e.target.value)}
-              >
-                <option value="">Tất cả nhóm</option>
-                {Object.entries(groupLabel).map(([v, l]) => (
-                  <option key={v} value={v}>
-                    {l}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                className="h-9 rounded-md border bg-background px-2 text-sm"
-                value={filterDebt}
-                onChange={(e) => setFilterDebt(e.target.value)}
-              >
-                <option value="all">Tất cả</option>
-                <option value="debt">Có công nợ</option>
-                <option value="no_debt">Không nợ</option>
-              </select>
-            </div>
+            <select
+              className="h-9 rounded-md border bg-background px-2 text-sm"
+              value={filterDebt}
+              onChange={(e) => setFilterDebt(e.target.value)}
+            >
+              <option value="all">Tất cả</option>
+              <option value="debt">Có công nợ</option>
+              <option value="no_debt">Không nợ</option>
+            </select>
           }
           total={filtered.length}
           totalLabel="khách"
         />
 
         <div className="overflow-auto rounded-xl border">
-          <table className="w-full min-w-[900px] text-sm">
+          <table className="w-full min-w-[980px] text-sm">
             <thead className="sticky top-0 bg-background text-left text-muted-foreground border-b z-10">
               <tr>
                 <th className="py-2 pl-3 pr-3">Tên khách hàng</th>
                 <th className="pr-3">SĐT</th>
                 <th className="pr-3">Địa chỉ</th>
-                <th className="pr-3">Nhóm</th>
-                <th className="text-right pr-3">Công nợ</th>
-                <th className="text-right pr-3">Thao tác</th>
+                <th className="pr-3">Tổng bán</th>
+                <th className="pr-3 text-right">Công nợ</th>
+                <th className="pr-3 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -621,16 +518,14 @@ function CustomersPage() {
                     </div>
                   </td>
                   <td className="pr-3 text-muted-foreground">{c.phone ?? "—"}</td>
-                  <td className="pr-3 text-muted-foreground text-xs max-w-[150px] truncate">
-                    {[c.district, c.province].filter(Boolean).join(", ") || c.address || "—"}
+                  <td className="pr-3 text-muted-foreground text-xs max-w-[180px] truncate">
+                    {[c.address, c.ward, c.district, c.province].filter(Boolean).join(", ") || "—"}
                   </td>
-                  <td className="pr-3">
-                    <span className={`text-xs rounded-full px-2 py-0.5 ${groupColor[c.group_name] ?? "bg-gray-100 text-gray-700"}`}>
-                      {groupLabel[c.group_name] ?? c.group_name}
-                    </span>
+                  <td className="pr-3 font-medium">
+                    {fmt(Number(c.total_sales || 0))}
                   </td>
                   <td
-                    className={`text-right pr-3 font-medium ${
+                    className={`pr-3 text-right font-medium ${
                       Number(c.debt || 0) > 0 ? "text-destructive" : "text-muted-foreground"
                     }`}
                   >
@@ -662,10 +557,7 @@ function CustomersPage() {
 
               {filtered.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={6}
-                    className="py-6 text-center text-muted-foreground"
-                  >
+                  <td colSpan={6} className="py-6 text-center text-muted-foreground">
                     Không có kết quả
                   </td>
                 </tr>
@@ -686,12 +578,19 @@ function CustomersPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {form.id ? "Sửa khách hàng" : "Thêm khách hàng"}
-            </DialogTitle>
+            <DialogTitle>{form.id ? "Sửa khách hàng" : "Thêm khách hàng"}</DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleSave} className="space-y-3">
+            <div>
+              <Label>Mã khách hàng</Label>
+              <Input
+                className="mt-1"
+                value={form.external_code}
+                onChange={(e) => setForm({ ...form, external_code: e.target.value })}
+              />
+            </div>
+
             <div>
               <Label>Tên *</Label>
               <Input
@@ -713,13 +612,39 @@ function CustomersPage() {
             </div>
 
             <div>
+              <Label>Địa chỉ</Label>
+              <Input
+                className="mt-1"
+                placeholder="Số nhà, tên đường..."
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <Label>Phường / Xã</Label>
+              <Input
+                className="mt-1"
+                value={form.ward}
+                onChange={(e) => setForm({ ...form, ward: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <Label>Khu vực giao hàng</Label>
+              <Input
+                className="mt-1"
+                value={form.district}
+                onChange={(e) => setForm({ ...form, district: e.target.value })}
+              />
+            </div>
+
+            <div>
               <Label>Tỉnh / Thành phố</Label>
               <select
                 className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                 value={form.province}
-                onChange={(e) =>
-                  setForm({ ...form, province: e.target.value, district: "", ward: "" })
-                }
+                onChange={(e) => setForm({ ...form, province: e.target.value })}
               >
                 <option value="">— Chọn tỉnh/thành phố —</option>
                 {PROVINCES.map((p) => (
@@ -731,52 +656,17 @@ function CustomersPage() {
             </div>
 
             <div>
-              <Label>Quận / Huyện</Label>
+              <Label>Tổng bán (₫)</Label>
               <Input
                 className="mt-1"
-                placeholder="Nhập quận/huyện"
-                value={form.district}
-                onChange={(e) => setForm({ ...form, district: e.target.value })}
+                type="number"
+                value={form.total_sales}
+                onChange={(e) => setForm({ ...form, total_sales: e.target.value })}
               />
             </div>
 
             <div>
-              <Label>Phường / Xã</Label>
-              <Input
-                className="mt-1"
-                placeholder="Nhập phường/xã"
-                value={form.ward}
-                onChange={(e) => setForm({ ...form, ward: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <Label>Địa chỉ chi tiết</Label>
-              <Input
-                className="mt-1"
-                placeholder="Số nhà, tên đường..."
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <Label>Nhóm</Label>
-              <select
-                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                value={form.group_name}
-                onChange={(e) => setForm({ ...form, group_name: e.target.value })}
-              >
-                {Object.entries(groupLabel).map(([v, l]) => (
-                  <option key={v} value={v}>
-                    {l}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <Label>Công nợ (₫)</Label>
+              <Label>Công nợ hiện tại (₫)</Label>
               <Input
                 className="mt-1"
                 type="number"
@@ -812,11 +702,6 @@ function CustomersPage() {
                       Mã: {viewCustomer.external_code}
                     </span>
                   ) : null}
-                  <span
-                    className={`text-xs rounded-full px-2 py-0.5 ${groupColor[viewCustomer.group_name] ?? "bg-gray-100 text-gray-700"}`}
-                  >
-                    {groupLabel[viewCustomer.group_name] ?? viewCustomer.group_name}
-                  </span>
                 </DialogTitle>
               </DialogHeader>
 
@@ -830,19 +715,19 @@ function CustomersPage() {
                 </div>
 
                 <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                  <Coins className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div>
+                    <div className="text-xs text-muted-foreground">Tổng bán</div>
+                    <div className="font-medium">{fmt(Number(viewCustomer.total_sales || 0))}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
                   <TrendingDown className="h-4 w-4 text-muted-foreground shrink-0" />
                   <div>
                     <div className="text-xs text-muted-foreground">Công nợ</div>
-                    <div
-                      className={`font-medium ${
-                        Number(viewCustomer.debt || 0) > 0
-                          ? "text-destructive"
-                          : "text-green-600"
-                      }`}
-                    >
-                      {Number(viewCustomer.debt || 0) > 0
-                        ? fmt(Number(viewCustomer.debt || 0))
-                        : "Không có nợ"}
+                    <div className={`font-medium ${Number(viewCustomer.debt || 0) > 0 ? "text-destructive" : "text-green-600"}`}>
+                      {Number(viewCustomer.debt || 0) > 0 ? fmt(Number(viewCustomer.debt || 0)) : "Không có nợ"}
                     </div>
                   </div>
                 </div>
@@ -865,18 +750,12 @@ function CustomersPage() {
                   <div className="text-2xl font-semibold">{customerOrders.length}</div>
                   <div className="text-xs text-muted-foreground mt-1">Tổng đơn hàng</div>
                 </div>
-
                 <div className="rounded-lg border p-3">
-                  <div className="text-2xl font-semibold text-green-600">
-                    {completedOrders.length}
-                  </div>
+                  <div className="text-2xl font-semibold text-green-600">{completedOrders.length}</div>
                   <div className="text-xs text-muted-foreground mt-1">Đã hoàn tất</div>
                 </div>
-
                 <div className="rounded-lg border p-3">
-                  <div className="text-sm font-semibold text-primary">
-                    {fmt(totalSpent)}
-                  </div>
+                  <div className="text-sm font-semibold text-primary">{fmt(totalSpent)}</div>
                   <div className="text-xs text-muted-foreground mt-1">Tổng chi tiêu</div>
                 </div>
               </div>
@@ -927,9 +806,7 @@ function CustomersPage() {
                             <td className="text-xs text-muted-foreground">
                               {new Date(o.created_at).toLocaleDateString("vi-VN")}
                             </td>
-                            <td className="text-right font-medium">
-                              {fmt(Number(o.total || 0))}
-                            </td>
+                            <td className="text-right font-medium">{fmt(Number(o.total || 0))}</td>
                           </tr>
                         ))}
                       </tbody>
