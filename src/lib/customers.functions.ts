@@ -1,119 +1,99 @@
 import { createServerFn } from "@tanstack/react-start";
-import {
-  deleteWhere,
-  fetchRows,
-  insertRow,
-  now,
-  updateWhere,
-  uid,
-} from "./supabase";
+import { deleteWhere, fetchRows, insertRow, now, updateWhere, uid } from "./supabase";
+import { supabase } from "./supabase"; // Sử dụng instance supabase gốc để gọi lệnh range và count
 
-type CustomerUpsertPayload = {
-  external_code?: string | null;
-  name: string;
-  phone: string | null;
-  address: string | null;
-  ward: string | null;
-  district: string | null;
-  province: string | null;
-  total_sales: number;
-  debt: number;
-};
-
-type ImportedCustomerRow = {
-  external_code: string | null;
-  name: string;
-  phone: string | null;
-  address: string | null;
-  ward: string | null;
-  district: string | null;
-  province: string | null;
-  total_sales: number;
-};
-
-function clean(value: unknown) {
-  return String(value ?? "")
-    .replace(/\u00a0/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+// Định nghĩa interface cho tham số truyền vào từ frontend
+interface ListCustomersArgs {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  group?: string;
+  debtFilter?: string;
+  sortBy?: string;
 }
 
-function parseMoney(value: unknown) {
-  const raw = clean(value).replace(/[^\d-]/g, "");
-  if (!raw) return 0;
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return 0;
-  return Math.abs(n);
-}
+export const listCustomers = createServerFn({ method: "GET" })
+  .handler(async ({ data }: { data: ListCustomersArgs | undefined }) => {
+    const page = data?.page ?? 1;
+    const pageSize = data?.pageSize ?? 100; // Tăng lên 100 khách mỗi lần cuộn để xem được nhiều hơn
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
-function getField(row: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    const value = clean(row[key]);
-    if (value) return value;
-  }
-  return "";
-}
+    let query = supabase
+      .from("customers")
+      .select("*", { count: "exact" });
 
-function normalizeRow(row: Record<string, unknown>): ImportedCustomerRow | null {
-  const external_code = getField(row, ["Mã khách hàng", "Ma khách hàng", "Mă khách hàng", "Mã KH"]) || null;
-  const name = getField(row, ["Tên khách hàng", "Ten khách hàng", "Khách hàng", "Ho ten", "Họ tên"]);
-  if (!name) return null;
+    if (data?.search) {
+      const q = `%${data.search}%`;
+      query = query.or(`name.ilike.${q},phone.ilike.${q}`);
+    }
+    if (data?.group) {
+      query = query.eq("group_name", data.group);
+    }
+    if (data?.debtFilter === "debt") {
+      query = query.gt("debt", 0);
+    } else if (data?.debtFilter === "no_debt") {
+      query = query.eq("debt", 0);
+    }
 
-  const phone = getField(row, ["Điện thoại", "So dien thoai", "Số điện thoại"]) || null;
-  const address = getField(row, ["Địa chỉ", "Dia chi"]) || null;
-  const ward = getField(row, ["Phường/Xã", "Phuong/Xa"]) || null;
-  const district = getField(row, ["Khu vực giao hàng", "Quan/Huyen", "Quận/Huyện"]) || null;
-  const province = getField(row, ["Tỉnh/Thành phố", "Tinh/Thanh pho"]) || null;
+    if (data?.sortBy === "name") {
+      query = query.order("name", { ascending: true });
+    } else if (data?.sortBy === "debt_desc") {
+      query = query.order("debt", { ascending: false });
+    } else if (data?.sortBy === "debt_asc") {
+      query = query.order("debt", { ascending: true });
+    } else {
+      query = query.order("created_at", { ascending: false });
+    }
 
-  const total_sales = parseMoney(
-    getField(row, ["Tổng bán", "Tong ban", "Tổng doanh số", "Tong doanh so"]),
-  );
+    const { data: customers, count: totalFilteredCustomers, error: custError } = await query.range(from, to);
+    if (custError) throw new Error(custError.message);
 
-  return {
-    external_code,
-    name,
-    phone,
-    address,
-    ward,
-    district,
-    province,
-    total_sales,
-  };
-}
+    // Tính toán số liệu tổng quan của toàn bộ 15.000 khách
+    const [statsRes, ordersRes] = await Promise.all([
+      supabase.from("customers").select("debt"),
+      fetchRows("orders", { orderBy: "created_at", ascending: false }),
+    ]);
 
-async function runInChunks<T>(
-  items: T[],
-  chunkSize: number,
-  fn: (item: T) => Promise<void>,
-) {
-  for (let i = 0; i < items.length; i += chunkSize) {
-    const chunk = items.slice(i, i + chunkSize);
-    await Promise.all(chunk.map(fn));
-  }
-}
+    let totalAllCustomers = 0;
+    let totalAllDebt = 0;
+    let totalDebtorCount = 0;
 
-export const listCustomers = createServerFn({ method: "GET" }).handler(async () => {
-  const [customers, orders, order_items] = await Promise.all([
-    fetchRows("customers", { orderBy: "name" }),
-    fetchRows("orders", { orderBy: "created_at", ascending: false }),
-    fetchRows("order_items"),
-  ]);
+    const { data: allStats, error: statsError } = statsRes;
+    
+    if (!statsError && allStats) {
+      totalAllCustomers = allStats.length;
+      allStats.forEach(c => {
+        if (c.debt > 0) {
+          totalAllDebt += c.debt;
+          totalDebtorCount++;
+        }
+      });
+    }
 
-  return { customers, orders, order_items };
-});
+    return {
+      customers: customers ?? [],
+      orders: ordersRes ?? [],
+      meta: {
+        totalFiltered: totalFilteredCustomers ?? 0,
+        totalAllCustomers,
+        totalAllDebt,
+        totalDebtorCount
+      }
+    };
+  });
 
-export const upsertCustomer = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: any }) => {
+export const upsertCustomer = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: any }) => {
     const payload = {
-      external_code: data.external_code || null,
       name: data.name,
       phone: data.phone || null,
-      address: data.address || null,
       ward: data.ward || null,
       district: data.district || null,
       province: data.province || null,
-      total_sales: Number(data.total_sales) || 0,
-      debt: Number(data.debt) || 0,
+      address: data.address || null,
+      group_name: data.group_name,
+      debt: data.debt || 0,
     };
 
     if (data.id) {
@@ -125,117 +105,24 @@ export const upsertCustomer = createServerFn({ method: "POST" }).handler(
         created_at: now(),
       });
     }
-
     return { ok: true };
-  },
-);
+  });
 
-export const deleteCustomer = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { id: string } }) => {
+export const deleteCustomer = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: { id: string } }) => {
     await deleteWhere("customers", { id: data.id });
     return { ok: true };
-  },
-);
+  });
 
-export const recordPayment = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { customer_id: string; amount: number } }) => {
+export const recordPayment = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: { customer_id: string; amount: number } }) => {
     const rows = await fetchRows<{ debt: number }>("customers", {
       eq: { id: data.customer_id },
       select: "debt",
       limit: 1,
     });
-
     const current = rows[0]?.debt ?? 0;
     const next = Math.max(0, current - Number(data.amount || 0));
-
     await updateWhere("customers", { debt: next }, { id: data.customer_id });
     return { ok: true };
-  },
-);
-
-export const importCustomersRows = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { rows: Record<string, unknown>[] } }) => {
-    const normalized = (data.rows || [])
-      .map(normalizeRow)
-      .filter(Boolean) as ImportedCustomerRow[];
-
-    const dedup = new Map<string, ImportedCustomerRow>();
-
-    for (const row of normalized) {
-      const key =
-        clean(row.external_code) ||
-        clean(row.phone) ||
-        `${clean(row.name)}__${clean(row.address)}`;
-
-      dedup.set(key, row);
-    }
-
-    const existingCustomers = await fetchRows<{
-      id: string;
-      external_code?: string | null;
-      phone?: string | null;
-    }>("customers", {
-      select: "id, external_code, phone",
-    });
-
-    const byExternal = new Map<string, { id: string }>();
-    const byPhone = new Map<string, { id: string }>();
-
-    for (const c of existingCustomers) {
-      if (c.external_code) byExternal.set(clean(c.external_code), { id: c.id });
-      if (c.phone) byPhone.set(clean(c.phone), { id: c.id });
-    }
-
-    const updates: Array<{ id: string; payload: CustomerUpsertPayload }> = [];
-    const inserts: CustomerUpsertPayload[] = [];
-
-    for (const row of dedup.values()) {
-      const externalKey = clean(row.external_code);
-      const phoneKey = clean(row.phone);
-
-      const matched = externalKey
-        ? byExternal.get(externalKey)
-        : phoneKey
-          ? byPhone.get(phoneKey)
-          : undefined;
-
-      const payload: CustomerUpsertPayload = {
-        external_code: row.external_code,
-        name: row.name,
-        phone: row.phone,
-        address: row.address,
-        ward: row.ward,
-        district: row.district,
-        province: row.province,
-        total_sales: row.total_sales,
-        debt: 0, // không import công nợ
-      };
-
-      if (matched) {
-        updates.push({ id: matched.id, payload });
-      } else {
-        inserts.push(payload);
-      }
-    }
-
-    await runInChunks(updates, 50, async ({ id, payload }) => {
-      await updateWhere("customers", payload, { id });
-    });
-
-    await runInChunks(inserts, 50, async (payload) => {
-      await insertRow("customers", {
-        id: uid(),
-        created_at: now(),
-        ...payload,
-      });
-    });
-
-    return {
-      ok: true,
-      total: normalized.length,
-      created: inserts.length,
-      updated: updates.length,
-      skipped: (data.rows || []).length - normalized.length,
-    };
-  },
-);
+  });
