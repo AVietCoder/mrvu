@@ -3,6 +3,7 @@ import path from "path";
 import xlsx from "xlsx";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import stringSimilarity from "string-similarity";
 
 dotenv.config();
 
@@ -11,86 +12,134 @@ const supabase = createClient(
   process.env.VITE_SUPABASE_ANON_KEY
 );
 
-const cleanStr = (val) => {
-  if (val === undefined || val === null) return "";
-  return String(val).trim();
-};
-
+const cleanStr = (val) => (val === undefined || val === null ? "" : String(val).trim());
 const cleanNum = (val) => {
   if (val === undefined || val === null) return 0;
   const num = Number(val);
   return isNaN(num) ? 0 : num;
 };
+const genRandomId = () => Math.random().toString(36).slice(2, 8).toUpperCase();
+const cleanPhone = (phone) => cleanStr(phone).replace(/[^0-9]/g, "");
 
 async function run() {
   try {
-    const excelFilePath = path.resolve(process.cwd(), "customers.xlsx");
-
+    const excelFilePath = path.resolve(process.cwd(), "orders.xlsx");
     if (!fs.existsSync(excelFilePath)) {
       console.error(`❌ Không tìm thấy file: ${excelFilePath}`);
       return;
     }
 
-    console.log("🔄 Đang đọc cấu trúc file Excel...");
+    // 1. TẢI DỮ LIỆU NỀN
+    console.log("📥 Đang tải dữ liệu từ Database...");
+    const { data: dbBranches } = await supabase.from("branches").select("id, name");
+    const { data: dbCustomers } = await supabase.from("customers").select("id, name, phone, address");
+    const { data: dbProducts } = await supabase.from("products").select("id, sku");
 
-    const workbook = xlsx.readFile(excelFilePath, {
-      cellDates: true,
-      cellNF: false,
-      cellText: false
-    });
-    
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    const rows = xlsx.utils.sheet_to_json(worksheet, { defval: "" });
+    // 2. ĐỌC EXCEL
+    console.log("🔄 Đang đọc file Excel...");
+    const workbook = xlsx.readFile(excelFilePath, { cellDates: true });
+    const rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" });
 
-    console.log(`📊 Tổng dữ liệu quét được: ${rows.length} khách hàng`);
+    const ordersMap = new Map();
+    for (const row of rows) {
+      const orderCode = cleanStr(row["Mã hóa đơn"] || row["Mã đặt hàng"]);
+      if (!orderCode) continue;
+      if (!ordersMap.has(orderCode)) ordersMap.set(orderCode, { excelRow: row, items: [] });
+      ordersMap.get(orderCode).items.push(row);
+    }
 
-    const batchSize = 500;
-    let successCount = 0;
+    // 3. XỬ LÝ VÀ ĐẨY LÊN SUPABASE
+    for (const [orderCode, orderGroup] of ordersMap.entries()) {
+      const mainRow = orderGroup.excelRow;
+      console.log(`\n⚙️ Đang xử lý: [${orderCode}]`);
 
-    for (let i = 0; i < rows.length; i += batchSize) {
-      const chunk = rows.slice(i, i + batchSize);
+      // --- MATCH KHÁCH HÀNG (3 Lớp) ---
+      let customerId = null;
+      const exCustName = cleanStr(mainRow["Tên khách hàng"]).toLowerCase();
+      const exCustPhone = cleanPhone(mainRow["Điện thoại"]);
+      
+      if (dbCustomers) {
+        let bestScore = 0;
+        let bestCust = null;
+        for (const cust of dbCustomers) {
+          let score = 0;
+          const dbName = cleanStr(cust.name).toLowerCase();
+          const dbPhone = cleanPhone(cust.phone);
 
-      const customers = chunk.map((row) => {
-        let rawId = cleanStr(row["Mã khách hàng"]);
-        if (!rawId) {
-          rawId = `KH_AUTO_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+          if (exCustPhone && dbPhone === exCustPhone) score += 20; // Khớp SĐT tuyệt đối
+          if (exCustName === dbName) score += 20; // Khớp tên tuyệt đối
+          
+          const nameSim = stringSimilarity.compareTwoStrings(exCustName, dbName);
+          if (nameSim > 0.6) score += (nameSim * 15);
+
+          if (score > bestScore) { bestScore = score; bestCust = cust; }
+        }
+        if (bestScore >= 10) {
+          customerId = bestCust.id;
+          console.log(`🎯 KH: "${exCustName}" -> "${bestCust.name}" (Score: ${bestScore.toFixed(1)})`);
+        } else {
+          console.log(`⚠️ KH: Không tìm thấy khớp cho "${exCustName}"`);
+        }
+      }
+
+      // --- MATCH SẢN PHẨM & TÍNH TOÁN ---
+      let orderItemsToInsert = [];
+      let totalSubtotal = 0;
+      for (const itemRow of orderGroup.items) {
+        const itemSku = cleanStr(itemRow["Mã hàng"]);
+        // Ưu tiên khớp ID trước, sau đó tới SKU
+        const matchedProduct = dbProducts?.find(p => p.id === itemSku || p.sku === itemSku);
+        
+        if (!matchedProduct) {
+          console.log(`❌ SP: [${itemSku}] không tồn tại trong DB!`);
+          continue;
         }
 
-        return {
-          id: rawId,
-          name: cleanStr(row["Tên khách hàng"]) || "Khách hàng không tên",
-          phone: cleanStr(row["Điện thoại"]),
-          address: cleanStr(row["Địa chỉ"]),
-          province: cleanStr(row["Khu vực giao hàng"]),
-          group_name: cleanStr(row["Nhóm khách hàng"]) || "le",
-          debt: cleanNum(row["Nợ cần thu hiện tại"]),
-          total_buy: cleanNum(row["Tổng bán"]),
-          type: cleanStr(row["Loại khách"]),
-          email: cleanStr(row["Email"]),
-          gender: cleanStr(row["Giới tính"])
-        };
-      });
+        const qty = cleanNum(itemRow["Số lượng"]);
+        const unitPrice = cleanNum(itemRow["Đơn giá"]);
+        const itemTotal = qty * unitPrice;
+        totalSubtotal += itemTotal;
 
-      console.log(`🚀 Đang đồng bộ batch ${Math.floor(i / batchSize) + 1} (${customers.length} khách hàng)...`);
+        orderItemsToInsert.push({
+          id: `OI_${genRandomId()}`,
+          order_id: orderCode,
+          product_id: matchedProduct.id,
+          qty,
+          unit_price: unitPrice,
+          total: itemTotal
+        });
+      }
 
-      const { error } = await supabase
-        .from("customers")
-        .upsert(customers, { onConflict: "id" });
-
-      if (error) {
-        console.error(`❌ Thất bại tại batch ${Math.floor(i / batchSize) + 1}:`, error.message);
+      if (orderItemsToInsert.length === 0) {
+        console.log(`❌ Bỏ qua đơn [${orderCode}] vì không có sản phẩm hợp lệ.`);
         continue;
       }
 
-      successCount += customers.length;
-      console.log(`✅ Tiến độ: ${successCount}/${rows.length} khách hàng`);
+      // --- ĐẨY LÊN DATABASE ---
+      const orderData = {
+        id: orderCode,
+        code: orderCode,
+        customer_id: customerId,
+        branch_id: dbBranches?.[0]?.id, // Mặc định lấy chi nhánh đầu tiên nếu chưa khớp branch
+        status: cleanStr(mainRow["Trạng thái"]).toLowerCase().includes("hoàn thành") ? "completed" : "draft",
+        subtotal: totalSubtotal,
+        total: cleanNum(mainRow["Khách cần trả"]) || totalSubtotal,
+        created_at: mainRow["Thời gian tạo"] || new Date()
+      };
+
+      const { error: errOrd } = await supabase.from("orders").upsert(orderData);
+      const { error: errItem } = await supabase.from("order_items").upsert(orderItemsToInsert);
+
+      if (!errOrd && !errItem) {
+        console.log(`✅ Đã lưu đơn [${orderCode}] & ${orderItemsToInsert.length} sản phẩm.`);
+      } else {
+        console.error(`❌ Lỗi DB:`, errOrd || errItem);
+      }
     }
 
-    console.log("\n🎉 TIẾN TRÌNH IMPORT HOÀN TẤT");
-    console.log(`📦 Tổng số bản ghi thực tế trong cơ sở dữ liệu: ${successCount}`);
+    console.log("\n🎉 TIẾN TRÌNH HOÀN TẤT!");
   } catch (err) {
-    console.error("❌ Hệ thống gặp sự cố:", err.message);
+    console.error("❌ Lỗi nghiêm trọng:", err.message);
   }
 }
 

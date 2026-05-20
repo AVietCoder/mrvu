@@ -50,6 +50,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 function printOrderSlip({ items, customer, branch, employee, status, discount, deposit, paid, note, subtotal, total, data, siteSettings }: any) {
   const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
+  console.log(data);
   const custName = customer ? (data?.customers ?? []).find((c: any) => c.id === customer)?.name ?? "Khách lẻ" : "Khách lẻ";
   const branchName = branch ? (data?.branches ?? []).find((b: any) => b.id === branch)?.name ?? "—" : "—";
   const empName = employee ? (data?.employees ?? []).find((e: any) => e.id === employee)?.name ?? "—" : "—";
@@ -250,7 +251,12 @@ function Page() {
           </thead>
           <tbody>
             {rows.map((o, idx) => {
-              const cust = (data?.customers ?? []).find((c: any) => c.id === o.customer_id)?.name ?? "Khách lẻ";
+              const customerMap = useMemo(() => {
+                return new Map((data?.customers ?? []).map((c: any) => [c.id, c]));
+              }, [data?.customers]);
+
+              console.log(customerMap.size); // ✅ đúng
+              const cust = customerMap[o.customer_id]?.name ?? "Khách lẻ";
               const br   = (data?.branches ?? []).find((b: any) => b.id === o.branch_id)?.name ?? "—";
               const linked = (data?.schedules ?? []).filter((s: any) => s.order_id === o.id);
               const globalIdx = (page - 1) * PAGE_SIZE + idx + 1;

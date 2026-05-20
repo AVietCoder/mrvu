@@ -169,9 +169,13 @@ function OrderDetailPage() {
     );
   }
 
-  const cust = (data?.customers ?? []).find((c: any) => c.id === order.customer_id);
-  const branch = (data?.branches ?? []).find((b: any) => b.id === order.branch_id);
+const customerMap = useMemo(() => {
+  return Object.fromEntries((data?.customers ?? []).map((c: any) => [c.id, c]));
+}, [data?.customers]);
+
+const cust = customerMap[order.customer_id];  const branch = (data?.branches ?? []).find((b: any) => b.id === order.branch_id);
   const emp = (data?.employees ?? []).find((e: any) => e.id === order.employee_id);
+  console.log(cust, order.customer_id);
 
   return (
     <AppShell title={`Đơn hàng ${order.code}`}>
