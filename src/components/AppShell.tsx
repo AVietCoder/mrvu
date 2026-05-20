@@ -7,6 +7,9 @@ import {
 import { type ReactNode, useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import type { Permission } from "@/lib/types";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { getSettings } from "@/lib/settings.functions";
 
 type NavItem = {
   to: string;
@@ -38,6 +41,36 @@ export function AppShell({ children, title }: { children: ReactNode; title: stri
   // ← Fix hydration: chỉ render user-dependent UI sau khi mount ở client
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  const getSettingsFn = useServerFn(getSettings);
+  const { data: settings } = useQuery({
+    queryKey: ["site_settings"],
+    queryFn: () => getSettingsFn(),
+    staleTime: 60_000,
+  });
+  const brandName = settings?.site_name?.trim() || "QuatTran POS";
+  const logoUrl = settings?.logo_url || "";
+  const primaryColor = settings?.primary_color || "";
+
+  // Override theme tokens with chosen brand color (buttons, hover, ring, active nav...)
+  useEffect(() => {
+    if (!mounted) return;
+    const root = document.documentElement;
+    const vars = [
+      "--primary", "--ring", "--sidebar-primary", "--sidebar-ring",
+      "--brand-primary",
+    ];
+    if (primaryColor) {
+      for (const v of vars) root.style.setProperty(v, primaryColor);
+      // Ensure readable text on the brand color
+      root.style.setProperty("--primary-foreground", "#ffffff");
+      root.style.setProperty("--sidebar-primary-foreground", "#ffffff");
+    } else {
+      for (const v of vars) root.style.removeProperty(v);
+      root.style.removeProperty("--primary-foreground");
+      root.style.removeProperty("--sidebar-primary-foreground");
+    }
+  }, [mounted, primaryColor]);
 
   function handleLogout() {
     logout();
@@ -80,11 +113,18 @@ export function AppShell({ children, title }: { children: ReactNode; title: stri
 
         {/* Logo */}
         <div className="flex items-center gap-2 px-5 py-5 border-b">
-          <div className="h-9 w-9 rounded-lg bg-primary/10 grid place-items-center">
-            <Fan className="h-5 w-5 text-primary" />
+          <div
+            className="h-9 w-9 rounded-lg grid place-items-center overflow-hidden shrink-0"
+            style={{ backgroundColor: primaryColor ? primaryColor + "1a" : undefined }}
+          >
+            {logoUrl ? (
+              <img src={logoUrl} alt={brandName} className="h-full w-full object-contain" />
+            ) : (
+              <Fan className="h-5 w-5" style={primaryColor ? { color: primaryColor } : { color: undefined }} />
+            )}
           </div>
-          <div>
-            <div className="font-semibold leading-tight">QuatTran POS</div>
+          <div className="min-w-0">
+            <div className="font-semibold leading-tight truncate">{brandName}</div>
             <div className="text-xs text-muted-foreground">
               {mounted && user
                 ? (user.branch_ids.length === 0 ? "Tất cả chi nhánh" : `${user.branch_ids.length} chi nhánh`)

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { getSettings, updateSettings } from "@/lib/settings.functions";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -73,20 +73,20 @@ function AdminPage() {
   const [phone, setPhone]             = useState("");
   const [email, setEmail]             = useState("");
   const [taxCode, setTaxCode]         = useState("");
-  const [loaded, setLoaded]           = useState(false);
   const [saving, setSaving]           = useState(false);
   const [saved, setSaved]             = useState(false);
 
-  if (settings && !loaded) {
-    setSiteName(settings.site_name);
-    setLogoUrl(settings.logo_url);
+  // Sync server settings -> local form state whenever settings load/refetch
+  useEffect(() => {
+    if (!settings) return;
+    setSiteName(settings.site_name ?? "");
+    setLogoUrl(settings.logo_url ?? "");
     setPrimaryColor(settings.primary_color || "#2563eb");
-    setAddress(settings.address);
-    setPhone(settings.phone);
-    setEmail(settings.email);
-    setTaxCode(settings.tax_code);
-    setLoaded(true);
-  }
+    setAddress(settings.address ?? "");
+    setPhone(settings.phone ?? "");
+    setEmail(settings.email ?? "");
+    setTaxCode(settings.tax_code ?? "");
+  }, [settings]);
 
   function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -233,7 +233,7 @@ function AdminPage() {
                     "relative h-12 rounded-xl flex items-center justify-center text-white text-xs font-semibold transition-all",
                     active ? "ring-2 ring-offset-2 scale-105 shadow-md" : "opacity-75 hover:opacity-100 hover:scale-102",
                   ].join(" ")}
-                  style={{ backgroundColor: c.value, ringColor: c.value }}
+                  style={{ backgroundColor: c.value, ["--tw-ring-color" as any]: c.value }}
                 >
                   {c.label}
                   {active && (
