@@ -1,108 +1,162 @@
 import { createServerFn } from "@tanstack/react-start";
-import db, { uid, now } from "@/server/db.server";
-import type { AuthSession, User, Permission } from "./types";
+import type { AuthSession, Permission, User } from "./types";
+import {
+  deleteWhere,
+  fetchRow,
+  fetchRows,
+  insertRow,
+  now,
+  supabase,
+  uid,
+  updateWhere,
+} from "./supabase";
 
-function loadUser(row: any): User {
-  const branches = db.prepare("SELECT branch_id FROM user_branches WHERE user_id=?")
-    .all(row.id).map((r: any) => r.branch_id);
-  const permissions = db.prepare("SELECT permission FROM user_permissions WHERE user_id=?")
-    .all(row.id).map((r: any) => r.permission as Permission);
+async function loadUser(row: any): Promise<User> {
+  const [branchRows, permRows] = await Promise.all([
+    fetchRows<{ branch_id: string }>("user_branches", { eq: { user_id: row.id }, select: "branch_id" }),
+    fetchRows<{ permission: Permission }>("user_permissions", { eq: { user_id: row.id }, select: "permission" }),
+  ]);
+
   return {
     id: row.id,
     full_name: row.full_name,
     username: row.username,
-    phone: row.phone,
-    is_admin: row.is_admin === 1,
-    branch_ids: branches,
-    permissions,
+    phone: row.phone ?? undefined,
+    is_admin: Boolean(row.is_admin),
+    branch_ids: branchRows.map((r) => r.branch_id),
+    permissions: permRows.map((r) => r.permission),
     created_at: row.created_at,
   };
 }
 
 export const loginFn = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { username: string; password: string } }) => {
-    const row = db.prepare("SELECT * FROM users WHERE username=? AND password=?")
-      .get(data.username, data.password) as any;
+    const row = await fetchRow<any>("users", {
+      eq: { username: data.username, password: data.password },
+    });
+
     if (!row) throw new Error("Sai tên đăng nhập hoặc mật khẩu");
-    const session: AuthSession = { user: loadUser(row), token: uid() + uid() };
+    const user = await loadUser(row);
+    const session: AuthSession = { user, token: uid() + uid() };
     return session;
   });
 
 export const registerFn = createServerFn({ method: "POST" })
-  .handler(async ({ data }: { data: {
-    full_name: string; phone?: string; username: string;
-    password: string; branch_ids?: string[];
-  }}) => {
-    const exists = db.prepare("SELECT id FROM users WHERE username=?").get(data.username);
+  .handler(async ({
+    data,
+  }: {
+    data: {
+      full_name: string;
+      phone?: string;
+      username: string;
+      password: string;
+      branch_ids?: string[];
+    };
+  }) => {
+    const exists = await fetchRow("users", { eq: { username: data.username }, select: "id" });
     if (exists) throw new Error("Tên đăng nhập đã tồn tại");
-    const id = uid();
-    db.prepare("INSERT INTO users (id,full_name,username,password,phone,is_admin,created_at) VALUES (?,?,?,?,?,0,?)")
-      .run(id, data.full_name, data.username, data.password, data.phone || null, now());
-    for (const bid of (data.branch_ids ?? [])) {
-      db.prepare("INSERT OR IGNORE INTO user_branches (user_id,branch_id) VALUES (?,?)").run(id, bid);
+
+    const user = await insertRow<any>("users", {
+      id: uid(),
+      full_name: data.full_name,
+      username: data.username,
+      password: data.password,
+      phone: data.phone || null,
+      is_admin: false,
+      created_at: now(),
+    });
+
+    if (data.branch_ids?.length) {
+      await supabase.from("user_branches").upsert(
+        data.branch_ids.map((branch_id) => ({ user_id: user.id, branch_id })),
+        { onConflict: "user_id,branch_id" },
+      );
     }
+
     return { success: true, username: data.username };
   });
 
 export const changePasswordFn = createServerFn({ method: "POST" })
-  .handler(async ({ data }: { data: {
-    user_id: string; old_password: string; new_password: string;
-  }}) => {
-    const u = db.prepare("SELECT id FROM users WHERE id=? AND password=?")
-      .get(data.user_id, data.old_password);
+  .handler(async ({
+    data,
+  }: {
+    data: { user_id: string; old_password: string; new_password: string };
+  }) => {
+    const u = await fetchRow("users", {
+      eq: { id: data.user_id, password: data.old_password },
+      select: "id",
+    });
     if (!u) throw new Error("Mật khẩu cũ không đúng");
-    db.prepare("UPDATE users SET password=? WHERE id=?").run(data.new_password, data.user_id);
+
+    await updateWhere("users", { password: data.new_password }, { id: data.user_id });
     return { success: true };
   });
 
 // Reset mật khẩu bởi admin (không cần mật khẩu cũ)
 export const resetPasswordFn = createServerFn({ method: "POST" })
-  .handler(async ({ data }: { data: {
-    user_id: string; new_password: string; admin_id: string;
-  }}) => {
-    const admin = db.prepare("SELECT id FROM users WHERE id=? AND is_admin=1").get(data.admin_id);
+  .handler(async ({
+    data,
+  }: {
+    data: { user_id: string; new_password: string; admin_id: string };
+  }) => {
+    const admin = await fetchRow("users", {
+      eq: { id: data.admin_id, is_admin: true },
+      select: "id",
+    });
     if (!admin) throw new Error("Không có quyền thực hiện");
-    db.prepare("UPDATE users SET password=? WHERE id=?").run(data.new_password, data.user_id);
+
+    await updateWhere("users", { password: data.new_password }, { id: data.user_id });
     return { success: true };
   });
 
 export const listUsersFn = createServerFn({ method: "GET" }).handler(async () => {
-  const rows = db.prepare("SELECT * FROM users ORDER BY full_name").all() as any[];
-  return rows.map(loadUser);
+  const rows = await fetchRows<any>("users", { orderBy: "full_name" });
+  const users = await Promise.all(rows.map((row) => loadUser(row)));
+  return users;
 });
 
 export const updateUserPermsFn = createServerFn({ method: "POST" })
-  .handler(async ({ data }: { data: {
-    user_ids: string[];
-    permissions: Permission[];
-    branch_ids: string[];
-  }}) => {
-    const transaction = db.transaction(() => {
-      for (const uid of data.user_ids) {
-        // Xóa quyền cũ, ghi lại mới
-        db.prepare("DELETE FROM user_permissions WHERE user_id=?").run(uid);
-        for (const p of data.permissions) {
-          db.prepare("INSERT OR IGNORE INTO user_permissions (user_id,permission) VALUES (?,?)").run(uid, p);
-        }
-        // Cập nhật chi nhánh
-        db.prepare("DELETE FROM user_branches WHERE user_id=?").run(uid);
-        for (const bid of data.branch_ids) {
-          db.prepare("INSERT OR IGNORE INTO user_branches (user_id,branch_id) VALUES (?,?)").run(uid, bid);
-        }
+  .handler(async ({
+    data,
+  }: {
+    data: {
+      user_ids: string[];
+      permissions: Permission[];
+      branch_ids: string[];
+    };
+  }) => {
+    for (const userId of data.user_ids) {
+      await deleteWhere("user_permissions", { user_id: userId });
+      if (data.permissions.length) {
+        await supabase.from("user_permissions").insert(
+          data.permissions.map((permission) => ({
+            user_id: userId,
+            permission,
+          })),
+        );
       }
-    });
-    transaction();
+
+      await deleteWhere("user_branches", { user_id: userId });
+      if (data.branch_ids.length) {
+        await supabase.from("user_branches").insert(
+          data.branch_ids.map((branch_id) => ({
+            user_id: userId,
+            branch_id,
+          })),
+        );
+      }
+    }
     return { success: true };
   });
 
 export const deleteUserFn = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
-    db.prepare("DELETE FROM users WHERE id=? AND is_admin=0").run(data.id);
+    await deleteWhere("users", { id: data.id, is_admin: false });
     return { success: true };
   });
 
 export const getFormOptionsFn = createServerFn({ method: "GET" }).handler(async () => {
   return {
-    branches: db.prepare("SELECT * FROM branches ORDER BY name").all(),
+    branches: await fetchRows("branches", { orderBy: "name" }),
   };
 });

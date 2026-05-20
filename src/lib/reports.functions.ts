@@ -1,89 +1,109 @@
-"use server";
 import { createServerFn } from "@tanstack/react-start";
-import db from "@/server/db.server";
+import { fetchRows } from "./supabase";
 
 export const getReports = createServerFn({ method: "GET" }).handler(async () => {
-  // Doanh thu tổng
-  const rev = db.prepare(
-    "SELECT COALESCE(SUM(total),0) as v FROM orders WHERE status='completed'"
-  ).get() as any;
-  const totalRevenue: number = rev.v;
+  const [orders, orderItems, products, customers, branches, users, stock] = await Promise.all([
+    fetchRows<any>("orders"),
+    fetchRows<any>("order_items"),
+    fetchRows<any>("products"),
+    fetchRows<any>("customers"),
+    fetchRows<any>("branches"),
+    fetchRows<any>("users", { select: "id, full_name" }),
+    fetchRows<any>("stock"),
+  ]);
 
-  const cnt = db.prepare(
-    "SELECT COUNT(*) as c FROM orders WHERE status='completed'"
-  ).get() as any;
-  const totalOrders: number = cnt.c;
+  const completedOrders = orders.filter((o: any) => o.status === "completed");
 
-  // Doanh thu 14 ngày gần nhất
-  const days = [];
+  const totalRevenue = completedOrders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0);
+  const totalOrders = completedOrders.length;
+
   const today = new Date();
+  const days = [];
   for (let i = 13; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
     const key = d.toISOString().slice(0, 10);
-    const r = db.prepare(
-      "SELECT COALESCE(SUM(total),0) as v FROM orders WHERE status='completed' AND DATE(created_at)=?"
-    ).get(key) as any;
-    days.push({ date: key.slice(5), revenue: r.v });
+    const revenue = completedOrders
+      .filter((o: any) => String(o.created_at || "").slice(0, 10) === key)
+      .reduce((sum: number, order: any) => sum + Number(order.total || 0), 0);
+    days.push({ date: key.slice(5), revenue });
   }
 
-  // Top sản phẩm
-  const topProducts = db.prepare(`
-    SELECT p.name, COALESCE(SUM(oi.qty),0) as qty
-    FROM order_items oi
-    JOIN products p ON p.id = oi.product_id
-    JOIN orders o ON o.id = oi.order_id
-    WHERE o.status = 'completed'
-    GROUP BY p.id ORDER BY qty DESC LIMIT 5
-  `).all();
+  const orderMap = new Map(completedOrders.map((o: any) => [o.id, o]));
+  const productMap = new Map(products.map((p: any) => [p.id, p]));
+  const topQty = new Map<string, number>();
 
-  // Tồn kho thấp
-  const lowStock = db.prepare(`
-    SELECT p.name, p.sku, COALESCE(SUM(s.qty),0) as qty, p.min_stock as min
-    FROM products p
-    LEFT JOIN stock s ON s.product_id = p.id
-    GROUP BY p.id
-    HAVING qty <= p.min_stock
-    ORDER BY qty ASC LIMIT 10
-  `).all();
+  for (const item of orderItems) {
+    const order = orderMap.get(item.order_id);
+    if (!order) continue;
+    topQty.set(item.product_id, (topQty.get(item.product_id) ?? 0) + Number(item.qty || 0));
+  }
 
-  // Công nợ
-  const debtRow = db.prepare(
-    "SELECT COALESCE(SUM(debt),0) as v FROM customers"
-  ).get() as any;
-  const totalDebt: number = debtRow.v;
+  const topProducts = [...topQty.entries()]
+    .map(([productId, qty]) => ({
+      name: productMap.get(productId)?.name ?? productId,
+      qty,
+    }))
+    .sort((a, b) => b.qty - a.qty)
+    .slice(0, 5);
 
-  const debtors = db.prepare(
-    "SELECT * FROM customers WHERE debt > 0 ORDER BY debt DESC LIMIT 10"
-  ).all();
+  const stockByProduct = new Map<string, number>();
+  for (const row of stock) {
+    stockByProduct.set(row.product_id, (stockByProduct.get(row.product_id) ?? 0) + Number(row.qty || 0));
+  }
 
-  const productCount = (db.prepare("SELECT COUNT(*) as c FROM products").get() as any).c;
-  const customerCount = (db.prepare("SELECT COUNT(*) as c FROM customers").get() as any).c;
+  const lowStock = products
+    .map((p: any) => ({
+      name: p.name,
+      sku: p.sku,
+      qty: stockByProduct.get(p.id) ?? 0,
+      min: Number(p.min_stock || 0),
+    }))
+    .filter((p: any) => p.qty <= p.min)
+    .sort((a: any, b: any) => a.qty - b.qty)
+    .slice(0, 10);
 
-  // Theo chi nhánh
-  const byBranch = db.prepare(`
-    SELECT b.name, COALESCE(SUM(o.total),0) as revenue, COUNT(o.id) as orders
-    FROM branches b
-    LEFT JOIN orders o ON o.branch_id = b.id AND o.status='completed'
-    GROUP BY b.id ORDER BY revenue DESC
-  `).all();
+  const totalDebt = customers.reduce((sum: number, customer: any) => sum + Number(customer.debt || 0), 0);
+  const debtors = customers
+    .filter((customer: any) => Number(customer.debt || 0) > 0)
+    .sort((a: any, b: any) => Number(b.debt || 0) - Number(a.debt || 0))
+    .slice(0, 10);
 
-  // Theo nhân viên
-    const byEmployee = db.prepare(`
-      SELECT u.full_name as name,
-            COALESCE(SUM(o.total),0) as revenue
-      FROM users u
-      LEFT JOIN orders o
-        ON o.employee_id = u.id
-      AND o.status='completed'
-      GROUP BY u.id
-      ORDER BY revenue DESC
-    `).all();
+  const productCount = products.length;
+  const customerCount = customers.length;
+
+  const byBranch = branches
+    .map((branch: any) => {
+      const branchOrders = completedOrders.filter((o: any) => o.branch_id === branch.id);
+      return {
+        name: branch.name,
+        revenue: branchOrders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0),
+        orders: branchOrders.length,
+      };
+    })
+    .sort((a: any, b: any) => b.revenue - a.revenue);
+
+  const byEmployee = users
+    .map((user: any) => {
+      const employeeOrders = completedOrders.filter((o: any) => o.employee_id === user.id);
+      return {
+        name: user.full_name,
+        revenue: employeeOrders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0),
+      };
+    })
+    .sort((a: any, b: any) => b.revenue - a.revenue);
 
   return {
-    totalRevenue, totalOrders, totalDebt,
-    productCount, customerCount,
-    days, topProducts, lowStock, debtors,
-    byBranch, byEmployee,
+    totalRevenue,
+    totalOrders,
+    totalDebt,
+    productCount,
+    customerCount,
+    days,
+    topProducts,
+    lowStock,
+    debtors,
+    byBranch,
+    byEmployee,
   };
 });

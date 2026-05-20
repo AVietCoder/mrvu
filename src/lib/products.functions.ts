@@ -1,65 +1,66 @@
 import { createServerFn } from "@tanstack/react-start";
-import db, { uid, now } from "@/server/db.server";
+import { countRows, deleteWhere, fetchRows, insertRow, now, uid, updateWhere } from "./supabase";
 
-function nextSku(): string {
-  const row = db.prepare("SELECT COUNT(*) as c FROM products").get() as any;
-  return "SP-" + String(row.c + 1).padStart(4, "0");
+async function nextSku(): Promise<string> {
+  const count = await countRows("products");
+  return "SP-" + String(count + 1).padStart(4, "0");
 }
 
 export const listProducts = createServerFn({ method: "GET" }).handler(async () => {
-  return {
-    products: db.prepare("SELECT * FROM products ORDER BY name").all(),
-    categories: db.prepare("SELECT * FROM categories ORDER BY name").all(),
-    brands: db.prepare("SELECT * FROM brands ORDER BY name").all(),
-    stock: db.prepare("SELECT * FROM stock").all(),
-  };
+  const [products, categories, brands, stock] = await Promise.all([
+    fetchRows("products", { orderBy: "name" }),
+    fetchRows("categories", { orderBy: "name" }),
+    fetchRows("brands", { orderBy: "name" }),
+    fetchRows("stock"),
+  ]);
+
+  return { products, categories, brands, stock };
 });
 
 export const upsertProduct = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
-    const sku = data.sku?.trim() || (data.id ? undefined : nextSku());
+    const sku = (data.sku?.trim() || (data.id ? undefined : await nextSku())) as string | undefined;
+    const payload = {
+      sku: sku ?? data.sku,
+      name: data.name,
+      category_id: data.category_id || null,
+      brand_id: data.brand_id || null,
+      power: data.power || null,
+      color: data.color || null,
+      blade_size: data.blade_size || null,
+      image_url: data.image_url || null,
+      description: data.description || null,
+      cost_price: Number(data.cost_price || 0),
+      sale_price: Number(data.sale_price || 0),
+      min_stock: Number(data.min_stock || 0),
+      tech_fee: Number(data.tech_fee || 0),
+    };
+
     if (data.id) {
-      db.prepare(`UPDATE products SET
-        sku=?, name=?, category_id=?, brand_id=?,
-        power=?, color=?, blade_size=?,
-        image_url=?, description=?,
-        cost_price=?, sale_price=?, min_stock=?, tech_fee=?
-        WHERE id=?`).run(
-        sku ?? data.sku, data.name,
-        data.category_id || null, data.brand_id || null,
-        data.power || null, data.color || null, data.blade_size || null,
-        data.image_url || null, data.description || null,
-        data.cost_price, data.sale_price, data.min_stock,
-        data.tech_fee || 0, data.id
-      );
+      await updateWhere("products", payload, { id: data.id });
     } else {
-      db.prepare(`INSERT INTO products
-        (id,sku,name,category_id,brand_id,power,color,blade_size,image_url,description,cost_price,sale_price,min_stock,tech_fee,created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-        uid(), sku, data.name,
-        data.category_id || null, data.brand_id || null,
-        data.power || null, data.color || null, data.blade_size || null,
-        data.image_url || null, data.description || null,
-        data.cost_price, data.sale_price, data.min_stock,
-        data.tech_fee || 0, now()
-      );
+      await insertRow("products", {
+        id: uid(),
+        ...payload,
+        created_at: now(),
+      });
     }
     return { ok: true };
   });
 
 export const deleteProduct = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
-    db.prepare("DELETE FROM stock WHERE product_id=?").run(data.id);
-    db.prepare("DELETE FROM products WHERE id=?").run(data.id);
+    await deleteWhere("stock", { product_id: data.id });
+    await deleteWhere("products", { id: data.id });
     return { ok: true };
   });
 
 export const upsertCategory = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id?: string; name: string } }) => {
     if (data.id) {
-      db.prepare("UPDATE categories SET name=? WHERE id=?").run(data.name, data.id);
+      await updateWhere("categories", { name: data.name }, { id: data.id });
     } else {
-      db.prepare("INSERT INTO categories (id,name) VALUES (?,?)").run(uid(), data.name);
+      await insertRow("categories", { id: uid(), name: data.name });
     }
     return { ok: true };
   });
@@ -67,15 +68,15 @@ export const upsertCategory = createServerFn({ method: "POST" })
 export const upsertBrand = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id?: string; name: string } }) => {
     if (data.id) {
-      db.prepare("UPDATE brands SET name=? WHERE id=?").run(data.name, data.id);
+      await updateWhere("brands", { name: data.name }, { id: data.id });
     } else {
-      db.prepare("INSERT INTO brands (id,name) VALUES (?,?)").run(uid(), data.name);
+      await insertRow("brands", { id: uid(), name: data.name });
     }
     return { ok: true };
   });
 
 export const deleteBrand = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
-    db.prepare("DELETE FROM brands WHERE id=?").run(data.id);
+    await deleteWhere("brands", { id: data.id });
     return { ok: true };
   });

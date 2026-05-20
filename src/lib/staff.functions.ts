@@ -1,54 +1,75 @@
 import { createServerFn } from "@tanstack/react-start";
-import db, { uid, now } from "@/server/db.server";
+import { deleteWhere, fetchRows, insertRow, now, uid, updateWhere } from "./supabase";
 
 export const listEmployees = createServerFn({ method: "GET" }).handler(async () => {
-  return {
-    employees: db.prepare("SELECT * FROM employees ORDER BY name").all(),
-    branches: db.prepare("SELECT * FROM branches ORDER BY name").all(),
-    logs: db.prepare("SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT 50").all(),
-  };
+  const [employees, branches, logs] = await Promise.all([
+    fetchRows("employees", { orderBy: "name" }),
+    fetchRows("branches", { orderBy: "name" }),
+    fetchRows("activity_logs", { orderBy: "created_at", ascending: false, limit: 50 }),
+  ]);
+
+  return { employees, branches, logs };
 });
 
 export const upsertEmployee = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
+    const payload = {
+      name: data.name,
+      phone: data.phone || null,
+      role: data.role,
+      branch_id: data.branch_id || null,
+    };
+
     if (data.id) {
-      db.prepare("UPDATE employees SET name=?,phone=?,role=?,branch_id=? WHERE id=?")
-        .run(data.name, data.phone||null, data.role, data.branch_id||null, data.id);
+      await updateWhere("employees", payload, { id: data.id });
     } else {
-      db.prepare("INSERT INTO employees (id,name,phone,role,branch_id,created_at) VALUES (?,?,?,?,?,?)")
-        .run(uid(), data.name, data.phone||null, data.role, data.branch_id||null, now());
+      await insertRow("employees", {
+        id: uid(),
+        ...payload,
+        created_at: now(),
+      });
     }
     return { ok: true };
   });
 
 export const deleteEmployee = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
-    db.prepare("DELETE FROM employees WHERE id=?").run(data.id);
+    await deleteWhere("employees", { id: data.id });
     return { ok: true };
   });
 
 export const listBranches = createServerFn({ method: "GET" }).handler(async () => {
-  return {
-    branches: db.prepare("SELECT * FROM branches ORDER BY name").all(),
-    stock: db.prepare("SELECT * FROM stock").all(),
-    orders: db.prepare("SELECT * FROM orders ORDER BY created_at DESC").all(),
-  };
+  const [branches, stock, orders] = await Promise.all([
+    fetchRows("branches", { orderBy: "name" }),
+    fetchRows("stock"),
+    fetchRows("orders", { orderBy: "created_at", ascending: false }),
+  ]);
+
+  return { branches, stock, orders };
 });
 
 export const upsertBranch = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
+    const payload = {
+      name: data.name,
+      address: data.address || null,
+      phone: data.phone || null,
+    };
+
     if (data.id) {
-      db.prepare("UPDATE branches SET name=?,address=?,phone=? WHERE id=?")
-        .run(data.name, data.address||null, data.phone||null, data.id);
+      await updateWhere("branches", payload, { id: data.id });
     } else {
-      db.prepare("INSERT INTO branches (id,name,address,phone,created_at) VALUES (?,?,?,?,?)")
-        .run(uid(), data.name, data.address||null, data.phone||null, now());
+      await insertRow("branches", {
+        id: uid(),
+        ...payload,
+        created_at: now(),
+      });
     }
     return { ok: true };
   });
 
 export const deleteBranch = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
-    db.prepare("DELETE FROM branches WHERE id=?").run(data.id);
+    await deleteWhere("branches", { id: data.id });
     return { ok: true };
   });

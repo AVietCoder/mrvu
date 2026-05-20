@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import db from "@/server/db.server";
+import { fetchRows, supabase } from "./supabase";
 
 export type SiteSettings = {
   site_name: string;
@@ -22,21 +22,30 @@ const DEFAULTS: SiteSettings = {
 };
 
 export const getSettings = createServerFn({ method: "GET" }).handler(async () => {
-  const rows = db.prepare("SELECT key, value FROM site_settings").all() as { key: string; value: string }[];
+  const rows = await fetchRows<{ key: keyof SiteSettings; value: string }>("site_settings", {
+    select: "key, value",
+  });
+
   const settings: Partial<SiteSettings> = {};
   for (const row of rows) {
     (settings as any)[row.key] = row.value;
   }
+
   return { ...DEFAULTS, ...settings } as SiteSettings;
 });
 
 export const updateSettings = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: Partial<SiteSettings> }) => {
-    const stmt = db.prepare("INSERT OR REPLACE INTO site_settings (key, value) VALUES (?, ?)");
-    for (const [key, value] of Object.entries(data)) {
-      if (value !== undefined && value !== null) {
-        stmt.run(key, String(value));
-      }
+    const rows = Object.entries(data)
+      .filter(([, value]) => value !== undefined && value !== null)
+      .map(([key, value]) => ({
+        key,
+        value: String(value),
+      }));
+
+    if (rows.length) {
+      await supabase.from("site_settings").upsert(rows, { onConflict: "key" });
     }
+
     return { ok: true };
   });

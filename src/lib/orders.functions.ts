@@ -1,132 +1,171 @@
 import { createServerFn } from "@tanstack/react-start";
-import db, { uid, now } from "@/server/db.server";
+import { countRows, deleteWhere, fetchRows, insertRow, now, uid, updateWhere } from "./supabase";
 
-function nextCode() {
-  const row = db.prepare("SELECT COUNT(*) as c FROM orders").get() as any;
-  return "HD" + String(row.c + 1).padStart(6, "0");
+async function nextCode() {
+  const count = await countRows("orders");
+  return "HD" + String(count + 1).padStart(6, "0");
 }
 
-function adjustStock(productId: string, branchId: string, delta: number) {
-  const row = db.prepare("SELECT qty FROM stock WHERE product_id=? AND branch_id=?")
-    .get(productId, branchId);
-  if (row) {
-    db.prepare("UPDATE stock SET qty=qty+? WHERE product_id=? AND branch_id=?")
-      .run(delta, productId, branchId);
+async function adjustStock(productId: string, branchId: string, delta: number) {
+  const rows = await fetchRows<{ qty: number }>("stock", {
+    eq: { product_id: productId, branch_id: branchId },
+    select: "qty",
+    limit: 1,
+  });
+  const current = rows[0]?.qty ?? 0;
+  const next = Math.max(0, current + delta);
+
+  if (rows.length) {
+    await updateWhere("stock", { qty: next }, { product_id: productId, branch_id: branchId });
   } else {
-    db.prepare("INSERT INTO stock (product_id,branch_id,qty) VALUES (?,?,?)")
-      .run(productId, branchId, Math.max(0, delta));
+    await insertRow("stock", { product_id: productId, branch_id: branchId, qty: next });
   }
 }
 
 export const listOrders = createServerFn({ method: "GET" }).handler(async () => {
+  const [orders, items, products, customers, employees, branches, schedules, schedule_assignments, users] =
+    await Promise.all([
+      fetchRows("orders", { orderBy: "created_at", ascending: false }),
+      fetchRows("order_items"),
+      fetchRows("products"),
+      fetchRows("customers", { orderBy: "name" }),
+      fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
+      fetchRows("branches", { orderBy: "name" }),
+      fetchRows("schedules", {
+        select: "id, title, type, status, scheduled_date, scheduled_time, order_id, created_at",
+        orderBy: "created_at",
+        ascending: false,
+      }),
+      fetchRows("schedule_assignments"),
+      fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
+    ]);
+
+  const linkedSchedules = schedules.filter((s: any) => s.order_id != null);
+
   return {
-    orders: db.prepare("SELECT * FROM orders ORDER BY created_at DESC").all(),
-    items: db.prepare("SELECT * FROM order_items").all(),
-    products: db.prepare("SELECT * FROM products").all(),
-    customers: db.prepare("SELECT * FROM customers ORDER BY name").all(),
-    employees: db.prepare(`
-      SELECT id, full_name as name FROM users ORDER BY full_name
-    `).all(),
-    branches: db.prepare("SELECT * FROM branches ORDER BY name").all(),
-    schedules: db.prepare(`
-      SELECT id, title, type, status, scheduled_date, scheduled_time, order_id
-      FROM schedules
-      WHERE order_id IS NOT NULL
-      ORDER BY scheduled_date DESC
-    `).all(),
-    schedule_assignments: db.prepare("SELECT * FROM schedule_assignments").all(),
-    users: db.prepare("SELECT id, full_name FROM users ORDER BY full_name").all(),
+    orders,
+    items,
+    products,
+    customers,
+    employees: employees.map((u: any) => ({ id: u.id, name: u.full_name })),
+    branches,
+    schedules: linkedSchedules,
+    schedule_assignments,
+    users,
   };
 });
 
 export const createOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
     const subtotal = data.items.reduce(
-      (s: number, it: any) => s + it.qty * it.unit_price - (it.discount || 0), 0
+      (s: number, it: any) => s + it.qty * it.unit_price - (it.discount || 0),
+      0,
     );
     const total = Math.max(0, subtotal - (data.discount || 0));
     const oid = uid();
-    const code = nextCode();
+    const code = await nextCode();
 
-    // Dùng transaction để đảm bảo toàn vẹn dữ liệu
-    const transaction = db.transaction(() => {
-      db.prepare(`INSERT INTO orders
-        (id,code,customer_id,branch_id,employee_id,status,subtotal,discount,total,deposit,paid,note,created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(
-          oid, code,
-          data.customer_id || null, data.branch_id,
-          data.employee_id || null, data.status,
-          subtotal, data.discount || 0, total,
-          data.deposit || 0, data.paid || 0,
-          data.note || null, now()
-        );
-
-      for (const it of data.items) {
-        const itemTotal = it.qty * it.unit_price - (it.discount || 0);
-        db.prepare(`INSERT INTO order_items (id,order_id,product_id,qty,unit_price,discount,total)
-          VALUES (?,?,?,?,?,?,?)`)
-          .run(uid(), oid, it.product_id, it.qty, it.unit_price, it.discount || 0, itemTotal);
-
-        if (data.status === "completed") {
-          adjustStock(it.product_id, data.branch_id, -it.qty);
-        }
-      }
-
-      // Ghi công nợ nếu chưa trả đủ
-      if (data.status === "completed" && data.customer_id) {
-        const owed = total - (data.paid || 0);
-        if (owed > 0) {
-          db.prepare("UPDATE customers SET debt=debt+? WHERE id=?")
-            .run(owed, data.customer_id);
-        }
-      }
-
-      db.prepare(`INSERT INTO activity_logs (id,employee_id,action,detail,created_at)
-        VALUES (?,?,?,?,?)`)
-        .run(uid(), data.employee_id || null, "create_order", code, now());
+    await insertRow("orders", {
+      id: oid,
+      code,
+      customer_id: data.customer_id || null,
+      branch_id: data.branch_id,
+      employee_id: data.employee_id || null,
+      status: data.status,
+      subtotal,
+      discount: Number(data.discount || 0),
+      total,
+      deposit: Number(data.deposit || 0),
+      paid: Number(data.paid || 0),
+      note: data.note || null,
+      created_at: now(),
     });
 
-    transaction();
+    for (const it of data.items) {
+      const itemTotal = it.qty * it.unit_price - (it.discount || 0);
+      await insertRow("order_items", {
+        id: uid(),
+        order_id: oid,
+        product_id: it.product_id,
+        qty: Number(it.qty),
+        unit_price: Number(it.unit_price),
+        discount: Number(it.discount || 0),
+        total: itemTotal,
+      });
+
+      if (data.status === "completed") {
+        await adjustStock(it.product_id, data.branch_id, -Number(it.qty));
+      }
+    }
+
+    if (data.status === "completed" && data.customer_id) {
+      const customerRows = await fetchRows<{ debt: number }>("customers", {
+        eq: { id: data.customer_id },
+        select: "debt",
+        limit: 1,
+      });
+      const currentDebt = customerRows[0]?.debt ?? 0;
+      const owed = total - (data.paid || 0);
+      if (owed > 0) {
+        await updateWhere("customers", { debt: currentDebt + owed }, { id: data.customer_id });
+      }
+    }
+
+    await insertRow("activity_logs", {
+      id: uid(),
+      employee_id: data.employee_id || null,
+      action: "create_order",
+      detail: code,
+      created_at: now(),
+    });
+
     return { ok: true, code };
   });
 
 export const updateOrderStatus = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string; status: string } }) => {
-    db.prepare("UPDATE orders SET status=? WHERE id=?").run(data.status, data.id);
+    await updateWhere("orders", { status: data.status }, { id: data.id });
     return { ok: true };
   });
 
 export const updateOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
     const subtotal = data.items.reduce(
-      (s: number, it: any) => s + it.qty * it.unit_price - (it.discount || 0), 0
+      (s: number, it: any) => s + it.qty * it.unit_price - (it.discount || 0),
+      0,
     );
     const total = Math.max(0, subtotal - (data.discount || 0));
 
-    const transaction = db.transaction(() => {
-      db.prepare(`UPDATE orders SET
-        customer_id=?, branch_id=?, employee_id=?, status=?,
-        subtotal=?, discount=?, total=?, deposit=?, paid=?, note=?
-        WHERE id=?`)
-        .run(
-          data.customer_id || null, data.branch_id,
-          data.employee_id || null, data.status,
-          subtotal, data.discount || 0, total,
-          data.deposit || 0, data.paid || 0,
-          data.note || null, data.id
-        );
+    await updateWhere(
+      "orders",
+      {
+        customer_id: data.customer_id || null,
+        branch_id: data.branch_id,
+        employee_id: data.employee_id || null,
+        status: data.status,
+        subtotal,
+        discount: Number(data.discount || 0),
+        total,
+        deposit: Number(data.deposit || 0),
+        paid: Number(data.paid || 0),
+        note: data.note || null,
+      },
+      { id: data.id },
+    );
 
-      // Xóa items cũ, thêm lại
-      db.prepare("DELETE FROM order_items WHERE order_id=?").run(data.id);
-      for (const it of data.items) {
-        const itemTotal = it.qty * it.unit_price - (it.discount || 0);
-        db.prepare(`INSERT INTO order_items (id,order_id,product_id,qty,unit_price,discount,total)
-          VALUES (?,?,?,?,?,?,?)`)
-          .run(uid(), data.id, it.product_id, it.qty, it.unit_price, it.discount || 0, itemTotal);
-      }
-    });
+    await deleteWhere("order_items", { order_id: data.id });
+    for (const it of data.items) {
+      const itemTotal = it.qty * it.unit_price - (it.discount || 0);
+      await insertRow("order_items", {
+        id: uid(),
+        order_id: data.id,
+        product_id: it.product_id,
+        qty: Number(it.qty),
+        unit_price: Number(it.unit_price),
+        discount: Number(it.discount || 0),
+        total: itemTotal,
+      });
+    }
 
-    transaction();
     return { ok: true };
   });
