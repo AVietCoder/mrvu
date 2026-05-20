@@ -154,6 +154,14 @@ db.exec(`
   );
 `);
 
+// ── Site settings table ───────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS site_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+`);
+
 // ── Migrations ────────────────────────────────────────────────
 const migrations = [
   `ALTER TABLE customers ADD COLUMN ward TEXT`,

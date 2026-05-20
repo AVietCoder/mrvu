@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Plus, X, ShoppingBag, Clock, CalendarDays,
-  ChevronLeft, ChevronRight, ExternalLink,
+  ChevronLeft, ChevronRight, ExternalLink, Minus, Printer,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { getSettings } from "@/lib/settings.functions";
 
 export const Route = createFileRoute("/orders/")({
   head: () => ({ meta: [{ title: "Bán hàng — QuatTran POS" }] }),
@@ -47,6 +48,68 @@ const STATUS_COLOR: Record<string, string> = {
   cancelled: "bg-red-100 text-red-700",
 };
 
+function printOrderSlip({ items, customer, branch, employee, status, discount, deposit, paid, note, subtotal, total, data, siteSettings }: any) {
+  const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
+  const custName = customer ? (data?.customers ?? []).find((c: any) => c.id === customer)?.name ?? "Khách lẻ" : "Khách lẻ";
+  const branchName = branch ? (data?.branches ?? []).find((b: any) => b.id === branch)?.name ?? "—" : "—";
+  const empName = employee ? (data?.employees ?? []).find((e: any) => e.id === employee)?.name ?? "—" : "—";
+  const statusLabels: Record<string,string> = { completed: "Hoàn tất", reserved: "Đặt trước", draft: "Nháp" };
+  const rows = items.map((item: any, i: number) => {
+    const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
+    const lineTotal = item.qty * item.unit_price - (item.discount ?? 0);
+    return `<tr>
+      <td style="text-align:center;padding:8px;border:1px solid #ddd">${i+1}</td>
+      <td style="padding:8px;border:1px solid #ddd">${prod?.name ?? item.product_id}</td>
+      <td style="text-align:center;padding:8px;border:1px solid #ddd">${item.qty}</td>
+      <td style="text-align:right;padding:8px;border:1px solid #ddd">${moneyFmt(item.unit_price)}</td>
+      <td style="text-align:right;padding:8px;border:1px solid #ddd">${moneyFmt(lineTotal)}</td>
+    </tr>`;
+  }).join("");
+  const pw = window.open("", "_blank");
+  if (!pw) return;
+  pw.document.write(`<!DOCTYPE html><html><head><title>Phiếu đặt hàng</title>
+  <style>*{box-sizing:border-box;font-family:Arial,sans-serif}body{padding:40px;color:#111}
+  .header{text-align:center;margin-bottom:28px}.title{font-size:26px;font-weight:700;margin-bottom:6px}
+  .sub{color:#666;font-size:13px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:14px;margin-bottom:20px}
+  table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:9px;font-size:14px}
+  th{background:#f5f5f5;text-align:left}.total-box{margin-top:18px;text-align:right;font-size:14px}
+  .total-main{font-size:22px;font-weight:700;margin-top:4px}.sign{margin-top:60px;display:grid;grid-template-columns:1fr 1fr;gap:40px;text-align:center}
+  .sign-box{padding-top:10px}@media print{body{padding:0}}</style></head><body>
+  <div class="header">
+  ${siteSettings?.logo_url ? `<img src="${siteSettings.logo_url}" alt="Logo" style="height:60px;object-fit:contain;margin-bottom:8px" />` : ""}
+  ${siteSettings?.site_name ? `<div style="font-size:15px;font-weight:600;color:#444;margin-bottom:4px">${siteSettings.site_name}</div>` : ""}
+  <div class="title">PHIẾU ĐẶT HÀNG</div>
+  <div class="sub">Ngày: ${new Date().toLocaleDateString("vi-VN")} &nbsp;|&nbsp; Trạng thái: ${statusLabels[status] ?? status}${siteSettings?.phone ? ` &nbsp;|&nbsp; ĐT: ${siteSettings.phone}` : ""}</div></div>
+  <div class="info-grid">
+    <div><strong>Khách hàng:</strong> ${custName}</div>
+    <div><strong>Chi nhánh:</strong> ${branchName}</div>
+    <div><strong>Nhân viên:</strong> ${empName}</div>
+    <div><strong>Mã phiếu:</strong> #${Date.now().toString().slice(-6)}</div>
+  </div>
+  <table><thead><tr>
+    <th style="width:50px;text-align:center">STT</th>
+    <th>Sản phẩm</th>
+    <th style="width:70px;text-align:center">SL</th>
+    <th style="width:130px;text-align:right">Đơn giá</th>
+    <th style="width:140px;text-align:right">Thành tiền</th>
+  </tr></thead><tbody>${rows}</tbody></table>
+  <div class="total-box">
+    <div>Tạm tính: ${moneyFmt(subtotal)}</div>
+    ${discount > 0 ? `<div>Giảm giá: - ${moneyFmt(discount)}</div>` : ""}
+    <div class="total-main">Tổng cộng: ${moneyFmt(total)}</div>
+    ${deposit > 0 ? `<div style="color:#b45309;margin-top:4px">Đặt cọc: ${moneyFmt(deposit)}</div>` : ""}
+    ${paid > 0 ? `<div style="color:#15803d;margin-top:4px">Đã thanh toán: ${moneyFmt(paid)}</div>` : ""}
+  </div>
+  ${note ? `<div style="margin-top:20px;font-size:14px"><strong>Ghi chú:</strong> ${note}</div>` : ""}
+  <div class="sign">
+    <div class="sign-box"><div>Người lập phiếu</div><div style="margin-top:60px;font-weight:600">....................</div></div>
+    <div class="sign-box"><div>Khách hàng xác nhận</div><div style="margin-top:60px">....................</div></div>
+  </div>
+  </body></html>`);
+  pw.document.close();
+  setTimeout(() => pw.print(), 300);
+}
+
 function Page() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -56,6 +119,8 @@ function Page() {
   const qc = useQueryClient();
 
   const { data } = useQuery({ queryKey: ["orders"], queryFn: () => listFn() });
+  const getSettingsFn = useServerFn(getSettings);
+  const { data: siteSettings } = useQuery({ queryKey: ["site_settings"], queryFn: () => getSettingsFn() });
 
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"orders" | "reserved">("orders");
@@ -298,29 +363,50 @@ function Page() {
                   {items.map((item, idx) => {
                     const lineTotal = item.qty * item.unit_price - item.discount;
                     return (
-                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                        <select
-                          className="col-span-5 h-9 rounded-md border bg-background px-2 text-sm"
-                          value={item.product_id}
-                          onChange={(e) => {
-                            const p = (data?.products ?? []).find((x: any) => x.id === e.target.value);
-                            const next = [...items];
-                            next[idx] = { ...next[idx], product_id: e.target.value, unit_price: (p as any)?.sale_price ?? 0 };
-                            setItems(next);
-                          }}
-                        >
-                          {(data?.products ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                        <Input type="number" className="col-span-1" placeholder="SL" value={item.qty}
-                          onChange={(e) => { const n = [...items]; n[idx].qty = Number(e.target.value); setItems(n); }} />
-                        <Input className="col-span-3" placeholder="Đơn giá"
-                          value={item.unit_price === 0 ? "" : new Intl.NumberFormat("vi-VN").format(item.unit_price)}
-                          onChange={(e) => { const n = [...items]; n[idx].unit_price = parseInput(e.target.value); setItems(n); }} />
-                        <div className="col-span-2 text-right text-xs font-medium text-muted-foreground pr-1">{fmt(lineTotal)}</div>
-                        <button type="button" className="col-span-1 flex items-center justify-center rounded-md border hover:text-destructive p-1"
-                          onClick={() => setItems(items.filter((_, i) => i !== idx))}>
-                          <X className="h-4 w-4" />
-                        </button>
+                      <div key={idx} className="flex flex-col gap-1.5 rounded-lg border p-2 bg-muted/20">
+                        <div className="flex items-center gap-2">
+                          <select
+                            className="flex-1 h-9 rounded-md border bg-background px-2 text-sm"
+                            value={item.product_id}
+                            onChange={(e) => {
+                              const p = (data?.products ?? []).find((x: any) => x.id === e.target.value);
+                              const next = [...items];
+                              next[idx] = { ...next[idx], product_id: e.target.value, unit_price: (p as any)?.sale_price ?? 0 };
+                              setItems(next);
+                            }}
+                          >
+                            {(data?.products ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                          <button type="button" className="flex items-center justify-center rounded-md border hover:text-destructive p-1.5 shrink-0"
+                            onClick={() => setItems(items.filter((_, i) => i !== idx))}>
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center border rounded-md overflow-hidden shrink-0">
+                            <button type="button"
+                              className="px-2 py-1.5 hover:bg-muted transition-colors border-r text-muted-foreground hover:text-foreground"
+                              onClick={() => { const n = [...items]; n[idx].qty = Math.max(1, n[idx].qty - 1); setItems(n); }}>
+                              <Minus className="h-3.5 w-3.5" />
+                            </button>
+                            <input
+                              type="number"
+                              className="w-12 text-center text-sm py-1.5 bg-background border-0 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              value={item.qty}
+                              min={1}
+                              onChange={(e) => { const n = [...items]; n[idx].qty = Math.max(1, Number(e.target.value) || 1); setItems(n); }}
+                            />
+                            <button type="button"
+                              className="px-2 py-1.5 hover:bg-muted transition-colors border-l text-muted-foreground hover:text-foreground"
+                              onClick={() => { const n = [...items]; n[idx].qty = n[idx].qty + 1; setItems(n); }}>
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                          <Input className="flex-1" placeholder="Đơn giá"
+                            value={item.unit_price === 0 ? "" : new Intl.NumberFormat("vi-VN").format(item.unit_price)}
+                            onChange={(e) => { const n = [...items]; n[idx].unit_price = parseInput(e.target.value); setItems(n); }} />
+                          <div className="text-right text-sm font-semibold text-primary shrink-0 min-w-[80px]">{fmt(lineTotal)}</div>
+                        </div>
                       </div>
                     );
                   })}
@@ -354,6 +440,11 @@ function Page() {
 
               <DialogFooter className="flex-col sm:flex-row gap-2">
                 <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>Hủy</Button>
+                {items.length > 0 && (
+                  <Button variant="outline" className="w-full sm:w-auto" type="button" onClick={() => printOrderSlip({ items, customer, branch, employee, status, discount, deposit, paid, note, subtotal, total, data, siteSettings })}>
+                    <Printer className="h-4 w-4 mr-1" />In phiếu đặt hàng
+                  </Button>
+                )}
                 <Button className="w-full sm:w-auto" onClick={submit}>Tạo đơn</Button>
               </DialogFooter>
             </div>

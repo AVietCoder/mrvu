@@ -43,6 +43,7 @@ import {
 
 import { toast } from "sonner";
 import { hasPermission } from "@/lib/types";
+import { getSettings } from "@/lib/settings.functions";
 
 export const Route = createFileRoute("/inventory")({
   head: () => ({
@@ -103,12 +104,18 @@ function Page() {
   const createTrf = useServerFn(createTransfer);
   const confirmTrf = useServerFn(confirmTransfer);
   const cancelTrf = useServerFn(cancelTransfer);
+  const getSettingsFn = useServerFn(getSettings);
 
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ["inventory"],
     queryFn: () => list(),
+  });
+
+  const { data: siteSettings } = useQuery({
+    queryKey: ["site_settings"],
+    queryFn: () => getSettingsFn(),
   });
 
   const canIn =
@@ -1936,6 +1943,8 @@ function Page() {
 
                             <body>
                               <div class="header">
+                                ${siteSettings?.logo_url ? `<img src="${siteSettings.logo_url}" alt="Logo" style="height:60px;object-fit:contain;margin-bottom:8px" />` : ""}
+                                ${siteSettings?.site_name ? `<div style="font-size:15px;font-weight:600;color:#444;margin-bottom:6px">${siteSettings.site_name}</div>` : ""}
                                 <div class="title">
                                   ${voucherTitle.toUpperCase()}
                                 </div>
@@ -1944,6 +1953,8 @@ function Page() {
                                   Mã phiếu #${Date.now()
                                     .toString()
                                     .slice(-6)}
+                                  ${siteSettings?.phone ? ` &nbsp;|&nbsp; ĐT: ${siteSettings.phone}` : ""}
+                                  ${siteSettings?.address ? ` &nbsp;|&nbsp; ${siteSettings.address}` : ""}
                                 </div>
                               </div>
 

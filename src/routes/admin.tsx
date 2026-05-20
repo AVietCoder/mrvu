@@ -1,356 +1,358 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import {
-  listProducts, upsertProduct, deleteProduct,
-  upsertCategory, upsertBrand, deleteBrand,
-} from "@/lib/products.functions";
-import { AppShell, Card, fmt } from "@/components/AppShell";
+import { useState, useRef } from "react";
+import { getSettings, updateSettings } from "@/lib/settings.functions";
+import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-  DialogTrigger, DialogFooter,
-} from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Search, Tags, Building } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import {
+  ImagePlus, Palette, Building2, Phone, Mail,
+  FileText, Save, CheckCircle2, Trash2,
+} from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
-  head: () => ({ meta: [{ title: "Hàng hóa — QuatTran POS" }] }),
-  component: ProductsPage,
+  head: () => ({ meta: [{ title: "Cài đặt — QuatTran POS" }] }),
+  component: AdminPage,
 });
 
-type FormState = {
-  id?: string; sku: string; name: string;
-  category_id: string; brand_id: string;
-  power: string; color: string; blade_size: string;
-  cost_price: string; sale_price: string; min_stock: string;
-  tech_fee: string;
-};
-const empty: FormState = {
-  sku: "", name: "", category_id: "", brand_id: "",
-  power: "", color: "", blade_size: "",
-  cost_price: "0", sale_price: "0", min_stock: "0", tech_fee: "0",
-};
+const PRESET_COLORS = [
+  { label: "Xanh dương", value: "#2563eb", bg: "#eff6ff" },
+  { label: "Xanh lá",   value: "#16a34a", bg: "#f0fdf4" },
+  { label: "Đỏ",        value: "#dc2626", bg: "#fef2f2" },
+  { label: "Cam",        value: "#ea580c", bg: "#fff7ed" },
+  { label: "Tím",        value: "#7c3aed", bg: "#f5f3ff" },
+  { label: "Hồng",       value: "#db2777", bg: "#fdf2f8" },
+  { label: "Xám đậm",   value: "#374151", bg: "#f9fafb" },
+  { label: "Đen",        value: "#111827", bg: "#f3f4f6" },
+];
 
-function fmtInput(val: string): string {
-  const num = val.replace(/\D/g, "");
-  if (!num) return "";
-  return new Intl.NumberFormat("vi-VN").format(Number(num));
-}
-function parseInput(val: string): number {
-  return Number(val.replace(/\D/g, "")) || 0;
-}
-
-function ProductsPage() {
-  const { isAdmin } = useAuth();
-  const list = useServerFn(listProducts);
-  const upsert = useServerFn(upsertProduct);
-  const del = useServerFn(deleteProduct);
-  const upsertCat = useServerFn(upsertCategory);
-  const upsertBr = useServerFn(upsertBrand);
-  const delBr = useServerFn(deleteBrand);
-  const qc = useQueryClient();
-
-  const { data, isLoading } = useQuery({ queryKey: ["products"], queryFn: () => list() });
-  const [form, setForm] = useState<FormState>(empty);
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-
-  // Admin panel: quản lý thương hiệu & danh mục
-  const [adminOpen, setAdminOpen] = useState(false);
-  const [newBrandName, setNewBrandName] = useState("");
-  const [newCatName, setNewCatName] = useState("");
-
-  const filtered = (data?.products ?? []).filter(
-    (p) => p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase()),
+function SectionCard({
+  icon, title, subtitle, children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+      <div className="px-6 py-5 border-b bg-muted/30 flex items-start gap-4">
+        <div className="h-10 w-10 rounded-xl bg-primary/10 grid place-items-center shrink-0 text-primary">
+          {icon}
+        </div>
+        <div>
+          <div className="font-semibold text-base">{title}</div>
+          <div className="text-sm text-muted-foreground mt-0.5">{subtitle}</div>
+        </div>
+      </div>
+      <div className="px-6 py-5">{children}</div>
+    </div>
   );
+}
 
-  const totalsByProduct = (id: string) =>
-    (data?.stock ?? []).filter((s) => s.product_id === id).reduce((a, b) => a + b.qty, 0);
+function AdminPage() {
+  const { isAdmin } = useAuth();
+  const getSettingsFn = useServerFn(getSettings);
+  const updateSettingsFn = useServerFn(updateSettings);
+  const qc = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function startNew() { setForm(empty); setOpen(true); }
-  function startEdit(id: string) {
-    const p = data!.products.find((x) => x.id === id)!;
-    setForm({
-      id: p.id, sku: p.sku, name: p.name,
-      category_id: p.category_id ?? "",
-      brand_id: (p as any).brand_id ?? "",
-      power: p.power ?? "", color: p.color ?? "",
-      blade_size: p.blade_size ?? "",
-      cost_price: String(p.cost_price),
-      sale_price: String(p.sale_price),
-      min_stock: String(p.min_stock),
-      tech_fee: String((p as any).tech_fee ?? 0),
-    });
-    setOpen(true);
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ["site_settings"],
+    queryFn: () => getSettingsFn(),
+  });
+
+  const [siteName, setSiteName]       = useState("");
+  const [logoUrl, setLogoUrl]         = useState("");
+  const [primaryColor, setPrimaryColor] = useState("#2563eb");
+  const [address, setAddress]         = useState("");
+  const [phone, setPhone]             = useState("");
+  const [email, setEmail]             = useState("");
+  const [taxCode, setTaxCode]         = useState("");
+  const [loaded, setLoaded]           = useState(false);
+  const [saving, setSaving]           = useState(false);
+  const [saved, setSaved]             = useState(false);
+
+  if (settings && !loaded) {
+    setSiteName(settings.site_name);
+    setLogoUrl(settings.logo_url);
+    setPrimaryColor(settings.primary_color || "#2563eb");
+    setAddress(settings.address);
+    setPhone(settings.phone);
+    setEmail(settings.email);
+    setTaxCode(settings.tax_code);
+    setLoaded(true);
+  }
+
+  function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Ảnh quá lớn, vui lòng chọn ảnh dưới 2MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => setLogoUrl(ev.target?.result as string);
+    reader.readAsDataURL(file);
   }
 
   async function save() {
-    if (!form.name.trim()) return toast.error("Vui lòng nhập tên hàng");
+    setSaving(true);
     try {
-      await upsert({
-        data: {
-          id: form.id,
-          // SKU để trống → server tự sinh
-          sku: form.sku.trim() || undefined,
-          name: form.name.trim(),
-          category_id: form.category_id || undefined,
-          brand_id: form.brand_id || undefined,
-          power: form.power || undefined,
-          color: form.color || undefined,
-          blade_size: form.blade_size || undefined,
-          cost_price: parseInput(form.cost_price),
-          sale_price: parseInput(form.sale_price),
-          min_stock: Number(form.min_stock) || 0,
-          tech_fee: parseInput(form.tech_fee),
-        },
+      await updateSettingsFn({
+        data: { site_name: siteName, logo_url: logoUrl, primary_color: primaryColor, address, phone, email, tax_code: taxCode },
       });
-      toast.success(form.id ? "Đã cập nhật sản phẩm" : "Đã thêm sản phẩm thành công!");
-      setOpen(false);
-      qc.invalidateQueries({ queryKey: ["products"] });
-    } catch (e: any) { toast.error(e?.message ?? "Lỗi lưu"); }
+      qc.invalidateQueries({ queryKey: ["site_settings"] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+      toast.success("Đã lưu cài đặt!");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi lưu cài đặt");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  async function remove(id: string) {
-    if (!confirm("Xóa sản phẩm này?")) return;
-    await del({ data: { id } });
-    toast.success("Đã xóa sản phẩm");
-    qc.invalidateQueries({ queryKey: ["products"] });
+  if (!isAdmin) {
+    return (
+      <AppShell title="Cài đặt">
+        <div className="text-center py-20 text-muted-foreground">Bạn không có quyền truy cập trang này.</div>
+      </AppShell>
+    );
   }
 
-  async function addBrand() {
-    if (!newBrandName.trim()) return;
-    await upsertBr({ data: { name: newBrandName.trim() } });
-    setNewBrandName("");
-    qc.invalidateQueries({ queryKey: ["products"] });
-    toast.success("Đã thêm thương hiệu");
+  if (isLoading) {
+    return (
+      <AppShell title="Cài đặt website">
+        <div className="text-center py-20 text-muted-foreground text-sm">Đang tải...</div>
+      </AppShell>
+    );
   }
 
-  async function addCat() {
-    if (!newCatName.trim()) return;
-    await upsertCat({ data: { name: newCatName.trim() } });
-    setNewCatName("");
-    qc.invalidateQueries({ queryKey: ["products"] });
-    toast.success("Đã thêm danh mục");
-  }
-
-  async function removeBrand(id: string) {
-    if (!confirm("Xóa thương hiệu này? Sản phẩm liên kết sẽ không bị xóa.")) return;
-    await delBr({ data: { id } });
-    qc.invalidateQueries({ queryKey: ["products"] });
-  }
+  const selectedPreset = PRESET_COLORS.find((c) => c.value === primaryColor);
 
   return (
-    <AppShell title="Quản lý hàng hóa">
-      <Card>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Tìm theo tên hoặc SKU..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+    <AppShell title="Cài đặt website">
+      <div className="space-y-5">
+
+        {/* ── Logo & Tên ───────────────────────────────── */}
+        <SectionCard
+          icon={<ImagePlus className="h-5 w-5" />}
+          title="Logo & Tên thương hiệu"
+          subtitle="Hiển thị trên sidebar, phiếu in và tiêu đề trang"
+        >
+          <div className="flex items-start gap-5">
+            {/* Logo drop zone */}
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="shrink-0 h-24 w-24 rounded-2xl border-2 border-dashed border-muted-foreground/30 hover:border-primary/60 hover:bg-primary/5 transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 overflow-hidden group"
+              title="Bấm để chọn logo"
+            >
+              {logoUrl ? (
+                <img src={logoUrl} alt="Logo" className="h-full w-full object-contain p-1" />
+              ) : (
+                <>
+                  <ImagePlus className="h-7 w-7 text-muted-foreground/40 group-hover:text-primary/60 transition-colors" />
+                  <span className="text-[11px] text-muted-foreground/50 group-hover:text-primary/60 transition-colors font-medium">
+                    Chọn ảnh
+                  </span>
+                </>
+              )}
+            </div>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoFile} />
+
+            <div className="flex-1 space-y-3">
+              <div>
+                <Label className="text-sm font-medium">Tên website / thương hiệu</Label>
+                <Input
+                  className="mt-1.5"
+                  value={siteName}
+                  onChange={(e) => setSiteName(e.target.value)}
+                  placeholder="QuatTran POS"
+                />
+              </div>
+
+              {logoUrl && (
+                <button
+                  type="button"
+                  onClick={() => setLogoUrl("")}
+                  className="inline-flex items-center gap-1.5 text-xs text-destructive/70 hover:text-destructive transition-colors"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Xóa logo
+                </button>
+              )}
+
+              <p className="text-xs text-muted-foreground">Định dạng PNG, JPG, SVG. Tối đa 2MB.</p>
+            </div>
           </div>
 
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={startNew}><Plus className="h-4 w-4 mr-1" /> Thêm sản phẩm</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader><DialogTitle>{form.id ? "Sửa sản phẩm" : "Thêm sản phẩm"}</DialogTitle></DialogHeader>
-              <div
-                onKeyDown={(e) => { if (e.key === "Enter" && (e.target as HTMLElement).tagName !== "TEXTAREA") { e.preventDefault(); save(); } }}
-              >
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Mã hàng (tự động nếu để trống)">
-                    <Input
-                      placeholder="Để trống để hệ thống tự sinh"
-                      value={form.sku}
-                      onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="Tên hàng hoá *">
-                    <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-                  </Field>
-
-                  {/* Nhóm hàng hoá — chọn từ list */}
-                  <Field label="Nhóm hàng hoá">
-                    <select
-                      className="h-9 rounded-md border bg-background px-3 text-sm w-full"
-                      value={form.category_id}
-                      onChange={(e) => setForm({ ...form, category_id: e.target.value })}
-                    >
-                      <option value="">— Chọn nhóm —</option>
-                      {data?.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  </Field>
-
-                  {/* Thương hiệu — chọn từ list, admin mới thêm được */}
-                  <Field label="Thương hiệu">
-                    <select
-                      className="h-9 rounded-md border bg-background px-3 text-sm w-full"
-                      value={form.brand_id}
-                      onChange={(e) => setForm({ ...form, brand_id: e.target.value })}
-                    >
-                      <option value="">— Chọn thương hiệu —</option>
-                      {data?.brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </select>
-                  </Field>
-
-                  <Field label="Công suất (W)">
-                    <Input value={form.power} onChange={(e) => setForm({ ...form, power: e.target.value })} />
-                  </Field>
-                  <Field label="Màu sắc">
-                    <Input value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} />
-                  </Field>
-                  <Field label="Size cánh">
-                    <Input value={form.blade_size} onChange={(e) => setForm({ ...form, blade_size: e.target.value })} />
-                  </Field>
-                  <Field label="Tồn tối thiểu (cảnh báo)">
-                    <Input type="number" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} />
-                  </Field>
-
-                  {/* Giá — format có dấu chấm */}
-                  <Field label="Giá vốn (₫)">
-                    <Input
-                      value={parseInput(form.cost_price) === 0 ? "" : new Intl.NumberFormat("vi-VN").format(parseInput(form.cost_price))}
-                      placeholder="0"
-                      onChange={(e) => setForm({ ...form, cost_price: fmtInput(e.target.value) })}
-                      onFocus={(e) => e.target.select()}
-                    />
-                  </Field>
-                  <Field label="Giá bán (₫)">
-                    <Input
-                      value={parseInput(form.sale_price) === 0 ? "" : new Intl.NumberFormat("vi-VN").format(parseInput(form.sale_price))}
-                      placeholder="0"
-                      onChange={(e) => setForm({ ...form, sale_price: fmtInput(e.target.value) })}
-                      onFocus={(e) => e.target.select()}
-                    />
-                  </Field>
-                  <Field label="Tiền công lắp đặt (₫)" >
-                    <Input
-                      value={parseInput(form.tech_fee) === 0 ? "" : new Intl.NumberFormat("vi-VN").format(parseInput(form.tech_fee))}
-                      placeholder="0"
-                      onChange={(e) => setForm({ ...form, tech_fee: fmtInput(e.target.value) })}
-                      onFocus={(e) => e.target.select()}
-                    />
-                  </Field>
+          {/* Live preview */}
+          {(logoUrl || siteName) && (
+            <div className="mt-5 pt-5 border-t">
+              <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">Xem trước trên sidebar</p>
+              <div className="inline-flex items-center gap-2.5 px-4 py-3 rounded-xl border bg-muted/20">
+                {logoUrl ? (
+                  <img src={logoUrl} alt="Logo" className="h-9 w-9 object-contain rounded-lg" />
+                ) : (
+                  <div
+                    className="h-9 w-9 rounded-lg grid place-items-center text-sm font-bold"
+                    style={{ backgroundColor: primaryColor + "22", color: primaryColor }}
+                  >
+                    {siteName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <div className="text-sm font-semibold leading-tight">{siteName || "Tên website"}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Hệ thống</div>
                 </div>
-                <DialogFooter className="mt-4">
-                  <Button variant="outline" onClick={() => setOpen(false)}>Hủy</Button>
-                  <Button onClick={save}>Lưu</Button>
-                </DialogFooter>
               </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* Admin: quản lý thương hiệu & danh mục */}
-          {isAdmin && (
-            <Dialog open={adminOpen} onOpenChange={setAdminOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Tags className="h-4 w-4 mr-1" /> Danh mục & Thương hiệu
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-lg">
-                <DialogHeader><DialogTitle>Quản lý danh mục & thương hiệu</DialogTitle></DialogHeader>
-                <div className="space-y-5">
-                  {/* Thương hiệu */}
-                  <div>
-                    <div className="font-medium mb-2 flex items-center gap-1"><Building className="h-4 w-4" /> Thương hiệu</div>
-                    <div className="flex gap-2 mb-2">
-                      <Input placeholder="Tên thương hiệu mới..." value={newBrandName} onChange={(e) => setNewBrandName(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") addBrand(); }} />
-                      <Button size="sm" onClick={addBrand}><Plus className="h-4 w-4" /></Button>
-                    </div>
-                    <div className="space-y-1 max-h-36 overflow-y-auto">
-                      {data?.brands.map((b) => (
-                        <div key={b.id} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm">
-                          <span>{b.name}</span>
-                          <button className="p-1 hover:text-destructive" onClick={() => removeBrand(b.id)}>
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Danh mục */}
-                  <div>
-                    <div className="font-medium mb-2 flex items-center gap-1"><Tags className="h-4 w-4" /> Danh mục (nhóm hàng)</div>
-                    <div className="flex gap-2 mb-2">
-                      <Input placeholder="Tên danh mục mới..." value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") addCat(); }} />
-                      <Button size="sm" onClick={addCat}><Plus className="h-4 w-4" /></Button>
-                    </div>
-                    <div className="space-y-1 max-h-36 overflow-y-auto">
-                      {data?.categories.map((c) => (
-                        <div key={c.id} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm">
-                          <span>{c.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button onClick={() => setAdminOpen(false)}>Đóng</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            </div>
           )}
+        </SectionCard>
+
+        {/* ── Màu sắc ──────────────────────────────────── */}
+        <SectionCard
+          icon={<Palette className="h-5 w-5" />}
+          title="Màu sắc chủ đạo"
+          subtitle="Tông màu chính hiển thị xuyên suốt giao diện"
+        >
+          {/* Preset swatches */}
+          <div className="grid grid-cols-4 gap-2 mb-4">
+            {PRESET_COLORS.map((c) => {
+              const active = primaryColor === c.value;
+              return (
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => setPrimaryColor(c.value)}
+                  className={[
+                    "relative h-12 rounded-xl flex items-center justify-center text-white text-xs font-semibold transition-all",
+                    active ? "ring-2 ring-offset-2 scale-105 shadow-md" : "opacity-75 hover:opacity-100 hover:scale-102",
+                  ].join(" ")}
+                  style={{ backgroundColor: c.value, ringColor: c.value }}
+                >
+                  {c.label}
+                  {active && (
+                    <CheckCircle2 className="absolute top-1.5 right-1.5 h-3.5 w-3.5 drop-shadow" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Custom picker row */}
+          <div className="flex items-center gap-3 pt-3 border-t">
+            <span className="text-sm text-muted-foreground shrink-0">Màu tùy chỉnh:</span>
+            <div className="relative">
+              <input
+                type="color"
+                value={primaryColor}
+                onChange={(e) => setPrimaryColor(e.target.value)}
+                className="h-9 w-9 rounded-lg border cursor-pointer p-0.5 bg-background"
+              />
+            </div>
+            <code className="text-sm font-mono bg-muted px-2 py-1 rounded-md">{primaryColor}</code>
+            <div
+              className="h-9 flex-1 rounded-lg border"
+              style={{ background: `linear-gradient(135deg, ${primaryColor}33, ${primaryColor}88)` }}
+            />
+          </div>
+        </SectionCard>
+
+        {/* ── Thông tin doanh nghiệp ────────────────────── */}
+        <SectionCard
+          icon={<Building2 className="h-5 w-5" />}
+          title="Thông tin doanh nghiệp"
+          subtitle="Hiển thị trên phiếu in xuất/nhập kho và phiếu đặt hàng"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                <Building2 className="h-3.5 w-3.5 text-muted-foreground" /> Địa chỉ
+              </Label>
+              <Input
+                className="mt-1.5"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="123 Đường ABC, Quận 1, TP. Hồ Chí Minh"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                <Phone className="h-3.5 w-3.5 text-muted-foreground" /> Số điện thoại
+              </Label>
+              <Input
+                className="mt-1.5"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="0909 000 001"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                <Mail className="h-3.5 w-3.5 text-muted-foreground" /> Email
+              </Label>
+              <Input
+                className="mt-1.5"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="contact@quatran.vn"
+              />
+            </div>
+            <div>
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5 text-muted-foreground" /> Mã số thuế
+              </Label>
+              <Input
+                className="mt-1.5"
+                value={taxCode}
+                onChange={(e) => setTaxCode(e.target.value)}
+                placeholder="0123456789"
+              />
+            </div>
+          </div>
+
+          {/* Print preview card */}
+          {(siteName || phone || address) && (
+            <div className="mt-5 pt-5 border-t">
+              <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">Xem trước tiêu đề phiếu in</p>
+              <div className="rounded-xl border p-4 bg-white text-center font-[Arial] text-sm space-y-1 shadow-sm">
+                {logoUrl && <img src={logoUrl} alt="" className="h-12 object-contain mx-auto mb-2" />}
+                {siteName && <div className="font-bold text-base">{siteName.toUpperCase()}</div>}
+                {address && <div className="text-gray-500 text-xs">{address}</div>}
+                <div className="text-gray-500 text-xs flex items-center justify-center gap-3 flex-wrap">
+                  {phone && <span>ĐT: {phone}</span>}
+                  {email && <span>{email}</span>}
+                  {taxCode && <span>MST: {taxCode}</span>}
+                </div>
+              </div>
+            </div>
+          )}
+        </SectionCard>
+
+        {/* ── Save button ──────────────────────────────── */}
+        <div className="flex justify-end pb-4">
+          <Button
+            onClick={save}
+            disabled={saving}
+            className="h-11 px-8 text-sm font-semibold gap-2 transition-all"
+            style={saved ? { backgroundColor: "#16a34a" } : {}}
+          >
+            {saved ? (
+              <><CheckCircle2 className="h-4 w-4" /> Đã lưu!</>
+            ) : saving ? (
+              "Đang lưu..."
+            ) : (
+              <><Save className="h-4 w-4" /> Lưu cài đặt</>
+            )}
+          </Button>
         </div>
 
-        {isLoading ? (
-          <div className="text-muted-foreground">Đang tải...</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-muted-foreground border-b">
-              <tr>
-                <th className="py-2 pr-2">SKU</th>
-                <th className="pr-2">Tên hàng</th>
-                <th className="pr-2">Thương hiệu</th>
-                <th className="pr-2">Công suất</th>
-                <th className="pr-2">Màu</th>
-                <th className="pr-2">Size cánh</th>
-                <th className="text-right pr-2">Giá bán</th>
-                <th className="text-right pr-2">Tồn</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p) => {
-                const qty = totalsByProduct(p.id);
-                const low = qty <= p.min_stock;
-                const brand = data?.brands.find((b) => b.id === (p as any).brand_id)?.name ?? (p as any).brand ?? "";
-                return (
-                  <tr key={p.id} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="py-2 font-mono text-xs pr-2">{p.sku}</td>
-                    <td className="font-medium pr-2">{p.name}</td>
-                    <td className="pr-2">{brand}</td>
-                    <td className="pr-2">{p.power}</td>
-                    <td className="pr-2">{p.color}</td>
-                    <td className="pr-2">{p.blade_size}</td>
-                    <td className="text-right pr-2">{fmt(p.sale_price)}</td>
-                    <td className={"text-right pr-2 " + (low ? "text-destructive font-medium" : "")}>{qty}</td>
-                    <td className="text-right">
-                      <Button size="icon" variant="ghost" onClick={() => startEdit(p.id)}><Pencil className="h-4 w-4" /></Button>
-                      <Button size="icon" variant="ghost" onClick={() => remove(p.id)}><Trash2 className="h-4 w-4" /></Button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filtered.length === 0 && (
-                <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">Không có sản phẩm</td></tr>
-              )}
-            </tbody>
-          </table>
-        )}
-      </Card>
+      </div>
     </AppShell>
   );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="space-y-1.5"><Label>{label}</Label>{children}</div>;
 }
