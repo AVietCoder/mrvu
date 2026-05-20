@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, TrendingDown, Eye } from "lucide-react";
+import { Plus, Pencil, Trash2, TrendingDown, Eye, Phone, MapPin, Users, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/customers")({
@@ -27,7 +27,6 @@ const groupColor: Record<string, string> = {
   vip: "bg-yellow-100 text-yellow-700", cong_trinh: "bg-purple-100 text-purple-700",
 };
 
-// Danh sách tỉnh/thành phố Việt Nam
 const PROVINCES = [
   "An Giang","Bà Rịa - Vũng Tàu","Bắc Giang","Bắc Kạn","Bạc Liêu","Bắc Ninh",
   "Bến Tre","Bình Định","Bình Dương","Bình Phước","Bình Thuận","Cà Mau",
@@ -51,8 +50,6 @@ const empty: FormState = {
   name: "", phone: "", province: "", district: "", ward: "", address: "",
   group_name: "le", debt: "0",
 };
-
-type ViewCustomer = { id: string } | null;
 
 function CustomersPage() {
   const { user } = useAuth();
@@ -128,23 +125,35 @@ function CustomersPage() {
     } catch (err: any) { toast.error(err?.message ?? "Lỗi"); }
   }
 
-  // Thông tin khách đang xem
   const viewCustomer = viewId ? customers.find((c) => c.id === viewId) : null;
-  const customerOrders = viewId
-    ? orders.filter((o) => o.customer_id === viewId)
-    : [];
+  const customerOrders = viewId ? orders.filter((o) => o.customer_id === viewId) : [];
   const completedOrders = customerOrders.filter((o) => o.status === "completed");
   const pendingOrders = customerOrders.filter((o) => o.status !== "completed" && o.status !== "cancelled");
+  const totalSpent = completedOrders.reduce((s, o) => s + o.total, 0);
 
   return (
     <AppShell title="Khách hàng">
-      {/* Tổng quan nợ */}
+      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <Card><div className="text-xs text-muted-foreground uppercase">Tổng khách hàng</div><div className="text-2xl font-semibold mt-1">{customers.length}</div></Card>
-        <Card><div className="text-xs text-muted-foreground uppercase">Còn công nợ</div><div className="text-2xl font-semibold mt-1 text-destructive">{debtorCount}</div></Card>
+        <Card>
+          <div className="flex items-center gap-2 mb-1">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <div className="text-xs text-muted-foreground uppercase">Tổng khách</div>
+          </div>
+          <div className="text-2xl font-semibold">{customers.length}</div>
+        </Card>
+        <Card>
+          <div className="flex items-center gap-2 mb-1">
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+            <div className="text-xs text-muted-foreground uppercase">Còn công nợ</div>
+          </div>
+          <div className="text-2xl font-semibold text-destructive">{debtorCount}</div>
+        </Card>
         <Card className="md:col-span-2">
-          <div className="text-xs text-muted-foreground uppercase flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Tổng công nợ phải thu (đang lọc)</div>
-          <div className="text-2xl font-semibold mt-1 text-destructive">{fmt(totalDebt)}</div>
+          <div className="text-xs text-muted-foreground uppercase flex items-center gap-1 mb-1">
+            <TrendingDown className="h-3 w-3" /> Tổng công nợ phải thu (đang lọc)
+          </div>
+          <div className="text-2xl font-semibold text-destructive">{fmt(totalDebt)}</div>
         </Card>
       </div>
 
@@ -190,7 +199,7 @@ function CustomersPage() {
               <tr>
                 <th className="py-2 pr-3">Tên khách hàng</th>
                 <th className="pr-3">SĐT</th>
-                <th className="pr-3">Tỉnh/Thành phố</th>
+                <th className="pr-3">Địa chỉ</th>
                 <th className="pr-3">Nhóm</th>
                 <th className="text-right pr-3">Công nợ</th>
                 <th className="text-right">Thao tác</th>
@@ -198,10 +207,16 @@ function CustomersPage() {
             </thead>
             <tbody>
               {paginated.map((c) => (
-                <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30">
+                <tr
+                  key={c.id}
+                  className="border-b last:border-0 hover:bg-muted/30 cursor-pointer"
+                  onClick={() => setViewId(c.id)}
+                >
                   <td className="py-2 pr-3 font-medium">{c.name}</td>
                   <td className="pr-3 text-muted-foreground">{c.phone ?? "—"}</td>
-                  <td className="pr-3 text-muted-foreground text-xs max-w-[150px] truncate">{c.province ?? c.address ?? "—"}</td>
+                  <td className="pr-3 text-muted-foreground text-xs max-w-[150px] truncate">
+                    {[c.district, c.province].filter(Boolean).join(", ") || c.address || "—"}
+                  </td>
                   <td className="pr-3">
                     <span className={`text-xs rounded-full px-2 py-0.5 ${groupColor[c.group_name]}`}>
                       {groupLabel[c.group_name]}
@@ -210,10 +225,16 @@ function CustomersPage() {
                   <td className={`text-right pr-3 font-medium ${c.debt > 0 ? "text-destructive" : "text-muted-foreground"}`}>
                     {c.debt > 0 ? fmt(c.debt) : "—"}
                   </td>
-                  <td className="text-right">
-                    <button className="p-1 hover:text-blue-600" title="Xem chi tiết" onClick={() => setViewId(c.id)}><Eye className="h-4 w-4" /></button>
-                    <button className="p-1 hover:text-primary" onClick={() => startEdit(c.id)}><Pencil className="h-4 w-4" /></button>
-                    <button className="p-1 hover:text-destructive" onClick={() => handleDelete(c.id, c.name)}><Trash2 className="h-4 w-4" /></button>
+                  <td className="text-right" onClick={(e) => e.stopPropagation()}>
+                    <button className="p-1 hover:text-blue-600" title="Xem chi tiết" onClick={() => setViewId(c.id)}>
+                      <Eye className="h-4 w-4" />
+                    </button>
+                    <button className="p-1 hover:text-primary" onClick={() => startEdit(c.id)}>
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button className="p-1 hover:text-destructive" onClick={() => handleDelete(c.id, c.name)}>
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -224,23 +245,15 @@ function CustomersPage() {
           </table>
         </div>
       </Card>
-        <Pagination
-          page={page}
-          pageSize={DEFAULT_PAGE_SIZE}
-          total={filtered.length}
-          onPageChange={setPage}
-          label="khách hàng"
-        />
+      <Pagination page={page} pageSize={DEFAULT_PAGE_SIZE} total={filtered.length} onPageChange={setPage} label="khách hàng" />
 
-      {/* Dialog thêm/sửa khách hàng */}
+      {/* Dialog thêm/sửa */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{form.id ? "Sửa khách hàng" : "Thêm khách hàng"}</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-3">
-            <div><Label>Tên *</Label><Input className="mt-1" value={form.name} required onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+            <div><Label>Tên *</Label><Input className="mt-1" value={form.name} required autoFocus onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
             <div><Label>Điện thoại</Label><Input className="mt-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-
-            {/* Địa chỉ — 3 cấp */}
             <div>
               <Label>Tỉnh / Thành phố</Label>
               <select
@@ -252,19 +265,9 @@ function CustomersPage() {
                 {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
-            <div>
-              <Label>Quận / Huyện</Label>
-              <Input className="mt-1" placeholder="Nhập quận/huyện" value={form.district} onChange={(e) => setForm({ ...form, district: e.target.value })} />
-            </div>
-            <div>
-              <Label>Phường / Xã</Label>
-              <Input className="mt-1" placeholder="Nhập phường/xã" value={form.ward} onChange={(e) => setForm({ ...form, ward: e.target.value })} />
-            </div>
-            <div>
-              <Label>Địa chỉ chi tiết</Label>
-              <Input className="mt-1" placeholder="Số nhà, tên đường..." value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-            </div>
-
+            <div><Label>Quận / Huyện</Label><Input className="mt-1" placeholder="Nhập quận/huyện" value={form.district} onChange={(e) => setForm({ ...form, district: e.target.value })} /></div>
+            <div><Label>Phường / Xã</Label><Input className="mt-1" placeholder="Nhập phường/xã" value={form.ward} onChange={(e) => setForm({ ...form, ward: e.target.value })} /></div>
+            <div><Label>Địa chỉ chi tiết</Label><Input className="mt-1" placeholder="Số nhà, tên đường..." value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
             <div><Label>Nhóm</Label>
               <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                 value={form.group_name} onChange={(e) => setForm({ ...form, group_name: e.target.value })}>
@@ -280,14 +283,14 @@ function CustomersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog xem chi tiết khách hàng */}
+      {/* Dialog xem chi tiết */}
       <Dialog open={!!viewId} onOpenChange={(o) => { if (!o) setViewId(null); }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           {viewCustomer && (
             <>
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <span>{viewCustomer.name}</span>
+                <DialogTitle className="flex items-center gap-2 flex-wrap">
+                  <span className="text-lg">{viewCustomer.name}</span>
                   <span className={`text-xs rounded-full px-2 py-0.5 ${groupColor[viewCustomer.group_name]}`}>
                     {groupLabel[viewCustomer.group_name]}
                   </span>
@@ -295,39 +298,71 @@ function CustomersPage() {
               </DialogHeader>
 
               {/* Thông tin cơ bản */}
-              <div className="grid grid-cols-2 gap-3 text-sm mb-4">
-                <div><span className="text-muted-foreground">SĐT:</span> {viewCustomer.phone ?? "—"}</div>
-                <div><span className="text-muted-foreground">Công nợ:</span> <span className={viewCustomer.debt > 0 ? "text-destructive font-medium" : ""}>{viewCustomer.debt > 0 ? fmt(viewCustomer.debt) : "Không có"}</span></div>
-                <div className="col-span-2">
-                  <span className="text-muted-foreground">Địa chỉ: </span>
-                  {[viewCustomer.address, viewCustomer.ward, viewCustomer.district, viewCustomer.province].filter(Boolean).join(", ") || "—"}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                  <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div>
+                    <div className="text-xs text-muted-foreground">Số điện thoại</div>
+                    <div className="font-medium">{viewCustomer.phone ?? "Chưa có"}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                  <TrendingDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div>
+                    <div className="text-xs text-muted-foreground">Công nợ</div>
+                    <div className={`font-medium ${viewCustomer.debt > 0 ? "text-destructive" : "text-green-600"}`}>
+                      {viewCustomer.debt > 0 ? fmt(viewCustomer.debt) : "Không có nợ"}
+                    </div>
+                  </div>
+                </div>
+                <div className="sm:col-span-2 flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                  <MapPin className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-xs text-muted-foreground">Địa chỉ đầy đủ</div>
+                    <div className="font-medium">
+                      {[viewCustomer.address, viewCustomer.ward, viewCustomer.district, viewCustomer.province].filter(Boolean).join(", ") || "Chưa có"}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Tab liên kết */}
-              <div className="border-t pt-3">
-                <div className="font-medium mb-2 text-sm">Đơn hàng đang chờ / đặt trước ({pendingOrders.length})</div>
-                {pendingOrders.length === 0 ? (
-                  <div className="text-muted-foreground text-sm">Không có đơn đang chờ</div>
-                ) : (
+              {/* Thống kê */}
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-lg border p-3">
+                  <div className="text-2xl font-semibold">{customerOrders.length}</div>
+                  <div className="text-xs text-muted-foreground mt-1">Tổng đơn hàng</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-2xl font-semibold text-green-600">{completedOrders.length}</div>
+                  <div className="text-xs text-muted-foreground mt-1">Đã hoàn tất</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-sm font-semibold text-primary">{fmt(totalSpent)}</div>
+                  <div className="text-xs text-muted-foreground mt-1">Tổng chi tiêu</div>
+                </div>
+              </div>
+
+              {pendingOrders.length > 0 && (
+                <div className="border-t pt-3">
+                  <div className="font-medium mb-2 text-sm">Đơn đang chờ / đặt trước ({pendingOrders.length})</div>
                   <div className="space-y-1">
                     {pendingOrders.map((o) => (
                       <div key={o.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
-                        <span className="font-mono">{o.code}</span>
+                        <span className="font-mono text-xs">{o.code}</span>
                         <span className="text-muted-foreground text-xs">{new Date(o.created_at).toLocaleDateString("vi-VN")}</span>
-                        <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded">{o.status === "reserved" ? "Đặt trước" : "Nháp"}</span>
+                        <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded">
+                          {o.status === "reserved" ? "Đặt trước" : "Nháp"}
+                        </span>
                         <span className="font-medium">{fmt(o.total)}</span>
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
-              <div className="border-t pt-3">
-                <div className="font-medium mb-2 text-sm">Hóa đơn đã hoàn tất ({completedOrders.length})</div>
-                {completedOrders.length === 0 ? (
-                  <div className="text-muted-foreground text-sm">Chưa có hóa đơn</div>
-                ) : (
+              {completedOrders.length > 0 && (
+                <div className="border-t pt-3">
+                  <div className="font-medium mb-2 text-sm">Hóa đơn đã hoàn tất ({completedOrders.length})</div>
                   <div className="overflow-auto max-h-48">
                     <table className="w-full text-sm">
                       <thead className="text-muted-foreground border-b">
@@ -340,7 +375,7 @@ function CustomersPage() {
                       <tbody>
                         {completedOrders.map((o) => (
                           <tr key={o.id} className="border-b last:border-0">
-                            <td className="py-1 font-mono">{o.code}</td>
+                            <td className="py-1 font-mono text-xs">{o.code}</td>
                             <td className="text-xs text-muted-foreground">{new Date(o.created_at).toLocaleDateString("vi-VN")}</td>
                             <td className="text-right font-medium">{fmt(o.total)}</td>
                           </tr>
@@ -348,8 +383,8 @@ function CustomersPage() {
                       </tbody>
                     </table>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               <DialogFooter>
                 <Button variant="outline" onClick={() => { setViewId(null); startEdit(viewCustomer.id); }}>

@@ -124,6 +124,7 @@ db.exec(`
     order_id TEXT REFERENCES orders(id),
     address TEXT, note TEXT,
     created_by TEXT NOT NULL,
+    assigned_by TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS schedule_assignments (
@@ -161,6 +162,7 @@ const migrations = [
   `ALTER TABLE customers ADD COLUMN created_by TEXT`,
   `ALTER TABLE products ADD COLUMN brand_id TEXT`,
   `ALTER TABLE products ADD COLUMN tech_fee REAL NOT NULL DEFAULT 0`,
+  `ALTER TABLE schedules ADD COLUMN assigned_by TEXT`,
 ];
 for (const m of migrations) {
   try { db.exec(m); } catch {}

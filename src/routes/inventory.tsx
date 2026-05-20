@@ -1705,20 +1705,19 @@ function Page() {
                   )}
 
                   <div className="mt-3">
-                    <Label>
-                      Ghi chú
-                    </Label>
-
+                    <Label>Ghi chú</Label>
                     <Input
                       className="mt-1"
-                      value={
-                        voucherNote
-                      }
-                      onChange={(e) =>
-                        setVoucherNote(
-                          e.target.value
-                        )
-                      }
+                      value={voucherNote}
+                      onChange={(e) => setVoucherNote(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          if (type === "in") submitIn();
+                          else if (type === "out") submitOut();
+                          else submitTransfer();
+                        }
+                      }}
+                      placeholder="Nhấn Enter để xác nhận..."
                     />
                   </div>
                 </div>

@@ -28,15 +28,17 @@ export const createSchedule = createServerFn({ method: "POST" })
     title: string; type: string; scheduled_date: string;
     scheduled_time?: string; customer_id?: string; branch_id?: string;
     order_id?: string; address?: string; note?: string; created_by: string;
+    assigned_by?: string;
   }}) => {
     const id = uid();
     db.prepare(`INSERT INTO schedules
-      (id,title,type,status,scheduled_date,scheduled_time,customer_id,branch_id,order_id,address,note,created_by,created_at)
-      VALUES (?,?,?,'pending',?,?,?,?,?,?,?,?,?)`)
+      (id,title,type,status,scheduled_date,scheduled_time,customer_id,branch_id,order_id,address,note,created_by,assigned_by,created_at)
+      VALUES (?,?,?,'pending',?,?,?,?,?,?,?,?,?,?)`)
       .run(id, data.title, data.type, data.scheduled_date,
         data.scheduled_time || null, data.customer_id || null,
         data.branch_id || null, data.order_id || null,
-        data.address || null, data.note || null, data.created_by, now());
+        data.address || null, data.note || null, data.created_by,
+        data.assigned_by || null, now());
     return { id };
   });
 

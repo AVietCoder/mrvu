@@ -55,6 +55,17 @@ export const changePasswordFn = createServerFn({ method: "POST" })
     return { success: true };
   });
 
+// Reset mật khẩu bởi admin (không cần mật khẩu cũ)
+export const resetPasswordFn = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: {
+    user_id: string; new_password: string; admin_id: string;
+  }}) => {
+    const admin = db.prepare("SELECT id FROM users WHERE id=? AND is_admin=1").get(data.admin_id);
+    if (!admin) throw new Error("Không có quyền thực hiện");
+    db.prepare("UPDATE users SET password=? WHERE id=?").run(data.new_password, data.user_id);
+    return { success: true };
+  });
+
 export const listUsersFn = createServerFn({ method: "GET" }).handler(async () => {
   const rows = db.prepare("SELECT * FROM users ORDER BY full_name").all() as any[];
   return rows.map(loadUser);

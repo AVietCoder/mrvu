@@ -98,9 +98,12 @@ function Page() {
   const [createForm, setCreateForm] = useState({
     title: "", type: "install", scheduled_date: todayStr,
     scheduled_time: nowTimeStr, customer_id: "", branch_id: "",
-    order_id: "",
-    address: "", note: "",
+    order_id: "", address: "", note: "",
+    assigned_by: "", // Người giao việc
   });
+
+  // Dialog xem chi tiết lịch
+  const [viewSchedule, setViewSchedule] = useState<any>(null);
 
   // Khi chọn đơn → auto-fill khách hàng / chi nhánh / địa chỉ + tiêu đề gợi ý
   function pickOrder(orderId: string) {
@@ -193,13 +196,14 @@ function Page() {
         customer_id: createForm.customer_id || undefined,
         branch_id: createForm.branch_id || undefined,
         order_id: createForm.order_id || undefined,
+        assigned_by: createForm.assigned_by || undefined,
       }});
       toast.success("Đã tạo lịch" + (createForm.order_id ? " (đã liên kết đơn hàng)" : ""));
       setCreateOpen(false);
       setCreateForm({
         title: "", type: "install", scheduled_date: todayStr,
         scheduled_time: nowTimeStr, customer_id: "", branch_id: "",
-        order_id: "", address: "", note: "",
+        order_id: "", address: "", note: "", assigned_by: "",
       });
       qc.invalidateQueries({ queryKey: ["schedules"] });
       qc.invalidateQueries({ queryKey: ["orders"] });
@@ -380,6 +384,17 @@ function Page() {
                           </div>
                         )}
 
+                        {/* Người giao việc */}
+                        {s.assigned_by && (() => {
+                          const assigner = data?.users.find((u: any) => u.id === s.assigned_by);
+                          return assigner ? (
+                            <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                              <UserCog className="h-3 w-3" />
+                              <span>Người giao việc: <span className="font-medium text-foreground">{assigner.full_name}</span></span>
+                            </div>
+                          ) : null;
+                        })()}
+
                         {/* Người tạo lịch */}
                         {s.created_by && (() => {
                           const creator = data?.users.find((u: any) => u.id === s.created_by);
@@ -453,7 +468,9 @@ function Page() {
                     <th className="pr-3">Loại</th>
                     <th className="pr-3">Ngày</th>
                     <th className="pr-3">Khách hàng</th>
-                    <th className="pr-3">Phụ trách</th>
+                    <th className="pr-3">Người phụ trách</th>
+                    <th className="pr-3">Người giao việc</th>
+                    <th className="pr-3">Người tạo</th>
                     <th className="pr-3">Trạng thái</th>
                     {isTech && <th className="pr-3">Tiền công</th>}
                     <th></th>
@@ -466,24 +483,36 @@ function Page() {
                     const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id);
                     const customer = data?.customers.find((c: any) => c.id === s.customer_id);
                     const techPay = isTech ? calcTechPay(s.id) : null;
+                    const assigner = s.assigned_by ? data?.users.find((u: any) => u.id === s.assigned_by) : null;
+                    const creator = s.created_by ? data?.users.find((u: any) => u.id === s.created_by) : null;
                     return (
-                      <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="py-2 pr-3 font-medium">{s.title}</td>
+                      <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => setViewSchedule(s)}>
+                        <td className="py-2 pr-3 font-medium max-w-[200px] truncate">{s.title}</td>
                         <td className="pr-3"><span className={`text-xs rounded-full px-2 py-0.5 ${typeInfo?.color}`}>{typeInfo?.label}</span></td>
-                        <td className="pr-3 text-xs">{s.scheduled_date?.slice(0,10)} {s.scheduled_time}</td>
-                        <td className="pr-3 text-muted-foreground">{customer?.name ?? "—"}</td>
+                        <td className="pr-3 text-xs whitespace-nowrap">{s.scheduled_date?.slice(0,10)} {s.scheduled_time}</td>
+                        <td className="pr-3 text-muted-foreground text-sm">{customer?.name ?? "—"}</td>
                         <td className="pr-3">
                           <div className="flex flex-wrap gap-1">
                             {assignees.map((a: any) => {
                               const u = data?.users.find((u: any) => u.id === a.user_id);
-                              return <span key={a.user_id} className="text-xs bg-muted rounded-full px-2 py-0.5">{u?.full_name ?? "?"}</span>;
+                              return <span key={a.user_id} className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">{u?.full_name ?? "?"}</span>;
                             })}
                             {assignees.length === 0 && <span className="text-xs text-muted-foreground">Chưa phân công</span>}
                           </div>
                         </td>
+                        <td className="pr-3">
+                          {assigner ? (
+                            <span className="text-xs bg-orange-100 text-orange-700 rounded-full px-2 py-0.5">{assigner.full_name}</span>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                        </td>
+                        <td className="pr-3">
+                          {creator ? (
+                            <span className="text-xs bg-muted rounded-full px-2 py-0.5">{creator.full_name}</span>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                        </td>
                         <td className="pr-3"><span className={`text-xs rounded-full px-2 py-0.5 ${status?.color}`}>{status?.label}</span></td>
                         {isTech && <td className="pr-3 text-green-600 font-medium text-sm">{techPay ? fmtMoney(techPay) : "—"}</td>}
-                        <td>
+                        <td onClick={(e) => e.stopPropagation()}>
                           {canApprove && s.status === "pending" && (
                             <Button size="sm" variant="outline" onClick={() => openApprove(s)}>Duyệt</Button>
                           )}
@@ -639,6 +668,12 @@ function Page() {
             <div><Label>Địa chỉ lắp đặt</Label>
               <Input className="mt-1" value={createForm.address}
                 onChange={(e) => setCreateForm({...createForm, address: e.target.value})} /></div>
+            <div><Label>Người giao việc</Label>
+              <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={createForm.assigned_by} onChange={(e) => setCreateForm({...createForm, assigned_by: e.target.value})}>
+                <option value="">— Không chỉ định —</option>
+                {data?.users.map((u: any) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+              </select></div>
             <div><Label>Ghi chú</Label>
               <Input className="mt-1" value={createForm.note}
                 onChange={(e) => setCreateForm({...createForm, note: e.target.value})} /></div>
@@ -649,8 +684,6 @@ function Page() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* ── Dialog duyệt lịch ── */}
       <Dialog open={approveOpen} onOpenChange={setApproveOpen}>
         <DialogContent className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Duyệt lịch & Phân công</DialogTitle></DialogHeader>
@@ -740,12 +773,19 @@ function Page() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog tính chất CV ── */}
       <Dialog open={diffOpen} onOpenChange={setDiffOpen}>
         <DialogContent className="w-full max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{diffForm.id ? "Sửa" : "Thêm"} tính chất công việc</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div><Label>Tên *</Label><Input className="mt-1" value={diffForm.name} onChange={(e) => setDiffForm({...diffForm, name: e.target.value})} /></div>
+          <div
+            className="space-y-3"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.target as HTMLElement).tagName !== "TEXTAREA") {
+                e.preventDefault();
+                handleSaveDiff();
+              }
+            }}
+          >
+            <div><Label>Tên *</Label><Input className="mt-1" autoFocus value={diffForm.name} onChange={(e) => setDiffForm({...diffForm, name: e.target.value})} /></div>
             <div><Label>Mô tả</Label><Input className="mt-1" value={diffForm.description} onChange={(e) => setDiffForm({...diffForm, description: e.target.value})} /></div>
             <div><Label>Tiền thưởng thêm (₫)</Label><Input className="mt-1" type="number" value={diffForm.bonus} onChange={(e) => setDiffForm({...diffForm, bonus: e.target.value})} /></div>
           </div>
@@ -753,6 +793,158 @@ function Page() {
             <Button variant="outline" onClick={() => setDiffOpen(false)}>Hủy</Button>
             <Button onClick={handleSaveDiff}>Lưu</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog xem chi tiết lịch làm việc ── */}
+      <Dialog open={!!viewSchedule} onOpenChange={(o) => { if (!o) setViewSchedule(null); }}>
+        <DialogContent className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          {viewSchedule && (() => {
+            const s = viewSchedule;
+            const typeInfo = SCHEDULE_TYPES.find((t) => t.value === s.type);
+            const status = STATUS_LABELS[s.status];
+            const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id);
+            const customer = data?.customers.find((c: any) => c.id === s.customer_id);
+            const assigner = s.assigned_by ? data?.users.find((u: any) => u.id === s.assigned_by) : null;
+            const creator = s.created_by ? data?.users.find((u: any) => u.id === s.created_by) : null;
+            const linkedOrder: any = s.order_id ? (data?.orders ?? []).find((o: any) => o.id === s.order_id) : null;
+            const techPay = calcTechPay(s.id);
+            const fees = (data?.tech_fees ?? []).filter((f: any) => f.schedule_id === s.id);
+            const diffIds = (data?.difficulties ?? []).filter((d: any) => d.schedule_id === s.id);
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="text-lg flex flex-wrap items-center gap-2">
+                    <span>{s.title}</span>
+                    <span className={`text-xs rounded-full px-2 py-0.5 ${typeInfo?.color}`}>{typeInfo?.label}</span>
+                    <span className={`text-xs rounded-full px-2 py-0.5 ${status?.color}`}>{status?.label}</span>
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  {/* Thông tin cơ bản */}
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-lg border bg-muted/30 p-3">
+                      <div className="text-xs text-muted-foreground mb-1">Ngày / Giờ</div>
+                      <div className="font-medium">{s.scheduled_date?.slice(0,10)} {s.scheduled_time ?? ""}</div>
+                    </div>
+                    <div className="rounded-lg border bg-muted/30 p-3">
+                      <div className="text-xs text-muted-foreground mb-1">Khách hàng</div>
+                      <div className="font-medium">{customer ? `${customer.name}${customer.phone ? ` — ${customer.phone}` : ""}` : "Chưa chọn"}</div>
+                    </div>
+                    {s.address && (
+                      <div className="col-span-2 rounded-lg border bg-muted/30 p-3">
+                        <div className="text-xs text-muted-foreground mb-1">Địa chỉ</div>
+                        <div className="font-medium">{s.address}</div>
+                      </div>
+                    )}
+                    {s.note && (
+                      <div className="col-span-2 rounded-lg border bg-muted/30 p-3">
+                        <div className="text-xs text-muted-foreground mb-1">Ghi chú</div>
+                        <div className="font-medium">{s.note}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Người liên quan */}
+                  <div className="space-y-2">
+                    <div className="font-medium text-sm">Nhân sự liên quan</div>
+                    <div className="grid grid-cols-1 gap-2">
+                      {creator && (
+                        <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2">
+                          <UserCog className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <div>
+                            <div className="text-xs text-muted-foreground">Người tạo lịch</div>
+                            <div className="font-medium text-sm">{creator.full_name}</div>
+                          </div>
+                        </div>
+                      )}
+                      {assigner && (
+                        <div className="flex items-center gap-3 rounded-lg border bg-orange-50 border-orange-200 px-3 py-2">
+                          <UserCog className="h-4 w-4 text-orange-600 shrink-0" />
+                          <div>
+                            <div className="text-xs text-orange-600">Người giao việc</div>
+                            <div className="font-medium text-sm">{assigner.full_name}</div>
+                          </div>
+                        </div>
+                      )}
+                      {assignees.length > 0 && (
+                        <div className="rounded-lg border bg-blue-50 border-blue-200 px-3 py-2">
+                          <div className="text-xs text-blue-600 mb-1.5">Người phụ trách / thực hiện ({assignees.length})</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {assignees.map((a: any) => {
+                              const u = data?.users.find((u: any) => u.id === a.user_id);
+                              return (
+                                <span key={a.user_id} className="text-sm bg-blue-100 text-blue-700 rounded-full px-3 py-1 font-medium">
+                                  {u?.full_name ?? a.user_id}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Đơn hàng liên kết */}
+                  {linkedOrder && (
+                    <div className="rounded-lg border bg-blue-50/50 border-blue-200 px-3 py-2">
+                      <div className="text-xs text-muted-foreground mb-1">Đơn hàng liên kết</div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-medium">{linkedOrder.code}</span>
+                        <span className="text-sm">{fmtMoney(linkedOrder.total)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tiền công */}
+                  {(fees.length > 0 || diffIds.length > 0) && (
+                    <div>
+                      <div className="font-medium text-sm mb-2">Tiền công dự kiến</div>
+                      <div className="space-y-1.5">
+                        {fees.map((f: any) => {
+                          const p = data?.products.find((x: any) => x.id === f.product_id);
+                          return (
+                            <div key={f.product_id} className="flex justify-between text-sm rounded border px-3 py-2">
+                              <span>{p?.name ?? f.product_id} × {f.qty}</span>
+                              <span className="font-medium text-green-600">+{fmtMoney(f.qty * f.unit_fee)}</span>
+                            </div>
+                          );
+                        })}
+                        {diffIds.map((d: any) => {
+                          const wd = data?.work_difficulties.find((w: any) => w.id === d.difficulty_id);
+                          return wd ? (
+                            <div key={d.difficulty_id} className="flex justify-between text-sm rounded border px-3 py-2">
+                              <span>{wd.name}</span>
+                              <span className="font-medium text-green-600">+{fmtMoney(wd.bonus)}</span>
+                            </div>
+                          ) : null;
+                        })}
+                        <div className="flex justify-between font-semibold text-sm rounded border border-green-200 bg-green-50 px-3 py-2">
+                          <span>Tổng tiền công</span>
+                          <span className="text-green-700">{fmtMoney(techPay)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <DialogFooter className="flex-wrap gap-2">
+                  {canApprove && s.status === "pending" && (
+                    <Button variant="outline" onClick={() => { setViewSchedule(null); openApprove(s); }}>
+                      <CheckCircle2 className="h-4 w-4 mr-1" /> Duyệt & Phân công
+                    </Button>
+                  )}
+                  {(isAdmin || canCreate) && !["done","cancelled"].includes(s.status) && (
+                    <Button variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                      onClick={() => { setViewSchedule(null); handleDelete(s.id); }}>
+                      <Trash2 className="h-4 w-4 mr-1" /> Xóa
+                    </Button>
+                  )}
+                  <Button onClick={() => setViewSchedule(null)}>Đóng</Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </AppShell>
