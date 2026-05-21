@@ -2,7 +2,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 
 import {
   listInventory,
@@ -41,6 +41,10 @@ import {
   XCircle,
   Printer,
   History,
+  ChevronDown,
+  ChevronUp,
+  Package2,
+  ShoppingCart,
 } from "lucide-react";
 
 import { toast } from "sonner";
@@ -153,6 +157,8 @@ function Page() {
   const [stockBy, setStockBy] =
     useState("stock_desc");
 
+  const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
+
   const [voucherNote, setVoucherNote] =
     useState("");
 
@@ -185,6 +191,27 @@ function Page() {
 
   const products = data?.products ?? [];
   const branches = data?.branches ?? [];
+  const pendingOrderSummaries = data?.pending_order_summaries ?? [];
+
+  const pendingOrderMap = useMemo(() => {
+    const map = new Map<string, { qty: number; order_count: number }>();
+    for (const row of pendingOrderSummaries as any[]) {
+      const key = `${row.product_id}__${row.branch_id ?? ""}`;
+      map.set(key, {
+        qty: Number(row.qty || 0),
+        order_count: Number(row.order_count || 0),
+      });
+    }
+    return map;
+  }, [pendingOrderSummaries]);
+
+  const stockMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of (data?.stock ?? []) as any[]) {
+      map.set(`${row.product_id}__${row.branch_id}`, Number(row.qty || 0));
+    }
+    return map;
+  }, [data?.stock]);
 
   const pendingTransfers =
     (data?.transfers ?? []).filter(
@@ -444,6 +471,46 @@ function Page() {
     );
   }
 
+  const visibleBranches = filterBranch
+    ? branches.filter(
+        (b) =>
+          b.id === filterBranch
+      )
+    : branches;
+
+  const branchStatsMap = useMemo(() => {
+    const map = new Map<
+      string,
+      Array<{
+        branchId: string;
+        branchName: string;
+        stock: number;
+        pendingQty: number;
+        pendingOrders: number;
+      }>
+    >();
+
+    for (const product of products as any[]) {
+      map.set(
+        product.id,
+        visibleBranches.map((branch) => {
+          const stock = stockMap.get(`${product.id}__${branch.id}`) ?? 0;
+          const pending = pendingOrderMap.get(`${product.id}__${branch.id}`);
+
+          return {
+            branchId: branch.id,
+            branchName: branch.name,
+            stock,
+            pendingQty: pending?.qty ?? 0,
+            pendingOrders: pending?.order_count ?? 0,
+          };
+        }),
+      );
+    }
+
+    return map;
+  }, [products, visibleBranches, stockMap, pendingOrderMap]);
+
   const filteredProducts = useMemo(() => {
     return products
       .filter((p) => {
@@ -470,29 +537,15 @@ function Page() {
             b.sku
           );
 
-        const stockA = (
-          data?.stock ?? []
-        )
-          .filter(
-            (s) =>
-              s.product_id === a.id
-          )
-          .reduce(
-            (x, y) => x + y.qty,
-            0
-          );
+        const stockA = visibleBranches.reduce(
+          (sum, branch) => sum + (stockMap.get(`${a.id}__${branch.id}`) ?? 0),
+          0,
+        );
 
-        const stockB = (
-          data?.stock ?? []
-        )
-          .filter(
-            (s) =>
-              s.product_id === b.id
-          )
-          .reduce(
-            (x, y) => x + y.qty,
-            0
-          );
+        const stockB = visibleBranches.reduce(
+          (sum, branch) => sum + (stockMap.get(`${b.id}__${branch.id}`) ?? 0),
+          0,
+        );
 
         return stockBy ===
           "stock_asc"
@@ -504,7 +557,8 @@ function Page() {
     search,
     sortBy,
     stockBy,
-    data?.stock,
+    stockMap,
+    visibleBranches,
   ]);
 
   const paginatedProducts = useMemo(
@@ -512,19 +566,19 @@ function Page() {
     [filteredProducts, page],
   );
 
-  const visibleBranches = filterBranch
-    ? branches.filter(
-        (b) =>
-          b.id === filterBranch
-      )
-    : branches;
-
   const voucherTitle =
     type === "in"
       ? "Phiếu nhập hàng"
       : type === "out"
         ? "Phiếu xuất kho"
         : "Phiếu chuyển kho";
+
+  function toggleExpanded(productId: string) {
+    setExpandedProducts((prev) => ({
+      ...prev,
+      [productId]: !prev[productId],
+    }));
+  }
 
   return (
     <AppShell title="Quản lý tồn kho" loading={isLoading && !data}>
@@ -680,65 +734,84 @@ function Page() {
         </Card>
       )}
 
-      <Card className="mb-6">
-        <div className="mb-3 font-medium">
-          Tồn kho theo sản phẩm × chi nhánh
+      <Card className="mb-6 overflow-hidden">
+        <div className="flex flex-col gap-3 border-b bg-gradient-to-r from-background to-muted/20 px-4 py-4 sm:px-5">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-base font-semibold">
+                <Package2 className="h-4 w-4 text-muted-foreground" />
+                Tồn kho theo sản phẩm × chi nhánh
+              </div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                Xem nhanh tồn kho, đơn chờ xử lý và mở rộng theo từng chi nhánh.
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="rounded-full border bg-background px-3 py-1.5">
+                {visibleBranches.length} chi nhánh
+              </span>
+              <span className="rounded-full border bg-background px-3 py-1.5">
+                {filteredProducts.length} sản phẩm
+              </span>
+            </div>
+          </div>
+
+          <SearchFilter
+            search={search}
+            onSearch={(v) => { setSearch(v); setPage(1); }}
+            placeholder="Tìm SKU, tên sản phẩm..."
+            sortOptions={[
+              {
+                value: "name",
+                label: "Tên A→Z",
+              },
+              {
+                value: "sku",
+                label: "SKU",
+              },
+              {
+                value: "stock_desc",
+                label: "Tồn nhiều nhất",
+              },
+              {
+                value: "stock_asc",
+                label: "Tồn ít nhất",
+              },
+            ]}
+            sortValue={sortBy}
+            onSort={(v) => { setSortBy(v as any); setPage(1); }}
+            filterSlot={
+              <select
+                className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={filterBranch}
+                onChange={(e) =>
+                  setFilterBranch(
+                    e.target.value
+                  )
+                }
+              >
+                <option value="">
+                  Tất cả chi nhánh
+                </option>
+
+                {branches.map((b) => (
+                  <option
+                    key={b.id}
+                    value={b.id}
+                  >
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            }
+            total={filteredProducts.length}
+            totalLabel="sản phẩm"
+          />
         </div>
 
-        <SearchFilter
-          search={search}
-          onSearch={(v) => { setSearch(v); setPage(1); }}
-          placeholder="Tìm SKU, tên sản phẩm..."
-          sortOptions={[
-            {
-              value: "name",
-              label: "Tên A→Z",
-            },
-            {
-              value: "sku",
-              label: "SKU",
-            },
-            {
-              value: "stock_desc",
-              label: "Tồn nhiều nhất",
-            },
-            {
-              value: "stock_asc",
-              label: "Tồn ít nhất",
-            },
-          ]}
-          sortValue={sortBy}
-          onSort={(v) => { setSortBy(v as any); setPage(1); }}
-          filterSlot={
-            <select
-              className="h-9 rounded-md border bg-background px-2 text-sm"
-              value={filterBranch}
-              onChange={(e) =>
-                setFilterBranch(
-                  e.target.value
-                )
-              }
-            >
-              <option value="">
-                Tất cả chi nhánh
-              </option>
-
-              {branches.map((b) => (
-                <option
-                  key={b.id}
-                  value={b.id}
-                >
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          }
-          total={filteredProducts.length}
-          totalLabel="sản phẩm"
-        />
-
         {isLoading ? (
-          <div className="text-muted-foreground">
+          <div className="px-4 py-6 text-muted-foreground">
             Đang tải...
           </div>
         ) : (
@@ -746,71 +819,150 @@ function Page() {
             <table className="w-full text-sm">
               <thead className="border-b text-left text-muted-foreground">
                 <tr>
-                  <th className="py-2 pr-3 w-[120px]">
+                  <th className="w-[120px] py-2 pr-3">
                     SKU
                   </th>
                   <th className="pr-3">
-                    Thông tin hàng & Chi nhánh
+                    Hàng tồn / đặt hàng
                   </th>
-                  <th className="text-right w-[100px]">
-                    Tổng tồn
+                  <th className="w-[100px] text-right">
+                    Tồn
                   </th>
+                  <th className="w-[120px] text-right">
+                    Đặt hàng
+                  </th>
+                  <th className="w-[84px]" />
                 </tr>
               </thead>
 
               <tbody>
                 {paginatedProducts.map((p) => {
-                  const total = visibleBranches.reduce((sum, b) => {
-                    const qty = data?.stock.find(
-                      (s) => s.product_id === p.id && s.branch_id === b.id
-                    )?.qty ?? 0;
-                    return sum + qty;
-                  }, 0);
+                  const branchStats = branchStatsMap.get(p.id) ?? [];
+                  const total = branchStats.reduce((sum, item) => sum + item.stock, 0);
+                  const pending = branchStats.reduce((sum, item) => sum + item.pendingQty, 0);
+                  const pendingOrderCount = branchStats.reduce((sum, item) => sum + item.pendingOrders, 0);
+                  const expanded = !!expandedProducts[p.id];
 
                   return (
-                    <tr
-                      key={p.id}
-                      className="border-b last:border-0 hover:bg-muted/30 align-top"
-                    >
-                      <td className="py-3 pr-3 font-mono text-xs pt-4">
-                        {p.sku}
-                      </td>
+                    <Fragment key={p.id}>
+                      <tr className="border-b last:border-0 hover:bg-muted/30 align-top">
+                        <td className="py-3 pr-3 font-mono text-xs pt-4">
+                          {p.sku}
+                        </td>
 
-                      <td className="pr-3 py-3">
-                        <div className="font-medium text-base mb-2">{p.name}</div>
-                        
-                        {/* Khu vực hiển thị danh sách 8 chi nhánh dạng wrap/grid cực thoáng */}
-                        <div className="flex flex-wrap gap-1.5 max-w-4xl">
-                          {visibleBranches.map((b) => {
-                            const qty = data?.stock.find(
-                              (s) => s.product_id === p.id && s.branch_id === b.id
-                            )?.qty ?? 0;
-                            
-                            const isLowStock = qty <= p.min_stock;
-
-                            return (
-                              <div
-                                key={b.id}
-                                className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs ${
-                                  isLowStock 
-                                    ? "bg-destructive/5 border-destructive/20 text-destructive font-medium" 
-                                    : "bg-background border-muted text-muted-foreground"
-                                }`}
-                              >
-                                <span className="truncate max-w-[100px]">{b.name}:</span>
-                                <span className={isLowStock ? "font-bold" : "font-semibold text-foreground"}>
-                                  {qty}
-                                </span>
+                        <td className="pr-3 py-3">
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-base font-semibold leading-tight">{p.name}</div>
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                  Hàng tồn hiện tại và đơn chờ theo chi nhánh.
+                                </div>
                               </div>
-                            );
-                          })}
-                        </div>
-                      </td>
 
-                      <td className="text-right py-3 font-semibold text-base pt-4">
-                        {total}
-                      </td>
-                    </tr>
+                              <button
+                                className="inline-flex items-center gap-1 rounded-full border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted"
+                                onClick={() => toggleExpanded(p.id)}
+                              >
+                                {expanded ? (
+                                  <>
+                                    Thu gọn <ChevronUp className="h-3.5 w-3.5" />
+                                  </>
+                                ) : (
+                                  <>
+                                    Chi tiết <ChevronDown className="h-3.5 w-3.5" />
+                                  </>
+                                )}
+                              </button>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              <span className="inline-flex items-center gap-1.5 rounded-full border bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
+                                <Package2 className="h-3.5 w-3.5" />
+                                Tổng tồn: <b>{total}</b>
+                              </span>
+
+                              <span className="inline-flex items-center gap-1.5 rounded-full border bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
+                                <ShoppingCart className="h-3.5 w-3.5" />
+                                Đặt hàng: <b>{pending}</b>
+                                <span className="text-amber-600/80">({pendingOrderCount} đơn)</span>
+                              </span>
+                            </div>
+
+                            {expanded && (
+                              <div className="rounded-2xl border bg-muted/20 p-3">
+                                <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+                                  <span>Chi tiết theo chi nhánh</span>
+                                  <span>Click để xem tổng ở từng chi nhánh</span>
+                                </div>
+
+                                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                                  {branchStats.map((item) => {
+                                    const isLowStock = item.stock <= p.min_stock;
+                                    return (
+                                      <div
+                                        key={item.branchId}
+                                        className={`rounded-xl border bg-background px-3 py-2 shadow-sm ${
+                                          isLowStock ? "border-destructive/20" : "border-muted"
+                                        }`}
+                                      >
+                                        <div className="flex items-start justify-between gap-2">
+                                          <div className="min-w-0 flex-1">
+                                            <div className="truncate text-sm font-semibold">{item.branchName}</div>
+                                            <div className="mt-1 text-[11px] text-muted-foreground">
+                                              {item.pendingOrders > 0
+                                                ? `${item.pendingOrders} đơn chờ`
+                                                : "Không có đơn chờ"}
+                                            </div>
+                                          </div>
+
+                                          <div className="text-right text-[11px] text-muted-foreground">
+                                            {isLowStock ? "Sắp hết" : "Ổn định"}
+                                          </div>
+                                        </div>
+
+                                        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                                          <span className="rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700">
+                                            Tồn {item.stock}
+                                          </span>
+                                          <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-700">
+                                            Đặt {item.pendingQty}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3 text-right font-semibold text-base pt-4">
+                          {total}
+                        </td>
+
+                        <td className="py-3 pt-4 text-right">
+                          <div className="font-semibold text-base">
+                            {pending}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {pendingOrderCount > 0
+                              ? `${pendingOrderCount} đơn chờ`
+                              : "Không có"}
+                          </div>
+                        </td>
+
+                        <td className="py-3 pt-3 text-right">
+                          <button
+                            className="inline-flex h-8 items-center justify-center rounded-md border px-2.5 text-xs font-medium text-muted-foreground transition hover:bg-muted"
+                            onClick={() => toggleExpanded(p.id)}
+                          >
+                            {expanded ? "Ẩn" : "Xem"}
+                          </button>
+                        </td>
+                      </tr>
+                    </Fragment>
                   );
                 })}
               </tbody>

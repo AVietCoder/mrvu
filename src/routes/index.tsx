@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { getReports } from "@/lib/reports.functions";
@@ -61,6 +61,24 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
+function ProgressBarLoader() {
+  return (
+    <div className="w-full space-y-2 py-12 flex flex-col items-center justify-center">
+      <div className="w-64 h-2 bg-muted rounded-full overflow-hidden relative border border-border">
+        <div className="h-full bg-primary rounded-full absolute top-0 left-0 animate-[loading_1.5s_infinite_ease-in-out]" style={{ width: '40%' }} />
+      </div>
+      <span className="text-xs text-muted-foreground animate-pulse font-medium">Đang xử lý dữ liệu báo cáo...</span>
+      <style>{`
+        @keyframes loading {
+          0% { left: -40%; }
+          50% { left: 100%; width: 50%; }
+          100% { left: 100%; width: 40%; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 function Dashboard() {
   const fn = useServerFn(getReports);
 
@@ -72,12 +90,9 @@ function Dashboard() {
   return (
     <AppShell title="Tổng quan">
       {isLoading || !data ? (
-        <div className="text-muted-foreground">
-          Đang tải dữ liệu...
-        </div>
+        <ProgressBarLoader />
       ) : (
         <div className="space-y-6">
-          {/* Stats */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label="Doanh thu"
@@ -103,9 +118,7 @@ function Dashboard() {
             />
           </div>
 
-          {/* Charts */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-            {/* Area Revenue */}
             <Card className="xl:col-span-2 border-primary/10 overflow-hidden">
               <div className="mb-1 text-lg font-semibold">
                 Doanh thu 14 ngày gần nhất
@@ -190,7 +203,6 @@ function Dashboard() {
               </div>
             </Card>
 
-            {/* Donut Chart */}
             <Card className="border-primary/10">
               <div className="mb-1 text-lg font-semibold">
                 Top sản phẩm
@@ -229,9 +241,7 @@ function Dashboard() {
             </Card>
           </div>
 
-          {/* Bottom charts */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            {/* Rounded Bar */}
             <Card className="border-primary/10">
               <div className="mb-1 text-lg font-semibold">
                 Sản phẩm bán chạy
@@ -293,7 +303,6 @@ function Dashboard() {
               </div>
             </Card>
 
-            {/* Inventory */}
             <Card className="border-primary/10">
               <div className="mb-1 text-lg font-semibold">
                 Cảnh báo tồn kho thấp
@@ -352,7 +361,6 @@ function Dashboard() {
             </Card>
           </div>
 
-          {/* Debtors */}
           <Card className="border-primary/10">
             <div className="mb-1 text-lg font-semibold">
               Khách công nợ cao nhất
@@ -389,7 +397,11 @@ function Dashboard() {
                       key={c.id}
                       className="border-b last:border-0"
                     >
-                      <td className="py-2">{c.name}</td>
+                      <td className="py-2">
+                        <Link to="/customers/$id" params={{ id: c.id }} className="font-medium hover:text-primary hover:underline">
+                          {c.name}
+                        </Link>
+                      </td>
 
                       <td className="text-muted-foreground">
                         {c.phone}

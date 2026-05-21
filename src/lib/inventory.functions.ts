@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { fetchRow, fetchRows, insertRow, now, supabase, uid, updateWhere } from "./supabase";
+import { fetchAllRows, fetchRow, fetchRows, insertRow, now, supabase, uid, updateWhere } from "./supabase";
 
 type StockItem = { product_id: string; qty: number };
 
@@ -66,17 +66,68 @@ async function adjustStock(productId: string, branchId: string, delta: number) {
   }
 }
 
+
+
+type PendingOrderSummary = {
+  product_id: string;
+  branch_id: string;
+  qty: number;
+  order_count: number;
+};
+
+function buildPendingOrderSummaries(
+  orders: { id: string; branch_id?: string | null; status: string }[],
+  items: { order_id: string; product_id: string; qty: number }[],
+): PendingOrderSummary[] {
+  const activeOrderIds = new Set(
+    orders
+      .filter((order) => order.status !== "completed" && order.status !== "cancelled")
+      .map((order) => order.id),
+  );
+
+  const orderBranchById = new Map(
+    orders.map((order) => [order.id, order.branch_id ?? ""]),
+  );
+
+  const agg = new Map<string, { qty: number; orderIds: Set<string> }>();
+
+  for (const item of items) {
+    if (!activeOrderIds.has(item.order_id)) continue;
+
+    const branchId = orderBranchById.get(item.order_id) ?? "";
+    const key = `${item.product_id}__${branchId}`;
+    const current = agg.get(key) ?? { qty: 0, orderIds: new Set<string>() };
+    current.qty += Number(item.qty || 0);
+    current.orderIds.add(item.order_id);
+    agg.set(key, current);
+  }
+
+  return [...agg.entries()].map(([key, value]) => {
+    const [product_id, branch_id] = key.split("__");
+    return {
+      product_id,
+      branch_id,
+      qty: value.qty,
+      order_count: value.orderIds.size,
+    };
+  });
+}
+
 export const listInventory = createServerFn({ method: "GET" }).handler(async () => {
-  const [products, branches, stock, movements, transfers, transfer_items] = await Promise.all([
+  const [products, branches, stock, movements, transfers, transfer_items, orders, order_items] = await Promise.all([
     fetchRows("products", { orderBy: "name" }),
     fetchRows("branches", { orderBy: "name" }),
     fetchRows("stock"),
     fetchRows("stock_movements", { orderBy: "created_at", ascending: false, limit: 100 }),
     fetchRows("stock_transfers", { orderBy: "created_at", ascending: false }),
     fetchRows("stock_transfer_items"),
+    fetchAllRows("orders", { select: "id, branch_id, status", orderBy: "created_at", ascending: false }),
+    fetchAllRows("order_items", { select: "order_id, product_id, qty" }),
   ]);
 
-  return { products, branches, stock, movements, transfers, transfer_items };
+  const pending_order_summaries = buildPendingOrderSummaries(orders as any, order_items as any);
+
+  return { products, branches, stock, movements, transfers, transfer_items, pending_order_summaries };
 });
 
 // Nhập / Xuất kho — nhận branch_id (cho cả nhập và xuất)

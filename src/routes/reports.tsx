@@ -1,8 +1,7 @@
 // @ts-nocheck
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
 import { getReports } from "@/lib/reports.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { useAuth } from "@/context/AuthContext";
@@ -10,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Download, ShieldOff } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 
 export const Route = createFileRoute("/reports")({
@@ -20,15 +19,32 @@ export const Route = createFileRoute("/reports")({
 
 const COLORS = ["#6366f1","#22c55e","#f59e0b","#ef4444","#8b5cf6"];
 
+function ProgressBarLoader() {
+  return (
+    <div className="w-full space-y-2 py-12 flex flex-col items-center justify-center">
+      <div className="w-64 h-2 bg-muted rounded-full overflow-hidden relative border border-border">
+        <div className="h-full bg-primary rounded-full absolute top-0 left-0 animate-[loading_1.5s_infinite_ease-in-out]" style={{ width: '40%' }} />
+      </div>
+      <span className="text-xs text-muted-foreground animate-pulse font-medium">Đang kết xuất biểu đồ và thống kê...</span>
+      <style>{`
+        @keyframes loading {
+          0% { left: -40%; }
+          50% { left: 100%; width: 50%; }
+          100% { left: 100%; width: 40%; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 function Page() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Chỉ admin hoặc người có quyền view_reports mới xem được
   const canView = user?.is_admin || user?.permissions.includes("view_reports");
 
   const fn = useServerFn(getReports);
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["reports-full"],
     queryFn: () => fn(),
     enabled: !!canView,
@@ -75,16 +91,15 @@ function Page() {
   return (
     <AppShell title="Báo cáo & Thống kê">
       <div className="flex justify-end mb-4">
-        <Button onClick={exportCsv}>
+        <Button onClick={exportCsv} disabled={isLoading || !data}>
           <Download className="h-4 w-4 mr-1" /> Xuất CSV
         </Button>
       </div>
 
-      {!data ? (
-        <div className="text-muted-foreground">Đang tải...</div>
+      {isLoading || !data ? (
+        <ProgressBarLoader />
       ) : (
         <div className="space-y-4">
-          {/* Stats tổng */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card><div className="text-xs text-muted-foreground uppercase">Doanh thu</div><div className="text-xl font-bold mt-1">{fmt(data.totalRevenue as number)}</div></Card>
             <Card><div className="text-xs text-muted-foreground uppercase">Tổng đơn</div><div className="text-xl font-bold mt-1">{data.totalOrders as number}</div></Card>
@@ -92,7 +107,6 @@ function Page() {
             <Card><div className="text-xs text-muted-foreground uppercase">Khách hàng</div><div className="text-xl font-bold mt-1">{data.customerCount as number}</div></Card>
           </div>
 
-          {/* Biểu đồ doanh thu 14 ngày */}
           <Card>
             <div className="font-medium mb-3">Doanh thu 14 ngày gần nhất</div>
             <div className="h-64">
@@ -109,7 +123,6 @@ function Page() {
           </Card>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Doanh thu theo chi nhánh — Pie */}
             <Card>
               <div className="font-medium mb-3">Doanh thu theo chi nhánh</div>
               <div className="h-56">
@@ -131,7 +144,6 @@ function Page() {
               </div>
             </Card>
 
-            {/* Top sản phẩm — Bar ngang */}
             <Card>
               <div className="font-medium mb-3">Top sản phẩm bán chạy</div>
               <div className="h-56">
@@ -146,7 +158,6 @@ function Page() {
               </div>
             </Card>
 
-            {/* Doanh thu theo nhân viên — Bar */}
             <Card>
               <div className="font-medium mb-3">Doanh thu theo nhân viên</div>
               <div className="h-56">
@@ -162,7 +173,6 @@ function Page() {
               </div>
             </Card>
 
-            {/* Tồn kho thấp */}
             <Card>
               <div className="font-medium mb-3">Cảnh báo tồn kho thấp</div>
               <table className="w-full text-sm">
@@ -185,7 +195,6 @@ function Page() {
             </Card>
           </div>
 
-          {/* Công nợ */}
           <Card>
             <div className="font-medium mb-3">Công nợ phải thu</div>
             <table className="w-full text-sm">
@@ -198,7 +207,11 @@ function Page() {
                 )}
                 {(data.debtors as any[]).map((c: any) => (
                   <tr key={c.id} className="border-b last:border-0">
-                    <td className="py-1.5">{c.name}</td>
+                    <td className="py-1.5">
+                      <Link to="/customers/$id" params={{ id: c.id }} className="font-medium hover:text-primary hover:underline">
+                        {c.name}
+                      </Link>
+                    </td>
                     <td className="text-right font-medium text-destructive">{fmt(c.debt)}</td>
                   </tr>
                 ))}

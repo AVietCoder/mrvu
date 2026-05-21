@@ -23,7 +23,7 @@ export const getReports = createServerFn({ method: "GET" }).handler(async () => 
     fetchAllRows<any>("orders", { select: "id, status, total, created_at, branch_id, employee_id, customer_id" }),
     fetchAllRows<any>("order_items", { select: "order_id, product_id, qty" }),
     fetchAllRows<any>("products", { select: "id, name, sku, min_stock" }),
-    fetchAllRows<any>("customers", { select: "id, debt" }),
+    fetchAllRows<any>("customers", { select: "id, name, phone, debt" }),
     fetchAllRows<any>("branches", { select: "id, name" }),
     fetchAllRows<any>("users", { select: "id, full_name" }),
     fetchAllRows<any>("stock", { select: "product_id, qty" }),

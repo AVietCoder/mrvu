@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import {
   listCustomers,
   upsertCustomer,
@@ -26,22 +26,23 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 
 import {
   Plus,
-  ExternalLink,
   Pencil,
   Trash2,
   TrendingDown,
   TrendingUp,
   Eye,
-  Phone,
-  MapPin,
   Users,
   AlertTriangle,
   Loader2,
+  User,
+  MapPin,
+  Wallet,
 } from "lucide-react";
 
 import { toast } from "sonner";
@@ -58,13 +59,6 @@ const groupLabel: Record<string, string> = {
   dai_ly: "Đại lý",
   vip: "VIP",
   cong_trinh: "Công trình",
-};
-
-const groupColor: Record<string, string> = {
-  le: "bg-gray-100 text-gray-700",
-  dai_ly: "bg-blue-100 text-blue-700",
-  vip: "bg-yellow-100 text-yellow-700",
-  cong_trinh: "bg-purple-100 text-purple-700",
 };
 
 const PROVINCES = [
@@ -138,7 +132,6 @@ type FormState = {
   name: string;
   phone: string;
   province: string;
-  district: string;
   ward: string;
   address: string;
   group_name: string;
@@ -149,7 +142,6 @@ const empty: FormState = {
   name: "",
   phone: "",
   province: "",
-  district: "",
   ward: "",
   address: "",
   group_name: "le",
@@ -158,7 +150,6 @@ const empty: FormState = {
 
 function CustomersPage() {
   const { user } = useAuth();
-
   const qc = useQueryClient();
 
   const list = useServerFn(listCustomers);
@@ -166,9 +157,7 @@ function CustomersPage() {
   const del = useServerFn(deleteCustomer);
 
   const [form, setForm] = useState<FormState>(empty);
-
   const [open, setOpen] = useState(false);
-
   const [viewId, setViewId] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
@@ -193,7 +182,6 @@ function CustomersPage() {
       filterDebt,
       filterTotalBuy,
     ],
-
     queryFn: () =>
       list({
         data: {
@@ -206,26 +194,16 @@ function CustomersPage() {
           sortBy,
         },
       }),
-
     placeholderData: (prev) => prev,
-
     staleTime: 1000 * 30,
   });
 
   const customers = data?.customers ?? [];
   const orders = data?.orders ?? [];
 
-  const totalAllCustomers =
-    data?.meta?.totalAllCustomers ?? 0;
-
-  const totalDebtorCount =
-    data?.meta?.totalDebtorCount ?? 0;
-
-  const totalAllDebt =
-    data?.meta?.totalAllDebt ?? 0;
-
-  const totalFilteredCount =
-    data?.meta?.totalFiltered ?? 0;
+  const totalDebtorCount = data?.meta?.totalDebtorCount ?? 0;
+  const totalAllDebt = data?.meta?.totalAllDebt ?? 0;
+  const totalFilteredCount = data?.meta?.totalFiltered ?? 0;
 
   const totalSales = useMemo(() => {
     return orders
@@ -235,7 +213,6 @@ function CustomersPage() {
 
   function startEdit(id: string) {
     const c = customers.find((x) => x.id === id);
-
     if (!c) return;
 
     setForm({
@@ -243,7 +220,6 @@ function CustomersPage() {
       name: c.name,
       phone: c.phone ?? "",
       province: c.province ?? "",
-      district: c.district ?? "",
       ward: c.ward ?? "",
       address: c.address ?? "",
       group_name: c.group_name,
@@ -253,9 +229,8 @@ function CustomersPage() {
     setOpen(true);
   }
 
-  async function handleSave(e: React.FormEvent) {
+  async function handleSave(e: FormEvent) {
     e.preventDefault();
-
     try {
       await upsert({
         data: {
@@ -269,76 +244,35 @@ function CustomersPage() {
           ? "Đã cập nhật khách hàng thành công!"
           : "Đã thêm khách hàng thành công!"
       );
-
       setOpen(false);
-
       setForm(empty);
-
-      qc.invalidateQueries({
-        queryKey: ["customers"],
-      });
+      qc.invalidateQueries({ queryKey: ["customers"] });
     } catch (err: any) {
       toast.error(err?.message ?? "Lỗi");
     }
   }
 
-  async function handleDelete(
-    id: string,
-    name: string
-  ) {
+  async function handleDelete(id: string, name: string) {
     if (!confirm(`Xóa khách hàng "${name}"?`)) return;
-
     try {
-      await del({
-        data: { id },
-      });
-
+      await del({ data: { id } });
       toast.success("Đã xóa");
-
-      qc.invalidateQueries({
-        queryKey: ["customers"],
-      });
+      qc.invalidateQueries({ queryKey: ["customers"] });
     } catch (err: any) {
       toast.error(err?.message ?? "Lỗi");
     }
   }
-
-  const viewCustomer = viewId
-    ? customers.find((c) => c.id === viewId)
-    : null;
-
-  const customerOrders = viewId
-    ? orders.filter((o) => o.customer_id === viewId)
-    : [];
-
-  const completedOrders = customerOrders.filter(
-    (o) => o.status === "completed"
-  );
-
-  const pendingOrders = customerOrders.filter(
-    (o) =>
-      o.status !== "completed" &&
-      o.status !== "cancelled"
-  );
-
-  const totalSpent = completedOrders.reduce(
-    (s, o) => s + o.total,
-    0
-  );
 
   return (
     <AppShell title="Khách hàng">
-
       {/* LOADING PROGRESS */}
       {(isLoading || isFetching) && (
         <div className="fixed left-0 right-0 top-0 z-[9999]">
           <div className="h-1 w-full overflow-hidden bg-primary/10">
             <div className="loading-bar h-full bg-primary" />
           </div>
-
           <div className="absolute right-4 top-3 flex items-center gap-2 rounded-full border bg-background/95 px-3 py-1 shadow-sm backdrop-blur">
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
-
             <span className="text-xs font-medium text-muted-foreground">
               Đang tải dữ liệu khách hàng...
             </span>
@@ -351,67 +285,40 @@ function CustomersPage() {
         <Card>
           <div className="mb-1 flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
-
-            <div className="text-xs uppercase text-muted-foreground">
-              Tổng khách
-            </div>
+            <div className="text-xs uppercase text-muted-foreground">Tổng khách</div>
           </div>
-
-          <div className="text-2xl font-semibold">
-            {totalFilteredCount}
-          </div>
+          <div className="text-2xl font-semibold">{totalFilteredCount}</div>
         </Card>
 
         <Card>
           <div className="mb-1 flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-destructive" />
-
-            <div className="text-xs uppercase text-muted-foreground">
-              Còn công nợ
-            </div>
+            <div className="text-xs uppercase text-muted-foreground">Còn công nợ</div>
           </div>
-
-          <div className="text-2xl font-semibold text-destructive">
-            {totalDebtorCount}
-          </div>
+          <div className="text-2xl font-semibold text-destructive">{totalDebtorCount}</div>
         </Card>
 
         <Card>
           <div className="mb-1 flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-green-600" />
-
-            <div className="text-xs uppercase text-muted-foreground">
-              Tổng bán
-            </div>
+            <div className="text-xs uppercase text-muted-foreground">Tổng bán</div>
           </div>
-
-          <div className="text-2xl font-semibold text-green-600">
-            {fmt(totalSales)}
-          </div>
+          <div className="text-2xl font-semibold text-green-600">{fmt(totalSales)}</div>
         </Card>
 
         <Card>
           <div className="mb-1 flex items-center gap-2">
             <TrendingDown className="h-4 w-4 text-destructive" />
-
-            <div className="text-xs uppercase text-muted-foreground">
-              Tổng công nợ
-            </div>
+            <div className="text-xs uppercase text-muted-foreground">Tổng công nợ</div>
           </div>
-
-          <div className="text-2xl font-semibold text-destructive">
-            {fmt(totalAllDebt)}
-          </div>
+          <div className="text-2xl font-semibold text-destructive">{fmt(totalAllDebt)}</div>
         </Card>
       </div>
 
       {/* TABLE */}
       <Card>
         <div className="mb-4 flex items-center justify-between">
-          <div className="font-medium">
-            Danh sách khách hàng
-          </div>
-
+          <div className="font-medium">Danh sách khách hàng</div>
           <Button
             size="sm"
             onClick={() => {
@@ -419,83 +326,43 @@ function CustomersPage() {
               setOpen(true);
             }}
           >
-            <Plus className="mr-1 h-4 w-4" />
-            Thêm khách
+            <Plus className="mr-1 h-4 w-4" /> Thêm khách
           </Button>
         </div>
 
         <SearchFilter
           search={search}
-          onSearch={(v) => {
-            setSearch(v);
-            setPage(1);
-          }}
+          onSearch={(v) => { setSearch(v); setPage(1); }}
           placeholder="Tìm tên, số điện thoại..."
           sortOptions={[
-            {
-              value: "name",
-              label: "Tên A→Z",
-            },
-            {
-              value: "debt_desc",
-              label: "Nợ nhiều nhất",
-            },
-            {
-              value: "debt_asc",
-              label: "Nợ ít nhất",
-            },
-            {
-              value: "date",
-              label: "Mới nhất",
-            },
+            { value: "name", label: "Tên A→Z" },
+            { value: "debt_desc", label: "Nợ nhiều nhất" },
+            { value: "debt_asc", label: "Nợ ít nhất" },
+            { value: "date", label: "Mới nhất" },
           ]}
           sortValue={sortBy}
-          onSort={(v) => {
-            setSortBy(v);
-            setPage(1);
-          }}
+          onSort={(v) => { setSortBy(v); setPage(1); }}
           filterSlot={
             <div className="flex gap-2">
               <select
                 className="h-9 rounded-md border bg-background px-2 text-sm"
                 value={filterGroup}
-                onChange={(e) => {
-                  setFilterGroup(e.target.value);
-                  setPage(1);
-                }}
+                onChange={(e) => { setFilterGroup(e.target.value); setPage(1); }}
               >
-                <option value="">
-                  Tất cả nhóm
-                </option>
-
-                {Object.entries(groupLabel).map(
-                  ([v, l]) => (
-                    <option key={v} value={v}>
-                      {l}
-                    </option>
-                  )
-                )}
+                <option value="">Tất cả nhóm</option>
+                {Object.entries(groupLabel).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
               </select>
 
               <select
                 className="h-9 rounded-md border bg-background px-2 text-sm"
                 value={filterDebt}
-                onChange={(e) => {
-                  setFilterDebt(e.target.value);
-                  setPage(1);
-                }}
+                onChange={(e) => { setFilterDebt(e.target.value); setPage(1); }}
               >
-                <option value="all">
-                  Tất cả
-                </option>
-
-                <option value="debt">
-                  Có công nợ
-                </option>
-
-                <option value="no_debt">
-                  Không nợ
-                </option>
+                <option value="all">Tất cả</option>
+                <option value="debt">Có công nợ</option>
+                <option value="no_debt">Không nợ</option>
               </select>
             </div>
           }
@@ -507,29 +374,12 @@ function CustomersPage() {
           <table className="w-full text-sm">
             <thead className="border-b text-left text-muted-foreground">
               <tr>
-                <th className="py-2 pr-3">
-                  Tên khách hàng
-                </th>
-
-                <th className="pr-3">
-                  SĐT
-                </th>
-
-                <th className="pr-3">
-                  Địa chỉ
-                </th>
-
-                <th className="pr-3 text-right">
-                  Tổng bán
-                </th>
-
-                <th className="pr-3 text-right">
-                  Công nợ
-                </th>
-
-                <th className="text-right">
-                  Thao tác
-                </th>
+                <th className="py-2 pr-3">Tên khách hàng</th>
+                <th className="pr-3">SĐT</th>
+                <th className="pr-3">Địa chỉ</th>
+                <th className="pr-3 text-right">Tổng bán</th>
+                <th className="pr-3 text-right">Công nợ</th>
+                <th className="text-right">Thao tác</th>
               </tr>
             </thead>
 
@@ -545,48 +395,20 @@ function CustomersPage() {
                       to="/customers/$id"
                       params={{ id: c.id }}
                       className="hover:text-primary hover:underline"
-                      onClick={(e) =>
-                        e.stopPropagation()
-                      }
+                      onClick={(e) => e.stopPropagation()}
                     >
                       {c.name}
                     </Link>
                   </td>
-
-                  <td className="pr-3 text-muted-foreground">
-                    {c.phone ?? "—"}
+                  <td className="pr-3 text-muted-foreground">{c.phone ?? "—"}</td>
+                  <td className="max-w-[200px] truncate pr-3 text-xs text-muted-foreground">
+                    {[c.address, c.ward, c.province].filter(Boolean).join(", ") || "—"}
                   </td>
-
-                  <td className="max-w-[150px] truncate pr-3 text-xs text-muted-foreground">
-                    {[c.district, c.province]
-                      .filter(Boolean)
-                      .join(", ") ||
-                      c.address ||
-                      "—"}
+                  <td className="pr-3 text-right font-medium text-green-600">{fmt(c.total_buy || 0)}</td>
+                  <td className={`pr-3 text-right font-medium ${c.debt > 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                    {c.debt > 0 ? fmt(c.debt) : "—"}
                   </td>
-
-                  <td className="pr-3 text-right font-medium text-green-600">
-                    {fmt(c.total_buy || 0)}
-                  </td>
-
-                  <td
-                    className={`pr-3 text-right font-medium ${
-                      c.debt > 0
-                        ? "text-destructive"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {c.debt > 0
-                      ? fmt(c.debt)
-                      : "—"}
-                  </td>
-
-                  <td
-                    className="text-right"
-                    onClick={(e) =>
-                      e.stopPropagation()
-                    }
-                  >
+                  <td className="text-right" onClick={(e) => e.stopPropagation()}>
                     <Link
                       to="/customers/$id"
                       params={{ id: c.id }}
@@ -594,25 +416,10 @@ function CustomersPage() {
                     >
                       <Eye className="h-4 w-4" />
                     </Link>
-
-                    <button
-                      className="p-1 hover:text-primary"
-                      onClick={() =>
-                        startEdit(c.id)
-                      }
-                    >
+                    <button className="p-1 hover:text-primary" onClick={() => startEdit(c.id)}>
                       <Pencil className="h-4 w-4" />
                     </button>
-
-                    <button
-                      className="p-1 hover:text-destructive"
-                      onClick={() =>
-                        handleDelete(
-                          c.id,
-                          c.name
-                        )
-                      }
-                    >
+                    <button className="p-1 hover:text-destructive" onClick={() => handleDelete(c.id, c.name)}>
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
@@ -621,10 +428,7 @@ function CustomersPage() {
 
               {customers.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={6}
-                    className="py-6 text-center text-muted-foreground"
-                  >
+                  <td colSpan={6} className="py-6 text-center text-muted-foreground">
                     Không có kết quả
                   </td>
                 </tr>
@@ -642,49 +446,160 @@ function CustomersPage() {
         label="khách hàng"
       />
 
-      {/* ADD / EDIT DIALOG */}
+      {/* DIALOG ĐƯỢC MỞ RỘNG RỘNG VÀ DÀI HƠN RA 2 BÊN (max-w-2xl) */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {form.id
-                ? "Sửa khách hàng"
-                : "Thêm khách hàng"}
+        <DialogContent style={{padding :0 }} className="max-h-[92vh] max-w-2xl overflow-y-auto p-0 rounded-2xl border-none shadow-2xl">
+          <DialogHeader className="px-6 pt-6 pb-4 bg-muted/40 border-b">
+            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
+              <div className="p-1.5 bg-primary/10 text-primary rounded-lg">
+                <Users className="h-5 w-5" />
+              </div>
+              {form.id ? "Cập nhật thông tin đối tác" : "Thêm khách hàng mới"}
             </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-1">
+              Điền các thông tin liên hệ và phân nhóm khách hàng để đồng bộ vào hệ thống POS.
+            </DialogDescription>
           </DialogHeader>
 
-          <form
-            onSubmit={handleSave}
-            className="space-y-3"
-          >
-            <div>
-              <Label>Tên *</Label>
+          <form onSubmit={handleSave} className="p-4 space-y-5">
+            {/* PHẦN 1: THÔNG TIN CƠ BẢN */}
+            <div className="space-y-4 p-5 bg-muted/30 rounded-xl border border-border/70">
+              <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider mb-0.5">
+                <User className="h-4 w-4" /> Thông tin cơ bản
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1 md:col-span-2">
+                  <Label className="text-xs font-medium">Họ và tên khách hàng <span className="text-destructive">*</span></Label>
+                  <Input
+                    className="bg-background focus-visible:ring-primary/40 mt-1"
+                    placeholder="Nhập tên đầy đủ (Ví dụ: Nguyễn Văn A)"
+                    value={form.name}
+                    required
+                    autoFocus
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                </div>
 
-              <Input
-                className="mt-1"
-                value={form.name}
-                required
-                autoFocus
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    name: e.target.value,
-                  })
-                }
-              />
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Số điện thoại</Label>
+                  <Input
+                    className="bg-background mt-1"
+                    placeholder="0912xxxxxx"
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1 md:col-span-1">
+                  <Label className="text-xs font-medium">Nhóm đối tác</Label>
+                  <select
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    value={form.group_name}
+                    onChange={(e) => setForm({ ...form, group_name: e.target.value })}
+                  >
+                    {Object.entries(groupLabel).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                {/* Tận dụng khoảng trống hàng ngang khi form rộng */}
+                <div className="hidden md:flex md:col-span-2 items-center text-xs text-muted-foreground pt-5 italic">
+                  * Vui lòng chọn đúng phân nhóm để áp dụng chính sách giá đại lý/bán lẻ chuẩn xác.
+                </div>
+              </div>
             </div>
 
-            <DialogFooter>
+            {/* PHẦN 2: ĐỊA CHỈ LIÊN HỆ */}
+            <div className="space-y-4 p-5 bg-muted/30 rounded-xl border border-border/70">
+              <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider mb-0.5">
+                <MapPin className="h-4 w-4" /> Địa chỉ liên hệ
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Tỉnh / Thành phố</Label>
+                  <select
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    value={form.province}
+                    onChange={(e) => setForm({ ...form, province: e.target.value })}
+                  >
+                    <option value="">-- Chọn tỉnh thành --</option>
+                    {PROVINCES.map((province) => (
+                      <option key={province} value={province}>
+                        {province}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Phường / Xã</Label>
+                  <Input
+                    className="bg-background mt-1"
+                    placeholder="Nhập Phường, Xã, Thị trấn"
+                    value={form.ward}
+                    onChange={(e) => setForm({ ...form, ward: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Tên đường, Số nhà, Số ngõ hẻm</Label>
+                <Input
+                  className="bg-background mt-1"
+                  placeholder="Ví dụ: Số 123, đường Trần Hưng Đạo"
+                  value={form.address}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                />
+              </div>
+            </div>
+
+            {/* PHẦN 3: TÀI CHÍNH CÔNG NỢ */}
+            <div className="space-y-4 p-5 bg-muted/30 rounded-xl border border-border/70">
+              <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider mb-0.5">
+                <Wallet className="h-4 w-4" /> Thiết lập tài chính
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Dư nợ công nợ đầu kỳ (nếu có)</Label>
+                  <div className="relative mt-1">
+                    <Input
+                      className="pl-8 bg-background font-medium text-destructive"
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={form.debt}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          debt: e.target.value.replace(/[^\d.]/g, ""),
+                        })
+                      }
+                    />
+                    <div className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">đ</div>
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground pt-4 md:pt-5">
+                  Khoản tiền khách hàng đang nợ cửa hàng tính tới thời điểm tạo tài khoản này.
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="pt-3 border-t gap-2 sm:gap-0">
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 onClick={() => setOpen(false)}
               >
-                Hủy
+                Hủy bỏ
               </Button>
-
-              <Button type="submit">
-                Lưu
+              <Button type="submit" className="px-6">
+                Lưu thông tin
               </Button>
             </DialogFooter>
           </form>
@@ -701,11 +616,9 @@ function CustomersPage() {
             transform: translateX(-100%);
             width: 40%;
           }
-
           50% {
             width: 60%;
           }
-
           100% {
             transform: translateX(250%);
             width: 40%;
