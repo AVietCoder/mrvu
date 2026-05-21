@@ -1,18 +1,18 @@
 // @ts-nocheck
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { loginFn } from "@/lib/auth.functions";
-import { getSettings } from "@/lib/settings.functions";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { Fan, Eye, EyeOff, ArrowLeft, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/login")({
+  head: () => ({ meta: [{ title: "Đăng nhập — Mr.Vũ" }] }),
   component: LoginPage,
 });
 
@@ -20,80 +20,88 @@ function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const doLogin = useServerFn(loginFn);
-  const getSettingsFn = useServerFn(getSettings);
 
-  const [settings, setSettings] = useState<any>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Quên mật khẩu
   const [forgotMode, setForgotMode] = useState(false);
   const [forgotUsername, setForgotUsername] = useState("");
 
-  useEffect(() => {
-    getSettingsFn().then(setSettings);
-  }, []);
-
-  const brandName = settings?.site_name?.trim() || "Mr.Vũ";
-  const logoUrl = settings?.logo_url || "";
-  const primaryColor = settings?.primary_color || "#3b82f6";
-
-  useEffect(() => {
-    document.title = forgotMode 
-      ? `Quên mật khẩu — ${brandName}` 
-      : `Đăng nhập — ${brandName}`;
-  }, [brandName, forgotMode]);
-
-  const handleLogin = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!username || !password) {
-      return toast.error("Vui lòng nhập tên đăng nhập và mật khẩu");
-    }
-
+    if (!username || !password) return toast.error("Vui lòng nhập đủ thông tin");
     setLoading(true);
     try {
       const session = await doLogin({ data: { username, password } });
       login(session);
       toast.success("Đăng nhập thành công!");
-      if (session.user.is_admin) {
-        navigate({ to: "/admin" });
-      } else {
-        navigate({ to: "/" });
-      }
+      navigate({ to: session.user.is_admin ? "/admin" : "/" });
     } catch (err: any) {
       toast.error(err?.message ?? "Đăng nhập thất bại");
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  function handleForgot(e: React.FormEvent) {
+    e.preventDefault();
+    if (!forgotUsername.trim()) return toast.error("Vui lòng nhập tên đăng nhập");
+    // Hướng dẫn người dùng liên hệ admin
+    toast.info(
+      `Vui lòng liên hệ quản trị viên để đặt lại mật khẩu cho tài khoản "${forgotUsername}".`,
+      { duration: 6000 }
+    );
+    setForgotMode(false);
+    setForgotUsername("");
+  }
 
   if (forgotMode) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-4" style={{ '--primary': primaryColor } as any}>
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <div className="w-full max-w-md">
           <div className="flex flex-col items-center mb-8">
-            {logoUrl ? (
-              <img src={logoUrl} alt={brandName} className="h-16 w-auto mb-4" />
-            ) : (
-              <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-                <span className="text-3xl">🔑</span>
-              </div>
-            )}
-            <h1 className="text-2xl font-bold">{brandName}</h1>
-            <p className="text-muted-foreground mt-1">Quên mật khẩu</p>
+            <div className="h-14 w-14 rounded-2xl bg-primary/10 grid place-items-center mb-3">
+              <KeyRound className="h-7 w-7 text-primary" />
+            </div>
+            <h1 className="text-2xl font-bold">Quên mật khẩu</h1>
+            <p className="text-sm text-muted-foreground mt-1 text-center">
+              Nhập username để yêu cầu đặt lại mật khẩu
+            </p>
           </div>
 
-          <div className="rounded-2xl border bg-card p-8 shadow">
-            <form onSubmit={(e) => { e.preventDefault(); toast.info("Chức năng đang phát triển"); }} className="space-y-5">
+          <div className="rounded-2xl border bg-card p-8 shadow-sm">
+            <form onSubmit={handleForgot} className="space-y-4">
               <div>
-                <Label>Tên đăng nhập</Label>
-                <Input value={forgotUsername} onChange={(e) => setForgotUsername(e.target.value)} placeholder="Nhập tên đăng nhập" />
+                <Label htmlFor="forgot-username">Tên đăng nhập</Label>
+                <Input
+                  id="forgot-username"
+                  placeholder="Nhập username của bạn..."
+                  value={forgotUsername}
+                  onChange={(e) => setForgotUsername(e.target.value)}
+                  className="mt-1"
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === "Enter") handleForgot(e as any); }}
+                />
               </div>
-              <Button type="submit" className="w-full">Gửi yêu cầu khôi phục</Button>
+
+              <div className="rounded-lg bg-muted/50 border p-3 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground mb-1">Hướng dẫn</p>
+                <p>Vì lý do bảo mật, mật khẩu cần được đặt lại bởi quản trị viên hệ thống. Sau khi gửi yêu cầu, hãy liên hệ admin để được cấp mật khẩu mới.</p>
+              </div>
+
+              <Button type="submit" className="w-full">
+                Gửi yêu cầu đặt lại mật khẩu
+              </Button>
             </form>
 
-            <button onClick={() => setForgotMode(false)} className="mt-6 text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mx-auto">
-              <ArrowLeft size={16} /> Quay lại đăng nhập
+            <button
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mt-4 mx-auto"
+              onClick={() => setForgotMode(false)}
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Quay lại đăng nhập
             </button>
           </div>
         </div>
@@ -102,59 +110,73 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12" style={{ '--primary': primaryColor } as any}>
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
+        {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          {logoUrl ? (
-            <img src={logoUrl} alt={brandName} className="h-16 w-auto mb-4 object-contain rounded-lg" />
-          ) : (
-            <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-fan h-7 w-7 text-primary" aria-hidden="true"><path d="M10.827 16.379a6.082 6.082 0 0 1-8.618-7.002l5.412 1.45a6.082 6.082 0 0 1 7.002-8.618l-1.45 5.412a6.082 6.082 0 0 1 8.618 7.002l-5.412-1.45a6.082 6.082 0 0 1-7.002 8.618l1.45-5.412Z"></path><path d="M12 12v.01"></path></svg>
-            </div>
-          )}
-          <h1 className="text-3xl font-bold tracking-tight">{brandName}</h1>
-          <p className="text-muted-foreground mt-1">Đăng nhập để tiếp tục</p>
+          <div className="h-14 w-14 rounded-2xl bg-primary/10 grid place-items-center mb-3">
+            <Fan className="h-7 w-7 text-primary" />
+          </div>
+          <h1 className="text-2xl font-bold">QuatTran POS</h1>
+          <p className="text-sm text-muted-foreground mt-1">Đăng nhập để tiếp tục</p>
         </div>
 
-        <div className="rounded-2xl border bg-card p-8 shadow">
-          <form onSubmit={handleLogin} className="space-y-5">
+        {/* Form */}
+        <div className="rounded-2xl border bg-card p-8 shadow-sm">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <Label htmlFor="username">Tên đăng nhập</Label>
-              <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username" required autoFocus />
+              <Input
+                id="username"
+                placeholder="Nhập username..."
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="mt-1"
+                autoFocus
+              />
             </div>
 
             <div>
-              <Label htmlFor="password">Mật khẩu</Label>
-              <div className="relative">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Mật khẩu</Label>
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  onClick={() => setForgotMode(true)}
+                >
+                  Quên mật khẩu?
+                </button>
+              </div>
+              <div className="relative mt-1">
                 <Input
                   id="password"
                   type={showPw ? "text" : "password"}
+                  placeholder="Nhập mật khẩu..."
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
+                  className="pr-10"
                 />
-                <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowPw(!showPw)}>
-                  {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowPw(!showPw)}
+                >
+                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
 
-            <div className="flex justify-end">
-              <button type="button" onClick={() => setForgotMode(true)} className="text-sm text-primary hover:underline">
-                Quên mật khẩu?
-              </button>
-            </div>
-
-            <Button type="submit" className="w-full" size="lg" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Đang đăng nhập..." : "Đăng nhập"}
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-sm">
+          <p className="text-center text-sm text-muted-foreground mt-4">
             Chưa có tài khoản?{" "}
-            <Link to="/register" className="text-primary hover:underline font-medium">Đăng ký ngay</Link>
-          </div>
+            <Link to="/register" className="text-primary hover:underline font-medium">
+              Đăng ký
+            </Link>
+          </p>
         </div>
       </div>
     </div>
