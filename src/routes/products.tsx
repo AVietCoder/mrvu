@@ -20,7 +20,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute("/products")({
-  head: () => ({ meta: [{ title: "Hàng hóa — QuatTran POS" }] }),
+  head: () => ({ meta: [{ title: "Hàng hóa — Mr.Vũ" }] }),
   component: ProductsPage,
 });
 

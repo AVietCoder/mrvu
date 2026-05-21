@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/change-password")({
-  head: () => ({ meta: [{ title: "Đổi mật khẩu — QuatTran POS" }] }),
+  head: () => ({ meta: [{ title: "Đổi mật khẩu — Mr.Vũ" }] }),
   component: ChangePasswordPage,
 });
 

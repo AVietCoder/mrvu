@@ -53,7 +53,7 @@ import { getSettings } from "@/lib/settings.functions";
 
 export const Route = createFileRoute("/inventory")({
   head: () => ({
-    meta: [{ title: "Tồn kho — QuatTran POS" }],
+    meta: [{ title: "Tồn kho — Mr.Vũ" }],
   }),
   component: Page,
 });

@@ -14,7 +14,7 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/branches")({
-  head: () => ({ meta: [{ title: "Chi nhánh — QuatTran POS" }] }),
+  head: () => ({ meta: [{ title: "Chi nhánh — Mr.Vũ" }] }),
   component: Page,
 });
 

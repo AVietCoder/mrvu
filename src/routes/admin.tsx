@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
-  head: () => ({ meta: [{ title: "Cài đặt — QuatTran POS" }] }),
+  head: () => ({ meta: [{ title: "Cài đặt — Mr.Vũ" }] }),
   component: AdminPage,
 });
 
@@ -173,7 +173,7 @@ function AdminPage() {
                   className="mt-1.5"
                   value={siteName}
                   onChange={(e) => setSiteName(e.target.value)}
-                  placeholder="QuatTran POS"
+                  placeholder="Mr.Vũ"
                 />
               </div>
 

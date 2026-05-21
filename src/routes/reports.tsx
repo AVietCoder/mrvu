@@ -13,7 +13,7 @@ import {
 } from "recharts";
 
 export const Route = createFileRoute("/reports")({
-  head: () => ({ meta: [{ title: "Báo cáo — QuatTran POS" }] }),
+  head: () => ({ meta: [{ title: "Báo cáo — Mr.Vũ" }] }),
   component: Page,
 });
 

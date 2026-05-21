@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute("/cash")({
-  head: () => ({ meta: [{ title: "Sổ quỹ — QuatTran POS" }] }),
+  head: () => ({ meta: [{ title: "Sổ quỹ — Mr.Vũ" }] }),
   component: Page,
 });
 

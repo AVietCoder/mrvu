@@ -41,7 +41,7 @@ import { toast } from "sonner";
 import { ALL_PERMISSIONS, type Permission } from "@/lib/types";
 
 export const Route = createFileRoute("/employees")({
-  head: () => ({ meta: [{ title: "Nhân viên — QuatTran POS" }] }),
+  head: () => ({ meta: [{ title: "Nhân viên — Mr.Vũ" }] }),
   component: Page,
 });
 
