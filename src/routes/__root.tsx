@@ -7,10 +7,8 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { RouterProgressBar } from "@/components/Spinner";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import appCss from "../styles.css?url";
-import { getSettings } from "@/lib/settings.functions";
-import { useServerFn } from "@tanstack/react-start";
 
 function NotFoundComponent() {
   return (
@@ -33,10 +31,8 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold">Trang không tải được</h1>
         <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
-        <button 
-          onClick={() => { router.invalidate(); reset(); }}
-          className="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
-        >
+        <button onClick={() => { router.invalidate(); reset(); }}
+          className="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground">
           Thử lại
         </button>
       </div>
@@ -44,6 +40,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
+// Guard: redirect to login if not authenticated
 function AuthGuard() {
   const { session } = useAuth();
   const navigate = useNavigate();
@@ -66,10 +63,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { title: "Mr.Vũ" },
     ],
-    links: [
-      { rel: "stylesheet", href: appCss },
-    ],
+    links: [{ rel: "stylesheet", href: appCss }],
   }),
   shellComponent: RootShell,
   component: RootComponent,
@@ -88,27 +84,6 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  const getSettingsFn = useServerFn(getSettings);
-  const [settings, setSettings] = useState<any>(null);
-
-  useEffect(() => {
-    getSettingsFn().then(setSettings);
-  }, []);
-
-  // Dynamic Favicon
-  useEffect(() => {
-    if (settings?.logo_url) {
-      let link = document.querySelector("link[rel='icon']") as HTMLLinkElement | null;
-      if (!link) {
-        link = document.createElement("link");
-        link.rel = "icon";
-        link.type = "image/x-icon";
-        document.head.appendChild(link);
-      }
-      link.href = settings.logo_url;
-    }
-  }, [settings?.logo_url]);
-
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
