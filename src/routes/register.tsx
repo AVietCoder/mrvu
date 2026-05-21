@@ -1,124 +1,134 @@
 // @ts-nocheck
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { registerFn, getFormOptionsFn } from "@/lib/auth.functions";
+import { registerFn } from "@/lib/auth.functions";
+import { getSettings } from "@/lib/settings.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Fan } from "lucide-react";
+import { Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/register")({
-  head: () => ({ meta: [{ title: "Đăng ký — QuatTran POS" }] }),
   component: RegisterPage,
 });
 
 function RegisterPage() {
   const navigate = useNavigate();
   const doRegister = useServerFn(registerFn);
-  const getOptions = useServerFn(getFormOptionsFn);
+  const getSettingsFn = useServerFn(getSettings);
 
-  const [opts, setOpts] = useState<{ branches: any[] } | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [settings, setSettings] = useState<any>(null);
   const [form, setForm] = useState({
-    full_name: "", phone: "", username: "", password: "",
-    branch_ids: [] as string[],
+    full_name: "",
+    username: "",
+    password: "",
+    confirmPassword: "",
+    phone: "",
   });
+  const [showPw, setShowPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => { getOptions().then(setOpts); }, []);
+  useEffect(() => {
+    getSettingsFn().then(setSettings);
+  }, []);
 
-  function toggleBranch(bid: string) {
-    setForm((f) => ({
-      ...f,
-      branch_ids: f.branch_ids.includes(bid)
-        ? f.branch_ids.filter((x) => x !== bid)
-        : [...f.branch_ids, bid],
-    }));
-  }
+  const brandName = settings?.site_name?.trim() || "Mr.Vũ";
+  const logoUrl = settings?.logo_url || "";
+  const primaryColor = settings?.primary_color || "#3b82f6";
 
-  async function handleSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    document.title = `Đăng ký — ${brandName}`;
+  }, [brandName]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.full_name || !form.username || !form.password)
-      return toast.error("Vui lòng điền đủ thông tin bắt buộc");
+    if (form.password !== form.confirmPassword) return toast.error("Mật khẩu xác nhận không khớp");
+    if (!form.full_name || !form.username || !form.password || !form.phone) {
+      return toast.error("Vui lòng điền đầy đủ thông tin");
+    }
+
     setLoading(true);
     try {
-      await doRegister({ data: form });
-      toast.success("Đăng ký thành công! Hãy đăng nhập.");
+      await doRegister({ data: {
+        full_name: form.full_name,
+        username: form.username,
+        password: form.password,
+        phone: form.phone,
+      }});
+      toast.success("Đăng ký thành công! Vui lòng đăng nhập.");
       navigate({ to: "/login" });
     } catch (err: any) {
       toast.error(err?.message ?? "Đăng ký thất bại");
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-10">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12" style={{ '--primary': primaryColor } as any}>
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
-          <div className="h-14 w-14 rounded-2xl bg-primary/10 grid place-items-center mb-3">
-            <Fan className="h-7 w-7 text-primary" />
-          </div>
-          <h1 className="text-2xl font-bold">Tạo tài khoản</h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            Sau khi đăng ký, admin sẽ cấp quyền cho bạn
-          </p>
+          {logoUrl ? (
+            <img src={logoUrl} alt={brandName} className="h-16 w-auto mb-4 object-contain" />
+          ) : (
+            <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+              <span className="text-3xl">🌀</span>
+            </div>
+          )}
+          <h1 className="text-3xl font-bold tracking-tight">{brandName}</h1>
+          <p className="text-muted-foreground mt-1">Tạo tài khoản mới</p>
         </div>
 
-        <div className="rounded-2xl border bg-card p-8 shadow-sm">
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="rounded-2xl border bg-card p-8 shadow">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <Label>Họ và tên <span className="text-destructive">*</span></Label>
-              <Input className="mt-1" placeholder="Nguyễn Văn A"
-                value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
+              <Label htmlFor="full_name">Họ và tên *</Label>
+              <Input id="full_name" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Nguyễn Văn A" required />
             </div>
+
             <div>
-              <Label>Số điện thoại</Label>
-              <Input className="mt-1" placeholder="0901234567" type="tel"
-                value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <Label htmlFor="username">Tên đăng nhập *</Label>
+              <Input id="username" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="username" required />
             </div>
+
             <div>
-              <Label>Chi nhánh hoạt động</Label>
-              <div className="mt-1 space-y-1 border rounded-md p-2 text-sm">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox"
-                    checked={form.branch_ids.length === 0}
-                    onChange={() => setForm({ ...form, branch_ids: [] })}
-                  />
-                  <span className="font-medium">Tất cả chi nhánh</span>
-                </label>
-                <hr />
-                {opts?.branches.map((b) => (
-                  <label key={b.id} className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox"
-                      checked={form.branch_ids.includes(b.id)}
-                      onChange={() => toggleBranch(b.id)}
-                    />
-                    {b.name}
-                  </label>
-                ))}
+              <Label htmlFor="phone">Số điện thoại *</Label>
+              <Input id="phone" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="0901234567" required />
+            </div>
+
+            <div>
+              <Label htmlFor="password">Mật khẩu *</Label>
+              <div className="relative">
+                <Input id="password" type={showPw ? "text" : "password"} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+                <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowPw(!showPw)}>
+                  {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
-            <hr />
+
             <div>
-              <Label>Tên đăng nhập <span className="text-destructive">*</span></Label>
-              <Input className="mt-1" placeholder="username"
-                value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
+              <Label htmlFor="confirmPassword">Xác nhận mật khẩu *</Label>
+              <div className="relative">
+                <Input id="confirmPassword" type={showConfirmPw ? "text" : "password"} value={form.confirmPassword} onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} required />
+                <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowConfirmPw(!showConfirmPw)}>
+                  {showConfirmPw ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
-            <div>
-              <Label>Mật khẩu <span className="text-destructive">*</span></Label>
-              <Input className="mt-1" type="password" placeholder="Tối thiểu 6 ký tự"
-                value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-            </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Đang tạo..." : "Đăng ký"}
+
+            <Button type="submit" className="w-full" size="lg" disabled={loading}>
+              {loading ? "Đang xử lý..." : "Đăng ký"}
             </Button>
           </form>
-          <p className="text-center text-sm text-muted-foreground mt-4">
+
+          <div className="mt-6 text-center text-sm">
             Đã có tài khoản?{" "}
             <Link to="/login" className="text-primary hover:underline font-medium">Đăng nhập</Link>
-          </p>
+          </div>
         </div>
       </div>
     </div>
