@@ -50,7 +50,7 @@ const groupColor: Record<string, string> = {
 
 const STATUS_LABEL: Record<string, string> = {
   completed: "Hoàn tất",
-  reserved: "Đặt trước",
+  reserved: "Đặt hàng",
   draft: "Nháp",
   cancelled: "Hủy",
 };
@@ -321,7 +321,7 @@ function CustomerDetailPage() {
               <div className="flex items-center gap-2 mb-3">
                 <Clock className="h-4 w-4 text-yellow-600" />
                 <h3 className="font-semibold">
-                  Đơn đang chờ / đặt trước ({pendingOrders.length})
+                  Đơn đang chờ / đặt hàng ({pendingOrders.length})
                 </h3>
               </div>
               <OrderTable orders={pendingOrders} />

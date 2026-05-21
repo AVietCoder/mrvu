@@ -360,7 +360,7 @@ function Page() {
                             <Receipt className="h-3.5 w-3.5 shrink-0" />
                             <div className="min-w-0 flex-1">
                               <div className="text-xs font-mono font-semibold">{linkedOrder.code}</div>
-                              <div className="text-xs opacity-80">{fmtMoney(linkedOrder.total)} · {linkedOrder.status === "completed" ? "Hoàn tất" : linkedOrder.status === "reserved" ? "Đặt trước" : linkedOrder.status}</div>
+                              <div className="text-xs opacity-80">{fmtMoney(linkedOrder.total)} · {linkedOrder.status === "completed" ? "Hoàn tất" : linkedOrder.status === "reserved" ? "Đặt hàng" : linkedOrder.status}</div>
                             </div>
                             <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
                           </Link>

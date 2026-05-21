@@ -24,7 +24,7 @@ export const Route = createFileRoute("/orders/$id")({
 });
 
 const STATUS_LABEL: Record<string, string> = {
-  completed: "Hoàn tất", reserved: "Đặt trước",
+  completed: "Hoàn tất", reserved: "Đặt hàng",
   draft: "Nháp", cancelled: "Hủy",
 };
 const STATUS_COLOR: Record<string, string> = {
@@ -76,6 +76,7 @@ function OrderDetailPage() {
   const [editBranch, setEditBranch] = useState("");
   const [editEmployee, setEditEmployee] = useState("");
   const [editStatus, setEditStatus] = useState("");
+  const [editPaymentMethod, setEditPaymentMethod] = useState<"tien_mat" | "ngan_hang">("tien_mat");
   const [editDiscount, setEditDiscount] = useState("0");
   const [editDeposit, setEditDeposit] = useState("0");
   const [editPaid, setEditPaid] = useState("0");
@@ -94,6 +95,7 @@ function OrderDetailPage() {
     setEditBranch(order.branch_id ?? "");
     setEditEmployee(order.employee_id ?? "");
     setEditStatus(order.status);
+    setEditPaymentMethod(order.payment_method ?? "tien_mat");
     setEditDiscount(String(order.discount ?? 0));
     setEditDeposit(String(order.deposit ?? 0));
     setEditPaid(String(order.paid ?? 0));
@@ -112,6 +114,7 @@ function OrderDetailPage() {
           branch_id: editBranch,
           employee_id: editEmployee || undefined,
           status: editStatus,
+          payment_method: editPaymentMethod,
           discount: parseInput(editDiscount),
           deposit: parseInput(editDeposit),
           paid: parseInput(editPaid),
@@ -225,16 +228,26 @@ function OrderDetailPage() {
                       {STATUS_LABEL[order.status]}
                     </span>
                   ) : (
-                    <select
-                      className="h-7 rounded-full border bg-background px-3 text-xs"
-                      value={editStatus}
-                      onChange={(e) => setEditStatus(e.target.value)}
-                    >
-                      <option value="completed">Hoàn tất</option>
-                      <option value="reserved">Đặt trước</option>
-                      <option value="draft">Nháp</option>
-                      <option value="cancelled">Hủy</option>
-                    </select>
+                    <div className="flex flex-wrap gap-2">
+                      <select
+                        className="h-7 rounded-full border bg-background px-3 text-xs"
+                        value={editStatus}
+                        onChange={(e) => setEditStatus(e.target.value)}
+                      >
+                        <option value="completed">Hoàn tất</option>
+                        <option value="reserved">Đặt hàng (chưa giao)</option>
+                        <option value="draft">Nháp</option>
+                        <option value="cancelled">Hủy</option>
+                      </select>
+                      <select
+                        className="h-7 rounded-full border bg-background px-3 text-xs"
+                        value={editPaymentMethod}
+                        onChange={(e) => setEditPaymentMethod(e.target.value as any)}
+                      >
+                        <option value="tien_mat">Tiền mặt</option>
+                        <option value="ngan_hang">Chuyển khoản (Ngân hàng)</option>
+                      </select>
+                    </div>
                   )}
                 </div>
                 <div className="text-xs text-muted-foreground flex items-center gap-1">
@@ -440,10 +453,14 @@ function OrderDetailPage() {
                   <span>Tổng cộng</span>
                   <span className="text-primary">{fmt(order.total)}</span>
                 </div>
+                <Row
+                  label="Hình thức thanh toán"
+                  value={order.payment_method === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt"}
+                />
                 {order.deposit > 0 && <Row label="Đặt cọc" value={fmt(order.deposit)} cls="text-yellow-700" />}
                 {order.paid > 0 && <Row label="Đã thanh toán" value={fmt(order.paid)} cls="text-green-700" />}
                 {(() => {
-                  const remaining = order.total - order.paid;
+                  const remaining = order.total - order.deposit - order.paid;
                   return remaining > 0 ? (
                     <div className="rounded-md bg-red-50 px-3 py-2 flex justify-between text-red-700 font-medium">
                       <span>Còn nợ</span><span>{fmt(remaining)}</span>

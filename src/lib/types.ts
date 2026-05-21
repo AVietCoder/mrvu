@@ -52,6 +52,7 @@ export type Order = {
   status: OrderStatus;
   subtotal: number; discount: number; total: number;
   deposit: number; paid: number;
+  payment_method?: "tien_mat" | "ngan_hang";
   note?: string; created_at: string;
 };
 

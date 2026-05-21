@@ -42,6 +42,48 @@ async function adjustStock(productId: string, branchId: string, delta: number) {
   }
 }
 
+async function applyCompletedOrderSideEffects(order: any, lineItems: any[]) {
+  if (!order) return;
+
+  for (const item of lineItems) {
+    await adjustStock(item.product_id, order.branch_id, -Number(item.qty || 0));
+  }
+
+  if (order.customer_id) {
+    const customerRows = await fetchRows<{ debt: number }>("customers", {
+      eq: { id: order.customer_id },
+      select: "debt",
+      limit: 1,
+    });
+    const currentDebt = customerRows[0]?.debt ?? 0;
+    const owed = Math.max(0, Number(order.total || 0) - Number(order.deposit || 0) - Number(order.paid || 0));
+    if (owed > 0) {
+      await updateWhere("customers", { debt: currentDebt + owed }, { id: order.customer_id });
+    }
+  }
+}
+
+async function revertCompletedOrderSideEffects(order: any, lineItems: any[]) {
+  if (!order) return;
+
+  for (const item of lineItems) {
+    await adjustStock(item.product_id, order.branch_id, Number(item.qty || 0));
+  }
+
+  if (order.customer_id) {
+    const customerRows = await fetchRows<{ debt: number }>("customers", {
+      eq: { id: order.customer_id },
+      select: "debt",
+      limit: 1,
+    });
+    const currentDebt = customerRows[0]?.debt ?? 0;
+    const owed = Math.max(0, Number(order.total || 0) - Number(order.deposit || 0) - Number(order.paid || 0));
+    if (owed > 0) {
+      await updateWhere("customers", { debt: Math.max(0, currentDebt - owed) }, { id: order.customer_id });
+    }
+  }
+}
+
 export const listOrders = createServerFn({ method: "GET" }).handler(async () => {
   // ❗ Tất cả các bảng có thể vượt 1000 dòng đều dùng fetchAllRows.
   const [orders, items, products, customers, employees, branches, schedules, schedule_assignments, users] =
@@ -134,8 +176,7 @@ export const createOrder = createServerFn({ method: "POST" })
     const code = await nextOrderCode();
     const createdAt = data.created_at || now();
 
-    // Mặc định: nếu front-end không truyền status hoặc truyền rỗng → "reserved"
-    // (đặt hàng – chưa giao). Chuyển sang "completed" qua nút Hoàn tất.
+    // Mặc định: đơn đặt hàng / chưa giao.
     const status: "reserved" | "completed" | "draft" | "cancelled" =
       data.status || "reserved";
 
@@ -175,23 +216,19 @@ export const createOrder = createServerFn({ method: "POST" })
         discount: Number(it.discount || 0),
         total: itemTotal,
       });
-
-      if (status === "completed") {
-        await adjustStock(it.product_id, data.branch_id, -Number(it.qty));
-      }
     }
 
-    if (status === "completed" && data.customer_id) {
-      const customerRows = await fetchRows<{ debt: number }>("customers", {
-        eq: { id: data.customer_id },
-        select: "debt",
-        limit: 1,
-      });
-      const currentDebt = customerRows[0]?.debt ?? 0;
-      const owed = total - paid;
-      if (owed > 0) {
-        await updateWhere("customers", { debt: currentDebt + owed }, { id: data.customer_id });
-      }
+    if (status === "completed") {
+      await applyCompletedOrderSideEffects(
+        {
+          branch_id: data.branch_id,
+          customer_id: data.customer_id || null,
+          total,
+          deposit,
+          paid,
+        },
+        data.items,
+      );
     }
 
     // ✨ Tự động tạo phiếu thu khi khách đã đưa tiền (cọc + đã thanh toán)
@@ -220,12 +257,48 @@ export const createOrder = createServerFn({ method: "POST" })
 
 export const updateOrderStatus = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string; status: string } }) => {
+    const currentRows = await fetchRows<any>("orders", {
+      eq: { id: data.id },
+      select: "id, customer_id, branch_id, total, deposit, paid, status",
+      limit: 1,
+    });
+    const currentOrder = currentRows[0];
+    if (!currentOrder) return { ok: true };
+
+    const currentItems = await fetchRows<any>("order_items", {
+      eq: { order_id: data.id },
+      select: "product_id, qty",
+    });
+
+    if (currentOrder.status === "completed" && data.status !== "completed") {
+      await revertCompletedOrderSideEffects(currentOrder, currentItems);
+    }
+
     await updateWhere("orders", { status: data.status }, { id: data.id });
+
+    if (data.status === "completed" && currentOrder.status !== "completed") {
+      await applyCompletedOrderSideEffects(currentOrder, currentItems);
+    }
+
     return { ok: true };
   });
 
 export const updateOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
+    const existingRows = await fetchRows<any>("orders", {
+      eq: { id: data.id },
+      select: "id, customer_id, branch_id, total, deposit, paid, status",
+      limit: 1,
+    });
+    const existingOrder = existingRows[0];
+    if (!existingOrder) return { ok: true };
+
+    const existingItems = await fetchRows<any>("order_items", {
+      eq: { order_id: data.id },
+      select: "product_id, qty",
+    });
+    const existingStatus = existingOrder.status;
+
     const subtotal = data.items.reduce(
       (s: number, it: any) => s + it.qty * it.unit_price - (it.discount || 0),
       0,
@@ -234,6 +307,31 @@ export const updateOrder = createServerFn({ method: "POST" })
 
     const paymentMethod: "tien_mat" | "ngan_hang" =
       data.payment_method === "ngan_hang" ? "ngan_hang" : "tien_mat";
+
+    const nextOrder = {
+      ...existingOrder,
+      customer_id: data.customer_id || null,
+      branch_id: data.branch_id,
+      employee_id: data.employee_id || null,
+      status: data.status,
+      subtotal,
+      discount: Number(data.discount || 0),
+      total,
+      deposit: Number(data.deposit || 0),
+      paid: Number(data.paid || 0),
+      payment_method: paymentMethod,
+      note: data.note || null,
+    };
+
+    if (existingStatus === "completed") {
+      await revertCompletedOrderSideEffects(
+        {
+          ...existingOrder,
+          branch_id: existingOrder.branch_id,
+        },
+        existingItems,
+      );
+    }
 
     await updateWhere(
       "orders",
@@ -265,6 +363,16 @@ export const updateOrder = createServerFn({ method: "POST" })
         discount: Number(it.discount || 0),
         total: itemTotal,
       });
+    }
+
+    if (data.status === "completed") {
+      await applyCompletedOrderSideEffects(
+        {
+          ...nextOrder,
+          branch_id: data.branch_id,
+        },
+        data.items,
+      );
     }
 
     return { ok: true };

@@ -47,8 +47,7 @@ export const createCashVoucher = createServerFn({ method: "POST" }).handler(
       payer_user_id: data.payer_user_id || null,
       receiver_customer_id: data.receiver_customer_id || null,
       note: data.note || null,
-      // Field 'accounting' vẫn lưu (giữ tương thích DB) – mặc định true,
-      // nhưng UI đã bỏ tuỳ chọn này.
+      // Field accounting vẫn giữ để tương thích DB; UI không còn cho nhập.
       accounting: data.accounting ?? true,
       status: "active",
       created_by: data.created_by || null,

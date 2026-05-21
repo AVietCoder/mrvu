@@ -41,7 +41,7 @@ function parseInput(val: string): number {
 const PAGE_SIZE = 20;
 
 const STATUS_LABEL: Record<string, string> = {
-  completed: "Hoàn tất", reserved: "Đặt trước", draft: "Nháp", cancelled: "Hủy",
+  completed: "Hoàn tất", reserved: "Đặt hàng", draft: "Nháp", cancelled: "Hủy",
 };
 const STATUS_COLOR: Record<string, string> = {
   completed: "bg-green-100 text-green-700",
@@ -50,13 +50,13 @@ const STATUS_COLOR: Record<string, string> = {
   cancelled: "bg-red-100 text-red-700",
 };
 
-function printOrderSlip({ items, customer, branch, employee, status, discount, deposit, paid, note, subtotal, total, data, siteSettings }: any) {
+function printOrderSlip({ items, customer, branch, employee, status, paymentMethod, discount, deposit, paid, note, subtotal, total, data, siteSettings }: any) {
   const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
   console.log(data);
   const custName = customer ? (data?.customers ?? []).find((c: any) => c.id === customer)?.name ?? "Khách lẻ" : "Khách lẻ";
   const branchName = branch ? (data?.branches ?? []).find((b: any) => b.id === branch)?.name ?? "—" : "—";
   const empName = employee ? (data?.employees ?? []).find((e: any) => e.id === employee)?.name ?? "—" : "—";
-  const statusLabels: Record<string,string> = { completed: "Hoàn tất", reserved: "Đặt trước", draft: "Nháp" };
+  const statusLabels: Record<string,string> = { completed: "Hoàn tất", reserved: "Đặt hàng (chưa giao)", draft: "Nháp" };
   const rows = items.map((item: any, i: number) => {
     const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
     const lineTotal = item.qty * item.unit_price - (item.discount ?? 0);
@@ -87,6 +87,7 @@ function printOrderSlip({ items, customer, branch, employee, status, discount, d
     <div><strong>Khách hàng:</strong> ${custName}</div>
     <div><strong>Chi nhánh:</strong> ${branchName}</div>
     <div><strong>Nhân viên:</strong> ${empName}</div>
+    <div><strong>Hình thức thanh toán:</strong> ${paymentMethod === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt"}</div>
     <div><strong>Mã phiếu:</strong> #${Date.now().toString().slice(-6)}</div>
   </div>
   <table><thead><tr>
@@ -101,7 +102,7 @@ function printOrderSlip({ items, customer, branch, employee, status, discount, d
     ${discount > 0 ? `<div>Giảm giá: - ${moneyFmt(discount)}</div>` : ""}
     <div class="total-main">Tổng cộng: ${moneyFmt(total)}</div>
     ${deposit > 0 ? `<div style="color:#b45309;margin-top:4px">Đặt cọc: ${moneyFmt(deposit)}</div>` : ""}
-    ${paid > 0 ? `<div style="color:#15803d;margin-top:4px">Đã thanh toán: ${moneyFmt(paid)}</div>` : ""}
+    ${paid > 0 ? `<div style="color:#15803d;margin-top:4px">Khách thanh toán: ${moneyFmt(paid)}</div>` : ""}
   </div>
   ${note ? `<div style="margin-top:20px;font-size:14px"><strong>Ghi chú:</strong> ${note}</div>` : ""}
   <div class="sign">
@@ -134,7 +135,8 @@ function Page() {
   const [customer, setCustomer] = useState("");
   const [branch, setBranch] = useState("");
   const [employee, setEmployee] = useState("");
-  const [status, setStatus] = useState<"completed" | "reserved" | "draft">("completed");
+  const [status, setStatus] = useState<"completed" | "reserved" | "draft">("reserved");
+  const [paymentMethod, setPaymentMethod] = useState<"tien_mat" | "ngan_hang">("tien_mat");
   const [discountRaw, setDiscountRaw] = useState("0");
   const [depositRaw, setDepositRaw] = useState("0");
   const [paidRaw, setPaidRaw] = useState("0");
@@ -197,7 +199,8 @@ function Page() {
     setBranch(data?.branches[0]?.id ?? "");
     // Mặc định nhân viên là người đang đăng nhập
     setEmployee(user?.id ?? "");
-    setStatus("completed");
+    setStatus("reserved");
+    setPaymentMethod("tien_mat");
     setDiscountRaw("0");
     setDepositRaw("0");
     setPaidRaw("0");
@@ -220,9 +223,10 @@ function Page() {
           branch_id: branch,
           employee_id: employee || undefined,
           status,
+          payment_method: paymentMethod,
           discount,
           deposit,
-          paid: status === "completed" ? paid : 0,
+          paid,
           note: note || undefined,
           items,
         },
@@ -367,9 +371,20 @@ function Page() {
                     onChange={(v) => setStatus(v as any)}
                     placeholder="Chọn trạng thái..."
                     options={[
-                      { value: "completed", label: "Hoàn tất" },
-                      { value: "reserved", label: "Đặt trước (chưa giao)" },
+                      { value: "reserved", label: "Đặt hàng (chưa giao)" },
                       { value: "draft", label: "Nháp" },
+                    ]}
+                  />
+                </div>
+                <div>
+                  <Label>Hình thức thanh toán</Label>
+                  <SearchableSelect
+                    value={paymentMethod}
+                    onChange={(v) => setPaymentMethod(v as any)}
+                    placeholder="Chọn hình thức..."
+                    options={[
+                      { value: "tien_mat", label: "Tiền mặt" },
+                      { value: "ngan_hang", label: "Chuyển khoản (Ngân hàng)" },
                     ]}
                   />
                 </div>
@@ -452,7 +467,7 @@ function Page() {
                   <Input className="mt-1" value={depositRaw} onChange={(e) => setDepositRaw(fmtInput(e.target.value))} onFocus={(e) => e.target.select()} />
                 </div>
                 <div>
-                  <Label>Đã thanh toán (₫)</Label>
+                  <Label>Khách thanh toán (₫)</Label>
                   <Input className="mt-1" value={paidRaw} onChange={(e) => setPaidRaw(fmtInput(e.target.value))} onFocus={(e) => e.target.select()} />
                 </div>
               </div>
@@ -470,7 +485,7 @@ function Page() {
               <DialogFooter className="flex-col sm:flex-row gap-2">
                 <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>Hủy</Button>
                 {items.length > 0 && (
-                  <Button variant="outline" className="w-full sm:w-auto" type="button" onClick={() => printOrderSlip({ items, customer, branch, employee, status, discount, deposit, paid, note, subtotal, total, data, siteSettings })}>
+                  <Button variant="outline" className="w-full sm:w-auto" type="button" onClick={() => printOrderSlip({ items, customer, branch, employee, status, paymentMethod, discount, deposit, paid, note, subtotal, total, data, siteSettings })}>
                     <Printer className="h-4 w-4 mr-1" />In phiếu đặt hàng
                   </Button>
                 )}
@@ -482,7 +497,7 @@ function Page() {
 
         {reservedOrders.length > 0 && (
           <span className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1 flex items-center gap-1">
-            <Clock className="h-3 w-3" />{reservedOrders.length} đơn đặt trước chờ giao
+            <Clock className="h-3 w-3" />{reservedOrders.length} đơn đặt hàng chờ giao
           </span>
         )}
       </div>

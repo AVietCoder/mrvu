@@ -57,7 +57,6 @@ const blankForm = () => ({
   payerUserId: "",
   receiverCustomerId: "",
   note: "",
-  accounting: true,                          // giữ mặc định true (DB vẫn lưu), UI bỏ
   fundType: "tien_mat" as "tien_mat" | "ngan_hang",
   branchId: "",
   createdAt: toLocalInput(new Date()),       // ✨ thời gian tạo phiếu (mặc định = hiện tại)
@@ -237,7 +236,6 @@ function Page() {
       payerUserId:          v.payer_user_id ?? "",
       receiverCustomerId:   v.receiver_customer_id ?? "",
       note:                 v.note ?? "",
-      accounting:           v.accounting ?? true,
       fundType:             v.fund_type,
       branchId:             v.branch_id,
     });
@@ -261,7 +259,6 @@ function Page() {
           payer_user_id:        createKind === "chi" ? (form.payerUserId || null) : null,
           receiver_customer_id: createKind === "chi" ? (form.receiverCustomerId || null) : null,
           note:                 form.note || null,
-          accounting:           form.accounting,
           created_by:           user?.id ?? null,
         },
       });
@@ -286,7 +283,6 @@ function Page() {
           payer_user_id:        selectedVoucher.type === "chi" ? (editForm.payerUserId || null) : null,
           receiver_customer_id: selectedVoucher.type === "chi" ? (editForm.receiverCustomerId || null) : null,
           note:                 editForm.note || null,
-          accounting:           editForm.accounting,
         },
       });
       toast.success("Cập nhật phiếu thành công");
@@ -434,16 +430,6 @@ function Page() {
           />
         </div>
 
-        {/* Hạch toán */}
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={f.accounting}
-            onChange={(e) => setF({ ...f, accounting: e.target.checked })}
-            className="h-4 w-4 rounded border"
-          />
-          <span className="text-sm">Hạch toán vào kết quả kinh doanh</span>
-        </label>
       </div>
     );
   }
@@ -646,11 +632,6 @@ function Page() {
                             <XCircle className="h-3.5 w-3.5 shrink-0" />Đã hủy
                           </span>
                         )}
-                        {isActive && !v.accounting && (
-                          <span className="text-xs text-amber-600 block whitespace-nowrap">
-                            Không hạch toán
-                          </span>
-                        )}
                       </td>
                       <td
                         className={`px-3 py-2.5 text-right font-semibold tabular-nums text-sm
@@ -763,10 +744,6 @@ function Page() {
               <div>
                 <span className="text-muted-foreground">Thời gian: </span>
                 {fmtDate(selectedVoucher.created_at)}
-              </div>
-              <div>
-                <span className="text-muted-foreground">Hạch toán: </span>
-                {selectedVoucher.accounting ? "Có" : "Không"}
               </div>
               {selectedVoucher.note && (
                 <div className="col-span-2 sm:col-span-3">
