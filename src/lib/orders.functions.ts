@@ -164,6 +164,7 @@ async function autoCreateReceiptForOrder({
   fundType,
   paymentMethodLabel,
   createdAt,
+  notePrefix,
 }: {
   orderCode: string;
   customerId: string | null;
@@ -173,9 +174,11 @@ async function autoCreateReceiptForOrder({
   fundType: "tien_mat" | "ngan_hang";
   paymentMethodLabel: string;
   createdAt: string;
+  notePrefix?: string;
 }) {
   if (!amount || amount <= 0) return null;
   const code = await nextCashCode("thu");
+  const label = notePrefix ?? "Thu từ đơn";
   const voucher = await insertRow("cash_vouchers", {
     id: uid(),
     code,
@@ -188,7 +191,7 @@ async function autoCreateReceiptForOrder({
     payer_customer_id: customerId || null,
     payer_user_id: null,
     receiver_customer_id: null,
-    note: `Thu từ đơn ${orderCode} — Hình thức: ${paymentMethodLabel}`,
+    note: `${label} ${orderCode} — Hình thức: ${paymentMethodLabel}`,
     accounting: true,
     status: "active",
     created_by: employeeId || null,
@@ -341,7 +344,7 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string; status: string } }) => {
     const currentRows = await fetchRows<any>("orders", {
       eq: { id: data.id },
-      select: "id, customer_id, branch_id, employee_id, subtotal, discount, total, deposit, paid, payment_method, note, status",
+      select: "id, code, customer_id, branch_id, employee_id, subtotal, discount, total, deposit, paid, payment_method, note, status",
       limit: 1,
     });
     const currentOrder = currentRows[0];
@@ -364,6 +367,31 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
 
     if (data.status === "completed" && currentOrder.status !== "completed") {
       await applyCompletedOrderSideEffects(currentOrder, currentItems as any);
+
+      // Tạo phiếu thu phần tiền còn lại khi hoàn tất đơn
+      // (đặt hàng đã thu deposit+paid rồi, giờ thu phần còn lại)
+      const remaining = Math.max(
+        0,
+        Number(currentOrder.total || 0)
+          - Number(currentOrder.deposit || 0)
+          - Number(currentOrder.paid || 0),
+      );
+      const paymentMethod: "tien_mat" | "ngan_hang" =
+        currentOrder.payment_method === "ngan_hang" ? "ngan_hang" : "tien_mat";
+      const paymentMethodLabel =
+        paymentMethod === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt";
+
+      await autoCreateReceiptForOrder({
+        orderCode: currentOrder.code,
+        customerId: currentOrder.customer_id || null,
+        branchId: currentOrder.branch_id,
+        employeeId: currentOrder.employee_id || null,
+        amount: remaining,
+        fundType: paymentMethod,
+        paymentMethodLabel,
+        createdAt: now(),
+        notePrefix: "Hoàn tất đơn",
+      });
     }
 
     return { ok: true };
@@ -373,7 +401,7 @@ export const updateOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
     const existingRows = await fetchRows<any>("orders", {
       eq: { id: data.id },
-      select: "id, customer_id, branch_id, employee_id, subtotal, discount, total, deposit, paid, payment_method, note, status",
+      select: "id, code, customer_id, branch_id, employee_id, subtotal, discount, total, deposit, paid, payment_method, note, status",
       limit: 1,
     });
     const existingOrder = existingRows[0];
@@ -464,6 +492,23 @@ export const updateOrder = createServerFn({ method: "POST" })
           },
           data.items,
         );
+
+        // Nếu chuyển sang completed từ trạng thái khác → tạo phiếu thu phần còn lại
+        if (existingStatus !== "completed") {
+          const remaining = Math.max(0, total - Number(data.deposit || 0) - Number(data.paid || 0));
+          await autoCreateReceiptForOrder({
+            orderCode: existingOrder.code,
+            customerId: data.customer_id || null,
+            branchId: data.branch_id,
+            employeeId: data.employee_id || null,
+            amount: remaining,
+            fundType: paymentMethod,
+            paymentMethodLabel:
+              paymentMethod === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt",
+            createdAt: now(),
+            notePrefix: "Hoàn tất đơn",
+          });
+        }
       }
 
       return { ok: true };
