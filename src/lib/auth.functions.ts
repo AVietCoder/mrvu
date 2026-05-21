@@ -22,7 +22,7 @@ async function loadUser(row: any): Promise<User> {
     full_name: row.full_name,
     username: row.username,
     phone: row.phone ?? undefined,
-    is_admin: Boolean(row.is_admin),
+    is_admin: Number(row.is_admin),
     branch_ids: branchRows.map((r) => r.branch_id),
     permissions: permRows.map((r) => r.permission),
     created_at: row.created_at,
@@ -62,7 +62,7 @@ export const registerFn = createServerFn({ method: "POST" })
       username: data.username,
       password: data.password,
       phone: data.phone || null,
-      is_admin: false,
+      is_admin: Number(0),
       created_at: now(),
     });
 
@@ -100,7 +100,7 @@ export const resetPasswordFn = createServerFn({ method: "POST" })
     data: { user_id: string; new_password: string; admin_id: string };
   }) => {
     const admin = await fetchRow("users", {
-      eq: { id: data.admin_id, is_admin: true },
+      eq: { id: data.admin_id, is_admin: Number(1) },
       select: "id",
     });
     if (!admin) throw new Error("Không có quyền thực hiện");
@@ -151,7 +151,7 @@ export const updateUserPermsFn = createServerFn({ method: "POST" })
 
 export const deleteUserFn = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
-    await deleteWhere("users", { id: data.id, is_admin: false });
+    await deleteWhere("users", { id: data.id, is_admin: Number(0) });
     return { success: true };
   });
 
