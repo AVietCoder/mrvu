@@ -744,92 +744,73 @@ function Page() {
             <table className="w-full text-sm">
               <thead className="border-b text-left text-muted-foreground">
                 <tr>
-                  <th className="py-2 pr-3">
+                  <th className="py-2 pr-3 w-[120px]">
                     SKU
                   </th>
-
                   <th className="pr-3">
-                    Tên hàng
+                    Thông tin hàng & Chi nhánh
                   </th>
-
-                  {visibleBranches.map(
-                    (b) => (
-                      <th
-                        key={b.id}
-                        className="pr-3 text-right"
-                      >
-                        {b.name}
-                      </th>
-                    )
-                  )}
-
-                  <th className="text-right">
-                    Tổng
+                  <th className="text-right w-[100px]">
+                    Tổng tồn
                   </th>
                 </tr>
               </thead>
 
               <tbody>
-                {paginatedProducts.map(
-                  (p) => {
-                    const cells =
-                      visibleBranches.map(
-                        (b) =>
-                          data?.stock.find(
-                            (s) =>
-                              s.product_id ===
-                                p.id &&
-                              s.branch_id ===
-                                b.id
-                          )?.qty ?? 0
-                      );
+                {paginatedProducts.map((p) => {
+                  const total = visibleBranches.reduce((sum, b) => {
+                    const qty = data?.stock.find(
+                      (s) => s.product_id === p.id && s.branch_id === b.id
+                    )?.qty ?? 0;
+                    return sum + qty;
+                  }, 0);
 
-                    const total =
-                      cells.reduce(
-                        (a, b) =>
-                          a + b,
-                        0
-                      );
+                  return (
+                    <tr
+                      key={p.id}
+                      className="border-b last:border-0 hover:bg-muted/30 align-top"
+                    >
+                      <td className="py-3 pr-3 font-mono text-xs pt-4">
+                        {p.sku}
+                      </td>
 
-                    return (
-                      <tr
-                        key={p.id}
-                        className="border-b last:border-0 hover:bg-muted/30"
-                      >
-                        <td className="py-2 pr-3 font-mono text-xs">
-                          {p.sku}
-                        </td>
+                      <td className="pr-3 py-3">
+                        <div className="font-medium text-base mb-2">{p.name}</div>
+                        
+                        {/* Khu vực hiển thị danh sách 8 chi nhánh dạng wrap/grid cực thoáng */}
+                        <div className="flex flex-wrap gap-1.5 max-w-4xl">
+                          {visibleBranches.map((b) => {
+                            const qty = data?.stock.find(
+                              (s) => s.product_id === p.id && s.branch_id === b.id
+                            )?.qty ?? 0;
+                            
+                            const isLowStock = qty <= p.min_stock;
 
-                        <td className="pr-3 font-medium">
-                          {p.name}
-                        </td>
+                            return (
+                              <div
+                                key={b.id}
+                                className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs ${
+                                  isLowStock 
+                                    ? "bg-destructive/5 border-destructive/20 text-destructive font-medium" 
+                                    : "bg-background border-muted text-muted-foreground"
+                                }`}
+                              >
+                                <span className="truncate max-w-[100px]">{b.name}:</span>
+                                <span className={isLowStock ? "font-bold" : "font-semibold text-foreground"}>
+                                  {qty}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </td>
 
-                        {cells.map(
-                          (
-                            c,
-                            i
-                          ) => (
-                            <td
-                              key={i}
-                              className={`pr-3 text-right ${
-                                c <=
-                                p.min_stock
-                                  ? "font-medium text-destructive"
-                                  : ""
-                              }`}
-                            >
-                              {c}
-                            </td>
-                          )
-                        )}
-
-                        <td className="text-right font-semibold">
-                          {total}
-                        </td>
-                      </tr>
-                    );
-                  }
-                )}
+                      <td className="text-right py-3 font-semibold text-base pt-4">
+                        {total}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

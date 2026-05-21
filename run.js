@@ -42,7 +42,7 @@ async function run() {
 
     const ordersMap = new Map();
     for (const row of rows) {
-      const orderCode = cleanStr(row["Mã hóa đơn"] || row["Mã đặt hàng"]);
+      const orderCode = cleanStr(row["Mã hàng"]);
       if (!orderCode) continue;
       if (!ordersMap.has(orderCode)) ordersMap.set(orderCode, { excelRow: row, items: [] });
       ordersMap.get(orderCode).items.push(row);

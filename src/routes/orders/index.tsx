@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { listOrders, createOrder, updateOrderStatus } from "@/lib/orders.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -327,10 +328,17 @@ function Page() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label>Khách hàng</Label>
-                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={customer} onChange={(e) => setCustomer(e.target.value)}>
-                    <option value="">Khách lẻ</option>
-                    {(data?.customers ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={customer}
+                    onChange={setCustomer}
+                    emptyLabel="Khách lẻ"
+                    placeholder="Tìm khách hàng..."
+                    options={(data?.customers ?? []).map((c: any) => ({
+                      value: c.id,
+                      label: c.name,
+                      sub: c.phone ?? undefined,
+                    }))}
+                  />
                 </div>
                 <div>
                   <Label>Chi nhánh</Label>
@@ -371,18 +379,22 @@ function Page() {
                     return (
                       <div key={idx} className="flex flex-col gap-1.5 rounded-lg border p-2 bg-muted/20">
                         <div className="flex items-center gap-2">
-                          <select
-                            className="flex-1 h-9 rounded-md border bg-background px-2 text-sm"
+                          <SearchableSelect
+                            className="flex-1"
                             value={item.product_id}
-                            onChange={(e) => {
-                              const p = (data?.products ?? []).find((x: any) => x.id === e.target.value);
+                            onChange={(val) => {
+                              const p = (data?.products ?? []).find((x: any) => x.id === val);
                               const next = [...items];
-                              next[idx] = { ...next[idx], product_id: e.target.value, unit_price: (p as any)?.sale_price ?? 0 };
+                              next[idx] = { ...next[idx], product_id: val, unit_price: (p as any)?.sale_price ?? 0 };
                               setItems(next);
                             }}
-                          >
-                            {(data?.products ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
+                            placeholder="Chọn sản phẩm..."
+                            options={(data?.products ?? []).map((p: any) => ({
+                              value: p.id,
+                              label: p.name,
+                              sub: p.sku ?? undefined,
+                            }))}
+                          />
                           <button type="button" className="flex items-center justify-center rounded-md border hover:text-destructive p-1.5 shrink-0"
                             onClick={() => setItems(items.filter((_, i) => i !== idx))}>
                             <X className="h-4 w-4" />

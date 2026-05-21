@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { countRows, deleteWhere, fetchRows, insertRow, now, uid, updateWhere } from "./supabase";
+import { countRows, deleteWhere, fetchAllRows, fetchRows, insertRow, now, uid, updateWhere } from "./supabase";
 
 async function nextCode() {
   const count = await countRows("orders");
@@ -27,8 +27,8 @@ export const listOrders = createServerFn({ method: "GET" }).handler(async () => 
     await Promise.all([
       fetchRows("orders", { orderBy: "created_at", ascending: false }),
       fetchRows("order_items"),
-      fetchRows("products"),
-      fetchRows("customers", { orderBy: "name" }),
+      fetchAllRows("products", { orderBy: "name" }),
+      fetchAllRows("customers", { orderBy: "name" }),
       fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
       fetchRows("branches", { orderBy: "name" }),
       fetchRows("schedules", {

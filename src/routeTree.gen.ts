@@ -18,6 +18,7 @@ import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as EmployeesRouteImport } from './routes/employees'
 import { Route as CustomersRouteImport } from './routes/customers'
 import { Route as ChangePasswordRouteImport } from './routes/change-password'
+import { Route as CashRouteImport } from './routes/cash'
 import { Route as BranchesRouteImport } from './routes/branches'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
@@ -69,6 +70,11 @@ const ChangePasswordRoute = ChangePasswordRouteImport.update({
   path: '/change-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CashRoute = CashRouteImport.update({
+  id: '/cash',
+  path: '/cash',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BranchesRoute = BranchesRouteImport.update({
   id: '/branches',
   path: '/branches',
@@ -99,6 +105,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/branches': typeof BranchesRoute
+  '/cash': typeof CashRoute
   '/change-password': typeof ChangePasswordRoute
   '/customers': typeof CustomersRoute
   '/employees': typeof EmployeesRoute
@@ -115,6 +122,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/branches': typeof BranchesRoute
+  '/cash': typeof CashRoute
   '/change-password': typeof ChangePasswordRoute
   '/customers': typeof CustomersRoute
   '/employees': typeof EmployeesRoute
@@ -132,6 +140,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/branches': typeof BranchesRoute
+  '/cash': typeof CashRoute
   '/change-password': typeof ChangePasswordRoute
   '/customers': typeof CustomersRoute
   '/employees': typeof EmployeesRoute
@@ -150,6 +159,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/branches'
+    | '/cash'
     | '/change-password'
     | '/customers'
     | '/employees'
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/branches'
+    | '/cash'
     | '/change-password'
     | '/customers'
     | '/employees'
@@ -182,6 +193,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/branches'
+    | '/cash'
     | '/change-password'
     | '/customers'
     | '/employees'
@@ -199,6 +211,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   BranchesRoute: typeof BranchesRoute
+  CashRoute: typeof CashRoute
   ChangePasswordRoute: typeof ChangePasswordRoute
   CustomersRoute: typeof CustomersRoute
   EmployeesRoute: typeof EmployeesRoute
@@ -277,6 +290,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChangePasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/cash': {
+      id: '/cash'
+      path: '/cash'
+      fullPath: '/cash'
+      preLoaderRoute: typeof CashRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/branches': {
       id: '/branches'
       path: '/branches'
@@ -319,6 +339,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   BranchesRoute: BranchesRoute,
+  CashRoute: CashRoute,
   ChangePasswordRoute: ChangePasswordRoute,
   CustomersRoute: CustomersRoute,
   EmployeesRoute: EmployeesRoute,

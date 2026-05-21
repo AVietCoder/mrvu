@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { listOrders, updateOrderStatus, updateOrder } from "@/lib/orders.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -169,13 +170,9 @@ function OrderDetailPage() {
     );
   }
 
-const customerMap = useMemo(() => {
-  return Object.fromEntries((data?.customers ?? []).map((c: any) => [c.id, c]));
-}, [data?.customers]);
-
-const cust = customerMap[order.customer_id];  const branch = (data?.branches ?? []).find((b: any) => b.id === order.branch_id);
+  const cust = (data?.customers ?? []).find((c: any) => c.id === order.customer_id);
+  const branch = (data?.branches ?? []).find((b: any) => b.id === order.branch_id);
   const emp = (data?.employees ?? []).find((e: any) => e.id === order.employee_id);
-  console.log(cust, order.customer_id);
 
   return (
     <AppShell title={`Đơn hàng ${order.code}`}>
@@ -294,11 +291,17 @@ const cust = customerMap[order.customer_id];  const branch = (data?.branches ?? 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label>Khách hàng</Label>
-                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                    value={editCustomer} onChange={(e) => setEditCustomer(e.target.value)}>
-                    <option value="">Khách lẻ</option>
-                    {(data?.customers ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={editCustomer}
+                    onChange={setEditCustomer}
+                    emptyLabel="Khách lẻ"
+                    placeholder="Tìm khách hàng..."
+                    options={(data?.customers ?? []).map((c: any) => ({
+                      value: c.id,
+                      label: c.name,
+                      sub: c.phone ?? undefined,
+                    }))}
+                  />
                 </div>
                 <div>
                   <Label>Chi nhánh</Label>
@@ -385,18 +388,23 @@ const cust = customerMap[order.customer_id];  const branch = (data?.branches ?? 
                   const lineTotal = item.qty * item.unit_price - item.discount;
                   return (
                     <div key={idx} className="grid grid-cols-12 gap-1.5 items-center">
-                      <select
-                        className="col-span-5 h-9 rounded-md border bg-background px-2 text-sm"
-                        value={item.product_id}
-                        onChange={(e) => {
-                          const p = (data?.products ?? []).find((x: any) => x.id === e.target.value);
-                          const next = [...editItems];
-                          next[idx] = { ...next[idx], product_id: e.target.value, unit_price: (p as any)?.sale_price ?? 0 };
-                          setEditItems(next);
-                        }}
-                      >
-                        {(data?.products ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
+                      <div className="col-span-5">
+                        <SearchableSelect
+                          value={item.product_id}
+                          onChange={(val) => {
+                            const p = (data?.products ?? []).find((x: any) => x.id === val);
+                            const next = [...editItems];
+                            next[idx] = { ...next[idx], product_id: val, unit_price: (p as any)?.sale_price ?? 0 };
+                            setEditItems(next);
+                          }}
+                          placeholder="Chọn sản phẩm..."
+                          options={(data?.products ?? []).map((p: any) => ({
+                            value: p.id,
+                            label: p.name,
+                            sub: p.sku ?? undefined,
+                          }))}
+                        />
+                      </div>
                       <Input type="number" className="col-span-1" placeholder="SL" value={item.qty}
                         onChange={(e) => { const n = [...editItems]; n[idx].qty = Number(e.target.value); setEditItems(n); }} />
                       <Input className="col-span-3" placeholder="Đơn giá"

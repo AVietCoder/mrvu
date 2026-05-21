@@ -63,6 +63,46 @@ export async function fetchRows<T = any>(table: string, options?: QueryOptions):
   return (data ?? []) as T[];
 }
 
+/**
+ * Lấy toàn bộ dữ liệu từ một bảng, vượt qua giới hạn 1000 rows của Supabase.
+ * Dùng cho customers, products khi cần matching đầy đủ.
+ */
+export async function fetchAllRows<T = any>(table: string, options?: Omit<QueryOptions, "limit">): Promise<T[]> {
+  const PAGE = 1000;
+  let all: T[] = [];
+  let from = 0;
+
+  while (true) {
+    let query = supabase
+      .from(table)
+      .select(options?.select ?? "*")
+      .range(from, from + PAGE - 1);
+
+    if (options?.eq) {
+      for (const [col, val] of Object.entries(options.eq)) {
+        if (Array.isArray(val)) {
+          query = query.in(col, val as any);
+        } else if (val === null) {
+          query = query.is(col, null);
+        } else {
+          query = query.eq(col, val as any);
+        }
+      }
+    }
+    if (options?.orderBy) {
+      query = query.order(options.orderBy, { ascending: options.ascending ?? true });
+    }
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as T[];
+    all = all.concat(rows);
+    if (rows.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
+
 export async function fetchRow<T = any>(table: string, options?: QueryOptions): Promise<T | null> {
   const rows = await fetchRows<T>(table, { ...options, limit: 1 });
   return rows[0] ?? null;
