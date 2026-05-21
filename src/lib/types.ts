@@ -140,20 +140,20 @@ export const ALL_PERMISSIONS: { key: Permission; label: string; desc: string }[]
 // ── User ─────────────────────────────────────────────────────
 export type User = {
   id: ID; full_name: string; username: string; phone?: string;
-  is_admin: boolean; branch_ids: ID[]; permissions: Permission[];
+  is_admin: number; branch_ids: ID[]; permissions: Permission[];
   created_at: string;
 };
 
 export type AuthSession = { user: User; token: string };
 
 export function hasPermission(user: User, perm: Permission): boolean {
-  if (user.is_admin) return true;
+  if (user.is_admin == 1) return true; // <-- Sửa từ user.is_admin thành user.is_admin == 1
   return user.permissions.includes(perm);
 }
 
 export function canViewBranch(user: User, branchId: ID): boolean {
-  if (user.is_admin) return true;
-  if (user.branch_ids.length === 0) return true;
+  if (user.is_admin == 1) return true; // <-- Sửa từ user.is_admin thành user.is_admin == 1
+  if (user.branch_ids.length === 0) return false;
   return user.branch_ids.includes(branchId);
 }
 

@@ -78,6 +78,7 @@ function Page() {
     phone: "",
     username: "",
     password: "123456",
+    is_admin: Number(0),
     branch_ids: [] as string[],
   });
 
@@ -98,7 +99,7 @@ function Page() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return (users ?? [])
-      .filter((u) => !u.is_admin)
+      .filter((u) => Number(u.is_admin) !== 1)
       .filter(
         (u) =>
           u.full_name.toLowerCase().includes(q) ||
@@ -117,12 +118,26 @@ function Page() {
   );
 
   function toggleAddBranch(bid: string) {
-    setAddForm((f) => ({
-      ...f,
-      branch_ids: f.branch_ids.includes(bid)
-        ? f.branch_ids.filter((x) => x !== bid)
-        : [...f.branch_ids, bid],
-    }));
+    setAddForm((f) => {
+      const isSelected = f.branch_ids.includes(bid);
+      return {
+        ...f,
+        branch_ids: isSelected
+          ? f.branch_ids.filter((x) => x !== bid)
+          : [...f.branch_ids, bid],
+      };
+    });
+  }
+
+  function toggleAddAllBranches() {
+    setAddForm((f) => {
+      const allIds = opts?.branches.map((b: any) => b.id || b.name) || [];
+      const isAllSelected = f.branch_ids.length === allIds.length;
+      return {
+        ...f,
+        branch_ids: isAllSelected ? [] : allIds,
+      };
+    });
   }
 
   async function handleAdd(e: FormEvent<HTMLFormElement>) {
@@ -135,7 +150,18 @@ function Page() {
 
     setAddLoading(true);
     try {
-      await doRegister({ data: addForm });
+      let finalBranches = addForm.branch_ids;
+      if (finalBranches.length === 0 && opts?.branches) {
+        finalBranches = opts.branches.map((b: any) => b.id || b.name);
+      }
+
+      await doRegister({
+        data: {
+          ...addForm,
+          branch_ids: finalBranches,
+        },
+      });
+      
       toast.success("Đã tạo tài khoản nhân viên");
       setAddOpen(false);
       setAddForm({
@@ -147,7 +173,7 @@ function Page() {
       });
       qc.invalidateQueries({ queryKey: ["users"] });
     } catch (err: any) {
-      toast.error(err?.message ?? "Lỗi");
+      toast.error(err?.message ?? "Lỗi tạo tài khoản");
     } finally {
       setAddLoading(false);
     }
@@ -180,27 +206,38 @@ function Page() {
     );
   }
 
+  function toggleAllGrantBranches() {
+    const allIds = opts?.branches.map((b: any) => b.id || b.name) || [];
+    setGrantBranches((prev) => (prev.length === allIds.length ? [] : allIds));
+  }
+
   async function handleSavePerms() {
     setPermLoading(true);
     try {
+      let finalBranches = grantBranches;
+      if (finalBranches.length === 0 && opts?.branches) {
+        finalBranches = opts.branches.map((b: any) => b.id || b.name);
+      }
+
       await doUpdatePerms({
         data: {
           user_ids: selectedUsers,
           permissions: grantPerms,
-          branch_ids: grantBranches,
+          branch_ids: finalBranches,
         },
       });
 
       toast.success(
         selectedUsers.length > 1
           ? `Đã cập nhật quyền cho ${selectedUsers.length} nhân viên`
-          : "Đã cập nhật quyền"
+          : "Đã cập nhật quyền thành công"
       );
 
       setPermOpen(false);
+      setBulkSelect([]);
       qc.invalidateQueries({ queryKey: ["users"] });
     } catch (err: any) {
-      toast.error(err?.message ?? "Lỗi");
+      toast.error(err?.message ?? "Lỗi lưu quyền");
     } finally {
       setPermLoading(false);
     }
@@ -214,7 +251,7 @@ function Page() {
       toast.success("Đã xóa tài khoản");
       qc.invalidateQueries({ queryKey: ["users"] });
     } catch (err: any) {
-      toast.error(err?.message ?? "Lỗi");
+      toast.error(err?.message ?? "Lỗi khi xóa");
     }
   }
 
@@ -231,7 +268,7 @@ function Page() {
       setResetPwId(null);
       setNewPw("123456");
     } catch (err: any) {
-      toast.error(err?.message ?? "Lỗi");
+      toast.error(err?.message ?? "Lỗi đổi mật khẩu");
     } finally {
       setResetLoading(false);
     }
@@ -242,6 +279,7 @@ function Page() {
   }
 
   const viewUser = viewId ? users?.find((u) => u.id === viewId) : null;
+  const allBranchesCount = opts?.branches?.length || 0;
 
   return (
     <AppShell title="Quản lý nhân viên">
@@ -342,14 +380,14 @@ function Page() {
 
             <tbody>
               {paginated.map((u) => {
-                const branchNames =
-                  u.branch_ids.length === 0
-                    ? "Tất cả chi nhánh"
-                    : u.branch_ids
-                        .map(
-                          (bid) => opts?.branches.find((b: any) => b.id === bid)?.name ?? bid
-                        )
-                        .join(", ");
+                const isAll = u.branch_ids.length === 0 || u.branch_ids.length === allBranchesCount;
+                const branchNames = isAll
+                  ? "Tất cả chi nhánh"
+                  : u.branch_ids
+                      .map(
+                        (bid) => opts?.branches.find((b: any) => (b.id === bid || b.name === bid))?.name ?? bid
+                      )
+                      .join(", ");
 
                 return (
                   <tr
@@ -521,28 +559,31 @@ function Page() {
 
             <div>
               <Label>Chi nhánh hoạt động</Label>
-              <div className="mt-1 space-y-1 border rounded-md p-2">
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <div className="mt-1 space-y-1 border rounded-md p-2 max-h-[200px] overflow-y-auto">
+                <label className="flex items-center gap-2 text-sm cursor-pointer py-1">
                   <input
                     type="checkbox"
-                    checked={addForm.branch_ids.length === 0}
-                    onChange={() => setAddForm({ ...addForm, branch_ids: [] })}
+                    checked={addForm.branch_ids.length === allBranchesCount || addForm.branch_ids.length === 0}
+                    onChange={toggleAddAllBranches}
                   />
-                  <span className="font-medium">Tất cả chi nhánh (mặc định)</span>
+                  <span className="font-medium">Tất cả chi nhánh</span>
                 </label>
 
-                <hr className="border-border" />
+                <hr className="border-border my-1" />
 
-                {opts?.branches.map((b: any) => (
-                  <label key={b.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={addForm.branch_ids.includes(b.id)}
-                      onChange={() => toggleAddBranch(b.id)}
-                    />
-                    {b.name}
-                  </label>
-                ))}
+                {opts?.branches.map((b: any) => {
+                  const targetId = b.id || b.name;
+                  return (
+                    <label key={targetId} className="flex items-center gap-2 text-sm cursor-pointer py-0.5">
+                      <input
+                        type="checkbox"
+                        checked={addForm.branch_ids.includes(targetId)}
+                        onChange={() => toggleAddBranch(targetId)}
+                      />
+                      {b.name}
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
@@ -593,11 +634,11 @@ function Page() {
                       <Building2 className="h-3 w-3" /> Chi nhánh
                     </div>
                     <div className="font-medium">
-                      {viewUser.branch_ids.length === 0
+                      {(viewUser.branch_ids.length === 0 || viewUser.branch_ids.length === allBranchesCount)
                         ? "Tất cả chi nhánh"
                         : viewUser.branch_ids
                             .map(
-                              (bid) => opts?.branches.find((b: any) => b.id === bid)?.name ?? bid
+                              (bid) => opts?.branches.find((b: any) => (b.id === bid || b.name === bid))?.name ?? bid
                             )
                             .join(", ")}
                     </div>
@@ -798,8 +839,8 @@ function Page() {
                 <label className="flex items-center gap-3 rounded-lg border bg-background px-3 py-2 cursor-pointer hover:bg-muted/40 transition-colors">
                   <input
                     type="checkbox"
-                    checked={grantBranches.length === 0}
-                    onChange={() => setGrantBranches([])}
+                    checked={grantBranches.length === allBranchesCount || grantBranches.length === 0}
+                    onChange={toggleAllGrantBranches}
                   />
                   <div>
                     <div className="text-sm font-medium">Tất cả chi nhánh</div>
@@ -809,12 +850,13 @@ function Page() {
                   </div>
                 </label>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-[160px] overflow-y-auto">
                   {opts?.branches.map((b: any) => {
-                    const checked = grantBranches.includes(b.id);
+                    const targetId = b.id || b.name;
+                    const checked = grantBranches.includes(targetId);
                     return (
                       <label
-                        key={b.id}
+                        key={targetId}
                         className={`flex items-center gap-3 rounded-lg border px-3 py-2 cursor-pointer transition-all hover:bg-muted/40 ${
                           checked ? "border-primary bg-primary/5" : "bg-background"
                         }`}
@@ -822,7 +864,7 @@ function Page() {
                         <input
                           type="checkbox"
                           checked={checked}
-                          onChange={() => toggleBranch(b.id)}
+                          onChange={() => toggleBranch(targetId)}
                         />
                         <div className="min-w-0">
                           <div className="text-sm font-medium truncate">{b.name}</div>
@@ -843,7 +885,7 @@ function Page() {
           <div className="border-t bg-background px-4 sm:px-6 py-3 flex items-center justify-between gap-2">
             <div className="text-xs text-muted-foreground hidden sm:block">
               {grantPerms.length} quyền •{" "}
-              {grantBranches.length === 0 ? "Tất cả chi nhánh" : `${grantBranches.length} chi nhánh`}
+              {(grantBranches.length === 0 || grantBranches.length === allBranchesCount) ? "Tất cả chi nhánh" : `${grantBranches.length} chi nhánh`}
             </div>
 
             <div className="flex gap-2 ml-auto">
