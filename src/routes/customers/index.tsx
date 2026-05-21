@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   Plus,
+  ExternalLink,
   Pencil,
   Trash2,
   TrendingDown,
@@ -25,7 +26,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/customers")({
+export const Route = createFileRoute("/customers/")({
   head: () => ({ meta: [{ title: "Khách hàng — QuatTran POS" }] }),
   component: CustomersPage,
 });
@@ -268,7 +269,13 @@ function CustomersPage() {
             <tbody>
               {customers.map((c) => (
                 <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => setViewId(c.id)}>
-                  <td className="py-2 pr-3 font-medium">{c.name}</td>
+                  <td className="py-2 pr-3 font-medium">
+                    <Link to="/customers/$id" params={{ id: c.id }}
+                      className="hover:text-primary hover:underline"
+                      onClick={(e) => e.stopPropagation()}>
+                      {c.name}
+                    </Link>
+                  </td>
                   <td className="pr-3 text-muted-foreground">{c.phone ?? "—"}</td>
                   <td className="pr-3 text-muted-foreground text-xs max-w-[150px] truncate">
                     {[c.district, c.province].filter(Boolean).join(", ") || c.address || "—"}
@@ -280,9 +287,10 @@ function CustomersPage() {
                     {c.debt > 0 ? fmt(c.debt) : "—"}
                   </td>
                   <td className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <button className="p-1 hover:text-blue-600" title="Xem chi tiết" onClick={() => setViewId(c.id)}>
+                    <Link to="/customers/$id" params={{ id: c.id }}
+                      className="p-1 inline-flex hover:text-blue-600" title="Xem chi tiết">
                       <Eye className="h-4 w-4" />
-                    </button>
+                    </Link>
                     <button className="p-1 hover:text-primary" onClick={() => startEdit(c.id)}>
                       <Pencil className="h-4 w-4" />
                     </button>
@@ -407,12 +415,13 @@ function CustomersPage() {
                   <div className="space-y-1">
                     {pendingOrders.map((o) => (
                       <div key={o.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
-                        <span className="font-mono text-xs">{o.code}</span>
+                        <Link to="/orders/$id" params={{ id: o.id }} className="font-mono text-xs hover:text-primary hover:underline">{o.code}</Link>
                         <span className="text-muted-foreground text-xs">{new Date(o.created_at).toLocaleDateString("vi-VN")}</span>
                         <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded">
                           {o.status === "reserved" ? "Đặt trước" : "Nháp"}
                         </span>
                         <span className="font-medium">{fmt(o.total)}</span>
+                        <Link to="/orders/$id" params={{ id: o.id }} className="text-muted-foreground hover:text-primary"><ExternalLink className="h-3.5 w-3.5" /></Link>
                       </div>
                     ))}
                   </div>
@@ -433,10 +442,15 @@ function CustomersPage() {
                       </thead>
                       <tbody>
                         {completedOrders.map((o) => (
-                          <tr key={o.id} className="border-b last:border-0">
-                            <td className="py-1 font-mono text-xs">{o.code}</td>
+                          <tr key={o.id} className="border-b last:border-0 hover:bg-muted/30">
+                            <td className="py-1 font-mono text-xs">
+                              <Link to="/orders/$id" params={{ id: o.id }} className="hover:text-primary hover:underline">{o.code}</Link>
+                            </td>
                             <td className="text-xs text-muted-foreground">{new Date(o.created_at).toLocaleDateString("vi-VN")}</td>
                             <td className="text-right font-medium">{fmt(o.total)}</td>
+                            <td className="text-right">
+                              <Link to="/orders/$id" params={{ id: o.id }} className="text-muted-foreground hover:text-primary"><ExternalLink className="h-3.5 w-3.5" /></Link>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -449,6 +463,9 @@ function CustomersPage() {
                 <Button variant="outline" onClick={() => { setViewId(null); startEdit(viewCustomer.id); }}>
                   <Pencil className="h-4 w-4 mr-1" /> Chỉnh sửa
                 </Button>
+                <Link to="/customers/$id" params={{ id: viewCustomer.id }} onClick={() => setViewId(null)}>
+                  <Button variant="outline"><ExternalLink className="h-4 w-4 mr-1" /> Xem trang đầy đủ</Button>
+                </Link>
                 <Button onClick={() => setViewId(null)}>Đóng</Button>
               </DialogFooter>
             </>

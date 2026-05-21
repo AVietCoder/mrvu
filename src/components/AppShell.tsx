@@ -139,7 +139,7 @@ export function AppShell({ children, title, loading }: { children: ReactNode; ti
         {/* Nav */}
         <nav className="p-2 flex-1 overflow-y-auto">
           {nav.filter(canSeeNav).map((item) => {
-            const active = loc.pathname === item.to;
+            const active = item.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(item.to);
             const Icon = item.icon;
             return (
               <Link

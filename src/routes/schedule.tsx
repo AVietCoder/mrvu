@@ -9,6 +9,7 @@ import {
   listWorkDifficulties, upsertWorkDifficulty, deleteWorkDifficulty,
 } from "@/lib/schedule.functions";
 import { useAuth } from "@/context/AuthContext";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { AppShell, Card } from "@/components/AppShell";
 import { fmtMoney, SCHEDULE_TYPES, ALL_PERMISSIONS, type Permission } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -616,21 +617,16 @@ function Page() {
             <Label className="flex items-center gap-1 text-blue-900">
               <Receipt className="h-4 w-4" /> Liên kết với đơn hàng (tuỳ chọn)
             </Label>
-            <select
-              className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+            <SearchableSelect
               value={createForm.order_id}
-              onChange={(e) => pickOrder(e.target.value)}
-            >
-              <option value="">— Không liên kết —</option>
-              {(data?.orders ?? []).map((o: any) => {
+              onChange={(v) => pickOrder(v)}
+              emptyLabel="— Không liên kết —"
+              placeholder="Tìm mã đơn, khách hàng..."
+              options={(data?.orders ?? []).map((o: any) => {
                 const c: any = (data?.customers ?? []).find((x: any) => x.id === o.customer_id);
-                return (
-                  <option key={o.id} value={o.id}>
-                    {o.code} · {c?.name ?? "Khách lẻ"} · {fmtMoney(o.total)} ({o.status})
-                  </option>
-                );
+                return { value: o.id, label: o.code, sub: `${c?.name ?? "Khách lẻ"} · ${fmtMoney(o.total)}` };
               })}
-            </select>
+            />
             <div className="text-xs text-muted-foreground mt-1">
               Khi chọn đơn, khách hàng / chi nhánh / địa chỉ sẽ tự điền.
             </div>
@@ -654,27 +650,33 @@ function Page() {
                 <Input className="mt-1" type="time" value={createForm.scheduled_time}
                   onChange={(e) => setCreateForm({...createForm, scheduled_time: e.target.value})} /></div>
               <div><Label>Chi nhánh</Label>
-                <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  value={createForm.branch_id} onChange={(e) => setCreateForm({...createForm, branch_id: e.target.value})}>
-                  <option value="">-- Chọn --</option>
-                  {data?.branches.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select></div>
+                <SearchableSelect
+                  value={createForm.branch_id}
+                  onChange={(v) => setCreateForm({...createForm, branch_id: v})}
+                  emptyLabel="-- Chọn --"
+                  placeholder="Tìm chi nhánh..."
+                  options={(data?.branches ?? []).map((b: any) => ({ value: b.id, label: b.name }))}
+                /></div>
             </div>
             <div><Label>Khách hàng</Label>
-              <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                value={createForm.customer_id} onChange={(e) => setCreateForm({...createForm, customer_id: e.target.value})}>
-                <option value="">-- Chọn --</option>
-                {data?.customers.map((c: any) => <option key={c.id} value={c.id}>{c.name} - {c.phone}</option>)}
-              </select></div>
+              <SearchableSelect
+                value={createForm.customer_id}
+                onChange={(v) => setCreateForm({...createForm, customer_id: v})}
+                emptyLabel="-- Chọn --"
+                placeholder="Tìm khách hàng..."
+                options={(data?.customers ?? []).map((c: any) => ({ value: c.id, label: c.name, sub: c.phone ?? undefined }))}
+              /></div>
             <div><Label>Địa chỉ lắp đặt</Label>
               <Input className="mt-1" value={createForm.address}
                 onChange={(e) => setCreateForm({...createForm, address: e.target.value})} /></div>
             <div><Label>Người giao việc</Label>
-              <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                value={createForm.assigned_by} onChange={(e) => setCreateForm({...createForm, assigned_by: e.target.value})}>
-                <option value="">— Không chỉ định —</option>
-                {data?.users.map((u: any) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-              </select></div>
+              <SearchableSelect
+                value={createForm.assigned_by}
+                onChange={(v) => setCreateForm({...createForm, assigned_by: v})}
+                emptyLabel="— Không chỉ định —"
+                placeholder="Tìm người dùng..."
+                options={(data?.users ?? []).map((u: any) => ({ value: u.id, label: u.full_name }))}
+              /></div>
             <div><Label>Ghi chú</Label>
               <Input className="mt-1" value={createForm.note}
                 onChange={(e) => setCreateForm({...createForm, note: e.target.value})} /></div>

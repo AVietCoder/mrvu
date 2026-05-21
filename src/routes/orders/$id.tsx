@@ -265,7 +265,7 @@ function OrderDetailPage() {
                 <InfoBox icon={<User className="h-4 w-4" />} label="Khách hàng">
                   {cust ? (
                     <div>
-                      <Link to="/customers" className="font-medium hover:text-primary hover:underline">
+                      <Link to="/customers/$id" params={{ id: cust.id }} className="font-medium hover:text-primary hover:underline">
                         {cust.name}
                       </Link>
                       {cust.phone && <div className="text-xs text-muted-foreground">{cust.phone}</div>}
@@ -306,18 +306,22 @@ function OrderDetailPage() {
                 </div>
                 <div>
                   <Label>Chi nhánh</Label>
-                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                    value={editBranch} onChange={(e) => setEditBranch(e.target.value)}>
-                    {(data?.branches ?? []).map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={editBranch}
+                    onChange={setEditBranch}
+                    placeholder="Tìm chi nhánh..."
+                    options={(data?.branches ?? []).map((b: any) => ({ value: b.id, label: b.name }))}
+                  />
                 </div>
                 <div>
                   <Label>Nhân viên</Label>
-                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                    value={editEmployee} onChange={(e) => setEditEmployee(e.target.value)}>
-                    <option value="">—</option>
-                    {(data?.employees ?? []).map((e: any) => <option key={e.id} value={e.id}>{e.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={editEmployee}
+                    onChange={setEditEmployee}
+                    emptyLabel="—"
+                    placeholder="Tìm nhân viên..."
+                    options={(data?.employees ?? []).map((e: any) => ({ value: e.id, label: e.name }))}
+                  />
                 </div>
                 <div>
                   <Label>Ghi chú</Label>

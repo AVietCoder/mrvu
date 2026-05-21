@@ -790,15 +790,12 @@ function Page() {
               </div>
               <div>
                 <Label>Chi nhánh</Label>
-                <select
-                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                <SearchableSelect
                   value={form.branchId}
-                  onChange={(e) => setForm({ ...form, branchId: e.target.value })}
-                >
-                  {visibleBranches.map((b: any) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setForm({ ...form, branchId: v })}
+                  placeholder="Tìm chi nhánh..."
+                  options={visibleBranches.map((b: any) => ({ value: b.id, label: b.name }))}
+                />
               </div>
             </div>
 

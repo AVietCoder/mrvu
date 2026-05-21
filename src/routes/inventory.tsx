@@ -12,6 +12,7 @@ import {
   cancelTransfer,
 } from "@/lib/inventory.functions";
 
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { AppShell, Card } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
 import { Pagination, DEFAULT_PAGE_SIZE } from "@/components/Pagination";
@@ -1181,113 +1182,33 @@ function Page() {
                               </td>
 
                               <td className="min-w-[320px] px-3 py-3">
-                                <select
-                                  className="h-10 w-full rounded-md border bg-background px-3"
-                                  value={
-                                    item.product_id
-                                  }
-                                  onChange={(
-                                    e
-                                  ) => {
-                                    const v =
-                                      e
-                                        .target
-                                        .value;
-
-                                    if (
-                                      type ===
-                                      "in"
-                                    ) {
-                                      const next =
-                                        [
-                                          ...inItems,
-                                        ];
-
-                                      next[
-                                        idx
-                                      ] = {
-                                        ...item,
-                                        product_id:
-                                          v,
-                                      };
-
-                                      setInItems(
-                                        next
-                                      );
+                                <SearchableSelect
+                                  value={item.product_id}
+                                  onChange={(v) => {
+                                    if (type === "in") {
+                                      const next = [...inItems];
+                                      next[idx] = { ...item, product_id: v };
+                                      setInItems(next);
                                     }
-
-                                    if (
-                                      type ===
-                                      "out"
-                                    ) {
-                                      const next =
-                                        [
-                                          ...outItems,
-                                        ];
-
-                                      next[
-                                        idx
-                                      ] = {
-                                        ...item,
-                                        product_id:
-                                          v,
-                                      };
-
-                                      setOutItems(
-                                        next
-                                      );
+                                    if (type === "out") {
+                                      const next = [...outItems];
+                                      next[idx] = { ...item, product_id: v };
+                                      setOutItems(next);
                                     }
-
-                                    if (
-                                      type ===
-                                      "transfer"
-                                    ) {
-                                      const next =
-                                        [
-                                          ...transferItems,
-                                        ];
-
-                                      next[
-                                        idx
-                                      ] = {
-                                        ...item,
-                                        product_id:
-                                          v,
-                                      };
-
-                                      setTransferItems(
-                                        next
-                                      );
+                                    if (type === "transfer") {
+                                      const next = [...transferItems];
+                                      next[idx] = { ...item, product_id: v };
+                                      setTransferItems(next);
                                     }
                                   }}
-                                >
-                                  <option value="">
-                                    — Chọn sản phẩm —
-                                  </option>
-
-                                  {products.map(
-                                    (
-                                      p
-                                    ) => (
-                                      <option
-                                        key={
-                                          p.id
-                                        }
-                                        value={
-                                          p.id
-                                        }
-                                      >
-                                        {
-                                          p.sku
-                                        }{" "}
-                                        —{" "}
-                                        {
-                                          p.name
-                                        }
-                                      </option>
-                                    )
-                                  )}
-                                </select>
+                                  emptyLabel="— Chọn sản phẩm —"
+                                  placeholder="Tìm sản phẩm..."
+                                  options={products.map((p) => ({
+                                    value: p.id,
+                                    label: p.name,
+                                    sub: p.sku ?? undefined,
+                                  }))}
+                                />
 
                                 {product && (
                                   <div className="mt-1 text-xs text-muted-foreground">
@@ -1542,32 +1463,12 @@ function Page() {
                         Chi nhánh nhập
                       </Label>
 
-                      <select
-                        className="mt-1 h-10 w-full rounded-md border bg-background px-3"
+                      <SearchableSelect
                         value={inBranch}
-                        onChange={(e) =>
-                          setInBranch(
-                            e.target.value
-                          )
-                        }
-                      >
-                        {branches.map(
-                          (b) => (
-                            <option
-                              key={
-                                b.id
-                              }
-                              value={
-                                b.id
-                              }
-                            >
-                              {
-                                b.name
-                              }
-                            </option>
-                          )
-                        )}
-                      </select>
+                        onChange={setInBranch}
+                        placeholder="Tìm chi nhánh..."
+                        options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                      />
                     </div>
                   )}
 
@@ -1577,32 +1478,12 @@ function Page() {
                         Chi nhánh xuất
                       </Label>
 
-                      <select
-                        className="mt-1 h-10 w-full rounded-md border bg-background px-3"
+                      <SearchableSelect
                         value={outBranch}
-                        onChange={(e) =>
-                          setOutBranch(
-                            e.target.value
-                          )
-                        }
-                      >
-                        {branches.map(
-                          (b) => (
-                            <option
-                              key={
-                                b.id
-                              }
-                              value={
-                                b.id
-                              }
-                            >
-                              {
-                                b.name
-                              }
-                            </option>
-                          )
-                        )}
-                      </select>
+                        onChange={setOutBranch}
+                        placeholder="Tìm chi nhánh..."
+                        options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                      />
                     </div>
                   )}
 
@@ -1614,40 +1495,12 @@ function Page() {
                           Từ CN
                         </Label>
 
-                        <select
-                          className="mt-1 h-10 w-full rounded-md border bg-background px-3"
-                          value={
-                            transferFrom
-                          }
-                          onChange={(
-                            e
-                          ) =>
-                            setTransferFrom(
-                              e
-                                .target
-                                .value
-                            )
-                          }
-                        >
-                          {branches.map(
-                            (
-                              b
-                            ) => (
-                              <option
-                                key={
-                                  b.id
-                                }
-                                value={
-                                  b.id
-                                }
-                              >
-                                {
-                                  b.name
-                                }
-                              </option>
-                            )
-                          )}
-                        </select>
+                        <SearchableSelect
+                          value={transferFrom}
+                          onChange={setTransferFrom}
+                          placeholder="Tìm chi nhánh..."
+                          options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                        />
                       </div>
 
                       <div>
@@ -1655,40 +1508,12 @@ function Page() {
                           Đến CN
                         </Label>
 
-                        <select
-                          className="mt-1 h-10 w-full rounded-md border bg-background px-3"
-                          value={
-                            transferTo
-                          }
-                          onChange={(
-                            e
-                          ) =>
-                            setTransferTo(
-                              e
-                                .target
-                                .value
-                            )
-                          }
-                        >
-                          {branches.map(
-                            (
-                              b
-                            ) => (
-                              <option
-                                key={
-                                  b.id
-                                }
-                                value={
-                                  b.id
-                                }
-                              >
-                                {
-                                  b.name
-                                }
-                              </option>
-                            )
-                          )}
-                        </select>
+                        <SearchableSelect
+                          value={transferTo}
+                          onChange={setTransferTo}
+                          placeholder="Tìm chi nhánh..."
+                          options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                        />
                       </div>
                     </div>
                   )}

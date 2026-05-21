@@ -258,7 +258,7 @@ function Page() {
               }, [data?.customers]);
 
               console.log(customerMap.size); // ✅ đúng
-              const cust = customerMap[o.customer_id]?.name ?? "Khách lẻ";
+              const cust = customerMap.get(o.customer_id)?.name ?? "Khách lẻ";
               const br   = (data?.branches ?? []).find((b: any) => b.id === o.branch_id)?.name ?? "—";
               const linked = (data?.schedules ?? []).filter((s: any) => s.order_id === o.id);
               const globalIdx = (page - 1) * PAGE_SIZE + idx + 1;
@@ -343,25 +343,35 @@ function Page() {
                 </div>
                 <div>
                   <Label>Chi nhánh</Label>
-                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={branch} onChange={(e) => setBranch(e.target.value)}>
-                    {(data?.branches ?? []).map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={branch}
+                    onChange={setBranch}
+                    placeholder="Tìm chi nhánh..."
+                    options={(data?.branches ?? []).map((b: any) => ({ value: b.id, label: b.name }))}
+                  />
                 </div>
                 <div>
                   <Label>Nhân viên</Label>
-                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={employee} onChange={(e) => setEmployee(e.target.value)}>
-                    <option value="">---</option>
-                    {(data?.employees ?? []).map((e: any) => <option key={e.id} value={e.id}>{e.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={employee}
+                    onChange={setEmployee}
+                    emptyLabel="---"
+                    placeholder="Tìm nhân viên..."
+                    options={(data?.employees ?? []).map((e: any) => ({ value: e.id, label: e.name }))}
+                  />
                 </div>
                 <div>
                   <Label>Trạng thái</Label>
-                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={status}
-                    onChange={(e) => setStatus(e.target.value as any)}>
-                    <option value="completed">Hoàn tất</option>
-                    <option value="reserved">Đặt trước (chưa giao)</option>
-                    <option value="draft">Nháp</option>
-                  </select>
+                  <SearchableSelect
+                    value={status}
+                    onChange={(v) => setStatus(v as any)}
+                    placeholder="Chọn trạng thái..."
+                    options={[
+                      { value: "completed", label: "Hoàn tất" },
+                      { value: "reserved", label: "Đặt trước (chưa giao)" },
+                      { value: "draft", label: "Nháp" },
+                    ]}
+                  />
                 </div>
               </div>
 

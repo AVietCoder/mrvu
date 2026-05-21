@@ -16,17 +16,14 @@ import { Route as ProductsRouteImport } from './routes/products'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as EmployeesRouteImport } from './routes/employees'
-import { Route as CustomersRouteImport } from './routes/customers'
 import { Route as ChangePasswordRouteImport } from './routes/change-password'
 import { Route as CashRouteImport } from './routes/cash'
 import { Route as BranchesRouteImport } from './routes/branches'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as OrdersIndexRouteImport } from './routes/orders/index'
-import { Route as EmployeesIndexRouteImport } from './routes/employees/index'
 import { Route as CustomersIndexRouteImport } from './routes/customers/index'
 import { Route as OrdersIdRouteImport } from './routes/orders/$id'
-import { Route as EmployeesIdRouteImport } from './routes/employees/$id'
 import { Route as CustomersIdRouteImport } from './routes/customers/$id'
 
 const ScheduleRoute = ScheduleRouteImport.update({
@@ -64,11 +61,6 @@ const EmployeesRoute = EmployeesRouteImport.update({
   path: '/employees',
   getParentRoute: () => rootRouteImport,
 } as any)
-const CustomersRoute = CustomersRouteImport.update({
-  id: '/customers',
-  path: '/customers',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ChangePasswordRoute = ChangePasswordRouteImport.update({
   id: '/change-password',
   path: '/change-password',
@@ -99,30 +91,20 @@ const OrdersIndexRoute = OrdersIndexRouteImport.update({
   path: '/orders/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const EmployeesIndexRoute = EmployeesIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => EmployeesRoute,
-} as any)
 const CustomersIndexRoute = CustomersIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => CustomersRoute,
+  id: '/customers/',
+  path: '/customers/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const OrdersIdRoute = OrdersIdRouteImport.update({
   id: '/orders/$id',
   path: '/orders/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const EmployeesIdRoute = EmployeesIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => EmployeesRoute,
-} as any)
 const CustomersIdRoute = CustomersIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => CustomersRoute,
+  id: '/customers/$id',
+  path: '/customers/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -131,8 +113,7 @@ export interface FileRoutesByFullPath {
   '/branches': typeof BranchesRoute
   '/cash': typeof CashRoute
   '/change-password': typeof ChangePasswordRoute
-  '/customers': typeof CustomersRouteWithChildren
-  '/employees': typeof EmployeesRouteWithChildren
+  '/employees': typeof EmployeesRoute
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/products': typeof ProductsRoute
@@ -140,10 +121,8 @@ export interface FileRoutesByFullPath {
   '/reports': typeof ReportsRoute
   '/schedule': typeof ScheduleRoute
   '/customers/$id': typeof CustomersIdRoute
-  '/employees/$id': typeof EmployeesIdRoute
   '/orders/$id': typeof OrdersIdRoute
   '/customers/': typeof CustomersIndexRoute
-  '/employees/': typeof EmployeesIndexRoute
   '/orders/': typeof OrdersIndexRoute
 }
 export interface FileRoutesByTo {
@@ -152,6 +131,7 @@ export interface FileRoutesByTo {
   '/branches': typeof BranchesRoute
   '/cash': typeof CashRoute
   '/change-password': typeof ChangePasswordRoute
+  '/employees': typeof EmployeesRoute
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/products': typeof ProductsRoute
@@ -159,10 +139,8 @@ export interface FileRoutesByTo {
   '/reports': typeof ReportsRoute
   '/schedule': typeof ScheduleRoute
   '/customers/$id': typeof CustomersIdRoute
-  '/employees/$id': typeof EmployeesIdRoute
   '/orders/$id': typeof OrdersIdRoute
   '/customers': typeof CustomersIndexRoute
-  '/employees': typeof EmployeesIndexRoute
   '/orders': typeof OrdersIndexRoute
 }
 export interface FileRoutesById {
@@ -172,8 +150,7 @@ export interface FileRoutesById {
   '/branches': typeof BranchesRoute
   '/cash': typeof CashRoute
   '/change-password': typeof ChangePasswordRoute
-  '/customers': typeof CustomersRouteWithChildren
-  '/employees': typeof EmployeesRouteWithChildren
+  '/employees': typeof EmployeesRoute
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/products': typeof ProductsRoute
@@ -181,10 +158,8 @@ export interface FileRoutesById {
   '/reports': typeof ReportsRoute
   '/schedule': typeof ScheduleRoute
   '/customers/$id': typeof CustomersIdRoute
-  '/employees/$id': typeof EmployeesIdRoute
   '/orders/$id': typeof OrdersIdRoute
   '/customers/': typeof CustomersIndexRoute
-  '/employees/': typeof EmployeesIndexRoute
   '/orders/': typeof OrdersIndexRoute
 }
 export interface FileRouteTypes {
@@ -195,7 +170,6 @@ export interface FileRouteTypes {
     | '/branches'
     | '/cash'
     | '/change-password'
-    | '/customers'
     | '/employees'
     | '/inventory'
     | '/login'
@@ -204,10 +178,8 @@ export interface FileRouteTypes {
     | '/reports'
     | '/schedule'
     | '/customers/$id'
-    | '/employees/$id'
     | '/orders/$id'
     | '/customers/'
-    | '/employees/'
     | '/orders/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -216,6 +188,7 @@ export interface FileRouteTypes {
     | '/branches'
     | '/cash'
     | '/change-password'
+    | '/employees'
     | '/inventory'
     | '/login'
     | '/products'
@@ -223,10 +196,8 @@ export interface FileRouteTypes {
     | '/reports'
     | '/schedule'
     | '/customers/$id'
-    | '/employees/$id'
     | '/orders/$id'
     | '/customers'
-    | '/employees'
     | '/orders'
   id:
     | '__root__'
@@ -235,7 +206,6 @@ export interface FileRouteTypes {
     | '/branches'
     | '/cash'
     | '/change-password'
-    | '/customers'
     | '/employees'
     | '/inventory'
     | '/login'
@@ -244,10 +214,8 @@ export interface FileRouteTypes {
     | '/reports'
     | '/schedule'
     | '/customers/$id'
-    | '/employees/$id'
     | '/orders/$id'
     | '/customers/'
-    | '/employees/'
     | '/orders/'
   fileRoutesById: FileRoutesById
 }
@@ -257,15 +225,16 @@ export interface RootRouteChildren {
   BranchesRoute: typeof BranchesRoute
   CashRoute: typeof CashRoute
   ChangePasswordRoute: typeof ChangePasswordRoute
-  CustomersRoute: typeof CustomersRouteWithChildren
-  EmployeesRoute: typeof EmployeesRouteWithChildren
+  EmployeesRoute: typeof EmployeesRoute
   InventoryRoute: typeof InventoryRoute
   LoginRoute: typeof LoginRoute
   ProductsRoute: typeof ProductsRoute
   RegisterRoute: typeof RegisterRoute
   ReportsRoute: typeof ReportsRoute
   ScheduleRoute: typeof ScheduleRoute
+  CustomersIdRoute: typeof CustomersIdRoute
   OrdersIdRoute: typeof OrdersIdRoute
+  CustomersIndexRoute: typeof CustomersIndexRoute
   OrdersIndexRoute: typeof OrdersIndexRoute
 }
 
@@ -320,13 +289,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EmployeesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/customers': {
-      id: '/customers'
-      path: '/customers'
-      fullPath: '/customers'
-      preLoaderRoute: typeof CustomersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/change-password': {
       id: '/change-password'
       path: '/change-password'
@@ -369,19 +331,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrdersIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/employees/': {
-      id: '/employees/'
-      path: '/'
-      fullPath: '/employees/'
-      preLoaderRoute: typeof EmployeesIndexRouteImport
-      parentRoute: typeof EmployeesRoute
-    }
     '/customers/': {
       id: '/customers/'
-      path: '/'
+      path: '/customers'
       fullPath: '/customers/'
       preLoaderRoute: typeof CustomersIndexRouteImport
-      parentRoute: typeof CustomersRoute
+      parentRoute: typeof rootRouteImport
     }
     '/orders/$id': {
       id: '/orders/$id'
@@ -390,50 +345,15 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrdersIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/employees/$id': {
-      id: '/employees/$id'
-      path: '/$id'
-      fullPath: '/employees/$id'
-      preLoaderRoute: typeof EmployeesIdRouteImport
-      parentRoute: typeof EmployeesRoute
-    }
     '/customers/$id': {
       id: '/customers/$id'
-      path: '/$id'
+      path: '/customers/$id'
       fullPath: '/customers/$id'
       preLoaderRoute: typeof CustomersIdRouteImport
-      parentRoute: typeof CustomersRoute
+      parentRoute: typeof rootRouteImport
     }
   }
 }
-
-interface CustomersRouteChildren {
-  CustomersIdRoute: typeof CustomersIdRoute
-  CustomersIndexRoute: typeof CustomersIndexRoute
-}
-
-const CustomersRouteChildren: CustomersRouteChildren = {
-  CustomersIdRoute: CustomersIdRoute,
-  CustomersIndexRoute: CustomersIndexRoute,
-}
-
-const CustomersRouteWithChildren = CustomersRoute._addFileChildren(
-  CustomersRouteChildren,
-)
-
-interface EmployeesRouteChildren {
-  EmployeesIdRoute: typeof EmployeesIdRoute
-  EmployeesIndexRoute: typeof EmployeesIndexRoute
-}
-
-const EmployeesRouteChildren: EmployeesRouteChildren = {
-  EmployeesIdRoute: EmployeesIdRoute,
-  EmployeesIndexRoute: EmployeesIndexRoute,
-}
-
-const EmployeesRouteWithChildren = EmployeesRoute._addFileChildren(
-  EmployeesRouteChildren,
-)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -441,15 +361,16 @@ const rootRouteChildren: RootRouteChildren = {
   BranchesRoute: BranchesRoute,
   CashRoute: CashRoute,
   ChangePasswordRoute: ChangePasswordRoute,
-  CustomersRoute: CustomersRouteWithChildren,
-  EmployeesRoute: EmployeesRouteWithChildren,
+  EmployeesRoute: EmployeesRoute,
   InventoryRoute: InventoryRoute,
   LoginRoute: LoginRoute,
   ProductsRoute: ProductsRoute,
   RegisterRoute: RegisterRoute,
   ReportsRoute: ReportsRoute,
   ScheduleRoute: ScheduleRoute,
+  CustomersIdRoute: CustomersIdRoute,
   OrdersIdRoute: OrdersIdRoute,
+  CustomersIndexRoute: CustomersIndexRoute,
   OrdersIndexRoute: OrdersIndexRoute,
 }
 export const routeTree = rootRouteImport
