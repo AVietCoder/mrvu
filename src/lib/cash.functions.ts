@@ -1,28 +1,21 @@
 import { createServerFn } from "@tanstack/react-start";
-import { supabase } from "./supabase";
-import { fetchRows, insertRow, updateWhere, deleteWhere, uid, now } from "./supabase";
+import { supabase, fetchRows, fetchAllRows, insertRow, updateWhere, deleteWhere, uid, now } from "./supabase";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-export type CashVoucherType = "thu" | "chi";
-export type CashFundType = "tien_mat" | "ngan_hang";
-export type CashVoucherStatus = "active" | "cancelled";
-
-// ─── listCash ────────────────────────────────────────────────────────────────
+// ─── listCash — trả về toàn bộ dữ liệu cần thiết cho trang Sổ quỹ ──────────
 export const listCash = createServerFn({ method: "GET" }).handler(async () => {
-  const [vouchers, branches, users, voucherTypes] = await Promise.all([
+  const [vouchers, branches, users, customers, voucherTypes] = await Promise.all([
     fetchRows("cash_vouchers", { orderBy: "created_at", ascending: false }),
     fetchRows("branches", { orderBy: "name" }),
-    fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
+    fetchRows("users", { select: "id, full_name, is_admin", orderBy: "full_name" }),
+    fetchAllRows("customers", { select: "id, name, phone", orderBy: "name" }),
     fetchRows("cash_voucher_types", { orderBy: "name" }),
   ]);
-
-  return { vouchers, branches, users, voucherTypes };
+  return { vouchers, branches, users, customers, voucherTypes };
 });
 
-// ─── createCashVoucher ────────────────────────────────────────────────────────
+// ─── createCashVoucher ───────────────────────────────────────────────────────
 export const createCashVoucher = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: any }) => {
-    // Generate code: PT000001 or PC000001
     const prefix = data.type === "thu" ? "PT" : "PC";
     const { count } = await supabase
       .from("cash_vouchers")
@@ -30,28 +23,31 @@ export const createCashVoucher = createServerFn({ method: "POST" }).handler(
       .eq("type", data.type);
     const code = prefix + String((count ?? 0) + 1).padStart(6, "0");
 
-    const id = uid();
     await insertRow("cash_vouchers", {
-      id,
+      id: uid(),
       code,
-      type: data.type,                     // 'thu' | 'chi'
-      fund_type: data.fund_type,           // 'tien_mat' | 'ngan_hang'
+      type: data.type,               // 'thu' | 'chi'
+      fund_type: data.fund_type,     // 'tien_mat' | 'ngan_hang'
       branch_id: data.branch_id,
       amount: Number(data.amount),
       voucher_type_id: data.voucher_type_id || null,
-      payer_receiver: data.payer_receiver || null,
+      // thu: collector_user_id = người thu; payer_customer_id = người nộp
+      // chi: payer_user_id = người chi;    receiver_customer_id = người nhận
+      collector_user_id:    data.collector_user_id    || null,
+      payer_customer_id:    data.payer_customer_id    || null,
+      payer_user_id:        data.payer_user_id        || null,
+      receiver_customer_id: data.receiver_customer_id || null,
       note: data.note || null,
       accounting: data.accounting ?? true,
       status: "active",
       created_by: data.created_by || null,
       created_at: now(),
     });
-
     return { ok: true, code };
   },
 );
 
-// ─── updateCashVoucher ────────────────────────────────────────────────────────
+// ─── updateCashVoucher ───────────────────────────────────────────────────────
 export const updateCashVoucher = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: any }) => {
     await updateWhere(
@@ -59,7 +55,10 @@ export const updateCashVoucher = createServerFn({ method: "POST" }).handler(
       {
         amount: Number(data.amount),
         voucher_type_id: data.voucher_type_id || null,
-        payer_receiver: data.payer_receiver || null,
+        collector_user_id:    data.collector_user_id    || null,
+        payer_customer_id:    data.payer_customer_id    || null,
+        payer_user_id:        data.payer_user_id        || null,
+        receiver_customer_id: data.receiver_customer_id || null,
         note: data.note || null,
         accounting: data.accounting ?? true,
       },
@@ -69,7 +68,7 @@ export const updateCashVoucher = createServerFn({ method: "POST" }).handler(
   },
 );
 
-// ─── cancelCashVoucher ────────────────────────────────────────────────────────
+// ─── cancelCashVoucher ───────────────────────────────────────────────────────
 export const cancelCashVoucher = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: { id: string } }) => {
     await updateWhere("cash_vouchers", { status: "cancelled" }, { id: data.id });
@@ -77,7 +76,7 @@ export const cancelCashVoucher = createServerFn({ method: "POST" }).handler(
   },
 );
 
-// ─── upsertCashVoucherType ────────────────────────────────────────────────────
+// ─── upsertCashVoucherType ───────────────────────────────────────────────────
 export const upsertCashVoucherType = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: { id?: string; name: string; kind: "thu" | "chi" } }) => {
     if (data.id) {
@@ -89,7 +88,7 @@ export const upsertCashVoucherType = createServerFn({ method: "POST" }).handler(
   },
 );
 
-// ─── deleteCashVoucherType ────────────────────────────────────────────────────
+// ─── deleteCashVoucherType ───────────────────────────────────────────────────
 export const deleteCashVoucherType = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: { id: string } }) => {
     await deleteWhere("cash_voucher_types", { id: data.id });

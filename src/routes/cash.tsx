@@ -3,24 +3,20 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import {
-  listCash,
-  createCashVoucher,
-  updateCashVoucher,
-  cancelCashVoucher,
-  upsertCashVoucherType,
-  deleteCashVoucherType,
+  listCash, createCashVoucher, updateCashVoucher,
+  cancelCashVoucher, upsertCashVoucherType, deleteCashVoucherType,
 } from "@/lib/cash.functions";
-import { AppShell, fmt } from "@/components/AppShell";
+import { AppShell } from "@/components/AppShell";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Plus, X, Wallet, Landmark, ChevronRight, Search, FileDown,
-  CheckCircle2, XCircle, Pencil, Trash2, Settings2,
+  Plus, X, Wallet, Landmark, Search,
+  CheckCircle2, XCircle, Pencil, Trash2, Settings2, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -31,32 +27,43 @@ export const Route = createFileRoute("/cash")({
 });
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
-function moneyFmt(n: number) {
-  return new Intl.NumberFormat("vi-VN").format(Math.round(n));
-}
-function fmtInput(v: string) {
+const moneyFmt = (n: number) =>
+  new Intl.NumberFormat("vi-VN").format(Math.round(n));
+const fmtInput = (v: string) => {
   const n = v.replace(/\D/g, "");
-  if (!n) return "";
-  return new Intl.NumberFormat("vi-VN").format(Number(n));
-}
-function parseInput(v: string) {
-  return Number(v.replace(/\D/g, "")) || 0;
-}
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
+  return n ? new Intl.NumberFormat("vi-VN").format(Number(n)) : "";
+};
+const parseInput = (v: string) => Number(v.replace(/\D/g, "")) || 0;
+const fmtDate = (iso: string) =>
+  new Date(iso).toLocaleString("vi-VN", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
 
 const FUND_TABS = [
   { id: "tien_mat", label: "Tiền mặt", icon: Wallet },
   { id: "ngan_hang", label: "Ngân hàng", icon: Landmark },
   { id: "all", label: "Tổng quỹ", icon: null },
 ] as const;
-
 type FundTab = "tien_mat" | "ngan_hang" | "all";
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── blank form ───────────────────────────────────────────────────────────────
+const blankForm = () => ({
+  amount: "",
+  voucherTypeId: "",
+  collectorUserId: "",   // thu: người thu tiền (user)
+  payerCustomerId: "",   // thu: người nộp (customer)
+  payerUserId: "",       // chi: người chi tiền (user)
+  receiverCustomerId: "",// chi: người nhận (customer)
+  note: "",
+  accounting: true,
+  fundType: "tien_mat" as "tien_mat" | "ngan_hang",
+  branchId: "",
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 function Page() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const qc = useQueryClient();
   const listFn = useServerFn(listCash);
   const createFn = useServerFn(createCashVoucher);
@@ -67,148 +74,211 @@ function Page() {
 
   const { data, isLoading } = useQuery({ queryKey: ["cash"], queryFn: () => listFn() });
 
+  // ── quyền xem ────────────────────────────────────────────────────────
+  const canViewAll =
+    isAdmin || user?.permissions.includes("view_cash_all");
+  const canViewBranch =
+    isAdmin ||
+    user?.permissions.includes("view_cash_all") ||
+    user?.permissions.includes("view_cash_branch");
+
+  // Nếu không có quyền nào → không hiển thị gì
+  if (!canViewBranch) {
+    return (
+      <AppShell title="Sổ quỹ">
+        <div className="py-16 text-center text-muted-foreground">
+          Bạn không có quyền xem Sổ quỹ. Liên hệ quản trị viên để được cấp quyền.
+        </div>
+      </AppShell>
+    );
+  }
+
+  // ── state ─────────────────────────────────────────────────────────────
   const [fund, setFund] = useState<FundTab>("tien_mat");
-  const [filterBranch, setFilterBranch] = useState("");
+  const [filterBranch, setFilterBranch] = useState<string>(() => {
+    // Mặc định chọn chi nhánh đầu tiên của user (nếu không phải admin/view_all)
+    if (isAdmin || user?.permissions.includes("view_cash_all")) return "";
+    return user?.branch_ids?.[0] ?? "";
+  });
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"" | "thu" | "chi">("");
-  const [selectedVoucher, setSelectedVoucher] = useState<any>(null);
 
-  // Dialog states
+  const [selectedVoucher, setSelectedVoucher] = useState<any>(null);
   const [openCreate, setOpenCreate] = useState(false);
   const [createKind, setCreateKind] = useState<"thu" | "chi">("thu");
   const [openEdit, setOpenEdit] = useState(false);
-  const [openTypes, setOpenTypes] = useState(false);
   const [openCancel, setOpenCancel] = useState(false);
-
-  // Create form
-  const [cAmount, setCAmount] = useState("");
-  const [cVoucherTypeId, setCVoucherTypeId] = useState("");
-  const [cPayerReceiver, setCPayerReceiver] = useState("");
-  const [cNote, setCNote] = useState("");
-  const [cAccounting, setCAccounting] = useState(true);
-  const [cBranch, setCBranch] = useState("");
-  const [cFund, setCFund] = useState<"tien_mat" | "ngan_hang">("tien_mat");
+  const [openTypes, setOpenTypes] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Edit form
-  const [eAmount, setEAmount] = useState("");
-  const [eVoucherTypeId, setEVoucherTypeId] = useState("");
-  const [ePayerReceiver, setEPayerReceiver] = useState("");
-  const [eNote, setENoteState] = useState("");
-  const [eAccounting, setEAccounting] = useState(true);
+  const [form, setForm] = useState(blankForm);
+  const [editForm, setEditForm] = useState(blankForm);
 
-  // Type manager
   const [newTypeName, setNewTypeName] = useState("");
   const [newTypeKind, setNewTypeKind] = useState<"thu" | "chi">("thu");
 
-  const vouchers = data?.vouchers ?? [];
-  const branches = data?.branches ?? [];
-  const users = data?.users ?? [];
+  // ── raw data ──────────────────────────────────────────────────────────
+  const allVouchers  = data?.vouchers     ?? [];
+  const branches     = data?.branches     ?? [];
+  const users        = data?.users        ?? [];
+  const customers    = data?.customers    ?? [];
   const voucherTypes = data?.voucherTypes ?? [];
 
-  // ─── computed stats ──────────────────────────────────────────────────────
-  function stats(fundType: "tien_mat" | "ngan_hang" | null, branchId: string) {
-    const list = vouchers.filter((v: any) =>
-      v.status === "active" &&
-      (fundType ? v.fund_type === fundType : true) &&
-      (branchId ? v.branch_id === branchId : true),
+  // Chi nhánh user có quyền thấy
+  const visibleBranches = useMemo(() => {
+    if (canViewAll) return branches;
+    return branches.filter((b: any) =>
+      !user?.branch_ids?.length || user.branch_ids.includes(b.id),
     );
-    const thu = list.filter((v: any) => v.type === "thu").reduce((s: number, v: any) => s + v.amount, 0);
-    const chi = list.filter((v: any) => v.type === "chi").reduce((s: number, v: any) => s + v.amount, 0);
+  }, [branches, canViewAll, user]);
+
+  // Nhân viên của branch đang chọn (dùng cho picker người thu/chi)
+  // Admin thấy tất cả; nhân viên thường chỉ thấy bản thân
+  const staffOptions = useMemo(() => {
+    const list = users.map((u: any) => ({
+      value: u.id,
+      label: u.full_name,
+    }));
+    if (isAdmin) return list;
+    // Non-admin: chỉ hiện bản thân (mặc định) — không cho chọn người khác
+    return list.filter((u: any) => u.value === user?.id);
+  }, [users, isAdmin, user]);
+
+  const customerOptions = useMemo(
+    () => customers.map((c: any) => ({ value: c.id, label: c.name, sub: c.phone ?? undefined })),
+    [customers],
+  );
+
+  // ── stats ─────────────────────────────────────────────────────────────
+  const branchStats = useMemo(() => {
+    const currentFund = fund === "all" ? null : fund;
+    const list = allVouchers.filter(
+      (v: any) =>
+        v.status === "active" &&
+        (currentFund ? v.fund_type === currentFund : true) &&
+        (filterBranch ? v.branch_id === filterBranch : true),
+    );
+    const thu = list
+      .filter((v: any) => v.type === "thu")
+      .reduce((s: number, v: any) => s + v.amount, 0);
+    const chi = list
+      .filter((v: any) => v.type === "chi")
+      .reduce((s: number, v: any) => s + v.amount, 0);
     return { thu, chi, ton: thu - chi };
-  }
+  }, [allVouchers, fund, filterBranch]);
 
-  const currentFund = fund === "all" ? null : fund;
-  const branchStats = stats(currentFund, filterBranch);
-
-  // ─── filtered list ───────────────────────────────────────────────────────
+  // ── filtered list ─────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    return vouchers.filter((v: any) => {
-      const matchFund = fund === "all" || v.fund_type === fund;
+    const currentFund = fund === "all" ? null : fund;
+    return allVouchers.filter((v: any) => {
+      const matchFund   = !currentFund || v.fund_type === currentFund;
       const matchBranch = !filterBranch || v.branch_id === filterBranch;
-      const matchType = !filterType || v.type === filterType;
+      // Nhân viên không có view_cash_all chỉ thấy chi nhánh mình
+      const matchAccess =
+        canViewAll ||
+        (user?.branch_ids?.length === 0) ||
+        user?.branch_ids?.includes(v.branch_id);
+      const matchType  = !filterType || v.type === filterType;
       const q = search.toLowerCase();
       const matchSearch =
         !search ||
         v.code?.toLowerCase().includes(q) ||
-        v.payer_receiver?.toLowerCase().includes(q) ||
+        getCustomerName(v.payer_customer_id)?.toLowerCase().includes(q) ||
+        getCustomerName(v.receiver_customer_id)?.toLowerCase().includes(q) ||
+        getUserName(v.collector_user_id)?.toLowerCase().includes(q) ||
+        getUserName(v.payer_user_id)?.toLowerCase().includes(q) ||
         v.note?.toLowerCase().includes(q);
-      return matchFund && matchBranch && matchType && matchSearch;
+      return matchFund && matchBranch && matchAccess && matchType && matchSearch;
     });
-  }, [vouchers, fund, filterBranch, filterType, search]);
+  }, [allVouchers, fund, filterBranch, filterType, search, canViewAll, user]);
 
-  // ─── actions ─────────────────────────────────────────────────────────────
+  // ── lookup helpers ────────────────────────────────────────────────────
+  const getBranchName    = (id: string) => branches.find((b: any) => b.id === id)?.name ?? "—";
+  const getUserName      = (id: string) => users.find((u: any) => u.id === id)?.full_name ?? "";
+  const getCustomerName  = (id: string) => customers.find((c: any) => c.id === id)?.name ?? "";
+  const getTypeName      = (id: string) => voucherTypes.find((t: any) => t.id === id)?.name ?? "—";
+
+  // ── open create ───────────────────────────────────────────────────────
   function openCreateDialog(kind: "thu" | "chi") {
     setCreateKind(kind);
-    setCAmount("");
-    setCVoucherTypeId("");
-    setCPayerReceiver("");
-    setCNote("");
-    setCAccounting(true);
-    setCBranch(branches[0]?.id ?? "");
-    setCFund(fund === "all" ? "tien_mat" : fund as any);
+    setForm({
+      ...blankForm(),
+      branchId: filterBranch || visibleBranches[0]?.id || "",
+      fundType: fund === "all" ? "tien_mat" : (fund as any),
+      // Mặc định người thu/chi = người đang đăng nhập
+      collectorUserId: kind === "thu" ? (user?.id ?? "") : "",
+      payerUserId:     kind === "chi" ? (user?.id ?? "") : "",
+    });
     setOpenCreate(true);
   }
 
+  function openEditDialog(v: any) {
+    setSelectedVoucher(v);
+    setEditForm({
+      amount:               moneyFmt(v.amount),
+      voucherTypeId:        v.voucher_type_id ?? "",
+      collectorUserId:      v.collector_user_id ?? "",
+      payerCustomerId:      v.payer_customer_id ?? "",
+      payerUserId:          v.payer_user_id ?? "",
+      receiverCustomerId:   v.receiver_customer_id ?? "",
+      note:                 v.note ?? "",
+      accounting:           v.accounting ?? true,
+      fundType:             v.fund_type,
+      branchId:             v.branch_id,
+    });
+    setOpenEdit(true);
+  }
+
+  // ── save ──────────────────────────────────────────────────────────────
   async function handleCreate() {
-    if (!parseInput(cAmount)) return toast.error("Nhập số tiền");
+    if (!parseInput(form.amount)) return toast.error("Nhập số tiền");
     setSaving(true);
     try {
       await createFn({
         data: {
-          type: createKind,
-          fund_type: cFund,
-          branch_id: cBranch,
-          amount: parseInput(cAmount),
-          voucher_type_id: cVoucherTypeId || null,
-          payer_receiver: cPayerReceiver || null,
-          note: cNote || null,
-          accounting: cAccounting,
-          created_by: user?.id ?? null,
+          type:                 createKind,
+          fund_type:            form.fundType,
+          branch_id:            form.branchId,
+          amount:               parseInput(form.amount),
+          voucher_type_id:      form.voucherTypeId || null,
+          collector_user_id:    createKind === "thu" ? (form.collectorUserId || null) : null,
+          payer_customer_id:    createKind === "thu" ? (form.payerCustomerId || null) : null,
+          payer_user_id:        createKind === "chi" ? (form.payerUserId || null) : null,
+          receiver_customer_id: createKind === "chi" ? (form.receiverCustomerId || null) : null,
+          note:                 form.note || null,
+          accounting:           form.accounting,
+          created_by:           user?.id ?? null,
         },
       });
       toast.success(`Tạo phiếu ${createKind === "thu" ? "thu" : "chi"} thành công`);
       qc.invalidateQueries({ queryKey: ["cash"] });
       setOpenCreate(false);
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function openEditDialog(v: any) {
-    setSelectedVoucher(v);
-    setEAmount(moneyFmt(v.amount));
-    setEVoucherTypeId(v.voucher_type_id ?? "");
-    setEPayerReceiver(v.payer_receiver ?? "");
-    setENoteState(v.note ?? "");
-    setEAccounting(v.accounting ?? true);
-    setOpenEdit(true);
+    } catch (e: any) { toast.error(e.message); }
+    finally { setSaving(false); }
   }
 
   async function handleEdit() {
-    if (!parseInput(eAmount)) return toast.error("Nhập số tiền");
+    if (!parseInput(editForm.amount)) return toast.error("Nhập số tiền");
     setSaving(true);
     try {
       await updateFn({
         data: {
-          id: selectedVoucher.id,
-          amount: parseInput(eAmount),
-          voucher_type_id: eVoucherTypeId || null,
-          payer_receiver: ePayerReceiver || null,
-          note: eNote || null,
-          accounting: eAccounting,
+          id:                   selectedVoucher.id,
+          amount:               parseInput(editForm.amount),
+          voucher_type_id:      editForm.voucherTypeId || null,
+          collector_user_id:    selectedVoucher.type === "thu" ? (editForm.collectorUserId || null) : null,
+          payer_customer_id:    selectedVoucher.type === "thu" ? (editForm.payerCustomerId || null) : null,
+          payer_user_id:        selectedVoucher.type === "chi" ? (editForm.payerUserId || null) : null,
+          receiver_customer_id: selectedVoucher.type === "chi" ? (editForm.receiverCustomerId || null) : null,
+          note:                 editForm.note || null,
+          accounting:           editForm.accounting,
         },
       });
       toast.success("Cập nhật phiếu thành công");
       qc.invalidateQueries({ queryKey: ["cash"] });
       setOpenEdit(false);
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setSaving(false);
-    }
+    } catch (e: any) { toast.error(e.message); }
+    finally { setSaving(false); }
   }
 
   async function handleCancel() {
@@ -219,11 +289,8 @@ function Page() {
       qc.invalidateQueries({ queryKey: ["cash"] });
       setOpenCancel(false);
       setSelectedVoucher(null);
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setSaving(false);
-    }
+    } catch (e: any) { toast.error(e.message); }
+    finally { setSaving(false); }
   }
 
   async function handleAddType() {
@@ -233,112 +300,163 @@ function Page() {
       setNewTypeName("");
       qc.invalidateQueries({ queryKey: ["cash"] });
       toast.success("Đã thêm loại thu/chi");
-    } catch (e: any) {
-      toast.error(e.message);
-    }
+    } catch (e: any) { toast.error(e.message); }
   }
 
-  async function handleDeleteType(id: string) {
-    try {
-      await deleteTypeFn({ data: { id } });
-      qc.invalidateQueries({ queryKey: ["cash"] });
-    } catch (e: any) {
-      toast.error(e.message);
-    }
-  }
+  // ── VoucherForm — shared between create & edit ────────────────────────
+  function VoucherForm({
+    kind, f, setF,
+  }: {
+    kind: "thu" | "chi";
+    f: typeof form;
+    setF: (v: typeof form) => void;
+  }) {
+    const typeOpts = voucherTypes
+      .filter((t: any) => t.kind === kind)
+      .map((t: any) => ({ value: t.id, label: t.name }));
 
-  // ─── voucher form fields (shared for create/edit) ─────────────────────────
-  function VoucherFields({
-    kind, amount, setAmount, voucherTypeId, setVoucherTypeId,
-    payerReceiver, setPayerReceiver, note, setNote,
-    accounting, setAccounting,
-  }: any) {
-    const typeOptions = voucherTypes.filter((t: any) => t.kind === kind);
     return (
       <div className="space-y-3">
+        {/* Số tiền */}
         <div>
-          <Label>Số tiền *</Label>
+          <Label>Số tiền <span className="text-destructive">*</span></Label>
           <Input
             className="mt-1"
-            value={amount}
-            onChange={(e) => setAmount(fmtInput(e.target.value))}
+            value={f.amount}
+            onChange={(e) => setF({ ...f, amount: fmtInput(e.target.value) })}
             onFocus={(e) => e.target.select()}
             placeholder="0"
           />
         </div>
+
+        {/* Loại thu/chi */}
         <div>
           <Label>Loại {kind === "thu" ? "thu" : "chi"}</Label>
-          <select
-            className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-            value={voucherTypeId}
-            onChange={(e) => setVoucherTypeId(e.target.value)}
-          >
-            <option value="">-- Chọn loại --</option>
-            {typeOptions.map((t: any) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <Label>Người {kind === "thu" ? "nộp" : "nhận"}</Label>
-          <Input
-            className="mt-1"
-            value={payerReceiver}
-            onChange={(e) => setPayerReceiver(e.target.value)}
-            placeholder="Họ tên / số điện thoại"
+          <SearchableSelect
+            className="w-full"
+            value={f.voucherTypeId}
+            onChange={(v) => setF({ ...f, voucherTypeId: v })}
+            emptyLabel="-- Không chọn --"
+            placeholder="Tìm loại..."
+            options={typeOpts}
           />
         </div>
+
+        {kind === "thu" ? (
+          <>
+            {/* Người thu tiền (user/nhân viên) */}
+            <div>
+              <Label>Người thu tiền</Label>
+              <SearchableSelect
+                className="w-full"
+                value={f.collectorUserId}
+                onChange={(v) => setF({ ...f, collectorUserId: v })}
+                emptyLabel="-- Không chọn --"
+                placeholder="Tìm nhân viên..."
+                options={staffOptions}
+                disabled={!isAdmin}  // non-admin bị khoá, luôn là bản thân
+              />
+              {!isAdmin && (
+                <p className="text-xs text-muted-foreground mt-1">Mặc định là bạn đang đăng nhập</p>
+              )}
+            </div>
+
+            {/* Người nộp tiền (customer) */}
+            <div>
+              <Label>Người nộp tiền</Label>
+              <SearchableSelect
+                className="w-full"
+                value={f.payerCustomerId}
+                onChange={(v) => setF({ ...f, payerCustomerId: v })}
+                emptyLabel="-- Không chọn --"
+                placeholder="Tìm khách hàng..."
+                options={customerOptions}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Người chi tiền (user/nhân viên) */}
+            <div>
+              <Label>Người chi tiền</Label>
+              <SearchableSelect
+                className="w-full"
+                value={f.payerUserId}
+                onChange={(v) => setF({ ...f, payerUserId: v })}
+                emptyLabel="-- Không chọn --"
+                placeholder="Tìm nhân viên..."
+                options={staffOptions}
+                disabled={!isAdmin}
+              />
+              {!isAdmin && (
+                <p className="text-xs text-muted-foreground mt-1">Mặc định là bạn đang đăng nhập</p>
+              )}
+            </div>
+
+            {/* Người nhận tiền (customer) */}
+            <div>
+              <Label>Người nhận tiền</Label>
+              <SearchableSelect
+                className="w-full"
+                value={f.receiverCustomerId}
+                onChange={(v) => setF({ ...f, receiverCustomerId: v })}
+                emptyLabel="-- Không chọn --"
+                placeholder="Tìm khách hàng..."
+                options={customerOptions}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Ghi chú */}
         <div>
           <Label>Ghi chú</Label>
           <Input
             className="mt-1"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
+            value={f.note}
+            onChange={(e) => setF({ ...f, note: e.target.value })}
             placeholder="Ghi chú thêm..."
           />
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* Hạch toán */}
+        <label className="flex items-center gap-2 cursor-pointer select-none">
           <input
             type="checkbox"
-            id="accounting"
-            checked={accounting}
-            onChange={(e) => setAccounting(e.target.checked)}
+            checked={f.accounting}
+            onChange={(e) => setF({ ...f, accounting: e.target.checked })}
             className="h-4 w-4 rounded border"
           />
-          <label htmlFor="accounting" className="text-sm cursor-pointer">
-            Hạch toán vào kết quả kinh doanh
-          </label>
-        </div>
+          <span className="text-sm">Hạch toán vào kết quả kinh doanh</span>
+        </label>
       </div>
     );
   }
 
-  const branchName = (id: string) => branches.find((b: any) => b.id === id)?.name ?? "—";
-  const userName = (id: string) => users.find((u: any) => u.id === id)?.full_name ?? "—";
-  const typeName = (id: string) => voucherTypes.find((t: any) => t.id === id)?.name ?? "—";
-
-  // ─── render ──────────────────────────────────────────────────────────────
+  // ── render ────────────────────────────────────────────────────────────
   return (
     <AppShell title="Sổ quỹ">
       <div className="space-y-4">
-        {/* Header actions */}
+
+        {/* ── Header actions ── */}
         <div className="flex flex-wrap gap-2 items-center justify-between">
           <div className="flex gap-2">
-            <Button onClick={() => openCreateDialog("thu")} className="bg-green-600 hover:bg-green-700 text-white">
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => openCreateDialog("thu")}
+            >
               <Plus className="h-4 w-4 mr-1" />Phiếu thu
             </Button>
-            <Button onClick={() => openCreateDialog("chi")} variant="destructive">
+            <Button variant="destructive" onClick={() => openCreateDialog("chi")}>
               <Plus className="h-4 w-4 mr-1" />Phiếu chi
             </Button>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setOpenTypes(true)}>
-              <Settings2 className="h-4 w-4 mr-1" />Loại thu/chi
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" onClick={() => setOpenTypes(true)}>
+            <Settings2 className="h-4 w-4 mr-1" />Loại thu/chi
+          </Button>
         </div>
 
-        {/* Fund tabs */}
+        {/* ── Fund tabs ── */}
         <div className="flex gap-1 border-b">
           {FUND_TABS.map((tab) => {
             const Icon = tab.icon;
@@ -346,10 +464,12 @@ function Page() {
               <button
                 key={tab.id}
                 onClick={() => setFund(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors
-                  ${fund === tab.id
+                className={[
+                  "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
+                  fund === tab.id
                     ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                ].join(" ")}
               >
                 {Icon && <Icon className="h-4 w-4" />}
                 {tab.label}
@@ -358,44 +478,50 @@ function Page() {
           })}
         </div>
 
-        {/* Stats bar */}
+        {/* ── Stats + Branch selector ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Chi nhánh */}
           <div className="rounded-lg border p-3">
-            <div className="text-xs text-muted-foreground mb-1">Chi nhánh</div>
+            <div className="text-xs text-muted-foreground mb-1.5">Chi nhánh</div>
             <select
-              className="w-full text-sm bg-transparent outline-none"
+              className="w-full text-sm bg-transparent outline-none cursor-pointer"
               value={filterBranch}
               onChange={(e) => setFilterBranch(e.target.value)}
             >
-              <option value="">Tất cả</option>
-              {branches.map((b: any) => (
+              {canViewAll && <option value="">Tất cả chi nhánh</option>}
+              {visibleBranches.map((b: any) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
             </select>
           </div>
+
           <div className="rounded-lg border p-3">
             <div className="text-xs text-muted-foreground mb-1">Tổng thu</div>
-            <div className="font-semibold text-green-600">{moneyFmt(branchStats.thu)}</div>
+            <div className="font-semibold text-green-600 text-lg">
+              +{moneyFmt(branchStats.thu)}
+            </div>
           </div>
           <div className="rounded-lg border p-3">
             <div className="text-xs text-muted-foreground mb-1">Tổng chi</div>
-            <div className="font-semibold text-red-600">-{moneyFmt(branchStats.chi)}</div>
+            <div className="font-semibold text-red-600 text-lg">
+              -{moneyFmt(branchStats.chi)}
+            </div>
           </div>
           <div className="rounded-lg border p-3">
             <div className="text-xs text-muted-foreground mb-1">Tồn quỹ</div>
-            <div className={`font-semibold ${branchStats.ton >= 0 ? "text-blue-600" : "text-red-600"}`}>
+            <div className={`font-semibold text-lg ${branchStats.ton >= 0 ? "text-blue-600" : "text-red-600"}`}>
               {moneyFmt(branchStats.ton)}
             </div>
           </div>
         </div>
 
-        {/* Filters */}
+        {/* ── Filters ── */}
         <div className="flex flex-wrap gap-2 items-center">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
-              className="pl-8 h-9 w-56"
-              placeholder="Tìm mã phiếu, người..."
+              className="pl-8 h-9 w-60"
+              placeholder="Tìm mã phiếu, khách hàng..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -411,68 +537,110 @@ function Page() {
           </select>
         </div>
 
-        {/* Table */}
+        {/* ── Table ── */}
         <div className="rounded-lg border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-2 text-left font-medium">Mã phiếu</th>
-                  <th className="px-3 py-2 text-left font-medium">Thời gian</th>
-                  <th className="px-3 py-2 text-left font-medium">Loại</th>
-                  <th className="px-3 py-2 text-left font-medium">Quỹ</th>
-                  <th className="px-3 py-2 text-left font-medium">Người nộp/nhận</th>
-                  <th className="px-3 py-2 text-left font-medium">Chi nhánh</th>
-                  <th className="px-3 py-2 text-left font-medium">Trạng thái</th>
-                  <th className="px-3 py-2 text-right font-medium">Giá trị</th>
-                  <th className="px-3 py-2 text-center font-medium">Thao tác</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Mã phiếu</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Thời gian</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Loại</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Quỹ</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Người thu/chi</th>
+                  <th className="px-3 py-2.5 text-left font-medium">Người nộp/nhận</th>
+                  {canViewAll && (
+                    <th className="px-3 py-2.5 text-left font-medium">Chi nhánh</th>
+                  )}
+                  <th className="px-3 py-2.5 text-left font-medium">Trạng thái</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Giá trị</th>
+                  <th className="px-3 py-2.5 text-center font-medium w-16">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {isLoading && (
-                  <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">Đang tải...</td></tr>
+                  <tr>
+                    <td colSpan={10} className="py-10 text-center text-muted-foreground">
+                      Đang tải dữ liệu...
+                    </td>
+                  </tr>
                 )}
                 {!isLoading && filtered.length === 0 && (
-                  <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">Chưa có phiếu nào</td></tr>
+                  <tr>
+                    <td colSpan={10} className="py-10 text-center text-muted-foreground">
+                      Chưa có phiếu nào
+                    </td>
+                  </tr>
                 )}
                 {filtered.map((v: any) => {
                   const isActive = v.status === "active";
                   const isThu = v.type === "thu";
+                  const staffName = isThu
+                    ? getUserName(v.collector_user_id)
+                    : getUserName(v.payer_user_id);
+                  const customerName = isThu
+                    ? getCustomerName(v.payer_customer_id)
+                    : getCustomerName(v.receiver_customer_id);
+
                   return (
                     <tr
                       key={v.id}
-                      className={`hover:bg-muted/30 cursor-pointer ${!isActive ? "opacity-50" : ""}`}
-                      onClick={() => setSelectedVoucher(selectedVoucher?.id === v.id ? null : v)}
+                      className={`hover:bg-muted/30 cursor-pointer ${!isActive ? "opacity-50 line-through" : ""}`}
+                      onClick={() =>
+                        setSelectedVoucher(selectedVoucher?.id === v.id ? null : v)
+                      }
                     >
-                      <td className="px-3 py-2.5 font-mono font-medium">{v.code}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{fmtDate(v.created_at)}</td>
+                      <td className="px-3 py-2.5 font-mono font-medium text-xs">
+                        {v.code}
+                      </td>
+                      <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap text-xs">
+                        {fmtDate(v.created_at)}
+                      </td>
                       <td className="px-3 py-2.5">
-                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full
-                          ${isThu ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                        <span
+                          className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full
+                            ${isThu
+                              ? "bg-green-100 text-green-700"
+                              : "bg-red-100 text-red-700"
+                            }`}
+                        >
                           {isThu ? "Thu" : "Chi"}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-muted-foreground">
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">
                         {v.fund_type === "tien_mat" ? "Tiền mặt" : "Ngân hàng"}
                       </td>
-                      <td className="px-3 py-2.5">{v.payer_receiver || "—"}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground">{branchName(v.branch_id)}</td>
+                      <td className="px-3 py-2.5 text-xs">
+                        {staffName || <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs">
+                        {customerName || <span className="text-muted-foreground">—</span>}
+                      </td>
+                      {canViewAll && (
+                        <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                          {getBranchName(v.branch_id)}
+                        </td>
+                      )}
                       <td className="px-3 py-2.5">
                         {isActive ? (
-                          <span className="flex items-center gap-1 text-xs text-green-600">
-                            <CheckCircle2 className="h-3.5 w-3.5" />Đã lưu
+                          <span className="flex items-center gap-1 text-xs text-green-600 whitespace-nowrap">
+                            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />Đã lưu
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 text-xs text-red-500">
-                            <XCircle className="h-3.5 w-3.5" />Đã hủy
+                          <span className="flex items-center gap-1 text-xs text-red-500 whitespace-nowrap">
+                            <XCircle className="h-3.5 w-3.5 shrink-0" />Đã hủy
                           </span>
                         )}
                         {isActive && !v.accounting && (
-                          <span className="text-xs text-amber-600 block">Không hạch toán</span>
+                          <span className="text-xs text-amber-600 block whitespace-nowrap">
+                            Không hạch toán
+                          </span>
                         )}
                       </td>
-                      <td className={`px-3 py-2.5 text-right font-semibold tabular-nums
-                        ${isThu ? "text-green-600" : "text-red-600"}`}>
+                      <td
+                        className={`px-3 py-2.5 text-right font-semibold tabular-nums text-sm
+                          ${isThu ? "text-green-600" : "text-red-600"}`}
+                      >
                         {isThu ? "+" : "-"}{moneyFmt(v.amount)}
                       </td>
                       <td className="px-3 py-2.5 text-center">
@@ -480,17 +648,24 @@ function Page() {
                           <div className="flex items-center justify-center gap-1">
                             <button
                               type="button"
-                              onClick={(e) => { e.stopPropagation(); openEditDialog(v); }}
-                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
                               title="Sửa"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditDialog(v);
+                              }}
+                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button
                               type="button"
-                              onClick={(e) => { e.stopPropagation(); setSelectedVoucher(v); setOpenCancel(true); }}
+                              title="Hủy phiếu"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedVoucher(v);
+                                setOpenCancel(true);
+                              }}
                               className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                              title="Hủy"
                             >
                               <X className="h-3.5 w-3.5" />
                             </button>
@@ -505,51 +680,108 @@ function Page() {
           </div>
         </div>
 
-        {/* Detail panel */}
+        {/* ── Detail panel (click row để xem) ── */}
         {selectedVoucher && !openEdit && !openCancel && (
           <div className="rounded-lg border p-4 bg-muted/20 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="font-semibold">
-                Chi tiết phiếu: <span className="font-mono">{selectedVoucher.code}</span>
-              </div>
-              <button onClick={() => setSelectedVoucher(null)} className="text-muted-foreground hover:text-foreground">
+              <span className="font-semibold text-sm">
+                Chi tiết phiếu:{" "}
+                <span className="font-mono">{selectedVoucher.code}</span>
+              </span>
+              <button
+                onClick={() => setSelectedVoucher(null)}
+                className="text-muted-foreground hover:text-foreground"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-              <div><span className="text-muted-foreground">Loại phiếu:</span> {selectedVoucher.type === "thu" ? "Phiếu thu" : "Phiếu chi"}</div>
-              <div><span className="text-muted-foreground">Quỹ:</span> {selectedVoucher.fund_type === "tien_mat" ? "Tiền mặt" : "Ngân hàng"}</div>
-              <div><span className="text-muted-foreground">Số tiền:</span> <strong>{moneyFmt(selectedVoucher.amount)}</strong></div>
-              <div><span className="text-muted-foreground">Loại thu/chi:</span> {selectedVoucher.voucher_type_id ? typeName(selectedVoucher.voucher_type_id) : "—"}</div>
-              <div><span className="text-muted-foreground">Người nộp/nhận:</span> {selectedVoucher.payer_receiver || "—"}</div>
-              <div><span className="text-muted-foreground">Chi nhánh:</span> {branchName(selectedVoucher.branch_id)}</div>
-              <div><span className="text-muted-foreground">Người tạo:</span> {userName(selectedVoucher.created_by)}</div>
-              <div><span className="text-muted-foreground">Thời gian:</span> {fmtDate(selectedVoucher.created_at)}</div>
-              <div><span className="text-muted-foreground">Hạch toán:</span> {selectedVoucher.accounting ? "Có" : "Không"}</div>
+              <div>
+                <span className="text-muted-foreground">Loại phiếu: </span>
+                {selectedVoucher.type === "thu" ? "Phiếu thu" : "Phiếu chi"}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Quỹ: </span>
+                {selectedVoucher.fund_type === "tien_mat" ? "Tiền mặt" : "Ngân hàng"}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Số tiền: </span>
+                <strong>{moneyFmt(selectedVoucher.amount)} ₫</strong>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Loại thu/chi: </span>
+                {selectedVoucher.voucher_type_id
+                  ? getTypeName(selectedVoucher.voucher_type_id)
+                  : "—"}
+              </div>
+              {selectedVoucher.type === "thu" ? (
+                <>
+                  <div>
+                    <span className="text-muted-foreground">Người thu: </span>
+                    {getUserName(selectedVoucher.collector_user_id) || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Người nộp: </span>
+                    {getCustomerName(selectedVoucher.payer_customer_id) || "—"}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <span className="text-muted-foreground">Người chi: </span>
+                    {getUserName(selectedVoucher.payer_user_id) || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Người nhận: </span>
+                    {getCustomerName(selectedVoucher.receiver_customer_id) || "—"}
+                  </div>
+                </>
+              )}
+              <div>
+                <span className="text-muted-foreground">Chi nhánh: </span>
+                {getBranchName(selectedVoucher.branch_id)}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Người tạo: </span>
+                {getUserName(selectedVoucher.created_by) || "—"}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Thời gian: </span>
+                {fmtDate(selectedVoucher.created_at)}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Hạch toán: </span>
+                {selectedVoucher.accounting ? "Có" : "Không"}
+              </div>
               {selectedVoucher.note && (
-                <div className="col-span-2 sm:col-span-3"><span className="text-muted-foreground">Ghi chú:</span> {selectedVoucher.note}</div>
+                <div className="col-span-2 sm:col-span-3">
+                  <span className="text-muted-foreground">Ghi chú: </span>
+                  {selectedVoucher.note}
+                </div>
               )}
             </div>
           </div>
         )}
       </div>
 
-      {/* ─── Create dialog ───────────────────────────────────────────────── */}
+      {/* ════ Create dialog ════ */}
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {createKind === "thu" ? "Tạo phiếu thu" : "Tạo phiếu chi"}
+              {createKind === "thu" ? "✅ Tạo phiếu thu" : "🔴 Tạo phiếu chi"}
             </DialogTitle>
           </DialogHeader>
+
           <div className="space-y-3">
+            {/* Quỹ + Chi nhánh */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Quỹ</Label>
                 <select
                   className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  value={cFund}
-                  onChange={(e) => setCFund(e.target.value as any)}
+                  value={form.fundType}
+                  onChange={(e) => setForm({ ...form, fundType: e.target.value as any })}
                 >
                   <option value="tien_mat">Tiền mặt</option>
                   <option value="ngan_hang">Ngân hàng</option>
@@ -559,24 +791,19 @@ function Page() {
                 <Label>Chi nhánh</Label>
                 <select
                   className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  value={cBranch}
-                  onChange={(e) => setCBranch(e.target.value)}
+                  value={form.branchId}
+                  onChange={(e) => setForm({ ...form, branchId: e.target.value })}
                 >
-                  {branches.map((b: any) => (
+                  {visibleBranches.map((b: any) => (
                     <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
               </div>
             </div>
-            <VoucherFields
-              kind={createKind}
-              amount={cAmount} setAmount={setCAmount}
-              voucherTypeId={cVoucherTypeId} setVoucherTypeId={setCVoucherTypeId}
-              payerReceiver={cPayerReceiver} setPayerReceiver={setCPayerReceiver}
-              note={cNote} setNote={setCNote}
-              accounting={cAccounting} setAccounting={setCAccounting}
-            />
+
+            <VoucherForm kind={createKind} f={form} setF={setForm} />
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenCreate(false)}>Hủy</Button>
             <Button onClick={handleCreate} disabled={saving}>
@@ -586,19 +813,16 @@ function Page() {
         </DialogContent>
       </Dialog>
 
-      {/* ─── Edit dialog ─────────────────────────────────────────────────── */}
+      {/* ════ Edit dialog ════ */}
       <Dialog open={openEdit} onOpenChange={setOpenEdit}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Sửa phiếu {selectedVoucher?.code}</DialogTitle>
           </DialogHeader>
-          <VoucherFields
+          <VoucherForm
             kind={selectedVoucher?.type ?? "thu"}
-            amount={eAmount} setAmount={setEAmount}
-            voucherTypeId={eVoucherTypeId} setVoucherTypeId={setEVoucherTypeId}
-            payerReceiver={ePayerReceiver} setPayerReceiver={setEPayerReceiver}
-            note={eNote} setNote={setENoteState}
-            accounting={eAccounting} setAccounting={setEAccounting}
+            f={editForm}
+            setF={setEditForm}
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenEdit(false)}>Hủy</Button>
@@ -609,17 +833,21 @@ function Page() {
         </DialogContent>
       </Dialog>
 
-      {/* ─── Cancel confirm ──────────────────────────────────────────────── */}
+      {/* ════ Cancel confirm ════ */}
       <Dialog open={openCancel} onOpenChange={setOpenCancel}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Hủy phiếu?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Bạn có chắc muốn hủy phiếu <strong>{selectedVoucher?.code}</strong>? Thao tác này không thể hoàn tác.
+            Xác nhận hủy phiếu{" "}
+            <strong className="font-mono">{selectedVoucher?.code}</strong>?
+            Thao tác này không thể hoàn tác.
           </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenCancel(false)}>Không</Button>
+            <Button variant="outline" onClick={() => setOpenCancel(false)}>
+              Không
+            </Button>
             <Button variant="destructive" onClick={handleCancel} disabled={saving}>
               {saving ? "Đang hủy..." : "Hủy phiếu"}
             </Button>
@@ -627,7 +855,7 @@ function Page() {
         </DialogContent>
       </Dialog>
 
-      {/* ─── Voucher type manager ─────────────────────────────────────────── */}
+      {/* ════ Voucher type manager ════ */}
       <Dialog open={openTypes} onOpenChange={setOpenTypes}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -636,7 +864,7 @@ function Page() {
           <div className="space-y-4">
             <div className="flex gap-2">
               <select
-                className="h-9 rounded-md border bg-background px-3 text-sm"
+                className="h-9 rounded-md border bg-background px-3 text-sm shrink-0"
                 value={newTypeKind}
                 onChange={(e) => setNewTypeKind(e.target.value as any)}
               >
@@ -652,23 +880,32 @@ function Page() {
               />
               <Button onClick={handleAddType}>Thêm</Button>
             </div>
-            <div className="space-y-1 max-h-64 overflow-y-auto">
-              {["thu", "chi"].map((kind) => (
+            <div className="space-y-1 max-h-72 overflow-y-auto">
+              {(["thu", "chi"] as const).map((kind) => (
                 <div key={kind}>
                   <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide py-1.5 px-1">
                     {kind === "thu" ? "Loại thu" : "Loại chi"}
                   </div>
                   {voucherTypes.filter((t: any) => t.kind === kind).length === 0 && (
-                    <div className="text-xs text-muted-foreground px-1 pb-1">Chưa có loại nào</div>
+                    <div className="text-xs text-muted-foreground px-1 pb-1 italic">
+                      Chưa có loại nào
+                    </div>
                   )}
                   {voucherTypes
                     .filter((t: any) => t.kind === kind)
                     .map((t: any) => (
-                      <div key={t.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted/50">
+                      <div
+                        key={t.id}
+                        className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted/50"
+                      >
                         <span className="text-sm">{t.name}</span>
                         <button
                           type="button"
-                          onClick={() => handleDeleteType(t.id)}
+                          onClick={() =>
+                            deleteTypeFn({ data: { id: t.id } }).then(() =>
+                              qc.invalidateQueries({ queryKey: ["cash"] }),
+                            )
+                          }
                           className="text-muted-foreground hover:text-destructive"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -680,7 +917,9 @@ function Page() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenTypes(false)}>Đóng</Button>
+            <Button variant="outline" onClick={() => setOpenTypes(false)}>
+              Đóng
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

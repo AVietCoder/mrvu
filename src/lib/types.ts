@@ -117,20 +117,24 @@ export type Permission =
   | "view_reports"
   | "create_schedule"     // Tạo lịch (không phân công người)
   | "approve_schedule"    // Duyệt lịch + phân công người
-  | "technician";         // Kỹ thuật viên: xem lịch được giao + tiền công
+  | "technician"          // Kỹ thuật viên: xem lịch được giao + tiền công
+  | "view_cash_branch"    // Xem sổ quỹ chi nhánh của mình
+  | "view_cash_all";      // Xem sổ quỹ toàn bộ chi nhánh
 
 export const ALL_PERMISSIONS: { key: Permission; label: string; desc: string }[] = [
-  { key: "stock_in",        label: "Nhập kho",              desc: "Tạo phiếu nhập hàng vào kho" },
-  { key: "stock_out",       label: "Xuất kho",              desc: "Tạo phiếu xuất hàng khỏi kho" },
-  { key: "stock_transfer",  label: "Chuyển kho",            desc: "Chuyển hàng giữa các chi nhánh" },
-  { key: "view_all_debt",   label: "Xem công nợ tất cả",    desc: "Xem công nợ KH do nhân viên khác tạo" },
-  { key: "manage_branches", label: "Quản lý chi nhánh",     desc: "Thêm, sửa, xóa chi nhánh" },
-  { key: "create_order",    label: "Tạo đơn hàng",          desc: "Tạo và xác nhận đơn bán hàng" },
-  { key: "manage_products", label: "Quản lý hàng hóa",      desc: "Thêm, sửa, xóa sản phẩm" },
-  { key: "view_reports",    label: "Xem báo cáo doanh thu", desc: "Truy cập trang báo cáo & thống kê" },
-  { key: "create_schedule", label: "Tạo lịch làm việc",     desc: "Tạo lịch lắp đặt, bảo hành,... (không phân công)" },
-  { key: "approve_schedule",label: "Duyệt & phân công",     desc: "Duyệt lịch và chọn kỹ thuật viên thực hiện" },
-  { key: "technician",      label: "Kỹ thuật viên",         desc: "Xem lịch được giao và tiền công" },
+  { key: "stock_in",          label: "Nhập kho",                  desc: "Tạo phiếu nhập hàng vào kho" },
+  { key: "stock_out",         label: "Xuất kho",                  desc: "Tạo phiếu xuất hàng khỏi kho" },
+  { key: "stock_transfer",    label: "Chuyển kho",                desc: "Chuyển hàng giữa các chi nhánh" },
+  { key: "view_all_debt",     label: "Xem công nợ tất cả",        desc: "Xem công nợ KH do nhân viên khác tạo" },
+  { key: "manage_branches",   label: "Quản lý chi nhánh",         desc: "Thêm, sửa, xóa chi nhánh" },
+  { key: "create_order",      label: "Tạo đơn hàng",              desc: "Tạo và xác nhận đơn bán hàng" },
+  { key: "manage_products",   label: "Quản lý hàng hóa",          desc: "Thêm, sửa, xóa sản phẩm" },
+  { key: "view_reports",      label: "Xem báo cáo doanh thu",     desc: "Truy cập trang báo cáo & thống kê" },
+  { key: "create_schedule",   label: "Tạo lịch làm việc",         desc: "Tạo lịch lắp đặt, bảo hành,... (không phân công)" },
+  { key: "approve_schedule",  label: "Duyệt & phân công",         desc: "Duyệt lịch và chọn kỹ thuật viên thực hiện" },
+  { key: "technician",        label: "Kỹ thuật viên",             desc: "Xem lịch được giao và tiền công" },
+  { key: "view_cash_branch",  label: "Xem sổ quỹ chi nhánh",      desc: "Xem & tạo phiếu thu/chi của chi nhánh mình" },
+  { key: "view_cash_all",     label: "Xem sổ quỹ toàn bộ",        desc: "Xem & tạo phiếu thu/chi của tất cả chi nhánh" },
 ];
 
 // ── User ─────────────────────────────────────────────────────
