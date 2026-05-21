@@ -51,7 +51,7 @@ export function AppShell({ children, title, loading }: { children: ReactNode; ti
     queryFn: () => getSettingsFn(),
     staleTime: 60_000,
   });
-  const brandName = settings?.site_name?.trim() || "QuatTran POS";
+  const brandName = settings?.site_name?.trim() || "Mr.Vũ";
   const logoUrl = settings?.logo_url || "";
   const primaryColor = settings?.primary_color || "";
 
