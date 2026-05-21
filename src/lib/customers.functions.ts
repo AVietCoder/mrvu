@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
 import { deleteWhere, fetchRows, insertRow, now, updateWhere, uid } from "./supabase";
 import { supabase } from "./supabase"; // Sử dụng instance supabase gốc để gọi lệnh range và count

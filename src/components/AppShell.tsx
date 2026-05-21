@@ -33,7 +33,9 @@ const nav: NavItem[] = [
 ];
 
 
-export function AppShell({ children, title }: { children: ReactNode; title: string }) {
+import { PageLoader } from "@/components/Spinner";
+
+export function AppShell({ children, title, loading }: { children: ReactNode; title: string; loading?: boolean }) {
   const loc = useLocation();
   const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -242,7 +244,7 @@ export function AppShell({ children, title }: { children: ReactNode; title: stri
             </span>
           )}
         </header>
-        <div className="p-4 md:p-6 flex-1">{children}</div>
+        <div className="p-4 md:p-6 flex-1">{loading ? <PageLoader /> : children}</div>
       </main>
     </div>
   );

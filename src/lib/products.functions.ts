@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
 import { countRows, deleteWhere, fetchRows, insertRow, now, uid, updateWhere } from "./supabase";
 

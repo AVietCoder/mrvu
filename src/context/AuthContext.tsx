@@ -24,7 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{
       session, user, login, logout,
-      isAdmin: user?.is_admin ?? false,
+      isAdmin: Boolean(user?.is_admin),
       branchId: user?.branch_ids?.[0],
     }}>
       {children}

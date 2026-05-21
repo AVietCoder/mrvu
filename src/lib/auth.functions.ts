@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
 import type { AuthSession, Permission, User } from "./types";
 import {

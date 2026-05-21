@@ -23,7 +23,11 @@ import { Route as BranchesRouteImport } from './routes/branches'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as OrdersIndexRouteImport } from './routes/orders/index'
+import { Route as EmployeesIndexRouteImport } from './routes/employees/index'
+import { Route as CustomersIndexRouteImport } from './routes/customers/index'
 import { Route as OrdersIdRouteImport } from './routes/orders/$id'
+import { Route as EmployeesIdRouteImport } from './routes/employees/$id'
+import { Route as CustomersIdRouteImport } from './routes/customers/$id'
 
 const ScheduleRoute = ScheduleRouteImport.update({
   id: '/schedule',
@@ -95,10 +99,30 @@ const OrdersIndexRoute = OrdersIndexRouteImport.update({
   path: '/orders/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EmployeesIndexRoute = EmployeesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => EmployeesRoute,
+} as any)
+const CustomersIndexRoute = CustomersIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => CustomersRoute,
+} as any)
 const OrdersIdRoute = OrdersIdRouteImport.update({
   id: '/orders/$id',
   path: '/orders/$id',
   getParentRoute: () => rootRouteImport,
+} as any)
+const EmployeesIdRoute = EmployeesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => EmployeesRoute,
+} as any)
+const CustomersIdRoute = CustomersIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => CustomersRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -107,15 +131,19 @@ export interface FileRoutesByFullPath {
   '/branches': typeof BranchesRoute
   '/cash': typeof CashRoute
   '/change-password': typeof ChangePasswordRoute
-  '/customers': typeof CustomersRoute
-  '/employees': typeof EmployeesRoute
+  '/customers': typeof CustomersRouteWithChildren
+  '/employees': typeof EmployeesRouteWithChildren
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/products': typeof ProductsRoute
   '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/schedule': typeof ScheduleRoute
+  '/customers/$id': typeof CustomersIdRoute
+  '/employees/$id': typeof EmployeesIdRoute
   '/orders/$id': typeof OrdersIdRoute
+  '/customers/': typeof CustomersIndexRoute
+  '/employees/': typeof EmployeesIndexRoute
   '/orders/': typeof OrdersIndexRoute
 }
 export interface FileRoutesByTo {
@@ -124,15 +152,17 @@ export interface FileRoutesByTo {
   '/branches': typeof BranchesRoute
   '/cash': typeof CashRoute
   '/change-password': typeof ChangePasswordRoute
-  '/customers': typeof CustomersRoute
-  '/employees': typeof EmployeesRoute
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/products': typeof ProductsRoute
   '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/schedule': typeof ScheduleRoute
+  '/customers/$id': typeof CustomersIdRoute
+  '/employees/$id': typeof EmployeesIdRoute
   '/orders/$id': typeof OrdersIdRoute
+  '/customers': typeof CustomersIndexRoute
+  '/employees': typeof EmployeesIndexRoute
   '/orders': typeof OrdersIndexRoute
 }
 export interface FileRoutesById {
@@ -142,15 +172,19 @@ export interface FileRoutesById {
   '/branches': typeof BranchesRoute
   '/cash': typeof CashRoute
   '/change-password': typeof ChangePasswordRoute
-  '/customers': typeof CustomersRoute
-  '/employees': typeof EmployeesRoute
+  '/customers': typeof CustomersRouteWithChildren
+  '/employees': typeof EmployeesRouteWithChildren
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/products': typeof ProductsRoute
   '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/schedule': typeof ScheduleRoute
+  '/customers/$id': typeof CustomersIdRoute
+  '/employees/$id': typeof EmployeesIdRoute
   '/orders/$id': typeof OrdersIdRoute
+  '/customers/': typeof CustomersIndexRoute
+  '/employees/': typeof EmployeesIndexRoute
   '/orders/': typeof OrdersIndexRoute
 }
 export interface FileRouteTypes {
@@ -169,7 +203,11 @@ export interface FileRouteTypes {
     | '/register'
     | '/reports'
     | '/schedule'
+    | '/customers/$id'
+    | '/employees/$id'
     | '/orders/$id'
+    | '/customers/'
+    | '/employees/'
     | '/orders/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -178,15 +216,17 @@ export interface FileRouteTypes {
     | '/branches'
     | '/cash'
     | '/change-password'
-    | '/customers'
-    | '/employees'
     | '/inventory'
     | '/login'
     | '/products'
     | '/register'
     | '/reports'
     | '/schedule'
+    | '/customers/$id'
+    | '/employees/$id'
     | '/orders/$id'
+    | '/customers'
+    | '/employees'
     | '/orders'
   id:
     | '__root__'
@@ -203,7 +243,11 @@ export interface FileRouteTypes {
     | '/register'
     | '/reports'
     | '/schedule'
+    | '/customers/$id'
+    | '/employees/$id'
     | '/orders/$id'
+    | '/customers/'
+    | '/employees/'
     | '/orders/'
   fileRoutesById: FileRoutesById
 }
@@ -213,8 +257,8 @@ export interface RootRouteChildren {
   BranchesRoute: typeof BranchesRoute
   CashRoute: typeof CashRoute
   ChangePasswordRoute: typeof ChangePasswordRoute
-  CustomersRoute: typeof CustomersRoute
-  EmployeesRoute: typeof EmployeesRoute
+  CustomersRoute: typeof CustomersRouteWithChildren
+  EmployeesRoute: typeof EmployeesRouteWithChildren
   InventoryRoute: typeof InventoryRoute
   LoginRoute: typeof LoginRoute
   ProductsRoute: typeof ProductsRoute
@@ -325,6 +369,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrdersIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/employees/': {
+      id: '/employees/'
+      path: '/'
+      fullPath: '/employees/'
+      preLoaderRoute: typeof EmployeesIndexRouteImport
+      parentRoute: typeof EmployeesRoute
+    }
+    '/customers/': {
+      id: '/customers/'
+      path: '/'
+      fullPath: '/customers/'
+      preLoaderRoute: typeof CustomersIndexRouteImport
+      parentRoute: typeof CustomersRoute
+    }
     '/orders/$id': {
       id: '/orders/$id'
       path: '/orders/$id'
@@ -332,8 +390,50 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrdersIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/employees/$id': {
+      id: '/employees/$id'
+      path: '/$id'
+      fullPath: '/employees/$id'
+      preLoaderRoute: typeof EmployeesIdRouteImport
+      parentRoute: typeof EmployeesRoute
+    }
+    '/customers/$id': {
+      id: '/customers/$id'
+      path: '/$id'
+      fullPath: '/customers/$id'
+      preLoaderRoute: typeof CustomersIdRouteImport
+      parentRoute: typeof CustomersRoute
+    }
   }
 }
+
+interface CustomersRouteChildren {
+  CustomersIdRoute: typeof CustomersIdRoute
+  CustomersIndexRoute: typeof CustomersIndexRoute
+}
+
+const CustomersRouteChildren: CustomersRouteChildren = {
+  CustomersIdRoute: CustomersIdRoute,
+  CustomersIndexRoute: CustomersIndexRoute,
+}
+
+const CustomersRouteWithChildren = CustomersRoute._addFileChildren(
+  CustomersRouteChildren,
+)
+
+interface EmployeesRouteChildren {
+  EmployeesIdRoute: typeof EmployeesIdRoute
+  EmployeesIndexRoute: typeof EmployeesIndexRoute
+}
+
+const EmployeesRouteChildren: EmployeesRouteChildren = {
+  EmployeesIdRoute: EmployeesIdRoute,
+  EmployeesIndexRoute: EmployeesIndexRoute,
+}
+
+const EmployeesRouteWithChildren = EmployeesRoute._addFileChildren(
+  EmployeesRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -341,8 +441,8 @@ const rootRouteChildren: RootRouteChildren = {
   BranchesRoute: BranchesRoute,
   CashRoute: CashRoute,
   ChangePasswordRoute: ChangePasswordRoute,
-  CustomersRoute: CustomersRoute,
-  EmployeesRoute: EmployeesRoute,
+  CustomersRoute: CustomersRouteWithChildren,
+  EmployeesRoute: EmployeesRouteWithChildren,
   InventoryRoute: InventoryRoute,
   LoginRoute: LoginRoute,
   ProductsRoute: ProductsRoute,

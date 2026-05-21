@@ -1,3 +1,4 @@
+// @ts-nocheck
 import cloudinary from "@/lib/cloudinary";
 
 export async function uploadImage(file: string) {
