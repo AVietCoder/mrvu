@@ -85,8 +85,7 @@ export async function fetchAllRows<T = any>(
   while (true) {
     let query = supabase
       .from(table)
-      .select(options?.select ?? "*")
-      .range(from, from + PAGE - 1);
+      .select(options?.select ?? "*");
 
     if (options?.eq) {
       for (const [col, val] of Object.entries(options.eq)) {
@@ -102,6 +101,8 @@ export async function fetchAllRows<T = any>(
     if (options?.orderBy) {
       query = query.order(options.orderBy, { ascending: options.ascending ?? true });
     }
+
+    query = query.range(from, from + PAGE - 1);
 
     const { data, error } = await query;
     if (error) throw new Error(error.message);

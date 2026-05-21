@@ -1,14 +1,51 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import {
-  fetchRow,
-  fetchRows,
-  insertRow,
-  now,
-  supabase,
-  uid,
-  updateWhere,
-} from "./supabase";
+import { fetchRow, fetchRows, insertRow, now, supabase, uid, updateWhere } from "./supabase";
+
+type StockItem = { product_id: string; qty: number };
+
+async function getStockMap(branchId: string, productIds: string[]) {
+  if (!productIds.length) return new Map<string, number>();
+  const { data, error } = await supabase
+    .from("stock")
+    .select("product_id, qty")
+    .eq("branch_id", branchId)
+    .in("product_id", productIds);
+
+  if (error) throw new Error(error.message);
+
+  const map = new Map<string, number>();
+  for (const row of data ?? []) {
+    map.set(row.product_id, Number(row.qty || 0));
+  }
+  return map;
+}
+
+async function ensureStockAvailable(branchId: string, items: StockItem[], mode: "out" | "transfer") {
+  const required = new Map<string, number>();
+  for (const item of items) {
+    const key = item.product_id;
+    required.set(key, (required.get(key) ?? 0) + Number(item.qty || 0));
+  }
+
+  const available = await getStockMap(branchId, [...required.keys()]);
+  const shortfalls: string[] = [];
+
+  for (const [productId, qtyNeeded] of required.entries()) {
+    const current = available.get(productId) ?? 0;
+    if (current < qtyNeeded) {
+      shortfalls.push(`${productId}: còn ${current}, cần ${qtyNeeded}`);
+    }
+  }
+
+  if (shortfalls.length) {
+    throw new Error(
+      mode === "transfer"
+        ? `Không đủ tồn kho để chuyển: ${shortfalls.join(" | ")}`
+        : `Không đủ tồn kho để xuất: ${shortfalls.join(" | ")}`,
+    );
+  }
+}
 
 async function adjustStock(productId: string, branchId: string, delta: number) {
   const row = await fetchRow<{ qty: number }>("stock", {
@@ -60,7 +97,12 @@ export const createMovement = createServerFn({ method: "POST" })
   }) => {
     const branchId = data.branch_id;
     const createdBy = data.created_by || data.actor_id || null;
-    const delta = data.type === "in" ? Number(data.qty) : -Number(data.qty);
+    const qty = Number(data.qty || 0);
+    const delta = data.type === "in" ? qty : -qty;
+
+    if (data.type === "out") {
+      await ensureStockAvailable(branchId, [{ product_id: data.product_id, qty }], "out");
+    }
 
     await adjustStock(data.product_id, branchId, delta);
 
@@ -70,7 +112,7 @@ export const createMovement = createServerFn({ method: "POST" })
       product_id: data.product_id,
       from_branch: data.type === "out" ? branchId : null,
       to_branch: data.type === "in" ? branchId : null,
-      qty: Number(data.qty),
+      qty,
       unit_cost: Number(data.unit_cost || 0),
       note: data.note || null,
       created_at: now(),
@@ -96,6 +138,8 @@ export const createTransfer = createServerFn({ method: "POST" })
     if (data.from_branch === data.to_branch) {
       throw new Error("Chi nhánh nguồn và đích không được giống nhau");
     }
+
+    await ensureStockAvailable(data.from_branch, data.items, "transfer");
 
     const tid = uid();
 

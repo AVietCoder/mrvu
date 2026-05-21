@@ -1,31 +1,46 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { fetchRows } from "./supabase";
+import { fetchAllRows } from "./supabase";
+
+const TZ = "Asia/Ho_Chi_Minh";
+
+function localDateKey(value: string | Date): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(value));
+}
+
+function normalizeDate(value: any): string {
+  if (!value) return "";
+  return localDateKey(value);
+}
 
 export const getReports = createServerFn({ method: "GET" }).handler(async () => {
   const [orders, orderItems, products, customers, branches, users, stock] = await Promise.all([
-    fetchRows<any>("orders"),
-    fetchRows<any>("order_items"),
-    fetchRows<any>("products"),
-    fetchRows<any>("customers"),
-    fetchRows<any>("branches"),
-    fetchRows<any>("users", { select: "id, full_name" }),
-    fetchRows<any>("stock"),
+    fetchAllRows<any>("orders", { select: "id, status, total, created_at, branch_id, employee_id, customer_id" }),
+    fetchAllRows<any>("order_items", { select: "order_id, product_id, qty" }),
+    fetchAllRows<any>("products", { select: "id, name, sku, min_stock" }),
+    fetchAllRows<any>("customers", { select: "id, debt" }),
+    fetchAllRows<any>("branches", { select: "id, name" }),
+    fetchAllRows<any>("users", { select: "id, full_name" }),
+    fetchAllRows<any>("stock", { select: "product_id, qty" }),
   ]);
 
   const completedOrders = orders.filter((o: any) => o.status === "completed");
-
   const totalRevenue = completedOrders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0);
   const totalOrders = completedOrders.length;
 
   const today = new Date();
-  const days = [];
+  const days: { date: string; revenue: number }[] = [];
   for (let i = 13; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
+    const key = localDateKey(d);
     const revenue = completedOrders
-      .filter((o: any) => String(o.created_at || "").slice(0, 10) === key)
+      .filter((o: any) => normalizeDate(o.created_at) === key)
       .reduce((sum: number, order: any) => sum + Number(order.total || 0), 0);
     days.push({ date: key.slice(5), revenue });
   }
@@ -35,8 +50,7 @@ export const getReports = createServerFn({ method: "GET" }).handler(async () => 
   const topQty = new Map<string, number>();
 
   for (const item of orderItems) {
-    const order = orderMap.get(item.order_id);
-    if (!order) continue;
+    if (!orderMap.has(item.order_id)) continue;
     topQty.set(item.product_id, (topQty.get(item.product_id) ?? 0) + Number(item.qty || 0));
   }
 

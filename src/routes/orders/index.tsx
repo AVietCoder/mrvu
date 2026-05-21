@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -50,7 +49,7 @@ const STATUS_COLOR: Record<string, string> = {
   cancelled: "bg-red-100 text-red-700",
 };
 
-function printOrderSlip({ items, customer, branch, employee, status, paymentMethod, discount, deposit, paid, note, subtotal, total, data, siteSettings }: any) {
+function printOrderSlip({ items, customer, branch, employee, status, paymentMethod, discount, deposit, note, subtotal, total, data, siteSettings }: any) {
   const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
   console.log(data);
   const custName = customer ? (data?.customers ?? []).find((c: any) => c.id === customer)?.name ?? "Khách lẻ" : "Khách lẻ";
@@ -100,9 +99,9 @@ function printOrderSlip({ items, customer, branch, employee, status, paymentMeth
   <div class="total-box">
     <div>Tạm tính: ${moneyFmt(subtotal)}</div>
     ${discount > 0 ? `<div>Giảm giá: - ${moneyFmt(discount)}</div>` : ""}
-    <div class="total-main">Tổng cộng: ${moneyFmt(total)}</div>
-    ${deposit > 0 ? `<div style="color:#b45309;margin-top:4px">Đặt cọc: ${moneyFmt(deposit)}</div>` : ""}
-    ${paid > 0 ? `<div style="color:#15803d;margin-top:4px">Khách thanh toán: ${moneyFmt(paid)}</div>` : ""}
+    <div>Tổng tiền: ${moneyFmt(total)}</div>
+    ${deposit > 0 ? `<div style="color:#b45309;margin-top:4px">Đặt cọc: - ${moneyFmt(deposit)}</div>` : ""}
+    <div class="total-main" style="color:#15803d;margin-top:8px">Khách cần thanh toán: ${moneyFmt(Math.max(0, total - deposit))}</div>
   </div>
   ${note ? `<div style="margin-top:20px;font-size:14px"><strong>Ghi chú:</strong> ${note}</div>` : ""}
   <div class="sign">
@@ -130,7 +129,6 @@ function Page() {
   const [activeTab, setActiveTab] = useState<"orders" | "reserved">("orders");
   const [page, setPage] = useState(1);
 
-  // Form tạo đơn
   const [items, setItems] = useState<LineItem[]>([]);
   const [customer, setCustomer] = useState("");
   const [branch, setBranch] = useState("");
@@ -139,10 +137,8 @@ function Page() {
   const [paymentMethod, setPaymentMethod] = useState<"tien_mat" | "ngan_hang">("tien_mat");
   const [discountRaw, setDiscountRaw] = useState("0");
   const [depositRaw, setDepositRaw] = useState("0");
-  const [paidRaw, setPaidRaw] = useState("0");
   const [note, setNote] = useState("");
 
-  // Filter / sort
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("newest");
   const [filterStatus, setFilterStatus] = useState("");
@@ -150,13 +146,13 @@ function Page() {
 
   const discount = parseInput(discountRaw);
   const deposit  = parseInput(depositRaw);
-  const paid     = parseInput(paidRaw);
 
   const subtotal = useMemo(
     () => items.reduce((s, i) => s + i.qty * i.unit_price - i.discount, 0),
     [items],
   );
   const total = Math.max(0, subtotal - discount);
+  const khachCanThanhToan = Math.max(0, total - deposit);
 
   const allOrders    = data?.orders ?? [];
   const invoiceOrders = useMemo(() => allOrders.filter((o) => o.status !== "reserved"), [allOrders]);
@@ -197,13 +193,11 @@ function Page() {
     setItems([]);
     setCustomer("");
     setBranch(data?.branches[0]?.id ?? "");
-    // Mặc định nhân viên là người đang đăng nhập
     setEmployee(user?.id ?? "");
     setStatus("reserved");
     setPaymentMethod("tien_mat");
     setDiscountRaw("0");
     setDepositRaw("0");
-    setPaidRaw("0");
     setNote("");
   }
 
@@ -226,7 +220,7 @@ function Page() {
           payment_method: paymentMethod,
           discount,
           deposit,
-          paid,
+          paid: 0,
           note: note || undefined,
           items,
         },
@@ -261,7 +255,6 @@ function Page() {
                 return new Map((data?.customers ?? []).map((c: any) => [c.id, c]));
               }, [data?.customers]);
 
-              console.log(customerMap.size); // ✅ đúng
               const cust = customerMap.get(o.customer_id)?.name ?? "Khách lẻ";
               const br   = (data?.branches ?? []).find((b: any) => b.id === o.branch_id)?.name ?? "—";
               const linked = (data?.schedules ?? []).filter((s: any) => s.order_id === o.id);
@@ -322,7 +315,6 @@ function Page() {
   return (
     <AppShell title="Bán hàng" loading={!data}>
       <div className="mb-4 flex items-center gap-3 flex-wrap">
-        {/* Dialog tạo đơn */}
         <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (o) reset(); }}>
           <DialogTrigger asChild>
             <Button><Plus className="h-4 w-4 mr-1" />Tạo đơn hàng</Button>
@@ -390,7 +382,6 @@ function Page() {
                 </div>
               </div>
 
-              {/* Sản phẩm */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Label>Sản phẩm</Label>
@@ -457,7 +448,7 @@ function Page() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label>Giảm giá (₫)</Label>
                   <Input className="mt-1" value={discountRaw} onChange={(e) => setDiscountRaw(fmtInput(e.target.value))} onFocus={(e) => e.target.select()} />
@@ -466,26 +457,24 @@ function Page() {
                   <Label>Đặt cọc (₫)</Label>
                   <Input className="mt-1" value={depositRaw} onChange={(e) => setDepositRaw(fmtInput(e.target.value))} onFocus={(e) => e.target.select()} />
                 </div>
-                <div>
-                  <Label>Khách thanh toán (₫)</Label>
-                  <Input className="mt-1" value={paidRaw} onChange={(e) => setPaidRaw(fmtInput(e.target.value))} onFocus={(e) => e.target.select()} />
-                </div>
               </div>
 
               <div><Label>Ghi chú</Label><Input className="mt-1" value={note} onChange={(e) => setNote(e.target.value)} /></div>
 
               <div className="rounded-lg border p-4 bg-muted/30">
                 <div className="flex justify-between text-sm"><span>Tạm tính</span><span>{fmt(subtotal)}</span></div>
-                <div className="flex justify-between text-sm mt-1"><span>Giảm giá</span><span>- {fmt(discount)}</span></div>
-                <div className="flex justify-between font-semibold text-lg mt-2 pt-2 border-t">
-                  <span>Tổng cộng</span><span>{fmt(total)}</span>
+                {discount > 0 && <div className="flex justify-between text-sm mt-1"><span>Giảm giá</span><span>- {fmt(discount)}</span></div>}
+                <div className="flex justify-between text-sm mt-1 font-medium"><span>Tổng tiền</span><span>{fmt(total)}</span></div>
+                {deposit > 0 && <div className="flex justify-between text-sm mt-1 text-yellow-700"><span>Đặt cọc</span><span>- {fmt(deposit)}</span></div>}
+                <div className="flex justify-between font-semibold text-lg mt-2 pt-2 border-t text-primary">
+                  <span>Khách cần thanh toán</span><span>{fmt(khachCanThanhToan)}</span>
                 </div>
               </div>
 
               <DialogFooter className="flex-col sm:flex-row gap-2">
                 <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>Hủy</Button>
                 {items.length > 0 && (
-                  <Button variant="outline" className="w-full sm:w-auto" type="button" onClick={() => printOrderSlip({ items, customer, branch, employee, status, paymentMethod, discount, deposit, paid, note, subtotal, total, data, siteSettings })}>
+                  <Button variant="outline" className="w-full sm:w-auto" type="button" onClick={() => printOrderSlip({ items, customer, branch, employee, status, paymentMethod, discount, deposit, note, subtotal, total, data, siteSettings })}>
                     <Printer className="h-4 w-4 mr-1" />In phiếu đặt hàng
                   </Button>
                 )}
@@ -502,7 +491,6 @@ function Page() {
         )}
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 mb-3 border-b overflow-x-auto">
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "orders" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
@@ -556,7 +544,6 @@ function Page() {
 
         <OrderTable rows={pagedOrders} />
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between mt-4 pt-3 border-t text-sm flex-wrap gap-2">
             <span className="text-muted-foreground">

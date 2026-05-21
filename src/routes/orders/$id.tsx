@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { createFileRoute, useParams, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -69,7 +68,6 @@ function OrderDetailPage() {
     [data, id],
   );
 
-  // ── Edit mode state ────────────────────────────────────────
   const [editing, setEditing] = useState(false);
   const [editItems, setEditItems] = useState<LineItem[]>([]);
   const [editCustomer, setEditCustomer] = useState("");
@@ -79,7 +77,6 @@ function OrderDetailPage() {
   const [editPaymentMethod, setEditPaymentMethod] = useState<"tien_mat" | "ngan_hang">("tien_mat");
   const [editDiscount, setEditDiscount] = useState("0");
   const [editDeposit, setEditDeposit] = useState("0");
-  const [editPaid, setEditPaid] = useState("0");
   const [editNote, setEditNote] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -98,7 +95,6 @@ function OrderDetailPage() {
     setEditPaymentMethod(order.payment_method ?? "tien_mat");
     setEditDiscount(String(order.discount ?? 0));
     setEditDeposit(String(order.deposit ?? 0));
-    setEditPaid(String(order.paid ?? 0));
     setEditNote(order.note ?? "");
     setEditing(true);
   }
@@ -117,7 +113,7 @@ function OrderDetailPage() {
           payment_method: editPaymentMethod,
           discount: parseInput(editDiscount),
           deposit: parseInput(editDeposit),
-          paid: parseInput(editPaid),
+          paid: 0,
           note: editNote || undefined,
           items: editItems,
         },
@@ -143,6 +139,7 @@ function OrderDetailPage() {
     [editItems]
   );
   const editTotal = Math.max(0, editSubtotal - parseInput(editDiscount));
+  const khachCanThanhToanEdit = Math.max(0, editTotal - parseInput(editDeposit));
 
   async function completeOrder() {
     await updateStatusFn({ data: { id: order.id, status: "completed" } });
@@ -180,7 +177,6 @@ function OrderDetailPage() {
 
   return (
     <AppShell title={`Đơn hàng ${order.code}`}>
-      {/* Breadcrumb + actions */}
       <div className="mb-5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
         <Link to="/orders" className="hover:text-foreground flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" /> Bán hàng
@@ -213,10 +209,7 @@ function OrderDetailPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* ── Cột trái ── */}
         <div className="lg:col-span-2 space-y-4">
-
-          {/* Header */}
           <Card>
             <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
               <div>
@@ -272,7 +265,6 @@ function OrderDetailPage() {
               )}
             </div>
 
-            {/* Info */}
             {!editing ? (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <InfoBox icon={<User className="h-4 w-4" />} label="Khách hàng">
@@ -351,7 +343,6 @@ function OrderDetailPage() {
             )}
           </Card>
 
-          {/* Sản phẩm */}
           <Card>
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2">
@@ -441,7 +432,6 @@ function OrderDetailPage() {
           </Card>
         </div>
 
-        {/* ── Cột phải ── */}
         <div className="space-y-4">
           <Card>
             <h3 className="font-semibold mb-3">Thanh toán</h3>
@@ -449,24 +439,16 @@ function OrderDetailPage() {
               <div className="space-y-2 text-sm">
                 <Row label="Tạm tính" value={fmt(order.subtotal)} />
                 {order.discount > 0 && <Row label="Giảm giá" value={`- ${fmt(order.discount)}`} cls="text-red-600" />}
-                <div className="border-t pt-2 flex justify-between font-bold text-base">
-                  <span>Tổng cộng</span>
-                  <span className="text-primary">{fmt(order.total)}</span>
-                </div>
+                <Row label="Tổng tiền hàng" value={fmt(order.total)} />
                 <Row
                   label="Hình thức thanh toán"
                   value={order.payment_method === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt"}
                 />
-                {order.deposit > 0 && <Row label="Đặt cọc" value={fmt(order.deposit)} cls="text-yellow-700" />}
-                {order.paid > 0 && <Row label="Đã thanh toán" value={fmt(order.paid)} cls="text-green-700" />}
-                {(() => {
-                  const remaining = order.total - order.deposit - order.paid;
-                  return remaining > 0 ? (
-                    <div className="rounded-md bg-red-50 px-3 py-2 flex justify-between text-red-700 font-medium">
-                      <span>Còn nợ</span><span>{fmt(remaining)}</span>
-                    </div>
-                  ) : null;
-                })()}
+                {order.deposit > 0 && <Row label="Đặt cọc" value={`- ${fmt(order.deposit)}`} cls="text-yellow-700" />}
+                <div className="border-t pt-2 flex justify-between font-bold text-base text-primary">
+                  <span>Khách cần thanh toán</span>
+                  <span>{fmt(Math.max(0, order.total - order.deposit))}</span>
+                </div>
               </div>
             ) : (
               <div className="space-y-3 text-sm">
@@ -480,9 +462,9 @@ function OrderDetailPage() {
                     onChange={(e) => setEditDiscount(fmtInput(e.target.value))}
                     onFocus={(e) => e.target.select()} />
                 </div>
-                <div className="rounded-md bg-primary/5 px-3 py-2 flex justify-between font-bold">
-                  <span>Tổng cộng</span>
-                  <span className="text-primary">{fmt(editTotal)}</span>
+                <div className="rounded-md px-3 py-2 flex justify-between font-medium">
+                  <span>Tổng tiền hàng</span>
+                  <span>{fmt(editTotal)}</span>
                 </div>
                 <div>
                   <Label>Đặt cọc (₫)</Label>
@@ -490,17 +472,14 @@ function OrderDetailPage() {
                     onChange={(e) => setEditDeposit(fmtInput(e.target.value))}
                     onFocus={(e) => e.target.select()} />
                 </div>
-                <div>
-                  <Label>Đã thanh toán (₫)</Label>
-                  <Input className="mt-1" value={editPaid}
-                    onChange={(e) => setEditPaid(fmtInput(e.target.value))}
-                    onFocus={(e) => e.target.select()} />
+                <div className="rounded-md bg-primary/5 px-3 py-2 flex justify-between font-bold text-primary mt-2 border border-primary/20">
+                  <span>Khách cần thanh toán</span>
+                  <span>{fmt(khachCanThanhToanEdit)}</span>
                 </div>
               </div>
             )}
           </Card>
 
-          {/* Lịch lắp đặt */}
           <Card>
             <div className="flex items-center gap-2 mb-3">
               <CalendarDays className="h-4 w-4 text-primary" />
