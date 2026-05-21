@@ -1,16 +1,34 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { listCustomers, upsertCustomer, deleteCustomer } from "@/lib/customers.functions";
+import {
+  listCustomers,
+  upsertCustomer,
+  deleteCustomer,
+} from "@/lib/customers.functions";
+
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
-import { Pagination, DEFAULT_PAGE_SIZE } from "@/components/Pagination";
+import {
+  Pagination,
+  DEFAULT_PAGE_SIZE,
+} from "@/components/Pagination";
+
 import { useAuth } from "@/context/AuthContext";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+
 import {
   Plus,
   ExternalLink,
@@ -23,11 +41,15 @@ import {
   MapPin,
   Users,
   AlertTriangle,
+  Loader2,
 } from "lucide-react";
+
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/customers/")({
-  head: () => ({ meta: [{ title: "Khách hàng — QuatTran POS" }] }),
+  head: () => ({
+    meta: [{ title: "Khách hàng — QuatTran POS" }],
+  }),
   component: CustomersPage,
 });
 
@@ -45,7 +67,71 @@ const groupColor: Record<string, string> = {
   cong_trinh: "bg-purple-100 text-purple-700",
 };
 
-const PROVINCES = ["An Giang", "Bà Rịa - Vũng Tàu", "Bắc Giang", "Bắc Kạn", "Bạc Liêu", "Bắc Ninh", "Bến Tre", "Bình Định", "Bình Dương", "Bình Phước", "Bình Thuận", "Cà Mau", "Cần Thơ", "Cao Bằng", "Đà Nẵng", "Đắk Lắk", "Đắk Nông", "Điện Biên", "Đồng Nai", "Đồng Tháp", "Gia Lai", "Hà Giang", "Hà Nam", "Hà Nội", "Hà Tĩnh", "Hải Dương", "Hải Phòng", "Hậu Giang", "Hòa Bình", "Hưng Yên", "Khánh Hòa", "Kiên Giang", "Kon Tum", "Lai Châu", "Lâm Đồng", "Lạng Sơn", "Lào Cai", "Long An", "Nam Định", "Nghệ An", "Ninh Bình", "Ninh Thuận", "Phú Thọ", "Phú Yên", "Quảng Bình", "Quảng Nam", "Quảng Ngãi", "Quảng Ninh", "Quảng Trị", "Sóc Trăng", "Sơn La", "Tây Ninh", "Thái Bình", "Thái Nguyên", "Thanh Hóa", "Thừa Thiên Huế", "Tiền Giang", "TP. Hồ Chí Minh", "Trà Vinh", "Tuyên Quang", "Vĩnh Long", "Vĩnh Phúc", "Yên Bái"];
+const PROVINCES = [
+  "An Giang",
+  "Bà Rịa - Vũng Tàu",
+  "Bắc Giang",
+  "Bắc Kạn",
+  "Bạc Liêu",
+  "Bắc Ninh",
+  "Bến Tre",
+  "Bình Định",
+  "Bình Dương",
+  "Bình Phước",
+  "Bình Thuận",
+  "Cà Mau",
+  "Cần Thơ",
+  "Cao Bằng",
+  "Đà Nẵng",
+  "Đắk Lắk",
+  "Đắk Nông",
+  "Điện Biên",
+  "Đồng Nai",
+  "Đồng Tháp",
+  "Gia Lai",
+  "Hà Giang",
+  "Hà Nam",
+  "Hà Nội",
+  "Hà Tĩnh",
+  "Hải Dương",
+  "Hải Phòng",
+  "Hậu Giang",
+  "Hòa Bình",
+  "Hưng Yên",
+  "Khánh Hòa",
+  "Kiên Giang",
+  "Kon Tum",
+  "Lai Châu",
+  "Lâm Đồng",
+  "Lạng Sơn",
+  "Lào Cai",
+  "Long An",
+  "Nam Định",
+  "Nghệ An",
+  "Ninh Bình",
+  "Ninh Thuận",
+  "Phú Thọ",
+  "Phú Yên",
+  "Quảng Bình",
+  "Quảng Nam",
+  "Quảng Ngãi",
+  "Quảng Ninh",
+  "Quảng Trị",
+  "Sóc Trăng",
+  "Sơn La",
+  "Tây Ninh",
+  "Thái Bình",
+  "Thái Nguyên",
+  "Thanh Hóa",
+  "Thừa Thiên Huế",
+  "Tiền Giang",
+  "TP. Hồ Chí Minh",
+  "Trà Vinh",
+  "Tuyên Quang",
+  "Vĩnh Long",
+  "Vĩnh Phúc",
+  "Yên Bái",
+];
 
 type FormState = {
   id?: string;
@@ -72,6 +158,7 @@ const empty: FormState = {
 
 function CustomersPage() {
   const { user } = useAuth();
+
   const qc = useQueryClient();
 
   const list = useServerFn(listCustomers);
@@ -79,28 +166,34 @@ function CustomersPage() {
   const del = useServerFn(deleteCustomer);
 
   const [form, setForm] = useState<FormState>(empty);
+
   const [open, setOpen] = useState(false);
+
   const [viewId, setViewId] = useState<string | null>(null);
 
-  // States quản lý bộ lọc và phân trang
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("name");
   const [page, setPage] = useState(1);
+
   const [filterGroup, setFilterGroup] = useState("");
   const [filterDebt, setFilterDebt] = useState("all");
   const [filterTotalBuy, setFilterTotalBuy] = useState("all");
 
-  // Đưa tất cả các biến trạng thái lọc vào queryKey để kích hoạt gọi Server chính xác khi thay đổi mẫu tin
-  const { data } = useQuery({
+  const {
+    data,
+    isLoading,
+    isFetching,
+  } = useQuery({
     queryKey: [
-  "customers",
-  page,
-  search,
-  sortBy,
-  filterGroup,
-  filterDebt,
-  filterTotalBuy,
-],
+      "customers",
+      page,
+      search,
+      sortBy,
+      filterGroup,
+      filterDebt,
+      filterTotalBuy,
+    ],
+
     queryFn: () =>
       list({
         data: {
@@ -113,17 +206,26 @@ function CustomersPage() {
           sortBy,
         },
       }),
+
+    placeholderData: (prev) => prev,
+
+    staleTime: 1000 * 30,
   });
 
-  // Data trả về từ Server-side xử lý phân trang
-  const customers = data?.customers ?? []; 
+  const customers = data?.customers ?? [];
   const orders = data?.orders ?? [];
 
-  // Lấy các giá trị tổng và meta chính xác từ Database đếm lên
-  const totalAllCustomers = data?.meta?.totalAllCustomers ?? 0; // Tổng số thực tế trong DB (ví dụ: 15.420)
-  const totalDebtorCount = data?.meta?.totalDebtorCount ?? 0;   // Tổng số khách đang nợ thực tế
-  const totalAllDebt = data?.meta?.totalAllDebt ?? 0;           // Tổng số tiền công nợ thực tế
-  const totalFilteredCount = data?.meta?.totalFiltered ?? 0;     // Số lượng khớp sau khi gõ tìm kiếm/lọc nhóm
+  const totalAllCustomers =
+    data?.meta?.totalAllCustomers ?? 0;
+
+  const totalDebtorCount =
+    data?.meta?.totalDebtorCount ?? 0;
+
+  const totalAllDebt =
+    data?.meta?.totalAllDebt ?? 0;
+
+  const totalFilteredCount =
+    data?.meta?.totalFiltered ?? 0;
 
   const totalSales = useMemo(() => {
     return orders
@@ -132,7 +234,10 @@ function CustomersPage() {
   }, [orders]);
 
   function startEdit(id: string) {
-    const c = customers.find((x) => x.id === id)!;
+    const c = customers.find((x) => x.id === id);
+
+    if (!c) return;
+
     setForm({
       id: c.id,
       name: c.name,
@@ -144,109 +249,253 @@ function CustomersPage() {
       group_name: c.group_name,
       debt: String(c.debt),
     });
+
     setOpen(true);
   }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+
     try {
       await upsert({
-        data: { ...form, debt: Number(form.debt) || 0 },
+        data: {
+          ...form,
+          debt: Number(form.debt) || 0,
+        },
       });
-      toast.success(form.id ? "Đã cập nhật khách hàng thành công!" : "Đã thêm khách hàng thành công!");
+
+      toast.success(
+        form.id
+          ? "Đã cập nhật khách hàng thành công!"
+          : "Đã thêm khách hàng thành công!"
+      );
+
       setOpen(false);
+
       setForm(empty);
-      qc.invalidateQueries({ queryKey: ["customers"] });
+
+      qc.invalidateQueries({
+        queryKey: ["customers"],
+      });
     } catch (err: any) {
       toast.error(err?.message ?? "Lỗi");
     }
   }
 
-  async function handleDelete(id: string, name: string) {
+  async function handleDelete(
+    id: string,
+    name: string
+  ) {
     if (!confirm(`Xóa khách hàng "${name}"?`)) return;
+
     try {
-      await del({ data: { id } });
+      await del({
+        data: { id },
+      });
+
       toast.success("Đã xóa");
-      qc.invalidateQueries({ queryKey: ["customers"] });
+
+      qc.invalidateQueries({
+        queryKey: ["customers"],
+      });
     } catch (err: any) {
       toast.error(err?.message ?? "Lỗi");
     }
   }
 
-  const viewCustomer = viewId ? customers.find((c) => c.id === viewId) : null;
-  const customerOrders = viewId ? orders.filter((o) => o.customer_id === viewId) : [];
-  const completedOrders = customerOrders.filter((o) => o.status === "completed");
-  const pendingOrders = customerOrders.filter((o) => o.status !== "completed" && o.status !== "cancelled");
-  const totalSpent = completedOrders.reduce((s, o) => s + o.total, 0);
+  const viewCustomer = viewId
+    ? customers.find((c) => c.id === viewId)
+    : null;
+
+  const customerOrders = viewId
+    ? orders.filter((o) => o.customer_id === viewId)
+    : [];
+
+  const completedOrders = customerOrders.filter(
+    (o) => o.status === "completed"
+  );
+
+  const pendingOrders = customerOrders.filter(
+    (o) =>
+      o.status !== "completed" &&
+      o.status !== "cancelled"
+  );
+
+  const totalSpent = completedOrders.reduce(
+    (s, o) => s + o.total,
+    0
+  );
 
   return (
     <AppShell title="Khách hàng">
-      {/* Khối Thống kê: Hiển thị số lượng chuẩn trên TOÀN BỘ hệ thống database */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+
+      {/* LOADING PROGRESS */}
+      {(isLoading || isFetching) && (
+        <div className="fixed left-0 right-0 top-0 z-[9999]">
+          <div className="h-1 w-full overflow-hidden bg-primary/10">
+            <div className="loading-bar h-full bg-primary" />
+          </div>
+
+          <div className="absolute right-4 top-3 flex items-center gap-2 rounded-full border bg-background/95 px-3 py-1 shadow-sm backdrop-blur">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+
+            <span className="text-xs font-medium text-muted-foreground">
+              Đang tải dữ liệu khách hàng...
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* STATS */}
+      <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Card>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="mb-1 flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
-            <div className="text-xs text-muted-foreground uppercase">Tổng khách</div>
+
+            <div className="text-xs uppercase text-muted-foreground">
+              Tổng khách
+            </div>
           </div>
-          <div className="text-2xl font-semibold">{totalFilteredCount}</div>
+
+          <div className="text-2xl font-semibold">
+            {totalFilteredCount}
+          </div>
         </Card>
 
         <Card>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="mb-1 flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-destructive" />
-            <div className="text-xs text-muted-foreground uppercase">Còn công nợ</div>
+
+            <div className="text-xs uppercase text-muted-foreground">
+              Còn công nợ
+            </div>
           </div>
-          <div className="text-2xl font-semibold text-destructive">{totalDebtorCount}</div>
+
+          <div className="text-2xl font-semibold text-destructive">
+            {totalDebtorCount}
+          </div>
         </Card>
 
         <Card>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="mb-1 flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-green-600" />
-            <div className="text-xs text-muted-foreground uppercase">Tổng bán</div>
+
+            <div className="text-xs uppercase text-muted-foreground">
+              Tổng bán
+            </div>
           </div>
-          <div className="text-2xl font-semibold text-green-600">{fmt(totalSales)}</div>
+
+          <div className="text-2xl font-semibold text-green-600">
+            {fmt(totalSales)}
+          </div>
         </Card>
 
         <Card>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="mb-1 flex items-center gap-2">
             <TrendingDown className="h-4 w-4 text-destructive" />
-            <div className="text-xs text-muted-foreground uppercase">Tổng công nợ</div>
+
+            <div className="text-xs uppercase text-muted-foreground">
+              Tổng công nợ
+            </div>
           </div>
-          <div className="text-2xl font-semibold text-destructive">{fmt(totalAllDebt)}</div>
+
+          <div className="text-2xl font-semibold text-destructive">
+            {fmt(totalAllDebt)}
+          </div>
         </Card>
       </div>
 
+      {/* TABLE */}
       <Card>
-        <div className="flex items-center justify-between mb-4">
-          <div className="font-medium">Danh sách khách hàng</div>
-          <Button size="sm" onClick={() => { setForm(empty); setOpen(true); }}>
-            <Plus className="h-4 w-4 mr-1" /> Thêm khách
+        <div className="mb-4 flex items-center justify-between">
+          <div className="font-medium">
+            Danh sách khách hàng
+          </div>
+
+          <Button
+            size="sm"
+            onClick={() => {
+              setForm(empty);
+              setOpen(true);
+            }}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            Thêm khách
           </Button>
         </div>
 
-        {/* SearchFilter: total={totalFilteredCount} đảm bảo hiện đúng số lượng dòng thỏa mãn điều kiện */}
         <SearchFilter
           search={search}
-          onSearch={(v) => { setSearch(v); setPage(1); }}
+          onSearch={(v) => {
+            setSearch(v);
+            setPage(1);
+          }}
           placeholder="Tìm tên, số điện thoại..."
           sortOptions={[
-            { value: "name", label: "Tên A→Z" },
-            { value: "debt_desc", label: "Nợ nhiều nhất" },
-            { value: "debt_asc", label: "Nợ ít nhất" },
-            { value: "date", label: "Mới nhất" },
+            {
+              value: "name",
+              label: "Tên A→Z",
+            },
+            {
+              value: "debt_desc",
+              label: "Nợ nhiều nhất",
+            },
+            {
+              value: "debt_asc",
+              label: "Nợ ít nhất",
+            },
+            {
+              value: "date",
+              label: "Mới nhất",
+            },
           ]}
           sortValue={sortBy}
-          onSort={(v) => { setSortBy(v); setPage(1); }}
+          onSort={(v) => {
+            setSortBy(v);
+            setPage(1);
+          }}
           filterSlot={
             <div className="flex gap-2">
-              <select className="h-9 rounded-md border bg-background px-2 text-sm" value={filterGroup} onChange={(e) => { setFilterGroup(e.target.value); setPage(1); }}>
-                <option value="">Tất cả nhóm</option>
-                {Object.entries(groupLabel).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              <select
+                className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={filterGroup}
+                onChange={(e) => {
+                  setFilterGroup(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">
+                  Tất cả nhóm
+                </option>
+
+                {Object.entries(groupLabel).map(
+                  ([v, l]) => (
+                    <option key={v} value={v}>
+                      {l}
+                    </option>
+                  )
+                )}
               </select>
-              <select className="h-9 rounded-md border bg-background px-2 text-sm" value={filterDebt} onChange={(e) => { setFilterDebt(e.target.value); setPage(1); }}>
-                <option value="all">Tất cả</option>
-                <option value="debt">Có công nợ</option>
-                <option value="no_debt">Không nợ</option>
+
+              <select
+                className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={filterDebt}
+                onChange={(e) => {
+                  setFilterDebt(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="all">
+                  Tất cả
+                </option>
+
+                <option value="debt">
+                  Có công nợ
+                </option>
+
+                <option value="no_debt">
+                  Không nợ
+                </option>
               </select>
             </div>
           }
@@ -254,224 +503,215 @@ function CustomersPage() {
           totalLabel="khách"
         />
 
-        <div className="overflow-auto mt-4">
+        <div className="mt-4 overflow-auto">
           <table className="w-full text-sm">
-            <thead className="text-left text-muted-foreground border-b">
+            <thead className="border-b text-left text-muted-foreground">
               <tr>
-                <th className="py-2 pr-3">Tên khách hàng</th>
-                <th className="pr-3">SĐT</th>
-                <th className="pr-3">Địa chỉ</th>
-                <th className="text-right pr-3">Tổng bán</th>
-                <th className="text-right pr-3">Công nợ</th>
-                <th className="text-right">Thao tác</th>
+                <th className="py-2 pr-3">
+                  Tên khách hàng
+                </th>
+
+                <th className="pr-3">
+                  SĐT
+                </th>
+
+                <th className="pr-3">
+                  Địa chỉ
+                </th>
+
+                <th className="pr-3 text-right">
+                  Tổng bán
+                </th>
+
+                <th className="pr-3 text-right">
+                  Công nợ
+                </th>
+
+                <th className="text-right">
+                  Thao tác
+                </th>
               </tr>
             </thead>
+
             <tbody>
               {customers.map((c) => (
-                <tr key={c.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => setViewId(c.id)}>
+                <tr
+                  key={c.id}
+                  className="cursor-pointer border-b last:border-0 hover:bg-muted/30"
+                  onClick={() => setViewId(c.id)}
+                >
                   <td className="py-2 pr-3 font-medium">
-                    <Link to="/customers/$id" params={{ id: c.id }}
+                    <Link
+                      to="/customers/$id"
+                      params={{ id: c.id }}
                       className="hover:text-primary hover:underline"
-                      onClick={(e) => e.stopPropagation()}>
+                      onClick={(e) =>
+                        e.stopPropagation()
+                      }
+                    >
                       {c.name}
                     </Link>
                   </td>
-                  <td className="pr-3 text-muted-foreground">{c.phone ?? "—"}</td>
-                  <td className="pr-3 text-muted-foreground text-xs max-w-[150px] truncate">
-                    {[c.district, c.province].filter(Boolean).join(", ") || c.address || "—"}
+
+                  <td className="pr-3 text-muted-foreground">
+                    {c.phone ?? "—"}
                   </td>
-                  <td className="text-right pr-3 font-medium text-green-600">
+
+                  <td className="max-w-[150px] truncate pr-3 text-xs text-muted-foreground">
+                    {[c.district, c.province]
+                      .filter(Boolean)
+                      .join(", ") ||
+                      c.address ||
+                      "—"}
+                  </td>
+
+                  <td className="pr-3 text-right font-medium text-green-600">
                     {fmt(c.total_buy || 0)}
                   </td>
-                  <td className={`text-right pr-3 font-medium ${c.debt > 0 ? "text-destructive" : "text-muted-foreground"}`}>
-                    {c.debt > 0 ? fmt(c.debt) : "—"}
+
+                  <td
+                    className={`pr-3 text-right font-medium ${
+                      c.debt > 0
+                        ? "text-destructive"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {c.debt > 0
+                      ? fmt(c.debt)
+                      : "—"}
                   </td>
-                  <td className="text-right" onClick={(e) => e.stopPropagation()}>
-                    <Link to="/customers/$id" params={{ id: c.id }}
-                      className="p-1 inline-flex hover:text-blue-600" title="Xem chi tiết">
+
+                  <td
+                    className="text-right"
+                    onClick={(e) =>
+                      e.stopPropagation()
+                    }
+                  >
+                    <Link
+                      to="/customers/$id"
+                      params={{ id: c.id }}
+                      className="inline-flex p-1 hover:text-blue-600"
+                    >
                       <Eye className="h-4 w-4" />
                     </Link>
-                    <button className="p-1 hover:text-primary" onClick={() => startEdit(c.id)}>
+
+                    <button
+                      className="p-1 hover:text-primary"
+                      onClick={() =>
+                        startEdit(c.id)
+                      }
+                    >
                       <Pencil className="h-4 w-4" />
                     </button>
-                    <button className="p-1 hover:text-destructive" onClick={() => handleDelete(c.id, c.name)}>
+
+                    <button
+                      className="p-1 hover:text-destructive"
+                      onClick={() =>
+                        handleDelete(
+                          c.id,
+                          c.name
+                        )
+                      }
+                    >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
                 </tr>
               ))}
+
               {customers.length === 0 && (
-                <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">Không có kết quả</td></tr>
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="py-6 text-center text-muted-foreground"
+                  >
+                    Không có kết quả
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </div>
       </Card>
 
-      {/* Điều khiển phân trang nhận vào tổng số lượng từ query API của DB */}
-      <Pagination 
-        page={page} 
-        pageSize={DEFAULT_PAGE_SIZE} 
-        total={totalFilteredCount} 
-        onPageChange={setPage} 
-        label="khách hàng" 
+      <Pagination
+        page={page}
+        pageSize={DEFAULT_PAGE_SIZE}
+        total={totalFilteredCount}
+        onPageChange={setPage}
+        label="khách hàng"
       />
 
-      {/* Dialog thêm/sửa khách hàng */}
+      {/* ADD / EDIT DIALOG */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{form.id ? "Sửa khách hàng" : "Thêm khách hàng"}</DialogTitle></DialogHeader>
-          <form onSubmit={handleSave} className="space-y-3">
-            <div><Label>Tên *</Label><Input className="mt-1" value={form.name} required autoFocus onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-            <div><Label>Điện thoại</Label><Input className="mt-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {form.id
+                ? "Sửa khách hàng"
+                : "Thêm khách hàng"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <form
+            onSubmit={handleSave}
+            className="space-y-3"
+          >
             <div>
-              <Label>Tỉnh / Thành phố</Label>
-              <select
-                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                value={form.province}
-                onChange={(e) => setForm({ ...form, province: e.target.value, district: "", ward: "" })}
-              >
-                <option value="">— Chọn tỉnh/thành phố —</option>
-                {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
+              <Label>Tên *</Label>
+
+              <Input
+                className="mt-1"
+                value={form.name}
+                required
+                autoFocus
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    name: e.target.value,
+                  })
+                }
+              />
             </div>
-            <div><Label>Quận / Huyện</Label><Input className="mt-1" placeholder="Nhập quận/huyện" value={form.district} onChange={(e) => setForm({ ...form, district: e.target.value })} /></div>
-            <div><Label>Phường / Xã</Label><Input className="mt-1" placeholder="Nhập phường/xã" value={form.ward} onChange={(e) => setForm({ ...form, ward: e.target.value })} /></div>
-            <div><Label>Địa chỉ chi tiết</Label><Input className="mt-1" placeholder="Số nhà, tên đường..." value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
-            <div><Label>Nhóm</Label>
-              <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={form.group_name} onChange={(e) => setForm({ ...form, group_name: e.target.value })}>
-                {Object.entries(groupLabel).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </div>
-            <div><Label>Công nợ (₫)</Label><Input className="mt-1" type="number" value={form.debt} onChange={(e) => setForm({ ...form, debt: e.target.value })} /></div>
+
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>Hủy</Button>
-              <Button type="submit">Lưu</Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+              >
+                Hủy
+              </Button>
+
+              <Button type="submit">
+                Lưu
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog xem chi tiết khách hàng */}
-      <Dialog open={!!viewId} onOpenChange={(o) => { if (!o) setViewId(null); }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          {viewCustomer && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 flex-wrap">
-                  <span className="text-lg">{viewCustomer.name}</span>
-                  <span className={`text-xs rounded-full px-2 py-0.5 ${groupColor[viewCustomer.group_name]}`}>
-                    {groupLabel[viewCustomer.group_name]}
-                  </span>
-                </DialogTitle>
-              </DialogHeader>
+      <style>{`
+        .loading-bar {
+          animation: loading 1.2s ease-in-out infinite;
+        }
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-                  <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <div>
-                    <div className="text-xs text-muted-foreground">Số điện thoại</div>
-                    <div className="font-medium">{viewCustomer.phone ?? "Chưa có"}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-                  <TrendingDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <div>
-                    <div className="text-xs text-muted-foreground">Công nợ</div>
-                    <div className={`font-medium ${viewCustomer.debt > 0 ? "text-destructive" : "text-green-600"}`}>
-                      {viewCustomer.debt > 0 ? fmt(viewCustomer.debt) : "Không có nợ"}
-                    </div>
-                  </div>
-                </div>
-                <div className="sm:col-span-2 flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-                  <div>
-                    <div className="text-xs text-muted-foreground">Địa chỉ đầy đủ</div>
-                    <div className="font-medium">
-                      {[viewCustomer.address, viewCustomer.ward, viewCustomer.district, viewCustomer.province].filter(Boolean).join(", ") || "Chưa có"}
-                    </div>
-                  </div>
-                </div>
-              </div>
+        @keyframes loading {
+          0% {
+            transform: translateX(-100%);
+            width: 40%;
+          }
 
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="rounded-lg border p-3">
-                  <div className="text-2xl font-semibold">{customerOrders.length}</div>
-                  <div className="text-xs text-muted-foreground mt-1">Tổng đơn hàng</div>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-2xl font-semibold text-green-600">{completedOrders.length}</div>
-                  <div className="text-xs text-muted-foreground mt-1">Đã hoàn tất</div>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <div className="text-sm font-semibold text-primary">{fmt(totalSpent)}</div>
-                  <div className="text-xs text-muted-foreground mt-1">Tổng chi tiêu</div>
-                </div>
-              </div>
+          50% {
+            width: 60%;
+          }
 
-              {pendingOrders.length > 0 && (
-                <div className="border-t pt-3">
-                  <div className="font-medium mb-2 text-sm">Đơn đang chờ / đặt trước ({pendingOrders.length})</div>
-                  <div className="space-y-1">
-                    {pendingOrders.map((o) => (
-                      <div key={o.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
-                        <Link to="/orders/$id" params={{ id: o.id }} className="font-mono text-xs hover:text-primary hover:underline">{o.code}</Link>
-                        <span className="text-muted-foreground text-xs">{new Date(o.created_at).toLocaleDateString("vi-VN")}</span>
-                        <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded">
-                          {o.status === "reserved" ? "Đặt trước" : "Nháp"}
-                        </span>
-                        <span className="font-medium">{fmt(o.total)}</span>
-                        <Link to="/orders/$id" params={{ id: o.id }} className="text-muted-foreground hover:text-primary"><ExternalLink className="h-3.5 w-3.5" /></Link>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {completedOrders.length > 0 && (
-                <div className="border-t pt-3">
-                  <div className="font-medium mb-2 text-sm">Hóa đơn đã hoàn tất ({completedOrders.length})</div>
-                  <div className="overflow-auto max-h-48">
-                    <table className="w-full text-sm">
-                      <thead className="text-muted-foreground border-b">
-                        <tr>
-                          <th className="py-1 text-left">Mã đơn</th>
-                          <th className="text-left">Ngày</th>
-                          <th className="text-right">Tổng tiền</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {completedOrders.map((o) => (
-                          <tr key={o.id} className="border-b last:border-0 hover:bg-muted/30">
-                            <td className="py-1 font-mono text-xs">
-                              <Link to="/orders/$id" params={{ id: o.id }} className="hover:text-primary hover:underline">{o.code}</Link>
-                            </td>
-                            <td className="text-xs text-muted-foreground">{new Date(o.created_at).toLocaleDateString("vi-VN")}</td>
-                            <td className="text-right font-medium">{fmt(o.total)}</td>
-                            <td className="text-right">
-                              <Link to="/orders/$id" params={{ id: o.id }} className="text-muted-foreground hover:text-primary"><ExternalLink className="h-3.5 w-3.5" /></Link>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => { setViewId(null); startEdit(viewCustomer.id); }}>
-                  <Pencil className="h-4 w-4 mr-1" /> Chỉnh sửa
-                </Button>
-                <Link to="/customers/$id" params={{ id: viewCustomer.id }} onClick={() => setViewId(null)}>
-                  <Button variant="outline"><ExternalLink className="h-4 w-4 mr-1" /> Xem trang đầy đủ</Button>
-                </Link>
-                <Button onClick={() => setViewId(null)}>Đóng</Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+          100% {
+            transform: translateX(250%);
+            width: 40%;
+          }
+        }
+      `}</style>
     </AppShell>
   );
 }

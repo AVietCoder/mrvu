@@ -52,15 +52,29 @@ type FundTab = "tien_mat" | "ngan_hang" | "all";
 const blankForm = () => ({
   amount: "",
   voucherTypeId: "",
-  collectorUserId: "",   // thu: người thu tiền (user)
-  payerCustomerId: "",   // thu: người nộp (customer)
-  payerUserId: "",       // chi: người chi tiền (user)
-  receiverCustomerId: "",// chi: người nhận (customer)
+  collectorUserId: "",
+  payerCustomerId: "",
+  payerUserId: "",
+  receiverCustomerId: "",
   note: "",
-  accounting: true,
+  accounting: true,                          // giữ mặc định true (DB vẫn lưu), UI bỏ
   fundType: "tien_mat" as "tien_mat" | "ngan_hang",
   branchId: "",
+  createdAt: toLocalInput(new Date()),       // ✨ thời gian tạo phiếu (mặc định = hiện tại)
 });
+
+// Convert Date -> "YYYY-MM-DDTHH:mm" cho <input type="datetime-local">
+function toLocalInput(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function fromLocalInput(v: string): string {
+  // "YYYY-MM-DDTHH:mm" → ISO chuẩn để lưu DB
+  if (!v) return new Date().toISOString();
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 function Page() {

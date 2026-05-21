@@ -1,9 +1,18 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { deleteWhere, fetchRows, insertRow, now, updateWhere, uid } from "./supabase";
-import { supabase } from "./supabase"; // Sử dụng instance supabase gốc để gọi lệnh range và count
+import {
+  aggregateColumn,
+  countRows,
+  deleteWhere,
+  fetchAllRows,
+  fetchRows,
+  insertRow,
+  now,
+  supabase,
+  uid,
+  updateWhere,
+} from "./supabase";
 
-// Định nghĩa interface cho tham số truyền vào từ frontend
 interface ListCustomersArgs {
   page?: number;
   pageSize?: number;
@@ -16,7 +25,7 @@ interface ListCustomersArgs {
 export const listCustomers = createServerFn({ method: "GET" })
   .handler(async ({ data }: { data: ListCustomersArgs | undefined }) => {
     const page = data?.page ?? 1;
-    const pageSize = data?.pageSize ?? 100; // Tăng lên 100 khách mỗi lần cuộn để xem được nhiều hơn
+    const pageSize = data?.pageSize ?? 100;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
@@ -47,40 +56,30 @@ export const listCustomers = createServerFn({ method: "GET" })
       query = query.order("created_at", { ascending: false });
     }
 
-    const { data: customers, count: totalFilteredCustomers, error: custError } = await query.range(from, to);
+    const { data: customers, count: totalFilteredCustomers, error: custError } =
+      await query.range(from, to);
     if (custError) throw new Error(custError.message);
 
-    // Tính toán số liệu tổng quan của toàn bộ 15.000 khách
-    const [statsRes, ordersRes] = await Promise.all([
-      supabase.from("customers").select("debt"),
-      fetchRows("orders", { orderBy: "created_at", ascending: false }),
+    // ────────────────────────────────────────────────────────────────
+    // Thống kê toàn cục: KHÔNG dùng .select("debt") thường vì
+    // Supabase giới hạn 1000 dòng → 15.000 khách sẽ bị mất 14.000.
+    // Dùng aggregateColumn (phân trang qua .range()) để tính đúng.
+    // ────────────────────────────────────────────────────────────────
+    const [debtAgg, totalAllCustomers, orders] = await Promise.all([
+      aggregateColumn("customers", "debt"),
+      countRows("customers"),
+      fetchAllRows("orders", { orderBy: "created_at", ascending: false }),
     ]);
-
-    let totalAllCustomers = 0;
-    let totalAllDebt = 0;
-    let totalDebtorCount = 0;
-
-    const { data: allStats, error: statsError } = statsRes;
-    
-    if (!statsError && allStats) {
-      totalAllCustomers = allStats.length;
-      allStats.forEach(c => {
-        if (c.debt > 0) {
-          totalAllDebt += c.debt;
-          totalDebtorCount++;
-        }
-      });
-    }
 
     return {
       customers: customers ?? [],
-      orders: ordersRes ?? [],
+      orders: orders ?? [],
       meta: {
         totalFiltered: totalFilteredCustomers ?? 0,
         totalAllCustomers,
-        totalAllDebt,
-        totalDebtorCount
-      }
+        totalAllDebt: debtAgg.sum,
+        totalDebtorCount: debtAgg.positiveCount,
+      },
     };
   });
 
@@ -126,4 +125,22 @@ export const recordPayment = createServerFn({ method: "POST" })
     const next = Math.max(0, current - Number(data.amount || 0));
     await updateWhere("customers", { debt: next }, { id: data.customer_id });
     return { ok: true };
+  });
+export const getCustomerById = createServerFn({ method: "GET" })
+  .handler(async ({ data }: { data: { id: string } }) => {
+    const customer = await fetchRows("customers", {
+      eq: { id: data.id },
+      limit: 1,
+    });
+
+    const orders = await fetchRows("orders", {
+      eq: { customer_id: data.id },
+      orderBy: "created_at",
+      ascending: false,
+    });
+
+    return {
+      customer: customer[0] ?? null,
+      orders,
+    };
   });

@@ -55,6 +55,12 @@ function applyFilters(query: any, options?: QueryOptions) {
   return query;
 }
 
+/**
+ * fetchRows: KHÔNG dùng cho bảng > 1000 dòng.
+ * Mặc định Supabase chỉ trả tối đa 1000 hàng. Nếu bảng có thể vượt
+ * ngưỡng đó (orders, order_items, customers, cash_vouchers...), hãy
+ * dùng `fetchAllRows` để tự động phân trang qua range().
+ */
 export async function fetchRows<T = any>(table: string, options?: QueryOptions): Promise<T[]> {
   let query = supabase.from(table).select(options?.select ?? "*");
   query = applyFilters(query, options);
@@ -64,12 +70,16 @@ export async function fetchRows<T = any>(table: string, options?: QueryOptions):
 }
 
 /**
- * Lấy toàn bộ dữ liệu từ một bảng, vượt qua giới hạn 1000 rows của Supabase.
- * Dùng cho customers, products khi cần matching đầy đủ.
+ * Lấy TOÀN BỘ dữ liệu từ một bảng, vượt qua giới hạn 1000 rows của Supabase
+ * bằng cách phân trang theo .range(). Dùng cho mọi bảng có thể vượt 1000 dòng:
+ * customers, orders, order_items, cash_vouchers, schedules...
  */
-export async function fetchAllRows<T = any>(table: string, options?: Omit<QueryOptions, "limit">): Promise<T[]> {
+export async function fetchAllRows<T = any>(
+  table: string,
+  options?: Omit<QueryOptions, "limit">,
+): Promise<T[]> {
   const PAGE = 1000;
-  let all: T[] = [];
+  const all: T[] = [];
   let from = 0;
 
   while (true) {
@@ -96,7 +106,7 @@ export async function fetchAllRows<T = any>(table: string, options?: Omit<QueryO
     const { data, error } = await query;
     if (error) throw new Error(error.message);
     const rows = (data ?? []) as T[];
-    all = all.concat(rows);
+    all.push(...rows);
     if (rows.length < PAGE) break;
     from += PAGE;
   }
@@ -114,6 +124,44 @@ export async function countRows(table: string, options?: QueryOptions): Promise<
   const { count, error } = await query;
   if (error) throw new Error(error.message);
   return count ?? 0;
+}
+
+/**
+ * Đếm + tính tổng (sum) một cột số trên TOÀN BỘ bảng, có filter,
+ * không bị giới hạn 1000 dòng. Trả về { count, sum, positiveCount }.
+ * positiveCount = số dòng có column > 0 (ví dụ để đếm khách còn nợ).
+ */
+export async function aggregateColumn(
+  table: string,
+  column: string,
+  options?: QueryOptions,
+): Promise<{ count: number; sum: number; positiveCount: number }> {
+  const PAGE = 1000;
+  let from = 0;
+  let sum = 0;
+  let count = 0;
+  let positiveCount = 0;
+
+  while (true) {
+    let query = supabase
+      .from(table)
+      .select(column)
+      .range(from, from + PAGE - 1);
+    query = applyFilters(query, { ...options, select: undefined });
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    for (const r of rows as any[]) {
+      const v = Number(r[column] ?? 0);
+      sum += v;
+      count += 1;
+      if (v > 0) positiveCount += 1;
+    }
+    if (rows.length < PAGE) break;
+    from += PAGE;
+  }
+
+  return { count, sum, positiveCount };
 }
 
 export async function insertRow<T = any>(table: string, row: Record<string, any>): Promise<T> {
@@ -145,7 +193,7 @@ export async function upsertRow<T = any>(
   row: Record<string, any>,
   onConflict?: string,
 ): Promise<T> {
-  let query = supabase.from(table).upsert(row, onConflict ? { onConflict } : undefined).select("*").single();
+  const query = supabase.from(table).upsert(row, onConflict ? { onConflict } : undefined).select("*").single();
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data as T;

@@ -1,11 +1,21 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { supabase, fetchRows, fetchAllRows, insertRow, updateWhere, deleteWhere, uid, now } from "./supabase";
+import {
+  supabase,
+  fetchRows,
+  fetchAllRows,
+  insertRow,
+  updateWhere,
+  deleteWhere,
+  uid,
+  now,
+} from "./supabase";
 
 // ─── listCash — trả về toàn bộ dữ liệu cần thiết cho trang Sổ quỹ ──────────
 export const listCash = createServerFn({ method: "GET" }).handler(async () => {
+  // ❗ cash_vouchers, customers có thể vượt 1000 dòng → dùng fetchAllRows.
   const [vouchers, branches, users, customers, voucherTypes] = await Promise.all([
-    fetchRows("cash_vouchers", { orderBy: "created_at", ascending: false }),
+    fetchAllRows("cash_vouchers", { orderBy: "created_at", ascending: false }),
     fetchRows("branches", { orderBy: "name" }),
     fetchRows("users", { select: "id, full_name, is_admin", orderBy: "full_name" }),
     fetchAllRows("customers", { select: "id, name, phone", orderBy: "name" }),
@@ -27,22 +37,23 @@ export const createCashVoucher = createServerFn({ method: "POST" }).handler(
     await insertRow("cash_vouchers", {
       id: uid(),
       code,
-      type: data.type,               // 'thu' | 'chi'
-      fund_type: data.fund_type,     // 'tien_mat' | 'ngan_hang'
+      type: data.type, // 'thu' | 'chi'
+      fund_type: data.fund_type, // 'tien_mat' | 'ngan_hang'
       branch_id: data.branch_id,
       amount: Number(data.amount),
       voucher_type_id: data.voucher_type_id || null,
-      // thu: collector_user_id = người thu; payer_customer_id = người nộp
-      // chi: payer_user_id = người chi;    receiver_customer_id = người nhận
-      collector_user_id:    data.collector_user_id    || null,
-      payer_customer_id:    data.payer_customer_id    || null,
-      payer_user_id:        data.payer_user_id        || null,
+      collector_user_id: data.collector_user_id || null,
+      payer_customer_id: data.payer_customer_id || null,
+      payer_user_id: data.payer_user_id || null,
       receiver_customer_id: data.receiver_customer_id || null,
       note: data.note || null,
+      // Field 'accounting' vẫn lưu (giữ tương thích DB) – mặc định true,
+      // nhưng UI đã bỏ tuỳ chọn này.
       accounting: data.accounting ?? true,
       status: "active",
       created_by: data.created_by || null,
-      created_at: now(),
+      // ✨ Cho phép chọn thời gian tạo phiếu từ UI, mặc định lấy now().
+      created_at: data.created_at || now(),
     });
     return { ok: true, code };
   },
@@ -51,20 +62,20 @@ export const createCashVoucher = createServerFn({ method: "POST" }).handler(
 // ─── updateCashVoucher ───────────────────────────────────────────────────────
 export const updateCashVoucher = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: any }) => {
-    await updateWhere(
-      "cash_vouchers",
-      {
-        amount: Number(data.amount),
-        voucher_type_id: data.voucher_type_id || null,
-        collector_user_id:    data.collector_user_id    || null,
-        payer_customer_id:    data.payer_customer_id    || null,
-        payer_user_id:        data.payer_user_id        || null,
-        receiver_customer_id: data.receiver_customer_id || null,
-        note: data.note || null,
-        accounting: data.accounting ?? true,
-      },
-      { id: data.id },
-    );
+    const updatePayload: Record<string, any> = {
+      amount: Number(data.amount),
+      voucher_type_id: data.voucher_type_id || null,
+      collector_user_id: data.collector_user_id || null,
+      payer_customer_id: data.payer_customer_id || null,
+      payer_user_id: data.payer_user_id || null,
+      receiver_customer_id: data.receiver_customer_id || null,
+      note: data.note || null,
+      accounting: data.accounting ?? true,
+    };
+    if (data.created_at) {
+      updatePayload.created_at = data.created_at;
+    }
+    await updateWhere("cash_vouchers", updatePayload, { id: data.id });
     return { ok: true };
   },
 );

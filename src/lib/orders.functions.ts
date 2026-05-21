@@ -1,10 +1,29 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { countRows, deleteWhere, fetchAllRows, fetchRows, insertRow, now, uid, updateWhere } from "./supabase";
+import {
+  countRows,
+  deleteWhere,
+  fetchAllRows,
+  fetchRows,
+  insertRow,
+  now,
+  supabase,
+  uid,
+  updateWhere,
+} from "./supabase";
 
-async function nextCode() {
+async function nextOrderCode() {
   const count = await countRows("orders");
   return "HD" + String(count + 1).padStart(6, "0");
+}
+
+async function nextCashCode(type: "thu" | "chi") {
+  const prefix = type === "thu" ? "PT" : "PC";
+  const { count } = await supabase
+    .from("cash_vouchers")
+    .select("id", { count: "exact", head: true })
+    .eq("type", type);
+  return prefix + String((count ?? 0) + 1).padStart(6, "0");
 }
 
 async function adjustStock(productId: string, branchId: string, delta: number) {
@@ -24,20 +43,21 @@ async function adjustStock(productId: string, branchId: string, delta: number) {
 }
 
 export const listOrders = createServerFn({ method: "GET" }).handler(async () => {
+  // ❗ Tất cả các bảng có thể vượt 1000 dòng đều dùng fetchAllRows.
   const [orders, items, products, customers, employees, branches, schedules, schedule_assignments, users] =
     await Promise.all([
-      fetchRows("orders", { orderBy: "created_at", ascending: false }),
-      fetchRows("order_items"),
+      fetchAllRows("orders", { orderBy: "created_at", ascending: false }),
+      fetchAllRows("order_items"),
       fetchAllRows("products", { orderBy: "name" }),
       fetchAllRows("customers", { orderBy: "name" }),
       fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
       fetchRows("branches", { orderBy: "name" }),
-      fetchRows("schedules", {
+      fetchAllRows("schedules", {
         select: "id, title, type, status, scheduled_date, scheduled_time, order_id, created_at",
         orderBy: "created_at",
         ascending: false,
       }),
-      fetchRows("schedule_assignments"),
+      fetchAllRows("schedule_assignments"),
       fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
     ]);
 
@@ -56,6 +76,53 @@ export const listOrders = createServerFn({ method: "GET" }).handler(async () => 
   };
 });
 
+/**
+ * Tạo phiếu thu tự động cho khách hàng khi tạo/hoàn tất đơn.
+ * - fund_type lấy theo hình thức thanh toán (tien_mat | ngan_hang).
+ * - amount = đặt cọc + đã thanh toán (số tiền khách đã đưa thực tế).
+ */
+async function autoCreateReceiptForOrder({
+  orderCode,
+  customerId,
+  branchId,
+  employeeId,
+  amount,
+  fundType,
+  paymentMethodLabel,
+  createdAt,
+}: {
+  orderCode: string;
+  customerId: string | null;
+  branchId: string;
+  employeeId: string | null;
+  amount: number;
+  fundType: "tien_mat" | "ngan_hang";
+  paymentMethodLabel: string;
+  createdAt: string;
+}) {
+  if (!amount || amount <= 0) return null;
+  const code = await nextCashCode("thu");
+  await insertRow("cash_vouchers", {
+    id: uid(),
+    code,
+    type: "thu",
+    fund_type: fundType,
+    branch_id: branchId,
+    amount: Number(amount),
+    voucher_type_id: null,
+    collector_user_id: employeeId || null,
+    payer_customer_id: customerId || null,
+    payer_user_id: null,
+    receiver_customer_id: null,
+    note: `Thu từ đơn ${orderCode} — Hình thức: ${paymentMethodLabel}`,
+    accounting: true,
+    status: "active",
+    created_by: employeeId || null,
+    created_at: createdAt,
+  });
+  return code;
+}
+
 export const createOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
     const subtotal = data.items.reduce(
@@ -64,7 +131,21 @@ export const createOrder = createServerFn({ method: "POST" })
     );
     const total = Math.max(0, subtotal - (data.discount || 0));
     const oid = uid();
-    const code = await nextCode();
+    const code = await nextOrderCode();
+    const createdAt = data.created_at || now();
+
+    // Mặc định: nếu front-end không truyền status hoặc truyền rỗng → "reserved"
+    // (đặt hàng – chưa giao). Chuyển sang "completed" qua nút Hoàn tất.
+    const status: "reserved" | "completed" | "draft" | "cancelled" =
+      data.status || "reserved";
+
+    const paymentMethod: "tien_mat" | "ngan_hang" =
+      data.payment_method === "ngan_hang" ? "ngan_hang" : "tien_mat";
+    const paymentMethodLabel =
+      paymentMethod === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt";
+
+    const deposit = Number(data.deposit || 0);
+    const paid = Number(data.paid || 0);
 
     await insertRow("orders", {
       id: oid,
@@ -72,14 +153,15 @@ export const createOrder = createServerFn({ method: "POST" })
       customer_id: data.customer_id || null,
       branch_id: data.branch_id,
       employee_id: data.employee_id || null,
-      status: data.status,
+      status,
       subtotal,
       discount: Number(data.discount || 0),
       total,
-      deposit: Number(data.deposit || 0),
-      paid: Number(data.paid || 0),
+      deposit,
+      paid,
+      payment_method: paymentMethod,
       note: data.note || null,
-      created_at: now(),
+      created_at: createdAt,
     });
 
     for (const it of data.items) {
@@ -94,33 +176,46 @@ export const createOrder = createServerFn({ method: "POST" })
         total: itemTotal,
       });
 
-      if (data.status === "completed") {
+      if (status === "completed") {
         await adjustStock(it.product_id, data.branch_id, -Number(it.qty));
       }
     }
 
-    if (data.status === "completed" && data.customer_id) {
+    if (status === "completed" && data.customer_id) {
       const customerRows = await fetchRows<{ debt: number }>("customers", {
         eq: { id: data.customer_id },
         select: "debt",
         limit: 1,
       });
       const currentDebt = customerRows[0]?.debt ?? 0;
-      const owed = total - (data.paid || 0);
+      const owed = total - paid;
       if (owed > 0) {
         await updateWhere("customers", { debt: currentDebt + owed }, { id: data.customer_id });
       }
     }
 
+    // ✨ Tự động tạo phiếu thu khi khách đã đưa tiền (cọc + đã thanh toán)
+    const receiptAmount = deposit + paid;
+    const receiptCode = await autoCreateReceiptForOrder({
+      orderCode: code,
+      customerId: data.customer_id || null,
+      branchId: data.branch_id,
+      employeeId: data.employee_id || null,
+      amount: receiptAmount,
+      fundType: paymentMethod,
+      paymentMethodLabel,
+      createdAt,
+    });
+
     await insertRow("activity_logs", {
       id: uid(),
       employee_id: data.employee_id || null,
       action: "create_order",
-      detail: code,
-      created_at: now(),
+      detail: receiptCode ? `${code} (+phiếu thu ${receiptCode})` : code,
+      created_at: createdAt,
     });
 
-    return { ok: true, code };
+    return { ok: true, code, receipt_code: receiptCode };
   });
 
 export const updateOrderStatus = createServerFn({ method: "POST" })
@@ -137,6 +232,9 @@ export const updateOrder = createServerFn({ method: "POST" })
     );
     const total = Math.max(0, subtotal - (data.discount || 0));
 
+    const paymentMethod: "tien_mat" | "ngan_hang" =
+      data.payment_method === "ngan_hang" ? "ngan_hang" : "tien_mat";
+
     await updateWhere(
       "orders",
       {
@@ -149,6 +247,7 @@ export const updateOrder = createServerFn({ method: "POST" })
         total,
         deposit: Number(data.deposit || 0),
         paid: Number(data.paid || 0),
+        payment_method: paymentMethod,
         note: data.note || null,
       },
       { id: data.id },
