@@ -117,7 +117,7 @@ function LoginPage() {
           <div className="h-14 w-14 rounded-2xl bg-primary/10 grid place-items-center mb-3">
             <Fan className="h-7 w-7 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold">QuatTran POS</h1>
+          <h1 className="text-2xl font-bold">Mr.Vũ</h1>
           <p className="text-sm text-muted-foreground mt-1">Đăng nhập để tiếp tục</p>
         </div>
 
