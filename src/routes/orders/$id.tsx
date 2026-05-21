@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { listOrders, updateOrderStatus, updateOrder } from "@/lib/orders.functions";
+import { getSettings } from "@/lib/settings.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import {
   ArrowLeft, CalendarDays, Receipt, Clock,
   CheckCircle2, Package, User, Building2, UserCog, FileText,
-  ExternalLink, Pencil, X, Plus, Save, Ban,
+  ExternalLink, Pencil, X, Plus, Save, Ban, Printer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -57,9 +58,14 @@ function OrderDetailPage() {
   const listFn = useServerFn(listOrders);
   const updateStatusFn = useServerFn(updateOrderStatus);
   const updateOrderFn = useServerFn(updateOrder);
+  const getSettingsFn = useServerFn(getSettings);
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({ queryKey: ["orders"], queryFn: () => listFn() });
+  const { data: siteSettings } = useQuery({ queryKey: ["site_settings"], queryFn: () => getSettingsFn() });
+
+  const [completingOrder, setCompletingOrder] = useState(false);
+  const [cancellingOrder, setCancellingOrder] = useState(false);
 
   const order = useMemo(() => (data?.orders ?? []).find((o: any) => o.id === id), [data, id]);
   const orderItems = useMemo(() => (data?.items ?? []).filter((i: any) => i.order_id === id), [data, id]);
@@ -142,15 +148,84 @@ function OrderDetailPage() {
   const khachCanThanhToanEdit = Math.max(0, editTotal - parseInput(editDeposit));
 
   async function completeOrder() {
-    await updateStatusFn({ data: { id: order.id, status: "completed" } });
-    toast.success("Đã hoàn tất đơn " + order.code);
-    qc.invalidateQueries({ queryKey: ["orders"] });
+    setCompletingOrder(true);
+    try {
+      await updateStatusFn({ data: { id: order.id, status: "completed" } });
+      toast.success("Đã hoàn tất đơn " + order.code);
+      qc.invalidateQueries({ queryKey: ["orders"] });
+    } finally { setCompletingOrder(false); }
   }
   async function cancelOrder() {
     if (!confirm("Hủy đơn hàng này?")) return;
-    await updateStatusFn({ data: { id: order.id, status: "cancelled" } });
-    toast.success("Đã hủy đơn " + order.code);
-    qc.invalidateQueries({ queryKey: ["orders"] });
+    setCancellingOrder(true);
+    try {
+      await updateStatusFn({ data: { id: order.id, status: "cancelled" } });
+      toast.success("Đã hủy đơn " + order.code);
+      qc.invalidateQueries({ queryKey: ["orders"] });
+    } finally { setCancellingOrder(false); }
+  }
+
+  function printOrderSlip() {
+    if (!order) return;
+    const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
+    const custObj = (data?.customers ?? []).find((c: any) => c.id === order.customer_id);
+    const branchObj = (data?.branches ?? []).find((b: any) => b.id === order.branch_id);
+    const empObj = (data?.employees ?? []).find((e: any) => e.id === order.employee_id);
+    const statusLabels: Record<string,string> = { completed: "Hoàn tất", reserved: "Đặt hàng (chưa giao)", draft: "Nháp" };
+    const rows = orderItems.map((item: any, i: number) => {
+      const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
+      const lineTotal = item.qty * item.unit_price - (item.discount ?? 0);
+      return `<tr>
+        <td style="text-align:center;padding:8px;border:1px solid #ddd">${i+1}</td>
+        <td style="padding:8px;border:1px solid #ddd">${prod?.name ?? item.product_id}</td>
+        <td style="text-align:center;padding:8px;border:1px solid #ddd">${item.qty}</td>
+        <td style="text-align:right;padding:8px;border:1px solid #ddd">${moneyFmt(item.unit_price)}</td>
+        <td style="text-align:right;padding:8px;border:1px solid #ddd">${moneyFmt(lineTotal)}</td>
+      </tr>`;
+    }).join("");
+    const pw = window.open("", "_blank");
+    if (!pw) return;
+    pw.document.write(`<!DOCTYPE html><html><head><title>Phiếu đặt hàng</title>
+    <style>*{box-sizing:border-box;font-family:Arial,sans-serif}body{padding:40px;color:#111}
+    .header{text-align:center;margin-bottom:28px}.title{font-size:26px;font-weight:700;margin-bottom:6px}
+    .sub{color:#666;font-size:13px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:14px;margin-bottom:20px}
+    table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:9px;font-size:14px}
+    th{background:#f5f5f5;text-align:left}.total-box{margin-top:18px;text-align:right;font-size:14px}
+    .total-main{font-size:22px;font-weight:700;margin-top:4px}.sign{margin-top:60px;display:grid;grid-template-columns:1fr 1fr;gap:40px;text-align:center}
+    .sign-box{padding-top:10px}@media print{body{padding:0}}</style></head><body>
+    <div class="header">
+    ${(siteSettings as any)?.logo_url ? `<img src="${(siteSettings as any).logo_url}" alt="Logo" style="height:60px;object-fit:contain;margin-bottom:8px" />` : ""}
+    ${(siteSettings as any)?.site_name ? `<div style="font-size:15px;font-weight:600;color:#444;margin-bottom:4px">${(siteSettings as any).site_name}</div>` : ""}
+    <div class="title">PHIẾU ĐẶT HÀNG</div>
+    <div class="sub">Ngày: ${new Date(order.created_at).toLocaleDateString("vi-VN")} &nbsp;|&nbsp; Mã phiếu: ${order.code} &nbsp;|&nbsp; Trạng thái: ${statusLabels[order.status] ?? order.status}${(siteSettings as any)?.phone ? ` &nbsp;|&nbsp; ĐT: ${(siteSettings as any).phone}` : ""}</div></div>
+    <div class="info-grid">
+      <div><strong>Khách hàng:</strong> ${custObj?.name ?? "Khách lẻ"}</div>
+      <div><strong>Chi nhánh:</strong> ${branchObj?.name ?? "—"}</div>
+      <div><strong>Nhân viên:</strong> ${empObj?.name ?? "—"}</div>
+      <div><strong>Hình thức thanh toán:</strong> ${order.payment_method === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt"}</div>
+    </div>
+    <table><thead><tr>
+      <th style="width:50px;text-align:center">STT</th>
+      <th>Sản phẩm</th>
+      <th style="width:70px;text-align:center">SL</th>
+      <th style="width:130px;text-align:right">Đơn giá</th>
+      <th style="width:140px;text-align:right">Thành tiền</th>
+    </tr></thead><tbody>${rows}</tbody></table>
+    <div class="total-box">
+      <div>Tạm tính: ${moneyFmt(order.subtotal)}</div>
+      ${order.discount > 0 ? `<div>Giảm giá: - ${moneyFmt(order.discount)}</div>` : ""}
+      <div>Tổng tiền: ${moneyFmt(order.total)}</div>
+      ${order.deposit > 0 ? `<div style="color:#b45309;margin-top:4px">Đặt cọc: - ${moneyFmt(order.deposit)}</div>` : ""}
+      <div class="total-main" style="color:#15803d;margin-top:8px">Khách cần thanh toán: ${moneyFmt(Math.max(0, order.total - order.deposit))}</div>
+    </div>
+    ${order.note ? `<div style="margin-top:20px;font-size:14px"><strong>Ghi chú:</strong> ${order.note}</div>` : ""}
+    <div class="sign">
+      <div class="sign-box"><div>Người lập phiếu</div><div style="margin-top:60px;font-weight:600">....................</div></div>
+      <div class="sign-box"><div>Khách hàng xác nhận</div><div style="margin-top:60px">....................</div></div>
+    </div>
+    </body></html>`);
+    pw.document.close();
+    setTimeout(() => pw.print(), 300);
   }
 
   if (isLoading) {
@@ -251,14 +326,17 @@ function OrderDetailPage() {
 
               {isAdmin && !editing && (
                 <div className="flex gap-2 flex-wrap">
+                  <Button size="sm" variant="outline" onClick={printOrderSlip}>
+                    <Printer className="h-4 w-4 mr-1" /> In hóa đơn
+                  </Button>
                   {(order.status === "reserved" || order.status === "draft") && (
-                    <Button size="sm" onClick={completeOrder}>
-                      <CheckCircle2 className="h-4 w-4 mr-1" /> Hoàn tất
+                    <Button size="sm" onClick={completeOrder} disabled={completingOrder}>
+                      <CheckCircle2 className="h-4 w-4 mr-1" /> {completingOrder ? "Đang xử lý..." : "Hoàn tất"}
                     </Button>
                   )}
                   {order.status !== "cancelled" && order.status !== "completed" && (
-                    <Button size="sm" variant="destructive" onClick={cancelOrder}>
-                      <Ban className="h-4 w-4 mr-1" /> Hủy đơn
+                    <Button size="sm" variant="destructive" onClick={cancelOrder} disabled={cancellingOrder}>
+                      <Ban className="h-4 w-4 mr-1" /> {cancellingOrder ? "Đang hủy..." : "Hủy đơn"}
                     </Button>
                   )}
                 </div>

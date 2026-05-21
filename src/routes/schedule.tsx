@@ -78,6 +78,9 @@ function Page() {
   const canApprove = isAdmin || (!!user && hasPermission(user, "approve_schedule"));
   const isTech     = !isAdmin && !!user && hasPermission(user, "technician");
 
+  const [creating, setCreating] = useState(false);
+  const [approving, setApproving] = useState(false);
+
   const { data } = useQuery({ queryKey: ["schedules"], queryFn: () => listFn() });
   const { data: diffData } = useQuery({ queryKey: ["work-difficulties"], queryFn: () => listDiff() });
 
@@ -142,12 +145,17 @@ function Page() {
   // Filter + nhóm lịch
   const mySchedules = useMemo(() => {
     let list = data?.schedules ?? [];
-    if (isTech && user) {
+    // Kỹ thuật viên: chỉ thấy lịch được giao
+    if (isTech && !canApprove && user) {
       const myIds = new Set(
         (data?.assignments ?? []).filter((a: any) => a.user_id === user.id).map((a: any) => a.schedule_id),
       );
       list = list.filter((s: any) => myIds.has(s.id));
+    } else if (!canApprove && canCreate && user) {
+      // Chỉ có quyền tạo lịch: chỉ thấy lịch mình tạo (không phân công được)
+      list = list.filter((s: any) => s.created_by === user.id);
     }
+    // canApprove (hoặc admin): thấy tất cả lịch — không lọc thêm
     if (filterStatus) list = list.filter((s: any) => s.status === filterStatus);
     if (filterType) list = list.filter((s: any) => s.type === filterType);
     if (filterDate) list = list.filter((s: any) => (s.scheduled_date ?? "").slice(0, 10) === filterDate);
@@ -178,21 +186,36 @@ function Page() {
 
   const grouped = useMemo(() => groupByDate(mySchedules), [mySchedules]);
 
-  // Tính tiền công cho 1 lịch
+  // Tính tiền công cho 1 người trong lịch
   function calcTechPay(scheduleId: string): number {
     const fees = (data?.tech_fees ?? []).filter((f: any) => f.schedule_id === scheduleId);
     const diffIds = (data?.difficulties ?? []).filter((d: any) => d.schedule_id === scheduleId).map((d: any) => d.difficulty_id);
-    const bonusTotal = diffIds.reduce((sum: number, did: string) => {
+    const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === scheduleId);
+    const numPeople = Math.max(1, assignees.length);
+
+    // Ưu đãi (bonus từ tech_fees)
+    const bonusTotal = fees.reduce((sum: number, f: any) => sum + f.qty * f.unit_fee, 0);
+    // Tính chất CV nhân số người
+    const diffBonusPerTask = diffIds.reduce((sum: number, did: string) => {
       const wdiff = (data?.work_difficulties ?? []).find((w: any) => w.id === did);
       return sum + (wdiff?.bonus ?? 0);
     }, 0);
-    const feeTotal = fees.reduce((sum: number, f: any) => sum + f.qty * f.unit_fee, 0);
-    return feeTotal + bonusTotal;
+    const diffBonus = diffBonusPerTask * numPeople;
+    // Tiền đơn hàng liên kết
+    const schedule = (data?.schedules ?? []).find((s: any) => s.id === scheduleId);
+    const linkedOrder: any = schedule?.order_id
+      ? (data?.orders ?? []).find((o: any) => o.id === schedule.order_id)
+      : null;
+    const orderTotal = linkedOrder?.total ?? 0;
+
+    const totalPool = bonusTotal + diffBonus + orderTotal;
+    return totalPool / numPeople;
   }
 
   async function handleCreate() {
     if (!createForm.title || !createForm.scheduled_date) return toast.error("Vui lòng điền tiêu đề và ngày");
     if (!user) return;
+    setCreating(true);
     try {
       await createFn({ data: { ...createForm, created_by: user.id,
         customer_id: createForm.customer_id || undefined,
@@ -210,6 +233,7 @@ function Page() {
       qc.invalidateQueries({ queryKey: ["schedules"] });
       qc.invalidateQueries({ queryKey: ["orders"] });
     } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
+    finally { setCreating(false); }
   }
 
   function openApprove(s: any) {
@@ -219,12 +243,13 @@ function Page() {
     const existingFees = (data?.tech_fees ?? []).filter((f: any) => f.schedule_id === s.id);
     setAssignedUsers(existing);
     setAssignedDiffs(existingDiffs);
-    setTechFees(existingFees.length > 0 ? existingFees : [{ product_id: data?.products[0]?.id ?? "", qty: 1, unit_fee: data?.products[0]?.tech_fee ?? 0 }]);
+    setTechFees(existingFees.length > 0 ? existingFees : []);
     setApproveOpen(true);
   }
 
   async function handleApprove() {
     if (!approveTarget) return;
+    setApproving(true);
     try {
       await approveFn({ data: {
         schedule_id: approveTarget.id,
@@ -236,6 +261,7 @@ function Page() {
       setApproveOpen(false);
       qc.invalidateQueries({ queryKey: ["schedules"] });
     } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
+    finally { setApproving(false); }
   }
 
   async function handleStatus(id: string, status: string) {
@@ -683,7 +709,7 @@ function Page() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Hủy</Button>
-            <Button onClick={handleCreate}>Tạo lịch</Button>
+            <Button onClick={handleCreate} disabled={creating}>{creating ? "Đang tạo..." : "Tạo lịch"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -724,30 +750,27 @@ function Page() {
               </div>
             </div>
 
-            {/* Sản phẩm lắp + tiền công */}
+            {/* Ưu đãi (bonus) */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <Label className="font-medium">Sản phẩm & tiền công</Label>
+                <Label className="font-medium">Ưu đãi (bonus)</Label>
                 <Button size="sm" variant="outline"
-                  onClick={() => setTechFees([...techFees, { product_id: data?.products[0]?.id ?? "", qty: 1, unit_fee: data?.products[0]?.tech_fee ?? 0 }])}>
-                  <Plus className="h-3 w-3 mr-1" /> Thêm SP
+                  onClick={() => setTechFees([...techFees, { product_id: "", qty: 1, unit_fee: 0 }])}>
+                  <Plus className="h-3 w-3 mr-1" /> Thêm ưu đãi
                 </Button>
               </div>
               {techFees.map((tf, idx) => (
                 <div key={idx} className="grid grid-cols-12 gap-2 mb-2">
-                  <select className="col-span-6 h-9 rounded-md border bg-background px-2 text-sm"
+                  <Input className="col-span-6" placeholder="Tên ưu đãi / mô tả"
                     value={tf.product_id}
                     onChange={(e) => {
-                      const p = data?.products.find((x: any) => x.id === e.target.value);
                       const next = [...techFees];
-                      next[idx] = { ...tf, product_id: e.target.value, unit_fee: p?.tech_fee ?? 0 };
+                      next[idx] = { ...tf, product_id: e.target.value };
                       setTechFees(next);
-                    }}>
-                    {data?.products.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
+                    }} />
                   <Input type="number" className="col-span-2" placeholder="SL" value={tf.qty}
                     onChange={(e) => { const next = [...techFees]; next[idx].qty = Number(e.target.value); setTechFees(next); }} />
-                  <Input type="number" className="col-span-3" placeholder="Tiền/cái" value={tf.unit_fee}
+                  <Input type="number" className="col-span-3" placeholder="Tiền ưu đãi" value={tf.unit_fee}
                     onChange={(e) => { const next = [...techFees]; next[idx].unit_fee = Number(e.target.value); setTechFees(next); }} />
                   <button className="col-span-1 hover:text-destructive"
                     onClick={() => setTechFees(techFees.filter((_, i) => i !== idx))}>
@@ -755,23 +778,47 @@ function Page() {
                   </button>
                 </div>
               ))}
-              {/* Tổng tiền công preview */}
-              <div className="rounded-md bg-muted/50 p-2 text-sm">
-                Tổng tiền công dự kiến: <span className="font-semibold text-green-600">
-                  {fmtMoney(
-                    techFees.reduce((s, tf) => s + tf.qty * tf.unit_fee, 0) +
-                    assignedDiffs.reduce((s, did) => {
-                      const d = (data?.work_difficulties ?? []).find((x: any) => x.id === did);
-                      return s + (d?.bonus ?? 0);
-                    }, 0)
-                  )}
-                </span>
-              </div>
+              {(() => {
+                const numPeople = Math.max(1, assignedUsers.length);
+                // Tiền ưu đãi tổng
+                const bonusTotal = techFees.reduce((s, tf) => s + tf.qty * tf.unit_fee, 0);
+                // Tính chất công việc: tự động nhân theo số người
+                const diffBonus = assignedDiffs.reduce((s, did) => {
+                  const d = (data?.work_difficulties ?? []).find((x: any) => x.id === did);
+                  return s + (d?.bonus ?? 0);
+                }, 0) * numPeople;
+                // Tiền đơn hàng liên kết
+                const linkedOrder: any = approveTarget?.order_id
+                  ? (data?.orders ?? []).find((o: any) => o.id === approveTarget.order_id)
+                  : null;
+                const orderTotal = linkedOrder?.total ?? 0;
+                const totalPool = bonusTotal + diffBonus + orderTotal;
+                const perPerson = totalPool / numPeople;
+                return (
+                  <div className="rounded-md bg-muted/50 p-2 text-sm space-y-1">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Ưu đãi</span><span>{fmtMoney(bonusTotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Tính chất CV × {numPeople} người</span><span>{fmtMoney(diffBonus)}</span>
+                    </div>
+                    {orderTotal > 0 && (
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Tiền đơn hàng</span><span>{fmtMoney(orderTotal)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-semibold border-t pt-1">
+                      <span>Tiền công / người ({numPeople} người)</span>
+                      <span className="text-green-600">{fmtMoney(perPerson)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setApproveOpen(false)}>Hủy</Button>
-            <Button onClick={handleApprove}>Xác nhận duyệt</Button>
+            <Button onClick={handleApprove} disabled={approving}>{approving ? "Đang duyệt..." : "Xác nhận duyệt"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -900,35 +947,50 @@ function Page() {
                   )}
 
                   {/* Tiền công */}
-                  {(fees.length > 0 || diffIds.length > 0) && (
+                  {(fees.length > 0 || diffIds.length > 0) && (() => {
+                    const numPeople = Math.max(1, assignees.length);
+                    const bonusTotal = fees.reduce((sum: number, f: any) => sum + f.qty * f.unit_fee, 0);
+                    const diffBonusPerTask = diffIds.reduce((sum: number, d: any) => {
+                      const wd = data?.work_difficulties.find((w: any) => w.id === d.difficulty_id);
+                      return sum + (wd?.bonus ?? 0);
+                    }, 0);
+                    const diffBonus = diffBonusPerTask * numPeople;
+                    const orderTotal = linkedOrder?.total ?? 0;
+                    const totalPool = bonusTotal + diffBonus + orderTotal;
+                    const perPerson = totalPool / numPeople;
+                    return (
                     <div>
                       <div className="font-medium text-sm mb-2">Tiền công dự kiến</div>
                       <div className="space-y-1.5">
-                        {fees.map((f: any) => {
-                          const p = data?.products.find((x: any) => x.id === f.product_id);
-                          return (
-                            <div key={f.product_id} className="flex justify-between text-sm rounded border px-3 py-2">
-                              <span>{p?.name ?? f.product_id} × {f.qty}</span>
-                              <span className="font-medium text-green-600">+{fmtMoney(f.qty * f.unit_fee)}</span>
-                            </div>
-                          );
-                        })}
+                        {fees.map((f: any) => (
+                          <div key={f.product_id} className="flex justify-between text-sm rounded border px-3 py-2">
+                            <span>{f.product_id} × {f.qty}</span>
+                            <span className="font-medium text-green-600">+{fmtMoney(f.qty * f.unit_fee)}</span>
+                          </div>
+                        ))}
                         {diffIds.map((d: any) => {
                           const wd = data?.work_difficulties.find((w: any) => w.id === d.difficulty_id);
                           return wd ? (
                             <div key={d.difficulty_id} className="flex justify-between text-sm rounded border px-3 py-2">
-                              <span>{wd.name}</span>
-                              <span className="font-medium text-green-600">+{fmtMoney(wd.bonus)}</span>
+                              <span>{wd.name} × {numPeople} người</span>
+                              <span className="font-medium text-green-600">+{fmtMoney(wd.bonus * numPeople)}</span>
                             </div>
                           ) : null;
                         })}
+                        {(() => { const linkedOrder2: any = s.order_id ? (data?.orders ?? []).find((o: any) => o.id === s.order_id) : null; return linkedOrder2?.total > 0 ? (
+                          <div className="flex justify-between text-sm rounded border px-3 py-2">
+                            <span>Tiền đơn hàng</span>
+                            <span className="font-medium text-green-600">+{fmtMoney(linkedOrder2.total)}</span>
+                          </div>
+                        ) : null; })()}
                         <div className="flex justify-between font-semibold text-sm rounded border border-green-200 bg-green-50 px-3 py-2">
-                          <span>Tổng tiền công</span>
-                          <span className="text-green-700">{fmtMoney(techPay)}</span>
+                          <span>Tiền công / người ({numPeople} người)</span>
+                          <span className="text-green-700">{fmtMoney(perPerson)}</span>
                         </div>
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
 
                 <DialogFooter className="flex-wrap gap-2">
