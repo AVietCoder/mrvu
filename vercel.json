@@ -1,3 +1,8 @@
 {
-  "framework": null
+  "framework": null,
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist/client",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/dist/server/server.js" }
+  ]
 }
