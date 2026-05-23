@@ -1,7 +1,3 @@
 {
-  "buildCommand": "vite build",
-  "outputDirectory": "dist/client", 
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/dist/server/server.js" }
-  ]
+  "framework": null
 }
