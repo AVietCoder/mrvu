@@ -3,12 +3,15 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { listOrders, createOrder } from "@/lib/orders.functions";
+import { createSchedule } from "@/lib/schedule.functions";
+import { SCHEDULE_TYPES } from "@/lib/types";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Plus,
   X,
@@ -19,6 +22,7 @@ import {
   ChevronRight,
   ExternalLink,
   Minus,
+  Loader2,
 } from "lucide-react";
 import {
   Dialog,
@@ -79,10 +83,13 @@ function printOrderSlip({
   status,
   paymentMethod,
   discount,
+  discountAmt,
+  vatAmt,
   deposit,
   note,
   subtotal,
   total,
+  includeVat,
   data,
   siteSettings,
 }: any) {
@@ -157,7 +164,8 @@ function printOrderSlip({
   </tr></thead><tbody>${rows}</tbody></table>
   <div class="total-box">
     <div>Tạm tính: ${moneyFmt(subtotal)}</div>
-    ${discount > 0 ? `<div>Giảm giá: - ${moneyFmt(discount)}</div>` : ""}
+    ${discountAmt > 0 ? `<div>Giảm giá: - ${moneyFmt(discountAmt)}</div>` : ""}
+    ${includeVat ? `<div>Thuế VAT (10%): + ${moneyFmt(vatAmt)}</div>` : ""}
     <div>Tổng tiền: ${moneyFmt(total)}</div>
     ${deposit > 0 ? `<div style="color:#b45309;margin-top:4px">Đặt cọc: - ${moneyFmt(deposit)}</div>` : ""}
     <div class="total-main" style="color:#15803d;margin-top:8px">Khách cần thanh toán: ${moneyFmt(Math.max(0, total - deposit))}</div>
@@ -178,6 +186,7 @@ function Page() {
   const navigate = useNavigate();
   const listFn = useServerFn(listOrders);
   const create = useServerFn(createOrder);
+  const createScheduleFn = useServerFn(createSchedule);
   const qc = useQueryClient();
 
   const { data } = useQuery({
@@ -196,6 +205,10 @@ function Page() {
   const [activeTab, setActiveTab] = useState<"orders" | "reserved">("orders");
   const [page, setPage] = useState(1);
 
+  // Receipt modal after order creation
+  const [receiptOrder, setReceiptOrder] = useState<any>(null);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+
   const [items, setItems] = useState<LineItem[]>([]);
   const [customer, setCustomer] = useState("");
   const [branch, setBranch] = useState("");
@@ -207,22 +220,49 @@ function Page() {
     "tien_mat" | "ngan_hang"
   >("tien_mat");
   const [discountRaw, setDiscountRaw] = useState("0");
+  const [discountPct, setDiscountPct] = useState("0");
+  const [useDiscountPct, setUseDiscountPct] = useState(false);
+  const [includeVat, setIncludeVat] = useState(false);
   const [depositRaw, setDepositRaw] = useState("0");
   const [note, setNote] = useState("");
+
+  // Lịch làm việc kèm theo
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const nowTimeStr = new Date().toTimeString().slice(0, 5);
+  const [createScheduleOnOrder, setCreateScheduleOnOrder] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState({
+    title: "",
+    type: "install",
+    scheduled_date: todayStr,
+    scheduled_time: nowTimeStr,
+    address: "",
+    note: "",
+  });
 
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("newest");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterBranch, setFilterBranch] = useState("");
 
-  const discount = parseInput(discountRaw);
+  const discount = useDiscountPct
+    ? 0
+    : parseInput(discountRaw);
   const deposit = parseInput(depositRaw);
 
   const subtotal = useMemo(
     () => items.reduce((s, i) => s + i.qty * i.unit_price - i.discount, 0),
     [items],
   );
-  const total = Math.max(0, subtotal - discount);
+
+  // Giảm giá: theo % hoặc theo số tiền cố định
+  const discountAmt = useDiscountPct
+    ? Math.round(subtotal * (Math.min(100, Math.max(0, parseFloat(discountPct) || 0)) / 100))
+    : parseInput(discountRaw);
+  const afterDiscount = Math.max(0, subtotal - discountAmt);
+
+  // VAT 10%
+  const vatAmt = includeVat ? Math.round(afterDiscount * 0.1) : 0;
+  const total = afterDiscount + vatAmt;
   const khachCanThanhToan = Math.max(0, total - deposit);
 
   const customerMap = useMemo(
@@ -341,8 +381,20 @@ function Page() {
     setStatus("reserved");
     setPaymentMethod("tien_mat");
     setDiscountRaw("0");
+    setDiscountPct("0");
+    setUseDiscountPct(false);
+    setIncludeVat(false);
     setDepositRaw("0");
     setNote("");
+    setCreateScheduleOnOrder(false);
+    setScheduleForm({
+      title: "",
+      type: "install",
+      scheduled_date: new Date().toISOString().slice(0, 10),
+      scheduled_time: new Date().toTimeString().slice(0, 5),
+      address: "",
+      note: "",
+    });
   }
 
   function addItem() {
@@ -363,6 +415,10 @@ function Page() {
     if (items.length === 0) return toast.error("Đơn chưa có sản phẩm");
     if (!branch) return toast.error("Chọn chi nhánh");
 
+    if (createScheduleOnOrder && !scheduleForm.title) {
+      return toast.error("Vui lòng nhập tiêu đề lịch làm việc");
+    }
+
     setSubmitting(true);
     try {
       const r = await create({
@@ -372,7 +428,7 @@ function Page() {
           employee_id: employee || undefined,
           status,
           payment_method: paymentMethod,
-          discount,
+          discount: discountAmt,
           deposit,
           paid: 0,
           note: note || undefined,
@@ -380,10 +436,50 @@ function Page() {
         },
       });
 
+      // Tạo lịch làm việc nếu người dùng tick
+      if (createScheduleOnOrder && scheduleForm.title && user) {
+        try {
+          await createScheduleFn({
+            data: {
+              ...scheduleForm,
+              order_id: r.id,
+              customer_id: customer || undefined,
+              branch_id: branch,
+              created_by: user.id,
+              assigned_by: undefined,
+            },
+          });
+        } catch (se: any) {
+          toast.warning("Đơn đã tạo nhưng lịch làm việc lỗi: " + (se?.message ?? ""));
+        }
+      }
+
+      // Chuẩn bị dữ liệu phiếu thu để hiển thị
+      setReceiptOrder({
+        ...r,
+        subtotal,
+        discountAmt,
+        vatAmt,
+        total,
+        deposit,
+        khachCanThanhToan,
+        items,
+        customer,
+        branch,
+        employee,
+        paymentMethod,
+        note,
+        includeVat,
+      });
+
       toast.success("Tạo đơn " + r.code);
       reset();
       setOpen(false);
       qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["schedules"] });
+
+      // Tự động mở phiếu thu
+      setReceiptOpen(true);
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi");
     } finally {
@@ -719,13 +815,42 @@ function Page() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <Label>Giảm giá (₫)</Label>
-                  <Input
-                    className="mt-1"
-                    value={discountRaw}
-                    onChange={(e) => setDiscountRaw(fmtInput(e.target.value))}
-                    onFocus={(e) => e.target.select()}
-                  />
+                  <div className="flex items-center gap-2 mb-1">
+                    <Label>Giảm giá</Label>
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                      <Checkbox
+                        checked={useDiscountPct}
+                        onCheckedChange={(v) => setUseDiscountPct(!!v)}
+                        id="use-pct"
+                      />
+                      Theo %
+                    </label>
+                  </div>
+                  {useDiscountPct ? (
+                    <div className="flex items-center gap-1 mt-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={discountPct}
+                        onChange={(e) => setDiscountPct(e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        className="flex-1"
+                        placeholder="0"
+                      />
+                      <span className="text-sm text-muted-foreground">%</span>
+                    </div>
+                  ) : (
+                    <Input
+                      className="mt-1"
+                      value={discountRaw}
+                      onChange={(e) => setDiscountRaw(fmtInput(e.target.value))}
+                      onFocus={(e) => e.target.select()}
+                    />
+                  )}
+                  {useDiscountPct && discountAmt > 0 && (
+                    <p className="text-xs text-muted-foreground mt-0.5">≈ {fmt(discountAmt)}</p>
+                  )}
                 </div>
 
                 <div>
@@ -739,6 +864,19 @@ function Page() {
                 </div>
               </div>
 
+              {/* VAT */}
+              <label className="flex items-center gap-2 cursor-pointer select-none rounded-lg border px-3 py-2.5 hover:bg-muted/30 transition-colors">
+                <Checkbox
+                  checked={includeVat}
+                  onCheckedChange={(v) => setIncludeVat(!!v)}
+                  id="vat"
+                />
+                <span className="text-sm font-medium">Thu thuế VAT (10%)</span>
+                {includeVat && (
+                  <span className="ml-auto text-sm font-semibold text-orange-600">+ {fmt(vatAmt)}</span>
+                )}
+              </label>
+
               <div>
                 <Label>Ghi chú</Label>
                 <Input
@@ -748,15 +886,90 @@ function Page() {
                 />
               </div>
 
+              {/* Lịch làm việc */}
+              <div className="rounded-lg border overflow-hidden">
+                <label className="flex items-center gap-2 cursor-pointer select-none bg-blue-50/60 px-3 py-2.5 hover:bg-blue-100/60 transition-colors">
+                  <Checkbox
+                    checked={createScheduleOnOrder}
+                    onCheckedChange={(v) => setCreateScheduleOnOrder(!!v)}
+                    id="create-schedule"
+                  />
+                  <CalendarDays className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium text-blue-900">Tạo lịch làm việc luôn</span>
+                </label>
+                {createScheduleOnOrder && (
+                  <div className="p-3 space-y-3 bg-blue-50/20 border-t">
+                    <div>
+                      <Label className="text-xs">Tiêu đề lịch *</Label>
+                      <Input
+                        className="mt-1 h-8 text-sm"
+                        value={scheduleForm.title}
+                        onChange={(e) => setScheduleForm({ ...scheduleForm, title: e.target.value })}
+                        placeholder="VD: Lắp đặt - Khách ABC"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Loại</Label>
+                        <select
+                          className="mt-1 h-8 w-full rounded-md border bg-background px-2 text-sm"
+                          value={scheduleForm.type}
+                          onChange={(e) => setScheduleForm({ ...scheduleForm, type: e.target.value })}
+                        >
+                          {SCHEDULE_TYPES.map((t) => (
+                            <option key={t.value} value={t.value}>{t.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Ngày</Label>
+                        <Input
+                          type="date"
+                          className="mt-1 h-8 text-sm"
+                          value={scheduleForm.scheduled_date}
+                          onChange={(e) => setScheduleForm({ ...scheduleForm, scheduled_date: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Giờ</Label>
+                        <Input
+                          type="time"
+                          className="mt-1 h-8 text-sm"
+                          value={scheduleForm.scheduled_time}
+                          onChange={(e) => setScheduleForm({ ...scheduleForm, scheduled_time: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Địa chỉ</Label>
+                        <Input
+                          className="mt-1 h-8 text-sm"
+                          value={scheduleForm.address}
+                          onChange={(e) => setScheduleForm({ ...scheduleForm, address: e.target.value })}
+                          placeholder="Địa chỉ lắp đặt"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="rounded-lg border p-4 bg-muted/30">
                 <div className="flex justify-between text-sm">
                   <span>Tạm tính</span>
                   <span>{fmt(subtotal)}</span>
                 </div>
-                {discount > 0 && (
-                  <div className="flex justify-between text-sm mt-1">
-                    <span>Giảm giá</span>
-                    <span>- {fmt(discount)}</span>
+                {discountAmt > 0 && (
+                  <div className="flex justify-between text-sm mt-1 text-green-700">
+                    <span>Giảm giá{useDiscountPct ? ` (${discountPct}%)` : ""}</span>
+                    <span>- {fmt(discountAmt)}</span>
+                  </div>
+                )}
+                {includeVat && (
+                  <div className="flex justify-between text-sm mt-1 text-orange-600">
+                    <span>Thuế VAT (10%)</span>
+                    <span>+ {fmt(vatAmt)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm mt-1 font-medium">
@@ -788,10 +1001,119 @@ function Page() {
                   onClick={submit}
                   disabled={submitting}
                 >
-                  {submitting ? "Đang tạo..." : "Tạo đơn"}
+                  {submitting ? (
+                    <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang tạo...</>
+                  ) : "Tạo đơn"}
                 </Button>
               </DialogFooter>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Phiếu thu tự động sau khi đặt hàng ── */}
+        <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
+          <DialogContent className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-green-700 flex items-center gap-2">
+                <span className="text-xl">✅</span> Đơn hàng đã tạo thành công!
+              </DialogTitle>
+              <DialogDescription>
+                Phiếu thu dưới đây để truy thu số tiền còn nợ. In hoặc đóng để tiếp tục.
+              </DialogDescription>
+            </DialogHeader>
+            {receiptOrder && (() => {
+              const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
+              const custName = receiptOrder.customer
+                ? (data?.customers ?? []).find((c: any) => c.id === receiptOrder.customer)?.name ?? "Khách lẻ"
+                : "Khách lẻ";
+              const branchName = receiptOrder.branch
+                ? (data?.branches ?? []).find((b: any) => b.id === receiptOrder.branch)?.name ?? "—"
+                : "—";
+              const empName = receiptOrder.employee
+                ? (data?.employees ?? []).find((e: any) => e.id === receiptOrder.employee)?.name ?? "—"
+                : "—";
+              return (
+                <div className="space-y-4 text-sm">
+                  <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted/40 p-3">
+                    <div><span className="text-muted-foreground">Mã đơn: </span><strong className="font-mono">{receiptOrder.code}</strong></div>
+                    <div><span className="text-muted-foreground">Khách: </span>{custName}</div>
+                    <div><span className="text-muted-foreground">Chi nhánh: </span>{branchName}</div>
+                    <div><span className="text-muted-foreground">Nhân viên: </span>{empName}</div>
+                    <div><span className="text-muted-foreground">Thanh toán: </span>{receiptOrder.paymentMethod === "ngan_hang" ? "Chuyển khoản" : "Tiền mặt"}</div>
+                  </div>
+
+                  <div className="rounded-lg border p-3 space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Tạm tính</span>
+                      <span>{moneyFmt(receiptOrder.subtotal)}</span>
+                    </div>
+                    {receiptOrder.discountAmt > 0 && (
+                      <div className="flex justify-between text-green-700">
+                        <span>Giảm giá</span>
+                        <span>- {moneyFmt(receiptOrder.discountAmt)}</span>
+                      </div>
+                    )}
+                    {receiptOrder.includeVat && (
+                      <div className="flex justify-between text-orange-600">
+                        <span>Thuế VAT (10%)</span>
+                        <span>+ {moneyFmt(receiptOrder.vatAmt)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-medium border-t pt-1.5">
+                      <span>Tổng tiền</span>
+                      <span>{moneyFmt(receiptOrder.total)}</span>
+                    </div>
+                    {receiptOrder.deposit > 0 && (
+                      <div className="flex justify-between text-yellow-700">
+                        <span>Đặt cọc</span>
+                        <span>- {moneyFmt(receiptOrder.deposit)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold text-lg pt-1 border-t text-green-700">
+                      <span>Còn phải thu</span>
+                      <span>{moneyFmt(receiptOrder.khachCanThanhToan)}</span>
+                    </div>
+                  </div>
+
+                  {receiptOrder.note && (
+                    <div className="text-muted-foreground text-xs">Ghi chú: {receiptOrder.note}</div>
+                  )}
+                </div>
+              );
+            })()}
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => {
+                  if (receiptOrder && data && siteSettings) {
+                    printOrderSlip({
+                      items: receiptOrder.items,
+                      customer: receiptOrder.customer,
+                      branch: receiptOrder.branch,
+                      employee: receiptOrder.employee,
+                      status: receiptOrder.status,
+                      paymentMethod: receiptOrder.paymentMethod,
+                      discount: receiptOrder.discountAmt,
+                      discountAmt: receiptOrder.discountAmt,
+                      vatAmt: receiptOrder.vatAmt,
+                      deposit: receiptOrder.deposit,
+                      note: receiptOrder.note,
+                      subtotal: receiptOrder.subtotal,
+                      total: receiptOrder.total,
+                      includeVat: receiptOrder.includeVat,
+                      data,
+                      siteSettings,
+                    });
+                  }
+                }}
+              >
+                🖨️ In phiếu
+              </Button>
+              <Button className="w-full sm:w-auto" onClick={() => setReceiptOpen(false)}>
+                Đóng
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 

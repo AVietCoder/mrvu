@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Plus, X, Wallet, Landmark, Search,
-  CheckCircle2, XCircle, Pencil, Trash2, Settings2, ChevronDown,
+  CheckCircle2, XCircle, Pencil, Trash2, Settings2, ChevronDown, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -796,7 +796,7 @@ function Page() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenCreate(false)}>Hủy</Button>
             <Button onClick={handleCreate} disabled={saving}>
-              {saving ? "Đang lưu..." : "Lưu phiếu"}
+              {saving ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang lưu...</> : "Lưu phiếu"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -816,7 +816,7 @@ function Page() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenEdit(false)}>Hủy</Button>
             <Button onClick={handleEdit} disabled={saving}>
-              {saving ? "Đang lưu..." : "Cập nhật"}
+              {saving ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang lưu...</> : "Cập nhật"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -838,7 +838,7 @@ function Page() {
               Không
             </Button>
             <Button variant="destructive" onClick={handleCancel} disabled={saving}>
-              {saving ? "Đang hủy..." : "Hủy phiếu"}
+              {saving ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang hủy...</> : "Hủy phiếu"}
             </Button>
           </DialogFooter>
         </DialogContent>

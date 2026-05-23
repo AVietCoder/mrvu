@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CalendarDays, Plus, CheckCircle2, Clock, Trash2,
-  Wrench, ShieldOff, Settings, Pencil, Receipt, ExternalLink, UserCog,
+  Wrench, ShieldOff, Settings, Pencil, Receipt, ExternalLink, UserCog, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { hasPermission } from "@/lib/types";
@@ -709,7 +709,7 @@ function Page() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Hủy</Button>
-            <Button onClick={handleCreate} disabled={creating}>{creating ? "Đang tạo..." : "Tạo lịch"}</Button>
+            <Button onClick={handleCreate} disabled={creating}>{creating ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang tạo...</> : "Tạo lịch"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
