@@ -1,1 +1,8 @@
-publish = "dist/client"
+[build]
+  command = "npm run build"
+  publish = "dist" # Hoặc 'build' tùy thuộc vào framework của bạn
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
