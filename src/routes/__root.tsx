@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet, Link, createRootRouteWithContext,
-  useRouter, HeadContent, Scripts, useNavigate,
+  useRouter, HeadContent, Scripts, useNavigate, useLocation,
 } from "@tanstack/react-router";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
@@ -44,8 +44,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 function AuthGuard() {
   const { session } = useAuth();
   const navigate = useNavigate();
-  const router = useRouter();
-  const pathname = router.state.location.pathname;
+  const { pathname } = useLocation();
 
   const publicPaths = ["/login", "/register"];
 
