@@ -204,9 +204,9 @@ export const listOrders = createServerFn({ method: "GET" }).handler(async () => 
   const [orders, items, products, customers, employees, branches, schedules, schedule_assignments, users] =
     await Promise.all([
       fetchAllRows("orders", { orderBy: "created_at", ascending: false }),
-      fetchAllRows("order_items"),
-      fetchAllRows("products", { orderBy: "name" }),
-      fetchAllRows("customers", { orderBy: "name" }),
+      fetchAllRows("order_items", { select: "id, order_id, product_id, qty, unit_price, discount, note" }),
+      fetchAllRows("products", { select: "id, name, sku, sale_price, cost_price, unit", orderBy: "name" }),
+      fetchAllRows("customers", { select: "id, name, phone, address, ward, province, debt, group_name" }),
       fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
       fetchRows("branches", { orderBy: "name" }),
       fetchAllRows("schedules", {

@@ -136,7 +136,7 @@ function Page() {
     (isAdmin || hasPermission(user, "stock_transfer"));
 
   const [type, setType] = useState<
-    "in" | "out" | "transfer"
+    "in" | "transfer"
   >("in");
 
   const [open, setOpen] = useState(false);
@@ -218,16 +218,11 @@ function Page() {
     data?.movements ?? [];
 
   function startAction(
-    t: "in" | "out" | "transfer"
+    t: "in" | "transfer"
   ) {
     if (t === "in" && !canIn)
       return toast.error(
         "Bạn không có quyền nhập kho"
-      );
-
-    if (t === "out" && !canOut)
-      return toast.error(
-        "Bạn không có quyền xuất kho"
       );
 
     if (t === "transfer" && !canTransfer)
@@ -565,9 +560,42 @@ function Page() {
   const voucherTitle =
     type === "in"
       ? "Phiếu nhập hàng"
-      : type === "out"
-        ? "Phiếu xuất kho"
-        : "Phiếu chuyển kho";
+      : "Phiếu chuyển kho";
+
+  // Xuất Excel tồn kho > 0 theo từng chi nhánh
+  function exportStockExcel() {
+    const branchesList = data?.branches ?? [];
+    const productsList = data?.products ?? [];
+    const stockList = data?.stock ?? [];
+
+    // Build rows: only items with qty > 0
+    const rows: string[][] = [];
+    rows.push(["STT", "Mã SP", "Tên sản phẩm", ...branchesList.map((b: any) => b.name), "Tổng tồn"]);
+
+    let stt = 1;
+    for (const p of productsList) {
+      const branchQtys = branchesList.map((b: any) => {
+        const s = stockList.find((s: any) => s.product_id === p.id && s.branch_id === b.id);
+        return s?.qty ?? 0;
+      });
+      const total = branchQtys.reduce((a: number, b: number) => a + b, 0);
+      if (total > 0) {
+        rows.push([String(stt++), p.sku ?? "", p.name, ...branchQtys.map(String), String(total)]);
+      }
+    }
+
+    // Build CSV content
+    const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const bom = "\uFEFF";
+    const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ton-kho-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Đã xuất file Excel tồn kho!");
+  }
 
   function toggleExpanded(productId: string) {
     setExpandedProducts((prev) => ({
@@ -591,6 +619,13 @@ function Page() {
             <Button variant="outline" onClick={() => startAction("transfer")}>
               <Repeat className="mr-1 h-4 w-4" />
               Chuyển kho
+            </Button>
+          )}
+
+          {isAdmin && (
+            <Button variant="outline" onClick={exportStockExcel}>
+              <FileText className="mr-1 h-4 w-4" />
+              Xuất Excel tồn kho
             </Button>
           )}
         </div>

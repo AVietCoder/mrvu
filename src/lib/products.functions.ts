@@ -39,12 +39,14 @@ export const upsertProduct = createServerFn({ method: "POST" })
 
     if (data.id) {
       await updateWhere("products", payload, { id: data.id });
+      await insertRow("activity_logs", { id: uid(), employee_id: null, action: "update_product", detail: data.name, created_at: now() }).catch(() => undefined);
     } else {
       await insertRow("products", {
         id: uid(),
         ...payload,
         created_at: now(),
       });
+      await insertRow("activity_logs", { id: uid(), employee_id: null, action: "create_product", detail: data.name, created_at: now() }).catch(() => undefined);
     }
     return { ok: true };
   });
@@ -53,6 +55,7 @@ export const deleteProduct = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
     await deleteWhere("stock", { product_id: data.id });
     await deleteWhere("products", { id: data.id });
+    await insertRow("activity_logs", { id: uid(), employee_id: null, action: "delete_product", detail: `ID: ${data.id}`, created_at: now() }).catch(() => undefined);
     return { ok: true };
   });
 

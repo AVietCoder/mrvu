@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, Package, Boxes, ShoppingCart, Users, UserCog,
   BarChart3, Building2, Fan, LogOut, Settings, ShieldCheck, ChevronDown,
-  CalendarDays, BookOpen,
+  CalendarDays, BookOpen, History,
 } from "lucide-react";
 import { type ReactNode, useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -26,10 +26,11 @@ const nav: NavItem[] = [
   { to: "/orders",    label: "Bán hàng",    icon: ShoppingCart,  permission: "create_order" },
   { to: "/customers", label: "Khách hàng",  icon: Users },
   { to: "/cash",      label: "Sổ quỹ",      icon: BookOpen },
-  { to: "/employees", label: "Nhân viên",   icon: UserCog,       permission: "admin" }, // ✏️ chỉ admin
-  { to: "/reports",   label: "Báo cáo",     icon: BarChart3,     permission: "admin" }, // ✏️ doanh thu = admin-only
+  { to: "/employees", label: "Nhân viên",   icon: UserCog,       permission: "admin" },
+  { to: "/reports",   label: "Báo cáo",     icon: BarChart3,     permission: "admin" },
   { to: "/branches",  label: "Chi nhánh",   icon: Building2,     permission: "manage_branches" },
-  { to: "/schedule", label: "Lịch làm việc", icon: CalendarDays, permission: "create_schedule" as Permission }, // canSeeNav xử lý special cho schedule
+  { to: "/schedule", label: "Lịch làm việc", icon: CalendarDays, permission: "create_schedule" as Permission },
+  { to: "/activity",  label: "Lịch sử",     icon: History,       permission: "admin" },
 ];
 
 

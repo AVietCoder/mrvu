@@ -336,6 +336,8 @@ function CustomersPage() {
           placeholder="Tìm tên, số điện thoại..."
           sortOptions={[
             { value: "name", label: "Tên A→Z" },
+            { value: "total_buy_desc", label: "Tổng bán (cao→thấp)" },
+            { value: "total_buy_asc", label: "Tổng bán (thấp→cao)" },
             { value: "debt_desc", label: "Nợ nhiều nhất" },
             { value: "debt_asc", label: "Nợ ít nhất" },
             { value: "date", label: "Mới nhất" },
@@ -377,8 +379,20 @@ function CustomersPage() {
                 <th className="py-2 pr-3">Tên khách hàng</th>
                 <th className="pr-3">SĐT</th>
                 <th className="pr-3">Địa chỉ</th>
-                <th className="pr-3 text-right">Tổng bán</th>
-                <th className="pr-3 text-right">Công nợ</th>
+                <th
+                  className="pr-3 text-right cursor-pointer select-none hover:text-foreground transition-colors"
+                  onClick={() => { setSortBy(sortBy === "total_buy_desc" ? "total_buy_asc" : "total_buy_desc"); setPage(1); }}
+                  title="Click để sắp xếp"
+                >
+                  Tổng bán {sortBy === "total_buy_desc" ? "↓" : sortBy === "total_buy_asc" ? "↑" : "↕"}
+                </th>
+                <th
+                  className="pr-3 text-right cursor-pointer select-none hover:text-foreground transition-colors"
+                  onClick={() => { setSortBy(sortBy === "debt_desc" ? "debt_asc" : "debt_desc"); setPage(1); }}
+                  title="Click để sắp xếp"
+                >
+                  Công nợ {sortBy === "debt_desc" ? "↓" : sortBy === "debt_asc" ? "↑" : "↕"}
+                </th>
                 <th className="text-right">Thao tác</th>
               </tr>
             </thead>

@@ -52,13 +52,42 @@ export const listCustomers = createServerFn({ method: "GET" })
       query = query.order("debt", { ascending: false });
     } else if (data?.sortBy === "debt_asc") {
       query = query.order("debt", { ascending: true });
+    } else if (data?.sortBy === "total_buy_desc" || data?.sortBy === "total_buy_asc") {
+      // total_buy is computed from orders — we sort after fetching all IDs
+      query = query.order("created_at", { ascending: false });
     } else {
       query = query.order("created_at", { ascending: false });
     }
 
-    const { data: customers, count: totalFilteredCustomers, error: custError } =
-      await query.range(from, to);
-    if (custError) throw new Error(custError.message);
+    const isTotalBuySort = data?.sortBy === "total_buy_desc" || data?.sortBy === "total_buy_asc";
+
+    let customerRows: any[];
+    let totalFilteredCustomers: number | null;
+
+    if (isTotalBuySort) {
+      // Fetch all matching customers (no range), sort by total_buy, then paginate
+      const { data: allCustomers, count, error: custError } = await query;
+      if (custError) throw new Error(custError.message);
+      totalFilteredCustomers = count;
+
+      // Compute total_buy for each customer from orders
+      const allOrders = await fetchAllRows("orders", { select: "customer_id, total, status" });
+      const buyMap = new Map<string, number>();
+      for (const o of allOrders) {
+        if (o.status === "completed" && o.customer_id) {
+          buyMap.set(o.customer_id, (buyMap.get(o.customer_id) ?? 0) + Number(o.total || 0));
+        }
+      }
+      const sorted = (allCustomers ?? [])
+        .map((c: any) => ({ ...c, total_buy: buyMap.get(c.id) ?? 0 }))
+        .sort((a: any, b: any) => data?.sortBy === "total_buy_desc" ? b.total_buy - a.total_buy : a.total_buy - b.total_buy);
+      customerRows = sorted.slice(from, to + 1);
+    } else {
+      const { data: customers, count, error: custError } = await query.range(from, to);
+      if (custError) throw new Error(custError.message);
+      totalFilteredCustomers = count;
+      customerRows = customers ?? [];
+    }
 
     // ────────────────────────────────────────────────────────────────
     // Thống kê toàn cục: KHÔNG dùng .select("debt") thường vì
@@ -72,7 +101,7 @@ export const listCustomers = createServerFn({ method: "GET" })
     ]);
 
     return {
-      customers: customers ?? [],
+      customers: customerRows ?? [],
       orders: orders ?? [],
       meta: {
         totalFiltered: totalFilteredCustomers ?? 0,
@@ -98,12 +127,14 @@ export const upsertCustomer = createServerFn({ method: "POST" })
 
     if (data.id) {
       await updateWhere("customers", payload, { id: data.id });
+      await insertRow("activity_logs", { id: uid(), employee_id: null, action: "update_customer", detail: data.name, created_at: now() }).catch(() => undefined);
     } else {
       await insertRow("customers", {
         id: uid(),
         ...payload,
         created_at: now(),
       });
+      await insertRow("activity_logs", { id: uid(), employee_id: null, action: "create_customer", detail: data.name, created_at: now() }).catch(() => undefined);
     }
     return { ok: true };
   });
@@ -111,6 +142,7 @@ export const upsertCustomer = createServerFn({ method: "POST" })
 export const deleteCustomer = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
     await deleteWhere("customers", { id: data.id });
+    await insertRow("activity_logs", { id: uid(), employee_id: null, action: "delete_customer", detail: `ID: ${data.id}`, created_at: now() }).catch(() => undefined);
     return { ok: true };
   });
 
