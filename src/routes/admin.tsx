@@ -74,8 +74,6 @@ function AdminPage() {
   const [phone, setPhone]             = useState("");
   const [email, setEmail]             = useState("");
   const [taxCode, setTaxCode]         = useState("");
-  const [adminEmail, setAdminEmail]   = useState("");
-  const [bankAccounts, setBankAccounts] = useState<{bank:string;account_number:string;account_name:string;note:string}[]>([]);
   const [saving, setSaving]           = useState(false);
   const [saved, setSaved]             = useState(false);
 
@@ -89,8 +87,6 @@ function AdminPage() {
     setPhone(settings.phone ?? "");
     setEmail(settings.email ?? "");
     setTaxCode(settings.tax_code ?? "");
-    setAdminEmail(settings.admin_email ?? "");
-    try { setBankAccounts(JSON.parse(settings.bank_accounts || "[]")); } catch { setBankAccounts([]); }
   }, [settings]);
 
   function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -109,7 +105,7 @@ function AdminPage() {
     setSaving(true);
     try {
       await updateSettingsFn({
-        data: { site_name: siteName, logo_url: logoUrl, primary_color: primaryColor, address, phone, email, tax_code: taxCode, admin_email: adminEmail, bank_accounts: JSON.stringify(bankAccounts) },
+        data: { site_name: siteName, logo_url: logoUrl, primary_color: primaryColor, address, phone, email, tax_code: taxCode },
       });
       qc.invalidateQueries({ queryKey: ["site_settings"] });
       setSaved(true);
@@ -340,76 +336,6 @@ function AdminPage() {
         </SectionCard>
 
         {/* ── Save button ──────────────────────────────── */}
-        {/* ── Email thông báo Admin ──────────────────── */}
-        <SectionCard
-          icon={<Mail className="h-5 w-5" />}
-          title="Email thông báo Admin"
-          subtitle="Nhận email tự động khi có đơn hàng mới hoặc hoàn thành"
-        >
-          <div>
-            <Label className="text-sm font-medium flex items-center gap-1.5">
-              <Mail className="h-3.5 w-3.5 text-muted-foreground" /> Email nhận thông báo
-            </Label>
-            <Input
-              className="mt-1.5"
-              value={adminEmail}
-              onChange={(e) => setAdminEmail(e.target.value)}
-              placeholder="admin@example.com"
-              type="email"
-            />
-            <p className="text-xs text-muted-foreground mt-1.5">Email này sẽ nhận thông báo khi có đơn đặt hàng mới hoặc đơn được hoàn thành.</p>
-          </div>
-        </SectionCard>
-
-        {/* ── Tài khoản ngân hàng ───────────────────── */}
-        <SectionCard
-          icon={<FileText className="h-5 w-5" />}
-          title="Tài khoản ngân hàng"
-          subtitle="Danh sách STK để khách chọn khi thanh toán chuyển khoản"
-        >
-          <div className="space-y-3">
-            {bankAccounts.map((ba, idx) => (
-              <div key={idx} className="grid grid-cols-2 gap-2 rounded-lg border p-3 bg-muted/20 relative">
-                <button
-                  className="absolute top-2 right-2 p-1 hover:text-destructive"
-                  onClick={() => setBankAccounts(bankAccounts.filter((_, i) => i !== idx))}
-                  title="Xóa"
-                ><Trash2 className="h-3.5 w-3.5" /></button>
-                <div>
-                  <Label className="text-xs">Tên ngân hàng</Label>
-                  <Input className="mt-1 h-8 text-sm" value={ba.bank}
-                    onChange={e => { const a = [...bankAccounts]; a[idx] = {...a[idx], bank: e.target.value}; setBankAccounts(a); }}
-                    placeholder="VD: Vietcombank" />
-                </div>
-                <div>
-                  <Label className="text-xs">Số tài khoản</Label>
-                  <Input className="mt-1 h-8 text-sm" value={ba.account_number}
-                    onChange={e => { const a = [...bankAccounts]; a[idx] = {...a[idx], account_number: e.target.value}; setBankAccounts(a); }}
-                    placeholder="0123456789" />
-                </div>
-                <div>
-                  <Label className="text-xs">Tên chủ tài khoản</Label>
-                  <Input className="mt-1 h-8 text-sm" value={ba.account_name}
-                    onChange={e => { const a = [...bankAccounts]; a[idx] = {...a[idx], account_name: e.target.value}; setBankAccounts(a); }}
-                    placeholder="NGUYEN VAN A" />
-                </div>
-                <div>
-                  <Label className="text-xs">Ghi chú</Label>
-                  <Input className="mt-1 h-8 text-sm" value={ba.note}
-                    onChange={e => { const a = [...bankAccounts]; a[idx] = {...a[idx], note: e.target.value}; setBankAccounts(a); }}
-                    placeholder="Chi nhánh HCM..." />
-                </div>
-              </div>
-            ))}
-            <button
-              className="flex items-center gap-1.5 text-sm text-primary hover:underline"
-              onClick={() => setBankAccounts([...bankAccounts, {bank:"",account_number:"",account_name:"",note:""}])}
-            >
-              <span className="text-lg leading-none">+</span> Thêm tài khoản ngân hàng
-            </button>
-          </div>
-        </SectionCard>
-
         <div className="flex justify-end pb-4">
           <Button
             onClick={save}

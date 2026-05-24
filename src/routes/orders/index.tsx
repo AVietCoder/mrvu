@@ -223,11 +223,6 @@ function Page() {
   const [discountPct, setDiscountPct] = useState("0");
   const [useDiscountPct, setUseDiscountPct] = useState(false);
   const [includeVat, setIncludeVat] = useState(false);
-  const [vatRate, setVatRate] = useState<number>(10); // 8 | 10 | custom
-  const [vatCustom, setVatCustom] = useState(""); // custom % or amount
-  const [vatMode, setVatMode] = useState<"pct" | "amount">("pct");
-  const [bankAccountId, setBankAccountId] = useState(""); // index in bank_accounts
-  const [bankContent, setBankContent] = useState(""); // nội dung chuyển khoản
   const [depositRaw, setDepositRaw] = useState("0");
   const [note, setNote] = useState("");
 
@@ -265,20 +260,8 @@ function Page() {
     : parseInput(discountRaw);
   const afterDiscount = Math.max(0, subtotal - discountAmt);
 
-  // VAT dynamic rate
-  const effectiveVatRate = (() => {
-    if (!includeVat) return 0;
-    if (vatMode === "pct") {
-      const r = parseFloat(vatCustom || String(vatRate));
-      return isNaN(r) ? vatRate : r;
-    }
-    return 0; // amount mode - handled separately
-  })();
-  const vatAmt = includeVat
-    ? vatMode === "amount" && vatCustom
-      ? parseInput(vatCustom)
-      : Math.round(afterDiscount * (effectiveVatRate / 100))
-    : 0;
+  // VAT 10%
+  const vatAmt = includeVat ? Math.round(afterDiscount * 0.1) : 0;
   const total = afterDiscount + vatAmt;
   const khachCanThanhToan = Math.max(0, total - deposit);
 
@@ -401,11 +384,6 @@ function Page() {
     setDiscountPct("0");
     setUseDiscountPct(false);
     setIncludeVat(false);
-    setVatRate(10);
-    setVatCustom("");
-    setVatMode("pct");
-    setBankAccountId("");
-    setBankContent("");
     setDepositRaw("0");
     setNote("");
     setCreateScheduleOnOrder(false);
@@ -493,24 +471,6 @@ function Page() {
         note,
         includeVat,
       });
-
-      // Gửi email thông báo admin nếu có cấu hình
-      if (siteSettings?.admin_email) {
-        try {
-          const custName = customer ? customerMap.get(customer)?.name ?? "Khách lẻ" : "Khách lẻ";
-          const branchName = (data?.branches ?? []).find((b: any) => b.id === branch)?.name ?? branch;
-          const itemLines = items.map((it: any) => {
-            const prod = (data?.products ?? []).find((p: any) => p.id === it.product_id);
-            return `${prod?.name ?? it.product_id} x${it.qty} = ${new Intl.NumberFormat("vi-VN").format(it.qty * it.unit_price - it.discount)} ₫`;
-          }).join("\n");
-          const body = `Đơn hàng mới: ${r.code}\nKhách hàng: ${custName}\nChi nhánh: ${branchName}\nTổng tiền: ${new Intl.NumberFormat("vi-VN").format(total)} ₫\n\nSản phẩm:\n${itemLines}\n\nTrạng thái: ${status === "completed" ? "Hoàn tất" : status === "reserved" ? "Đặt hàng" : "Nháp"}`;
-          const mailto = `mailto:${siteSettings.admin_email}?subject=${encodeURIComponent(`[${siteSettings.site_name}] Đơn hàng mới: ${r.code}`)}&body=${encodeURIComponent(body)}`;
-          // Dùng fetch để gửi qua Supabase Edge Function nếu có; fallback: mở mailto
-          window.open(mailto, "_blank");
-        } catch (_) {
-          // ignore email errors
-        }
-      }
 
       toast.success("Tạo đơn " + r.code);
       reset();
@@ -722,53 +682,8 @@ function Page() {
                       { value: "ngan_hang", label: "Chuyển khoản (Ngân hàng)" },
                     ]}
                   />
-                  {paymentMethod === "ngan_hang" && (() => {
-                    const bankList = (() => { try { return JSON.parse(siteSettings?.bank_accounts || "[]"); } catch { return []; } })();
-                    return (
-                      <div className="mt-2 space-y-2">
-                        {bankList.length > 0 && (
-                          <div>
-                            <Label className="text-xs text-muted-foreground">Chọn tài khoản nhận tiền</Label>
-                            <select
-                              className="mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm"
-                              value={bankAccountId}
-                              onChange={e => {
-                                setBankAccountId(e.target.value);
-                                const ba = bankList[parseInt(e.target.value)];
-                                if (ba && !bankContent) setBankContent(`CK ${siteSettings?.site_name || ""} - ${ba.account_number}`);
-                              }}
-                            >
-                              <option value="">— Chọn STK —</option>
-                              {bankList.map((ba: any, i: number) => (
-                                <option key={i} value={String(i)}>{ba.bank} - {ba.account_number} ({ba.account_name})</option>
-                              ))}
-                            </select>
-                            {bankAccountId !== "" && (() => {
-                              const ba = bankList[parseInt(bankAccountId)];
-                              return ba ? (
-                                <div className="mt-1 rounded border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
-                                  <div className="font-semibold">{ba.bank}</div>
-                                  <div>STK: <span className="font-mono font-bold">{ba.account_number}</span></div>
-                                  <div>Chủ TK: {ba.account_name}</div>
-                                  {ba.note && <div className="text-muted-foreground">{ba.note}</div>}
-                                </div>
-                              ) : null;
-                            })()}
-                          </div>
-                        )}
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Nội dung chuyển khoản</Label>
-                          <input
-                            className="mt-1 w-full h-9 rounded-md border bg-background px-3 text-sm"
-                            placeholder="VD: DATHANG0001 NGUYEN VAN A"
-                            value={bankContent}
-                            onChange={e => setBankContent(e.target.value)}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })()}
                 </div>
+              </div>
 
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -950,49 +865,17 @@ function Page() {
               </div>
 
               {/* VAT */}
-              <div className="rounded-lg border px-3 py-2.5">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <Checkbox
-                    checked={includeVat}
-                    onCheckedChange={(v) => setIncludeVat(!!v)}
-                    id="vat"
-                  />
-                  <span className="text-sm font-medium">Thu thuế VAT</span>
-                  {includeVat && (
-                    <span className="ml-auto text-sm font-semibold text-orange-600">+ {fmt(vatAmt)}</span>
-                  )}
-                </label>
+              <label className="flex items-center gap-2 cursor-pointer select-none rounded-lg border px-3 py-2.5 hover:bg-muted/30 transition-colors">
+                <Checkbox
+                  checked={includeVat}
+                  onCheckedChange={(v) => setIncludeVat(!!v)}
+                  id="vat"
+                />
+                <span className="text-sm font-medium">Thu thuế VAT (10%)</span>
                 {includeVat && (
-                  <div className="mt-2 flex flex-wrap gap-2 items-center">
-                    <span className="text-xs text-muted-foreground">Mức:</span>
-                    {[8, 10].map(r => (
-                      <button key={r}
-                        className={`px-2 py-0.5 rounded border text-xs font-medium transition-colors ${vatRate === r && vatMode === "pct" && !vatCustom ? "bg-orange-500 text-white border-orange-500" : "border-border hover:bg-muted"}`}
-                        onClick={() => { setVatRate(r); setVatMode("pct"); setVatCustom(""); }}
-                      >{r}%</button>
-                    ))}
-                    <div className="flex items-center gap-1">
-                      <input
-                        className="w-16 h-6 text-xs rounded border px-1.5 bg-background"
-                        placeholder="Tự nhập %"
-                        value={vatMode === "pct" && vatCustom ? vatCustom : ""}
-                        onChange={e => { setVatMode("pct"); setVatCustom(e.target.value); }}
-                      />
-                      <span className="text-xs text-muted-foreground">%</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">hoặc</span>
-                    <div className="flex items-center gap-1">
-                      <input
-                        className="w-24 h-6 text-xs rounded border px-1.5 bg-background"
-                        placeholder="Số tiền ₫"
-                        value={vatMode === "amount" ? vatCustom : ""}
-                        onChange={e => { setVatMode("amount"); setVatCustom(e.target.value.replace(/\D/g,"")); }}
-                      />
-                      <span className="text-xs text-muted-foreground">₫</span>
-                    </div>
-                  </div>
+                  <span className="ml-auto text-sm font-semibold text-orange-600">+ {fmt(vatAmt)}</span>
                 )}
-              </div>
+              </label>
 
               <div>
                 <Label>Ghi chú</Label>
@@ -1008,25 +891,7 @@ function Page() {
                 <label className="flex items-center gap-2 cursor-pointer select-none bg-blue-50/60 px-3 py-2.5 hover:bg-blue-100/60 transition-colors">
                   <Checkbox
                     checked={createScheduleOnOrder}
-                    onCheckedChange={(v) => {
-                      setCreateScheduleOnOrder(!!v);
-                      if (v) {
-                        // Auto fill title and address from customer
-                        const cust = customer ? customerMap.get(customer) : null;
-                        const schedType = SCHEDULE_TYPES[0];
-                        const defaultTitle = cust
-                          ? `${schedType.label} - ${cust.name}`
-                          : schedType.label;
-                        const defaultAddress = cust
-                          ? [cust.address, cust.ward, cust.province].filter(Boolean).join(", ")
-                          : "";
-                        setScheduleForm(f => ({
-                          ...f,
-                          title: f.title || defaultTitle,
-                          address: f.address || defaultAddress,
-                        }));
-                      }
-                    }}
+                    onCheckedChange={(v) => setCreateScheduleOnOrder(!!v)}
                     id="create-schedule"
                   />
                   <CalendarDays className="h-4 w-4 text-blue-600" />

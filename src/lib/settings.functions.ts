@@ -10,8 +10,6 @@ export type SiteSettings = {
   phone: string;
   email: string;
   tax_code: string;
-  admin_email: string;       // Email nhận thông báo đơn hàng
-  bank_accounts: string;     // JSON array: [{bank, account_number, account_name, note}]
 };
 
 const DEFAULTS: SiteSettings = {
@@ -22,8 +20,6 @@ const DEFAULTS: SiteSettings = {
   phone: "",
   email: "",
   tax_code: "",
-  admin_email: "",
-  bank_accounts: "[]",
 };
 
 export const getSettings = createServerFn({ method: "GET" }).handler(async () => {

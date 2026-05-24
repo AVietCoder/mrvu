@@ -193,7 +193,7 @@ function Page() {
     const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === scheduleId);
     const numPeople = Math.max(1, assignees.length);
 
-    // thu nhập (bonus từ tech_fees)
+    // Ưu đãi (bonus từ tech_fees)
     const bonusTotal = fees.reduce((sum: number, f: any) => sum + f.qty * f.unit_fee, 0);
     // Tính chất CV nhân số người
     const diffBonusPerTask = diffIds.reduce((sum: number, did: string) => {
@@ -750,18 +750,18 @@ function Page() {
               </div>
             </div>
 
-            {/* thu nhập (bonus) */}
+            {/* Ưu đãi (bonus) */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <Label className="font-medium">Thu nhập khác</Label>
+                <Label className="font-medium">Ưu đãi (bonus)</Label>
                 <Button size="sm" variant="outline"
                   onClick={() => setTechFees([...techFees, { product_id: "", qty: 1, unit_fee: 0 }])}>
-                  <Plus className="h-3 w-3 mr-1" /> Thêm thu nhập
+                  <Plus className="h-3 w-3 mr-1" /> Thêm ưu đãi
                 </Button>
               </div>
               {techFees.map((tf, idx) => (
                 <div key={idx} className="grid grid-cols-12 gap-2 mb-2">
-                  <Input className="col-span-6" placeholder="Tên thu nhập / mô tả"
+                  <Input className="col-span-6" placeholder="Tên ưu đãi / mô tả"
                     value={tf.product_id}
                     onChange={(e) => {
                       const next = [...techFees];
@@ -770,7 +770,7 @@ function Page() {
                     }} />
                   <Input type="number" className="col-span-2" placeholder="SL" value={tf.qty}
                     onChange={(e) => { const next = [...techFees]; next[idx].qty = Number(e.target.value); setTechFees(next); }} />
-                  <Input type="number" className="col-span-3" placeholder="Tiền thu nhập" value={tf.unit_fee}
+                  <Input type="number" className="col-span-3" placeholder="Tiền ưu đãi" value={tf.unit_fee}
                     onChange={(e) => { const next = [...techFees]; next[idx].unit_fee = Number(e.target.value); setTechFees(next); }} />
                   <button className="col-span-1 hover:text-destructive"
                     onClick={() => setTechFees(techFees.filter((_, i) => i !== idx))}>
@@ -780,7 +780,7 @@ function Page() {
               ))}
               {(() => {
                 const numPeople = Math.max(1, assignedUsers.length);
-                // Tiền thu nhập tổng
+                // Tiền ưu đãi tổng
                 const bonusTotal = techFees.reduce((s, tf) => s + tf.qty * tf.unit_fee, 0);
                 // Tính chất công việc: tự động nhân theo số người
                 const diffBonus = assignedDiffs.reduce((s, did) => {
@@ -797,7 +797,7 @@ function Page() {
                 return (
                   <div className="rounded-md bg-muted/50 p-2 text-sm space-y-1">
                     <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Thu nhập</span><span>{fmtMoney(bonusTotal)}</span>
+                      <span>Ưu đãi</span><span>{fmtMoney(bonusTotal)}</span>
                     </div>
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>Tính chất CV × {numPeople} người</span><span>{fmtMoney(diffBonus)}</span>

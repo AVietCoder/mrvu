@@ -225,10 +225,13 @@ function ProductsPage() {
           <>
             <div className="overflow-auto">
               <table className="w-full text-sm">
-                <thead className="text-left text-muted-foreground border-b hidden md:table-header-group">
+                <thead className="text-left text-muted-foreground border-b">
                   <tr>
                     <th className="py-2 pr-3 w-10 text-center">STT</th>
                     <th className="pr-2">Tên hàng</th>
+                    <th className="pr-2">Danh mục</th>
+                    <th className="pr-2">Thương hiệu</th>
+                    <th className="text-right pr-2">Giá vốn</th>
                     <th className="text-right pr-2">Giá bán</th>
                     <th className="text-right pr-2">Tồn kho</th>
                     <th className="w-24"></th>
@@ -238,6 +241,8 @@ function ProductsPage() {
                   {paginated.map((p, idx) => {
                     const qty = totalsByProduct(p.id);
                     const low = qty <= p.min_stock;
+                    const cat = data?.categories.find((c) => c.id === p.category_id)?.name ?? "—";
+                    const brand = data?.brands.find((b) => b.id === (p as any).brand_id)?.name ?? "—";
                     const globalIdx = (page - 1) * PAGE_SIZE + idx + 1;
                     return (
                       <tr
@@ -245,8 +250,11 @@ function ProductsPage() {
                         className="border-b last:border-0 hover:bg-muted/30 cursor-pointer"
                         onClick={() => setViewId(p.id)}
                       >
-                        <td className="py-2 text-muted-foreground pr-3 text-center text-xs hidden md:table-cell">{globalIdx}</td>
+                        <td className="py-2 text-muted-foreground pr-3 text-center text-xs">{globalIdx}</td>
                         <td className="font-medium pr-2">{p.name}</td>
+                        <td className="pr-2 text-muted-foreground text-xs">{cat}</td>
+                        <td className="pr-2 text-muted-foreground text-xs">{brand}</td>
+                        <td className="text-right pr-2 text-xs text-muted-foreground">{fmt(p.cost_price)}</td>
                         <td className="text-right pr-2 font-medium">{fmt(p.sale_price)}</td>
                         <td className={"text-right pr-2 " + (low ? "text-destructive font-medium" : "")}>{qty}{low && <AlertTriangle className="h-3 w-3 inline ml-1" />}</td>
                         <td className="text-right" onClick={(e) => e.stopPropagation()}>
@@ -361,32 +369,20 @@ function ProductsPage() {
                 <DialogTitle className="text-lg">{viewProduct.name}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
-                {/* Ảnh sản phẩm */}
-                {(viewProduct as any).image_url && (
-                  <div className="flex justify-center">
-                    <img src={(viewProduct as any).image_url} alt={viewProduct.name} className="h-40 object-contain rounded-lg border" />
-                  </div>
-                )}
                 {/* Thông tin chung */}
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  {isAdmin && (
-                    <div className="rounded-lg border bg-muted/30 p-3">
-                      <div className="text-xs text-muted-foreground mb-1">Danh mục</div>
-                      <div className="font-medium">{data?.categories.find((c) => c.id === viewProduct.category_id)?.name ?? "—"}</div>
-                    </div>
-                  )}
-                  {isAdmin && (
-                    <div className="rounded-lg border bg-muted/30 p-3">
-                      <div className="text-xs text-muted-foreground mb-1">Thương hiệu</div>
-                      <div className="font-medium">{data?.brands.find((b) => b.id === (viewProduct as any).brand_id)?.name ?? "—"}</div>
-                    </div>
-                  )}
-                  {isAdmin && (
-                    <div className="rounded-lg border bg-muted/30 p-3">
-                      <div className="text-xs text-muted-foreground mb-1">Giá vốn</div>
-                      <div className="font-medium">{fmt(viewProduct.cost_price)}</div>
-                    </div>
-                  )}
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <div className="text-xs text-muted-foreground mb-1">Danh mục</div>
+                    <div className="font-medium">{data?.categories.find((c) => c.id === viewProduct.category_id)?.name ?? "—"}</div>
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <div className="text-xs text-muted-foreground mb-1">Thương hiệu</div>
+                    <div className="font-medium">{data?.brands.find((b) => b.id === (viewProduct as any).brand_id)?.name ?? "—"}</div>
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 p-3">
+                    <div className="text-xs text-muted-foreground mb-1">Giá vốn</div>
+                    <div className="font-medium">{fmt(viewProduct.cost_price)}</div>
+                  </div>
                   <div className="rounded-lg border bg-muted/30 p-3">
                     <div className="text-xs text-muted-foreground mb-1">Giá bán</div>
                     <div className="font-semibold text-primary">{fmt(viewProduct.sale_price)}</div>

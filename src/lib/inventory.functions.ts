@@ -170,14 +170,6 @@ export const createMovement = createServerFn({ method: "POST" })
       created_by: createdBy,
     });
 
-    await insertRow("activity_logs", {
-      id: uid(),
-      employee_id: createdBy,
-      action: "create_movement",
-      detail: `${data.type === "in" ? "Nhập kho" : "Xuất kho"} x${qty} - SP: ${data.product_id}${data.note ? " - " + data.note : ""}`,
-      created_at: now(),
-    }).catch(() => undefined);
-
     return { ok: true };
   });
 
@@ -257,14 +249,6 @@ export const confirmTransfer = createServerFn({ method: "POST" })
       { status: "confirmed", confirmed_at: now() },
       { id: data.transfer_id },
     );
-
-    await insertRow("activity_logs", {
-      id: uid(),
-      employee_id: null,
-      action: "confirm_transfer",
-      detail: `XN chuyển kho - Phiếu: ${data.transfer_id}`,
-      created_at: now(),
-    }).catch(() => undefined);
 
     return { ok: true };
   });
