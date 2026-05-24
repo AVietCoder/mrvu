@@ -31,7 +31,6 @@ import {
 
 import {
   ArrowDownToLine,
-  ArrowUpFromLine,
   Repeat,
   Plus,
   Trash2,
@@ -136,11 +135,8 @@ function Page() {
     !!user &&
     (isAdmin || hasPermission(user, "stock_transfer"));
 
-  const canAnyMove =
-    canIn || canOut || canTransfer;
-
   const [type, setType] = useState<
-    "in" | "out" | "transfer"
+    "in" | "transfer"
   >("in");
 
   const [open, setOpen] = useState(false);
@@ -222,16 +218,11 @@ function Page() {
     data?.movements ?? [];
 
   function startAction(
-    t: "in" | "out" | "transfer"
+    t: "in" | "transfer"
   ) {
     if (t === "in" && !canIn)
       return toast.error(
         "Bạn không có quyền nhập kho"
-      );
-
-    if (t === "out" && !canOut)
-      return toast.error(
-        "Bạn không có quyền xuất kho"
       );
 
     if (t === "transfer" && !canTransfer)
@@ -569,9 +560,42 @@ function Page() {
   const voucherTitle =
     type === "in"
       ? "Phiếu nhập hàng"
-      : type === "out"
-        ? "Phiếu xuất kho"
-        : "Phiếu chuyển kho";
+      : "Phiếu chuyển kho";
+
+  // Xuất Excel tồn kho > 0 theo từng chi nhánh
+  function exportStockExcel() {
+    const branchesList = data?.branches ?? [];
+    const productsList = data?.products ?? [];
+    const stockList = data?.stock ?? [];
+
+    // Build rows: only items with qty > 0
+    const rows: string[][] = [];
+    rows.push(["STT", "Mã SP", "Tên sản phẩm", ...branchesList.map((b: any) => b.name), "Tổng tồn"]);
+
+    let stt = 1;
+    for (const p of productsList) {
+      const branchQtys = branchesList.map((b: any) => {
+        const s = stockList.find((s: any) => s.product_id === p.id && s.branch_id === b.id);
+        return s?.qty ?? 0;
+      });
+      const total = branchQtys.reduce((a: number, b: number) => a + b, 0);
+      if (total > 0) {
+        rows.push([String(stt++), p.sku ?? "", p.name, ...branchQtys.map(String), String(total)]);
+      }
+    }
+
+    // Build CSV content
+    const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const bom = "\uFEFF";
+    const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ton-kho-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Đã xuất file Excel tồn kho!");
+  }
 
   function toggleExpanded(productId: string) {
     setExpandedProducts((prev) => ({
@@ -582,40 +606,26 @@ function Page() {
 
   return (
     <AppShell title="Quản lý tồn kho" loading={isLoading && !data}>
-      {canAnyMove ? (
+      {(canIn || canTransfer) ? (
         <div className="mb-4 flex flex-wrap gap-2">
           {canIn && (
-            <Button
-              onClick={() =>
-                startAction("in")
-              }
-            >
+            <Button onClick={() => startAction("in")}>
               <ArrowDownToLine className="mr-1 h-4 w-4" />
               Nhập kho
             </Button>
           )}
 
-          {canOut && (
-            <Button
-              variant="secondary"
-              onClick={() =>
-                startAction("out")
-              }
-            >
-              <ArrowUpFromLine className="mr-1 h-4 w-4" />
-              Xuất kho
+          {canTransfer && (
+            <Button variant="outline" onClick={() => startAction("transfer")}>
+              <Repeat className="mr-1 h-4 w-4" />
+              Chuyển kho
             </Button>
           )}
 
-          {canTransfer && (
-            <Button
-              variant="outline"
-              onClick={() =>
-                startAction("transfer")
-              }
-            >
-              <Repeat className="mr-1 h-4 w-4" />
-              Chuyển kho
+          {isAdmin && (
+            <Button variant="outline" onClick={exportStockExcel}>
+              <FileText className="mr-1 h-4 w-4" />
+              Xuất Excel tồn kho
             </Button>
           )}
         </div>
@@ -831,7 +841,6 @@ function Page() {
                   <th className="w-[120px] text-right">
                     Đặt hàng
                   </th>
-                  <th className="w-[84px]" />
                 </tr>
               </thead>
 
@@ -952,15 +961,6 @@ function Page() {
                               : "Không có"}
                           </div>
                         </td>
-
-                        <td className="py-3 pt-3 text-right">
-                          <button
-                            className="inline-flex h-8 items-center justify-center rounded-md border px-2.5 text-xs font-medium text-muted-foreground transition hover:bg-muted"
-                            onClick={() => toggleExpanded(p.id)}
-                          >
-                            {expanded ? "Ẩn" : "Xem"}
-                          </button>
-                        </td>
                       </tr>
                     </Fragment>
                   );
@@ -990,110 +990,80 @@ function Page() {
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-background border-b z-10">
               <tr className="text-muted-foreground">
-                <th className="px-4 py-3 text-left">
-                  Thời gian
-                </th>
-
-                <th className="px-4 py-3 text-left">
-                  Loại
-                </th>
-
-                <th className="px-4 py-3 text-left">
-                  Sản phẩm
-                </th>
-
-                <th className="px-4 py-3 text-right">
-                  SL
-                </th>
-
-                <th className="px-4 py-3 text-right">
-                  Giá
-                </th>
-
-                <th className="px-4 py-3 text-left">
-                  Ghi chú
-                </th>
+                <th className="px-4 py-3 text-left">Thời gian</th>
+                <th className="px-4 py-3 text-left">Loại</th>
+                <th className="px-4 py-3 text-left">Sản phẩm</th>
+                <th className="px-4 py-3 text-left">Luồng kho</th>
+                <th className="px-4 py-3 text-right">SL</th>
+                <th className="px-4 py-3 text-left">Ghi chú</th>
               </tr>
             </thead>
 
             <tbody>
-              {historyMovements.map(
-                (m: any) => {
-                  const product =
-                    products.find(
-                      (p) =>
-                        p.id ===
-                        m.product_id
-                    );
+              {historyMovements.map((m: any) => {
+                const product = products.find((p) => p.id === m.product_id);
+                const fromName = m.from_branch
+                  ? (branches.find((b) => b.id === m.from_branch)?.name ?? m.from_branch)
+                  : null;
+                const toName = m.to_branch
+                  ? (branches.find((b) => b.id === m.to_branch)?.name ?? m.to_branch)
+                  : null;
 
-                  return (
-                    <tr
-                      key={m.id}
-                      className="border-b hover:bg-muted/30"
-                    >
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {new Date(
-                          m.created_at
-                        ).toLocaleString(
-                          "vi-VN"
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <span
-                          className={`rounded-full px-2 py-1 text-xs font-medium ${
-                            m.type === "in"
-                              ? "bg-green-100 text-green-700"
-                              : m.type === "out"
-                                ? "bg-red-100 text-red-700"
-                                : "bg-blue-100 text-blue-700"
-                          }`}
-                        >
-                          {m.type === "in"
-                            ? "Nhập"
-                            : m.type === "out"
-                              ? "Xuất"
-                              : "Chuyển"}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <div className="font-medium">
-                          {product?.name ||
-                            "—"}
-                        </div>
-
-                        <div className="text-xs text-muted-foreground">
-                          {product?.sku}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3 text-right font-medium">
-                        {m.qty}
-                      </td>
-
-                      <td className="px-4 py-3 text-right">
-                        {m.unit_cost
-                          ? `${formatMoney(m.unit_cost)} đ`
-                          : "—"}
-                      </td>
-
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {m.note || "—"}
-                      </td>
-                    </tr>
+                let flowLabel: React.ReactNode = "—";
+                if (m.type === "in" && toName) {
+                  flowLabel = (
+                    <span>
+                      Nhập vào <b>{toName}</b>
+                    </span>
+                  );
+                } else if (m.type === "out" && fromName) {
+                  flowLabel = (
+                    <span>
+                      Xuất khỏi <b>{fromName}</b>
+                    </span>
+                  );
+                } else if (m.type === "transfer" && fromName && toName) {
+                  flowLabel = (
+                    <span>
+                      <b>{fromName}</b> → <b>{toName}</b>
+                    </span>
                   );
                 }
-              )}
+
+                return (
+                  <tr key={m.id} className="border-b hover:bg-muted/30">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {new Date(m.created_at).toLocaleString("vi-VN")}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-medium ${
+                          m.type === "in"
+                            ? "bg-green-100 text-green-700"
+                            : m.type === "out"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-blue-100 text-blue-700"
+                        }`}
+                      >
+                        {m.type === "in" ? "Nhập" : m.type === "out" ? "Xuất" : "Chuyển"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{product?.name || "—"}</div>
+                      <div className="text-xs text-muted-foreground">{product?.sku}</div>
+                    </td>
+                    <td className="px-4 py-3 text-xs">{flowLabel}</td>
+                    <td className="px-4 py-3 text-right font-medium">{m.qty}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{m.note || "—"}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </Card>
 
-      <Dialog
-        open={open}
-        onOpenChange={setOpen}
-      >
+      <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="
           h-[100dvh]
           w-[100vw]
@@ -2013,7 +1983,7 @@ function Page() {
 
                                   <div style="margin-top:70px;font-weight:600">
                                     ${
-                                      user?.name ||
+                                      user?.full_name ||
                                       "................"
                                     }
                                   </div>
