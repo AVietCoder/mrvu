@@ -562,13 +562,12 @@ function Page() {
       ? "Phiếu nhập hàng"
       : "Phiếu chuyển kho";
 
-  // Xuất Excel tồn kho > 0 theo từng chi nhánh
+  // Xuất CSV danh sách tồn kho > 0 theo từng chi nhánh
   function exportStockExcel() {
     const branchesList = data?.branches ?? [];
     const productsList = data?.products ?? [];
     const stockList = data?.stock ?? [];
 
-    // Build rows: only items with qty > 0
     const rows: string[][] = [];
     rows.push(["STT", "Mã SP", "Tên sản phẩm", ...branchesList.map((b: any) => b.name), "Tổng tồn"]);
 
@@ -576,15 +575,14 @@ function Page() {
     for (const p of productsList) {
       const branchQtys = branchesList.map((b: any) => {
         const s = stockList.find((s: any) => s.product_id === p.id && s.branch_id === b.id);
-        return s?.qty ?? 0;
+        return (s?.qty ?? 0) as number;
       });
-      const total = branchQtys.reduce((a: number, b: number) => a + b, 0);
+      const total = branchQtys.reduce((a, b) => a + b, 0);
       if (total > 0) {
         rows.push([String(stt++), p.sku ?? "", p.name, ...branchQtys.map(String), String(total)]);
       }
     }
 
-    // Build CSV content
     const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
     const bom = "\uFEFF";
     const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
@@ -594,7 +592,7 @@ function Page() {
     a.download = `ton-kho-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success("Đã xuất file Excel tồn kho!");
+    toast.success("Đã xuất danh sách hàng tồn kho!");
   }
 
   function toggleExpanded(productId: string) {
@@ -606,35 +604,30 @@ function Page() {
 
   return (
     <AppShell title="Quản lý tồn kho" loading={isLoading && !data}>
-      {(canIn || canTransfer) ? (
-        <div className="mb-4 flex flex-wrap gap-2">
-          {canIn && (
-            <Button onClick={() => startAction("in")}>
-              <ArrowDownToLine className="mr-1 h-4 w-4" />
-              Nhập kho
-            </Button>
-          )}
-
-          {canTransfer && (
-            <Button variant="outline" onClick={() => startAction("transfer")}>
-              <Repeat className="mr-1 h-4 w-4" />
-              Chuyển kho
-            </Button>
-          )}
-
-          {isAdmin && (
-            <Button variant="outline" onClick={exportStockExcel}>
-              <FileText className="mr-1 h-4 w-4" />
-              Xuất Excel tồn kho
-            </Button>
-          )}
-        </div>
-      ) : (
-        <div className="mb-4 flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-          <ShieldOff className="h-4 w-4" />
-          Bạn chỉ có quyền xem tồn kho
-        </div>
-      )}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {canIn && (
+          <Button onClick={() => startAction("in")}>
+            <ArrowDownToLine className="mr-1 h-4 w-4" />
+            Nhập kho
+          </Button>
+        )}
+        {canTransfer && (
+          <Button variant="outline" onClick={() => startAction("transfer")}>
+            <Repeat className="mr-1 h-4 w-4" />
+            Chuyển kho
+          </Button>
+        )}
+        <Button variant="outline" onClick={exportStockExcel}>
+          <FileText className="mr-1 h-4 w-4" />
+          Xuất Excel tồn kho
+        </Button>
+        {!canIn && !canTransfer && (
+          <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            <ShieldOff className="h-4 w-4" />
+            Bạn chỉ có quyền xem tồn kho
+          </div>
+        )}
+      </div>
 
       {pendingTransfers.length > 0 && (
         <Card className="mb-4 border-yellow-200 bg-yellow-50/50">

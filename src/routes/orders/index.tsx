@@ -219,6 +219,8 @@ function Page() {
   const [paymentMethod, setPaymentMethod] = useState<
     "tien_mat" | "ngan_hang"
   >("tien_mat");
+  const [bankAccountIdx, setBankAccountIdx] = useState<string>("");
+  const [bankContent, setBankContent] = useState("");
   const [discountRaw, setDiscountRaw] = useState("0");
   const [discountPct, setDiscountPct] = useState("0");
   const [useDiscountPct, setUseDiscountPct] = useState(false);
@@ -380,6 +382,8 @@ function Page() {
     setEmployee(user?.id ?? "");
     setStatus("reserved");
     setPaymentMethod("tien_mat");
+    setBankAccountIdx("");
+    setBankContent("");
     setDiscountRaw("0");
     setDiscountPct("0");
     setUseDiscountPct(false);
@@ -675,13 +679,83 @@ function Page() {
                   <Label>Hình thức thanh toán</Label>
                   <SearchableSelect
                     value={paymentMethod}
-                    onChange={(v) => setPaymentMethod(v as any)}
+                    onChange={(v) => {
+                      setPaymentMethod(v as any);
+                      setBankAccountIdx("");
+                      setBankContent("");
+                    }}
                     placeholder="Chọn hình thức..."
                     options={[
                       { value: "tien_mat", label: "Tiền mặt" },
                       { value: "ngan_hang", label: "Chuyển khoản (Ngân hàng)" },
                     ]}
                   />
+                  {paymentMethod === "ngan_hang" && (() => {
+                    const bankList: any[] = (() => {
+                      try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
+                      catch { return []; }
+                    })();
+                    return (
+                      <div className="mt-2 space-y-2">
+                        {bankList.length > 0 && (
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Chọn tài khoản nhận tiền</Label>
+                            <select
+                              className="mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm"
+                              value={bankAccountIdx}
+                              onChange={e => {
+                                const idx = e.target.value;
+                                setBankAccountIdx(idx);
+                                if (idx !== "") {
+                                  const ba = bankList[parseInt(idx)];
+                                  if (ba && !bankContent) {
+                                    setBankContent(`${siteSettings?.site_name ?? "CK"} ${ba.account_number}`);
+                                  }
+                                }
+                              }}
+                            >
+                              <option value="">— Chọn STK —</option>
+                              {bankList.map((ba: any, i: number) => (
+                                <option key={i} value={String(i)}>
+                                  {ba.bank} - {ba.account_number} ({ba.account_name})
+                                </option>
+                              ))}
+                            </select>
+                            {bankAccountIdx !== "" && (() => {
+                              const ba = bankList[parseInt(bankAccountIdx)];
+                              return ba ? (
+                                <div className="mt-1.5 rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
+                                  <div className="font-semibold text-sm">{ba.bank}</div>
+                                  <div>STK: <span className="font-mono font-bold tracking-wide">{ba.account_number}</span></div>
+                                  <div>Chủ TK: {ba.account_name}</div>
+                                  {ba.note && <div className="text-blue-600">{ba.note}</div>}
+                                </div>
+                              ) : null;
+                            })()}
+                          </div>
+                        )}
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Nội dung chuyển khoản</Label>
+                          <div className="mt-1 relative">
+                            <Input
+                              value={bankContent}
+                              onChange={e => setBankContent(e.target.value)}
+                              placeholder="VD: DATHANG0001 NGUYEN VAN A"
+                              className="pr-10 font-mono text-sm"
+                            />
+                            {bankContent && (
+                              <button
+                                type="button"
+                                className="absolute right-2 top-2 text-xs text-primary hover:underline"
+                                onClick={() => { navigator.clipboard.writeText(bankContent); toast.success("Đã copy nội dung CK!"); }}
+                              >Copy</button>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">Nội dung tin nhắn khi chuyển tiền</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -891,7 +965,24 @@ function Page() {
                 <label className="flex items-center gap-2 cursor-pointer select-none bg-blue-50/60 px-3 py-2.5 hover:bg-blue-100/60 transition-colors">
                   <Checkbox
                     checked={createScheduleOnOrder}
-                    onCheckedChange={(v) => setCreateScheduleOnOrder(!!v)}
+                    onCheckedChange={(v) => {
+                      setCreateScheduleOnOrder(!!v);
+                      if (v) {
+                        const cust = customer ? customerMap.get(customer) : null;
+                        const schedType = SCHEDULE_TYPES.find(t => t.value === scheduleForm.type) ?? SCHEDULE_TYPES[0];
+                        const autoTitle = cust
+                          ? `${schedType.label} - ${cust.name}`
+                          : schedType.label;
+                        const autoAddress = cust
+                          ? [cust.address, cust.ward, cust.province].filter(Boolean).join(", ")
+                          : "";
+                        setScheduleForm(f => ({
+                          ...f,
+                          title: f.title || autoTitle,
+                          address: f.address || autoAddress,
+                        }));
+                      }
+                    }}
                     id="create-schedule"
                   />
                   <CalendarDays className="h-4 w-4 text-blue-600" />
@@ -914,7 +1005,19 @@ function Page() {
                         <select
                           className="mt-1 h-8 w-full rounded-md border bg-background px-2 text-sm"
                           value={scheduleForm.type}
-                          onChange={(e) => setScheduleForm({ ...scheduleForm, type: e.target.value })}
+                          onChange={(e) => {
+                            const newType = e.target.value;
+                            const cust = customer ? customerMap.get(customer) : null;
+                            const schedType = SCHEDULE_TYPES.find(t => t.value === newType) ?? SCHEDULE_TYPES[0];
+                            const autoTitle = cust
+                              ? `${schedType.label} - ${cust.name}`
+                              : schedType.label;
+                            setScheduleForm(f => ({
+                              ...f,
+                              type: newType,
+                              title: autoTitle,
+                            }));
+                          }}
                         >
                           {SCHEDULE_TYPES.map((t) => (
                             <option key={t.value} value={t.value}>{t.label}</option>

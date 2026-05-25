@@ -52,6 +52,10 @@ export const listCustomers = createServerFn({ method: "GET" })
       query = query.order("debt", { ascending: false });
     } else if (data?.sortBy === "debt_asc") {
       query = query.order("debt", { ascending: true });
+    } else if (data?.sortBy === "total_buy_desc") {
+      query = query.order("total_buy", { ascending: false });
+    } else if (data?.sortBy === "total_buy_asc") {
+      query = query.order("total_buy", { ascending: true });
     } else {
       query = query.order("created_at", { ascending: false });
     }

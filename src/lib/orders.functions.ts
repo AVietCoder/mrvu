@@ -105,16 +105,23 @@ async function applyCompletedOrderSideEffects(order: any, lineItems: LineItem[])
   await applyStockDeltaMap(order.branch_id, deltas);
 
   if (order.customer_id) {
-    const customerRows = await fetchRows<{ debt: number }>("customers", {
+    const customerRows = await fetchRows<{ debt: number; total_buy: number }>("customers", {
       eq: { id: order.customer_id },
-      select: "debt",
+      select: "debt, total_buy",
       limit: 1,
     });
     const currentDebt = customerRows[0]?.debt ?? 0;
+    const currentTotalBuy = customerRows[0]?.total_buy ?? 0;
     const owed = Math.max(0, Number(order.total || 0) - Number(order.deposit || 0) - Number(order.paid || 0));
+    const orderTotal = Number(order.total || 0);
+
+    const updates: Record<string, number> = {
+      total_buy: currentTotalBuy + orderTotal,
+    };
     if (owed > 0) {
-      await updateWhere("customers", { debt: currentDebt + owed }, { id: order.customer_id });
+      updates.debt = currentDebt + owed;
     }
+    await updateWhere("customers", updates, { id: order.customer_id });
   }
 }
 
@@ -128,16 +135,23 @@ async function revertCompletedOrderSideEffects(order: any, lineItems: LineItem[]
   }
 
   if (order.customer_id) {
-    const customerRows = await fetchRows<{ debt: number }>("customers", {
+    const customerRows = await fetchRows<{ debt: number; total_buy: number }>("customers", {
       eq: { id: order.customer_id },
-      select: "debt",
+      select: "debt, total_buy",
       limit: 1,
     });
     const currentDebt = customerRows[0]?.debt ?? 0;
+    const currentTotalBuy = customerRows[0]?.total_buy ?? 0;
     const owed = Math.max(0, Number(order.total || 0) - Number(order.deposit || 0) - Number(order.paid || 0));
+    const orderTotal = Number(order.total || 0);
+
+    const updates: Record<string, number> = {
+      total_buy: Math.max(0, currentTotalBuy - orderTotal),
+    };
     if (owed > 0) {
-      await updateWhere("customers", { debt: Math.max(0, currentDebt - owed) }, { id: order.customer_id });
+      updates.debt = Math.max(0, currentDebt - owed);
     }
+    await updateWhere("customers", updates, { id: order.customer_id });
   }
 }
 

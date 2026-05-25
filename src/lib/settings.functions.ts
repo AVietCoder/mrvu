@@ -10,6 +10,8 @@ export type SiteSettings = {
   phone: string;
   email: string;
   tax_code: string;
+  admin_email: string;
+  bank_accounts: string; // JSON: [{bank, account_number, account_name, note}]
 };
 
 const DEFAULTS: SiteSettings = {
@@ -20,18 +22,18 @@ const DEFAULTS: SiteSettings = {
   phone: "",
   email: "",
   tax_code: "",
+  admin_email: "",
+  bank_accounts: "[]",
 };
 
 export const getSettings = createServerFn({ method: "GET" }).handler(async () => {
   const rows = await fetchRows<{ key: keyof SiteSettings; value: string }>("site_settings", {
     select: "key, value",
   });
-
   const settings: Partial<SiteSettings> = {};
   for (const row of rows) {
     (settings as any)[row.key] = row.value;
   }
-
   return { ...DEFAULTS, ...settings } as SiteSettings;
 });
 
@@ -39,14 +41,9 @@ export const updateSettings = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: Partial<SiteSettings> }) => {
     const rows = Object.entries(data)
       .filter(([, value]) => value !== undefined && value !== null)
-      .map(([key, value]) => ({
-        key,
-        value: String(value),
-      }));
-
+      .map(([key, value]) => ({ key, value: String(value) }));
     if (rows.length) {
       await supabase.from("site_settings").upsert(rows, { onConflict: "key" });
     }
-
     return { ok: true };
   });

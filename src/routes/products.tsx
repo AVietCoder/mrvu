@@ -2,11 +2,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import {
   listProducts, upsertProduct, deleteProduct,
   upsertCategory, upsertBrand, deleteBrand,
 } from "@/lib/products.functions";
+import { uploadImageToCloudinary } from "@/lib/cloudinary";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Search, Tags, ChevronLeft, ChevronRight, Eye, Package, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Tags, ChevronLeft, ChevronRight, Eye, Package, AlertTriangle, ImagePlus, X, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
@@ -32,11 +33,12 @@ type FormState = {
   cost_price: string;
   sale_price: string;
   min_stock: string;
+  image_url: string;
 };
 
 const empty: FormState = {
   name: "", category_id: "", brand_id: "",
-  cost_price: "0", sale_price: "0", min_stock: "0",
+  cost_price: "0", sale_price: "0", min_stock: "0", image_url: "",
 };
 
 const PAGE_SIZE = 20;
@@ -68,6 +70,8 @@ function ProductsPage() {
   const [page, setPage] = useState(1);
   const [filterCategory, setFilterCategory] = useState("");
   const [filterBrand, setFilterBrand] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [adminOpen, setAdminOpen] = useState(false);
   const [newBrandName, setNewBrandName] = useState("");
@@ -102,6 +106,7 @@ function ProductsPage() {
       cost_price: String(p.cost_price),
       sale_price: String(p.sale_price),
       min_stock: String(p.min_stock),
+      image_url: (p as any).image_url ?? "",
     });
     setOpen(true);
   }
@@ -120,6 +125,7 @@ function ProductsPage() {
           cost_price: parseInput(form.cost_price),
           sale_price: parseInput(form.sale_price),
           min_stock: Number(form.min_stock) || 0,
+          image_url: form.image_url.trim() || null,
         },
       });
       toast.success(form.id ? "Đã cập nhật sản phẩm" : "Đã thêm sản phẩm thành công!");
@@ -155,6 +161,26 @@ function ProductsPage() {
     if (!confirm("Xóa thương hiệu này?")) return;
     await delBr({ data: { id } });
     qc.invalidateQueries({ queryKey: ["products"] });
+  }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Ảnh quá lớn, vui lòng chọn ảnh dưới 5MB");
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const url = await uploadImageToCloudinary(file);
+      setForm(f => ({ ...f, image_url: url }));
+      toast.success("Tải ảnh lên thành công!");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Lỗi tải ảnh lên Cloudinary");
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   }
 
   // View product detail
@@ -225,9 +251,10 @@ function ProductsPage() {
           <>
             <div className="overflow-auto">
               <table className="w-full text-sm">
-                <thead className="text-left text-muted-foreground border-b hidden md:table-header-group">
+                <thead className="text-left text-muted-foreground border-b">
                   <tr>
-                    <th className="py-2 pr-3 w-10 text-center">STT</th>
+                    <th className="py-2 pr-3 w-10 text-center hidden md:table-cell">STT</th>
+                    <th className="pr-3 w-14">Ảnh</th>
                     <th className="pr-2">Tên hàng</th>
                     <th className="text-right pr-2">Giá bán</th>
                     <th className="text-right pr-2">Tồn kho</th>
@@ -246,9 +273,18 @@ function ProductsPage() {
                         onClick={() => setViewId(p.id)}
                       >
                         <td className="py-2 text-muted-foreground pr-3 text-center text-xs hidden md:table-cell">{globalIdx}</td>
-                        <td className="font-medium pr-2">{p.name}</td>
-                        <td className="text-right pr-2 font-medium">{fmt(p.sale_price)}</td>
-                        <td className={"text-right pr-2 " + (low ? "text-destructive font-medium" : "")}>{qty}{low && <AlertTriangle className="h-3 w-3 inline ml-1" />}</td>
+                        <td className="py-1.5 pr-3">
+                          {(p as any).image_url
+                            ? <img src={(p as any).image_url} alt={p.name} className="h-10 w-10 object-cover rounded-lg border shadow-sm" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            : <div className="h-10 w-10 rounded-lg border bg-muted/40 flex items-center justify-center"><Package className="h-4 w-4 text-muted-foreground/30" /></div>
+                          }
+                        </td>
+                        <td className="font-medium pr-2">
+                          <div>{p.name}</div>
+                          {p.sku && <div className="text-xs text-muted-foreground">{p.sku}</div>}
+                        </td>
+                        <td className="text-right pr-2 font-semibold text-primary">{fmt(p.sale_price)}</td>
+                        <td className={"text-right pr-2 font-medium " + (low ? "text-destructive" : "")}>{qty}{low && <AlertTriangle className="h-3 w-3 inline ml-1" />}</td>
                         <td className="text-right" onClick={(e) => e.stopPropagation()}>
                           <button className="p-1 hover:text-blue-600" onClick={() => setViewId(p.id)}><Eye className="h-4 w-4" /></button>
                           {isAdmin && (
@@ -343,6 +379,74 @@ function ProductsPage() {
               <Field label="Tồn tối thiểu (cảnh báo)">
                 <Input type="number" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} />
               </Field>
+
+              {/* Ảnh sản phẩm */}
+              <Field label="Ảnh sản phẩm" className="col-span-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                />
+                {form.image_url ? (
+                  <div className="relative group rounded-xl border-2 border-border overflow-hidden bg-muted/20" style={{minHeight: 160}}>
+                    <img
+                      src={form.image_url}
+                      alt="Ảnh sản phẩm"
+                      className="w-full max-h-48 object-contain"
+                    />
+                    {/* Overlay khi hover */}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        className="flex items-center gap-1.5 bg-white text-gray-800 rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-gray-100"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingImage}
+                      >
+                        {uploadingImage ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                        Đổi ảnh
+                      </button>
+                      <button
+                        type="button"
+                        className="flex items-center gap-1.5 bg-red-500 text-white rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-red-600"
+                        onClick={() => setForm(f => ({ ...f, image_url: "" }))}
+                      >
+                        <X className="h-3.5 w-3.5" /> Xóa ảnh
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="w-full rounded-xl border-2 border-dashed border-muted-foreground/25 bg-muted/10 hover:bg-muted/20 hover:border-primary/40 transition-all flex flex-col items-center justify-center gap-2 py-8 text-muted-foreground"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingImage}
+                  >
+                    {uploadingImage ? (
+                      <>
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        <span className="text-sm font-medium text-primary">Đang tải lên Cloudinary...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ImagePlus className="h-8 w-8" />
+                        <span className="text-sm font-medium">Click để chọn ảnh từ máy tính</span>
+                        <span className="text-xs">PNG, JPG, WEBP — tối đa 5MB</span>
+                      </>
+                    )}
+                  </button>
+                )}
+                {/* URL thủ công */}
+                <div className="mt-2">
+                  <Input
+                    value={form.image_url}
+                    onChange={(e) => setForm({ ...form, image_url: e.target.value })}
+                    placeholder="Hoặc dán URL ảnh trực tiếp..."
+                    className="text-xs text-muted-foreground"
+                  />
+                </div>
+              </Field>
             </div>
             <DialogFooter className="mt-4">
               <Button variant="outline" onClick={() => setOpen(false)}>Hủy</Button>
@@ -362,34 +466,42 @@ function ProductsPage() {
               </DialogHeader>
               <div className="space-y-4">
                 {/* Ảnh sản phẩm */}
-                {(viewProduct as any).image_url && (
-                  <div className="flex justify-center">
-                    <img src={(viewProduct as any).image_url} alt={viewProduct.name} className="h-40 object-contain rounded-lg border" />
+                {(viewProduct as any).image_url ? (
+                  <div className="rounded-xl overflow-hidden border bg-muted/10">
+                    <img
+                      src={(viewProduct as any).image_url}
+                      alt={viewProduct.name}
+                      className="w-full max-h-56 object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-xl border-2 border-dashed border-muted-foreground/20 bg-muted/10 flex items-center justify-center h-28 text-muted-foreground/40">
+                    <Package className="h-10 w-10" />
                   </div>
                 )}
+
                 {/* Thông tin chung */}
                 <div className="grid grid-cols-2 gap-3 text-sm">
+                  {/* Admin-only: Danh mục, Thương hiệu, Giá vốn */}
                   {isAdmin && (
-                    <div className="rounded-lg border bg-muted/30 p-3">
-                      <div className="text-xs text-muted-foreground mb-1">Danh mục</div>
-                      <div className="font-medium">{data?.categories.find((c) => c.id === viewProduct.category_id)?.name ?? "—"}</div>
-                    </div>
+                    <>
+                      <div className="rounded-lg border bg-muted/30 p-3">
+                        <div className="text-xs text-muted-foreground mb-1">Danh mục</div>
+                        <div className="font-medium">{data?.categories.find((c) => c.id === viewProduct.category_id)?.name ?? "—"}</div>
+                      </div>
+                      <div className="rounded-lg border bg-muted/30 p-3">
+                        <div className="text-xs text-muted-foreground mb-1">Thương hiệu</div>
+                        <div className="font-medium">{data?.brands.find((b) => b.id === (viewProduct as any).brand_id)?.name ?? "—"}</div>
+                      </div>
+                      <div className="rounded-lg border bg-amber-50 border-amber-200 p-3">
+                        <div className="text-xs text-amber-700 mb-1">Giá vốn</div>
+                        <div className="font-semibold text-amber-800">{fmt(viewProduct.cost_price)}</div>
+                      </div>
+                    </>
                   )}
-                  {isAdmin && (
-                    <div className="rounded-lg border bg-muted/30 p-3">
-                      <div className="text-xs text-muted-foreground mb-1">Thương hiệu</div>
-                      <div className="font-medium">{data?.brands.find((b) => b.id === (viewProduct as any).brand_id)?.name ?? "—"}</div>
-                    </div>
-                  )}
-                  {isAdmin && (
-                    <div className="rounded-lg border bg-muted/30 p-3">
-                      <div className="text-xs text-muted-foreground mb-1">Giá vốn</div>
-                      <div className="font-medium">{fmt(viewProduct.cost_price)}</div>
-                    </div>
-                  )}
-                  <div className="rounded-lg border bg-muted/30 p-3">
-                    <div className="text-xs text-muted-foreground mb-1">Giá bán</div>
-                    <div className="font-semibold text-primary">{fmt(viewProduct.sale_price)}</div>
+                  <div className={`rounded-lg border bg-primary/5 border-primary/20 p-3 ${isAdmin ? "" : "col-span-2"}`}>
+                    <div className="text-xs text-primary/70 mb-1">Giá bán</div>
+                    <div className="font-bold text-lg text-primary">{fmt(viewProduct.sale_price)}</div>
                   </div>
                 </div>
 
