@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
@@ -19,6 +19,9 @@ import {
   CalendarDays,
   ShieldCheck,
   Clock3,
+  TrendingUp,
+  ExternalLink,
+  X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -33,34 +36,30 @@ export const Route = createFileRoute("/activity")({
   component: ActivityPage,
 });
 
-const ACTION_LABELS: Record<string, { label: string; color: string }> = {
-  create_order: { label: "Tạo đơn", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  update_order: { label: "Sửa đơn", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  cancel_order: { label: "Huỷ đơn", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  delete_order: { label: "Xóa đơn", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  complete_order: { label: "HT đơn", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  create_movement: { label: "Nhập kho", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  create_transfer: { label: "Chuyển kho", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  confirm_transfer: { label: "XN chuyển kho", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  create_cash_voucher: { label: "Phiếu thu/chi", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  create_customer: { label: "Tạo KH", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  update_customer: { label: "Sửa KH", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  delete_customer: { label: "Xóa KH", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  create_product: { label: "Tạo SP", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  update_product: { label: "Sửa SP", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  delete_product: { label: "Xóa SP", color: "bg-slate-100 text-slate-700 border border-slate-200" },
-  login: { label: "Đăng nhập", color: "bg-slate-100 text-slate-700 border border-slate-200" },
+const ACTION_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
+  create_order:     { label: "Tạo đơn",       color: "bg-blue-50 text-blue-700 border-blue-200",     dot: "bg-blue-400" },
+  update_order:     { label: "Sửa đơn",        color: "bg-amber-50 text-amber-700 border-amber-200",   dot: "bg-amber-400" },
+  cancel_order:     { label: "Huỷ đơn",        color: "bg-rose-50 text-rose-700 border-rose-200",      dot: "bg-rose-400" },
+  delete_order:     { label: "Xóa đơn",        color: "bg-red-50 text-red-700 border-red-200",         dot: "bg-red-400" },
+  complete_order:   { label: "HT đơn",         color: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-400" },
+  create_movement:  { label: "Nhập kho",       color: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-400" },
+  create_transfer:  { label: "Chuyển kho",     color: "bg-purple-50 text-purple-700 border-purple-200", dot: "bg-purple-400" },
+  confirm_transfer: { label: "XN chuyển kho",  color: "bg-indigo-50 text-indigo-700 border-indigo-200", dot: "bg-indigo-400" },
+  create_cash_voucher: { label: "Phiếu thu/chi", color: "bg-teal-50 text-teal-700 border-teal-200",   dot: "bg-teal-400" },
+  create_customer:  { label: "Tạo KH",         color: "bg-sky-50 text-sky-700 border-sky-200",         dot: "bg-sky-400" },
+  update_customer:  { label: "Sửa KH",         color: "bg-cyan-50 text-cyan-700 border-cyan-200",      dot: "bg-cyan-400" },
+  delete_customer:  { label: "Xóa KH",         color: "bg-rose-50 text-rose-700 border-rose-200",      dot: "bg-rose-400" },
+  create_product:   { label: "Tạo SP",         color: "bg-lime-50 text-lime-700 border-lime-200",      dot: "bg-lime-400" },
+  update_product:   { label: "Sửa SP",         color: "bg-green-50 text-green-700 border-green-200",   dot: "bg-green-400" },
+  delete_product:   { label: "Xóa SP",         color: "bg-red-50 text-red-700 border-red-200",         dot: "bg-red-400" },
+  login:            { label: "Đăng nhập",      color: "bg-slate-50 text-slate-600 border-slate-200",   dot: "bg-slate-400" },
 };
 
 function fmtDate(s: string) {
   const d = new Date(s);
   return d.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
 }
 
@@ -70,39 +69,42 @@ function money(v: number) {
 
 function normalizeStatus(status?: string) {
   const s = String(status || "").toLowerCase();
+  if (s === "completed" || s === "done")
+    return { label: "Hoàn thành", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+  if (s === "reserved" || s === "pending")
+    return { label: "Đang giữ", className: "bg-amber-50 text-amber-700 border-amber-200" };
+  if (s === "cancelled" || s === "canceled")
+    return { label: "Đã huỷ", className: "bg-rose-50 text-rose-700 border-rose-200" };
+  return { label: status || "Đang xử lý", className: "bg-slate-50 text-slate-700 border-slate-200" };
+}
 
-  if (s === "completed" || s === "done") {
-    return {
-      label: "Hoàn thành",
-      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    };
-  }
-
-  if (s === "reserved" || s === "pending") {
-    return {
-      label: "Đang giữ",
-      className: "bg-amber-50 text-amber-700 border-amber-200",
-    };
-  }
-
-  if (s === "cancelled" || s === "canceled") {
-    return {
-      label: "Đã huỷ",
-      className: "bg-rose-50 text-rose-700 border-rose-200",
-    };
-  }
-
-  return {
-    label: status || "Đang xử lý",
-    className: "bg-slate-50 text-slate-700 border-slate-200",
-  };
+// Extract order ID from log detail or meta
+function extractOrderId(log: any): string | null {
+  if (log.order_id) return log.order_id;
+  if (log.meta?.order_id) return log.meta.order_id;
+  if (log.ref_id && ["create_order","update_order","cancel_order","delete_order","complete_order"].includes(log.action))
+    return log.ref_id;
+  return null;
 }
 
 const PAGE_SIZE = 50;
 
+function StatCard({ icon: Icon, label, value, accent }: any) {
+  return (
+    <div className="rounded-2xl border bg-background p-5 shadow-sm flex flex-col gap-3">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className={`p-1.5 rounded-lg ${accent}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        {label}
+      </div>
+      <div className="text-2xl font-bold tracking-tight">{value}</div>
+    </div>
+  );
+}
+
 function ActivityPage() {
   const { isAdmin } = useAuth();
-
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
@@ -113,10 +115,7 @@ function ActivityPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["activity_logs", page, search],
-    queryFn: () =>
-      listFn({
-        data: { page, search },
-      }),
+    queryFn: () => listFn({ data: { page, search } }),
     staleTime: 10_000,
     placeholderData: (prev) => prev,
     enabled: isAdmin,
@@ -129,10 +128,7 @@ function ActivityPage() {
 
   const employeeQuery = useQuery({
     queryKey: ["employee_activity_detail", selectedEmployee?.employee_id],
-    queryFn: () =>
-      employeeDetailFn({
-        data: { id: selectedEmployee.employee_id },
-      }),
+    queryFn: () => employeeDetailFn({ data: { id: selectedEmployee.employee_id } }),
     enabled: !!selectedEmployee?.employee_id,
   });
 
@@ -143,16 +139,8 @@ function ActivityPage() {
 
   function getEmployeeName(log: any) {
     if (!log?.employee_id) return "—";
-
     const found = users?.find((u: any) => u.id === log.employee_id);
-
-    return (
-      found?.full_name ||
-      log?.full_name ||
-      log?.employee_name ||
-      log?.username ||
-      "—"
-    );
+    return found?.full_name || log?.full_name || log?.employee_name || log?.username || "—";
   }
 
   const employeeStats = useMemo(() => {
@@ -161,19 +149,10 @@ function ActivityPage() {
         acc.totalOrders += 1;
         acc.totalRevenue += Number(order.total || 0);
         acc.totalPaid += Number(order.paid || 0);
-
-        if (order.status === "completed" || order.status === "done") {
-          acc.completed += 1;
-        }
-
+        if (order.status === "completed" || order.status === "done") acc.completed += 1;
         return acc;
       },
-      {
-        totalOrders: 0,
-        totalRevenue: 0,
-        totalPaid: 0,
-        completed: 0,
-      }
+      { totalOrders: 0, totalRevenue: 0, totalPaid: 0, completed: 0 }
     );
   }, [employeeOrders]);
 
@@ -190,86 +169,108 @@ function ActivityPage() {
 
   return (
     <AppShell title="Lịch sử thao tác" loading={isLoading && !data}>
-      <div className="mb-4 flex items-center gap-3 rounded-2xl border bg-muted/30 px-4 py-3">
+      {/* Search Bar */}
+      <div className="mb-5 flex items-center gap-3 rounded-2xl border bg-background px-4 py-3 shadow-sm">
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            className="pl-8 bg-background"
+            className="pl-9 bg-muted/30 border-0 focus-visible:ring-1 rounded-xl"
             placeholder="Tìm theo hành động, chi tiết..."
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
-
-        <span className="text-sm text-muted-foreground">
-          {total.toLocaleString("vi-VN")} bản ghi
-        </span>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-xl">
+          <History className="h-4 w-4" />
+          <span className="font-medium">{total.toLocaleString("vi-VN")}</span>
+          <span>bản ghi</span>
+        </div>
       </div>
 
+      {/* Table */}
       <div className="rounded-2xl overflow-hidden border bg-background shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-muted/40 border-b text-left">
             <tr>
-              <th className="py-3 px-4 text-muted-foreground">Thời gian</th>
-              <th className="px-4 text-muted-foreground">Nhân viên</th>
-              <th className="px-4 text-muted-foreground">Hành động</th>
-              <th className="px-4 text-muted-foreground">Chi tiết</th>
+              <th className="py-3 px-5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Thời gian</th>
+              <th className="px-5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Nhân viên</th>
+              <th className="px-5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Hành động</th>
+              <th className="px-5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Chi tiết</th>
             </tr>
           </thead>
-
           <tbody>
             {logs.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-14 text-center text-muted-foreground">
-                  {isLoading ? "Đang tải..." : "Chưa có dữ liệu"}
+                <td colSpan={4} className="py-16 text-center text-muted-foreground">
+                  {isLoading ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <span>Đang tải...</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <History className="h-10 w-10 opacity-20" />
+                      <span>Chưa có dữ liệu</span>
+                    </div>
+                  )}
                 </td>
               </tr>
             )}
 
             {logs.map((log: any) => {
-              const meta = ACTION_LABELS[log.action] ?? {
+              const meta = ACTION_CONFIG[log.action] ?? {
                 label: log.action,
-                color: "bg-slate-100 text-slate-700 border border-slate-200",
+                color: "bg-slate-100 text-slate-700 border-slate-200",
+                dot: "bg-slate-400",
               };
+              const orderId = extractOrderId(log);
+              const isOrderAction = ["create_order","update_order","cancel_order","delete_order","complete_order"].includes(log.action);
 
               return (
-                <tr
-                  key={log.id}
-                  className="border-b last:border-0 hover:bg-muted/30 transition-colors"
-                >
-                  <td className="py-3 px-4 whitespace-nowrap text-xs text-muted-foreground">
-                    {fmtDate(log.created_at)}
+                <tr key={log.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors group">
+                  <td className="py-3.5 px-5 whitespace-nowrap">
+                    <span className="text-xs text-muted-foreground font-mono">{fmtDate(log.created_at)}</span>
                   </td>
 
-                  <td className="px-4">
+                  <td className="px-5">
                     {log.employee_id ? (
                       <button
                         onClick={() => setSelectedEmployee(log)}
-                        className="font-semibold text-primary hover:underline text-left"
+                        className="inline-flex items-center gap-1.5 font-semibold text-primary hover:underline text-left group-hover:text-primary/80 transition-colors"
                       >
+                        <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
+                          {getEmployeeName(log)?.[0]?.toUpperCase() || "?"}
+                        </div>
                         {getEmployeeName(log)}
                       </button>
                     ) : (
-                      <span className="font-medium">—</span>
+                      <span className="text-muted-foreground">—</span>
                     )}
                   </td>
 
-                  <td className="px-4">
-                    <span
-                      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${meta.color}`}
-                    >
+                  <td className="px-5">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border ${meta.color}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
                       {meta.label}
                     </span>
                   </td>
 
-                  <td
-                    className="px-4 text-muted-foreground max-w-xs truncate"
-                    title={log.detail ?? ""}
-                  >
-                    {log.detail ?? "—"}
+                  <td className="px-5 max-w-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground truncate text-xs" title={log.detail ?? ""}>
+                        {log.detail ?? "—"}
+                      </span>
+                      {isOrderAction && orderId && (
+                        <Link
+                          to="/orders/$id"
+                          params={{ id: orderId }}
+                          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Xem đơn
+                        </Link>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -278,169 +279,175 @@ function ActivityPage() {
         </table>
       </div>
 
+      {/* Pagination */}
       {totalPages > 1 && (
         <div className="mt-5 flex items-center justify-center gap-3">
           <button
-            className="flex items-center gap-1 px-4 py-2 rounded-xl border bg-background hover:bg-muted/40 disabled:opacity-40"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl border bg-background hover:bg-muted/40 disabled:opacity-40 text-sm font-medium transition-colors"
             disabled={page <= 1}
             onClick={() => setPage((p) => p - 1)}
           >
-            <ChevronLeft className="h-4 w-4" />
-            Trước
+            <ChevronLeft className="h-4 w-4" /> Trước
           </button>
-
-          <span className="text-sm text-muted-foreground">
-            Trang {page} / {totalPages}
+          <span className="text-sm text-muted-foreground px-2">
+            Trang <span className="font-semibold text-foreground">{page}</span> / {totalPages}
           </span>
-
           <button
-            className="flex items-center gap-1 px-4 py-2 rounded-xl border bg-background hover:bg-muted/40 disabled:opacity-40"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl border bg-background hover:bg-muted/40 disabled:opacity-40 text-sm font-medium transition-colors"
             disabled={page >= totalPages}
             onClick={() => setPage((p) => p + 1)}
           >
-            Sau
-            <ChevronRight className="h-4 w-4" />
+            Sau <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       )}
 
+      {/* Employee Detail Dialog */}
       <Dialog
         open={!!selectedEmployee}
-        onOpenChange={(v) => {
-          if (!v) setSelectedEmployee(null);
-        }}
+        onOpenChange={(v) => { if (!v) setSelectedEmployee(null); }}
       >
-        <DialogContent className="max-w-6xl max-h-[92vh] overflow-hidden rounded-3xl p-0 gap-0">
-          <div className="border-b bg-muted/20 px-6 py-5">
-            <DialogHeader className="space-y-2">
-              <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-foreground">
-                <User2 className="h-5 w-5 text-primary" />
-                <span className="truncate">{getEmployeeName(selectedEmployee)}</span>
+        <DialogContent className="          h-[100dvh]
+          w-[100vw]
+          max-w-none
+          overflow-hidden
+          border-0
+          bg-[#f4f6f8]
+          p-0
+          dark:bg-background
+          sm:h-[96vh]
+          sm:w-[98vw]
+          sm:max-w-[1600px]
+          sm:rounded-2xl">
+          {/* Header */}
+          <div className="flex items-start justify-between px-7 py-5 border-b bg-gradient-to-r from-primary/5 to-background shrink-0">
+            <DialogHeader className="space-y-1">
+              <DialogTitle className="flex items-center gap-3 text-xl font-bold text-foreground">
+                <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-bold text-lg shrink-0">
+                  {getEmployeeName(selectedEmployee)?.[0]?.toUpperCase() || "?"}
+                </div>
+                <div>
+                  <div>{getEmployeeName(selectedEmployee)}</div>
+                  <div className="text-sm font-normal text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                    <Clock3 className="h-3.5 w-3.5" />
+                    Thống kê đơn hàng và doanh thu
+                  </div>
+                </div>
               </DialogTitle>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock3 className="h-4 w-4" />
-                Thống kê đơn hàng và doanh thu của nhân viên
-              </div>
             </DialogHeader>
           </div>
 
-          <div className="p-6 overflow-y-auto">
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto overscroll-contain p-7">
             {employeeQuery.isLoading ? (
-              <div className="py-12 text-center text-muted-foreground">
-                Đang tải dữ liệu nhân viên...
+              <div className="py-16 flex flex-col items-center gap-3 text-muted-foreground">
+                <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <span>Đang tải dữ liệu nhân viên...</span>
               </div>
             ) : (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                  <div className="rounded-2xl border bg-background p-4 shadow-sm">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <ShoppingCart className="h-4 w-4" />
-                      Tổng đơn
-                    </div>
-                    <div className="mt-3 text-3xl font-semibold tracking-tight">
-                      {employeeStats.totalOrders}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border bg-background p-4 shadow-sm">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Wallet className="h-4 w-4" />
-                      Doanh thu
-                    </div>
-                    <div className="mt-3 text-2xl font-semibold tracking-tight">
-                      {money(employeeStats.totalRevenue)}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border bg-background p-4 shadow-sm">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Wallet className="h-4 w-4" />
-                      Đã thanh toán
-                    </div>
-                    <div className="mt-3 text-2xl font-semibold tracking-tight">
-                      {money(employeeStats.totalPaid)}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border bg-background p-4 shadow-sm">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <ShieldCheck className="h-4 w-4" />
-                      Hoàn thành
-                    </div>
-                    <div className="mt-3 text-3xl font-semibold tracking-tight">
-                      {employeeStats.completed}
-                    </div>
-                  </div>
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <StatCard
+                    icon={ShoppingCart}
+                    label="Tổng đơn"
+                    value={employeeStats.totalOrders}
+                    accent="bg-blue-100 text-blue-600"
+                  />
+                  <StatCard
+                    icon={TrendingUp}
+                    label="Doanh thu"
+                    value={money(employeeStats.totalRevenue)}
+                    accent="bg-emerald-100 text-emerald-600"
+                  />
+                  <StatCard
+                    icon={Wallet}
+                    label="Đã thanh toán"
+                    value={money(employeeStats.totalPaid)}
+                    accent="bg-violet-100 text-violet-600"
+                  />
+                  <StatCard
+                    icon={ShieldCheck}
+                    label="Hoàn thành"
+                    value={employeeStats.completed}
+                    accent="bg-amber-100 text-amber-600"
+                  />
                 </div>
 
+                {/* Orders Table */}
                 <div className="rounded-2xl border overflow-hidden bg-background shadow-sm">
-                  <div className="px-5 py-4 border-b bg-muted/30">
-                    <div className="font-semibold text-base">
-                      Đơn hàng nhân viên đã xử lý
+                  <div className="px-6 py-4 border-b bg-muted/30 flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-base">Đơn hàng đã xử lý</div>
+                      <div className="text-sm text-muted-foreground mt-0.5">
+                        {employeeOrders.length} đơn hàng gắn với nhân viên này
+                      </div>
                     </div>
-                    <div className="text-sm text-muted-foreground mt-1">
-                      Danh sách đơn hàng gắn với nhân viên này
-                    </div>
+                    <Badge variant="secondary" className="font-semibold">
+                      {employeeOrders.length} đơn
+                    </Badge>
                   </div>
 
-                  <div className="max-h-[50vh] overflow-auto">
+                  <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-muted/40 text-muted-foreground sticky top-0 z-10">
                         <tr>
-                          <th className="text-left px-5 py-3 font-medium">Mã đơn</th>
-                          <th className="text-left px-5 py-3 font-medium">Ngày tạo</th>
-                          <th className="text-left px-5 py-3 font-medium">Trạng thái</th>
-                          <th className="text-right px-5 py-3 font-medium">Tổng tiền</th>
-                          <th className="text-right px-5 py-3 font-medium">Đã thanh toán</th>
+                          <th className="text-left px-6 py-3 font-semibold text-xs uppercase tracking-wide">Mã đơn</th>
+                          <th className="text-left px-6 py-3 font-semibold text-xs uppercase tracking-wide">Ngày tạo</th>
+                          <th className="text-left px-6 py-3 font-semibold text-xs uppercase tracking-wide">Trạng thái</th>
+                          <th className="text-right px-6 py-3 font-semibold text-xs uppercase tracking-wide">Tổng tiền</th>
+                          <th className="text-right px-6 py-3 font-semibold text-xs uppercase tracking-wide">Đã TT</th>
+                          <th className="px-6 py-3"></th>
                         </tr>
                       </thead>
-
                       <tbody>
                         {employeeOrders.length === 0 && (
                           <tr>
-                            <td
-                              colSpan={5}
-                              className="py-12 text-center text-muted-foreground"
-                            >
+                            <td colSpan={6} className="py-14 text-center text-muted-foreground">
+                              <ShoppingCart className="h-10 w-10 opacity-20 mx-auto mb-2" />
                               Nhân viên này chưa có đơn hàng
                             </td>
                           </tr>
                         )}
-
                         {employeeOrders.map((order: any) => {
                           const status = normalizeStatus(order.status);
-
                           return (
-                            <tr
-                              key={order.id}
-                              className="border-b last:border-0 hover:bg-muted/20 transition-colors"
-                            >
-                              <td className="px-5 py-3 font-medium">
-                                {order.code || order.id}
+                            <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors group/row">
+                              <td className="px-6 py-3.5">
+                                <Link
+                                  to="/orders/$id"
+                                  params={{ id: order.id }}
+                                  className="font-semibold text-primary hover:underline"
+                                >
+                                  {order.code || order.id}
+                                </Link>
                               </td>
-
-                              <td className="px-5 py-3 whitespace-nowrap text-muted-foreground">
-                                <div className="flex items-center gap-2">
-                                  <CalendarDays className="h-4 w-4 shrink-0" />
-                                  <span>{fmtDate(order.created_at)}</span>
+                              <td className="px-6 py-3.5 whitespace-nowrap text-muted-foreground text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                                  {fmtDate(order.created_at)}
                                 </div>
                               </td>
-
-                              <td className="px-5 py-3">
-                                <Badge
-                                  variant="outline"
-                                  className={`rounded-full px-3 py-1 font-normal ${status.className}`}
-                                >
+                              <td className="px-6 py-3.5">
+                                <Badge variant="outline" className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${status.className}`}>
                                   {status.label}
                                 </Badge>
                               </td>
-
-                              <td className="px-5 py-3 text-right font-semibold tabular-nums">
+                              <td className="px-6 py-3.5 text-right font-semibold tabular-nums">
                                 {money(order.total)}
                               </td>
-
-                              <td className="px-5 py-3 text-right font-medium tabular-nums">
+                              <td className="px-6 py-3.5 text-right font-medium tabular-nums text-muted-foreground">
                                 {money(order.paid)}
+                              </td>
+                              <td className="px-6 py-3.5">
+                                <Link
+                                  to="/orders/$id"
+                                  params={{ id: order.id }}
+                                  className="opacity-0 group-hover/row:opacity-100 transition-opacity inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                  Mở
+                                </Link>
                               </td>
                             </tr>
                           );

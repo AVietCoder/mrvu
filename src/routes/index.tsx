@@ -4,6 +4,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { getReports } from "@/lib/reports.functions";
 import { AppShell, Card, StatCard, fmt } from "@/components/AppShell";
+import { useAuth } from "@/context/AuthContext";
+import { ShieldOff } from "lucide-react";
 
 import {
   ResponsiveContainer,
@@ -80,12 +82,28 @@ function ProgressBarLoader() {
 }
 
 function Dashboard() {
+  const { isAdmin } = useAuth();
   const fn = useServerFn(getReports);
 
   const { data, isLoading } = useQuery({
     queryKey: ["reports"],
     queryFn: () => fn(),
+    enabled: isAdmin,
   });
+
+  if (!isAdmin) {
+    return (
+      <AppShell title="Tổng quan">
+        <div className="flex flex-col items-center justify-center min-h-[50vh] text-center gap-4">
+          <ShieldOff className="h-16 w-16 text-muted-foreground opacity-40" />
+          <div>
+            <h2 className="text-xl font-semibold mb-1">Không có quyền truy cập</h2>
+            <p className="text-muted-foreground text-sm max-w-sm">Trang tổng quan chỉ dành cho Admin. Sử dụng menu để truy cập các tính năng của bạn.</p>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell title="Tổng quan">

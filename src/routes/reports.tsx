@@ -41,7 +41,7 @@ function Page() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const canView = user?.is_admin || user?.permissions.includes("view_reports");
+  const canView = Boolean(user?.is_admin);
 
   const fn = useServerFn(getReports);
   const { data, isLoading } = useQuery({

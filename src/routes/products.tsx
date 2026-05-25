@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useRef } from "react";
 import {
   listProducts, upsertProduct, deleteProduct,
-  upsertCategory, upsertBrand, deleteBrand,
+  upsertCategory, upsertBrand, deleteBrand, deleteCategory,
 } from "@/lib/products.functions";
 import { uploadImageToCloudinary } from "@/lib/cloudinary";
 import { AppShell, Card, fmt } from "@/components/AppShell";
@@ -60,6 +60,7 @@ function ProductsPage() {
   const upsertCat = useServerFn(upsertCategory);
   const upsertBr  = useServerFn(upsertBrand);
   const delBr     = useServerFn(deleteBrand);
+  const delCat    = useServerFn(deleteCategory);
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({ queryKey: ["products"], queryFn: () => list() });
@@ -76,6 +77,10 @@ function ProductsPage() {
   const [adminOpen, setAdminOpen] = useState(false);
   const [newBrandName, setNewBrandName] = useState("");
   const [newCatName, setNewCatName] = useState("");
+  const [editingBrandId, setEditingBrandId] = useState<string | null>(null);
+  const [editingBrandName, setEditingBrandName] = useState("");
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState("");
 
   const filtered = useMemo(
     () => (data?.products ?? []).filter((p) => {
@@ -161,6 +166,29 @@ function ProductsPage() {
     if (!confirm("Xóa thương hiệu này?")) return;
     await delBr({ data: { id } });
     qc.invalidateQueries({ queryKey: ["products"] });
+  }
+
+  async function saveBrand(id: string) {
+    if (!editingBrandName.trim()) return;
+    await upsertBr({ data: { id, name: editingBrandName.trim() } });
+    setEditingBrandId(null);
+    qc.invalidateQueries({ queryKey: ["products"] });
+    toast.success("Đã cập nhật thương hiệu");
+  }
+
+  async function removeCategory(id: string) {
+    if (!confirm("Xóa danh mục này?")) return;
+    await delCat({ data: { id } });
+    qc.invalidateQueries({ queryKey: ["products"] });
+    toast.success("Đã xóa danh mục");
+  }
+
+  async function saveCategory(id: string) {
+    if (!editingCatName.trim()) return;
+    await upsertCat({ data: { id, name: editingCatName.trim() } });
+    setEditingCatId(null);
+    qc.invalidateQueries({ queryKey: ["products"] });
+    toast.success("Đã cập nhật danh mục");
   }
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -546,48 +574,135 @@ function ProductsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog Danh mục & Thương hiệu */}
-      <Dialog open={adminOpen} onOpenChange={setAdminOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Quản lý danh mục & thương hiệu</DialogTitle></DialogHeader>
-          <div className="space-y-5">
+      {/* Dialog Danh mục & Thương hiệu — admin only */}
+      <Dialog open={adminOpen} onOpenChange={(v) => { setAdminOpen(v); setEditingBrandId(null); setEditingCatId(null); }}>
+        <DialogContent className="max-w-xl w-[95vw] max-h-[90vh] flex flex-col rounded-2xl p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-6 py-5 border-b bg-muted/20 shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <Tags className="h-5 w-5 text-primary" />
+              Quản lý danh mục & thương hiệu
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto overscroll-contain p-6 space-y-6">
+            {/* Thương hiệu */}
             <div>
-              <div className="font-medium mb-2">Thương hiệu</div>
-              <div className="flex gap-2 mb-2">
-                <Input placeholder="Tên thương hiệu mới..."
-                  value={newBrandName}
-                  onChange={(e) => setNewBrandName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") addBrand(); }} />
-                <Button size="sm" onClick={addBrand}><Plus className="h-4 w-4" /></Button>
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Thương hiệu</span>
+                <span className="text-xs text-muted-foreground">{data?.brands.length ?? 0} mục</span>
               </div>
-              <div className="space-y-1 max-h-36 overflow-y-auto">
-                {data?.brands.map((b) => (
-                  <div key={b.id} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm">
-                    <span>{b.name}</span>
-                    <button className="p-1 hover:text-destructive" onClick={() => removeBrand(b.id)}><Trash2 className="h-3 w-3" /></button>
+              {isAdmin && (
+                <div className="flex gap-2 mb-3">
+                  <Input
+                    className="h-9 rounded-xl bg-muted/30 border-0 focus-visible:ring-1"
+                    placeholder="Tên thương hiệu mới..."
+                    value={newBrandName}
+                    onChange={(e) => setNewBrandName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") addBrand(); }}
+                  />
+                  <Button size="sm" className="h-9 px-3 rounded-xl shrink-0" onClick={addBrand}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              <div className="space-y-1.5 max-h-44 overflow-y-auto overscroll-contain">
+                {(data?.brands ?? []).map((b: any) => (
+                  <div key={b.id} className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2 text-sm group hover:bg-muted/30 transition-colors">
+                    {editingBrandId === b.id ? (
+                      <>
+                        <Input
+                          className="h-7 flex-1 text-sm rounded-lg"
+                          value={editingBrandName}
+                          onChange={(e) => setEditingBrandName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") saveBrand(b.id); if (e.key === "Escape") setEditingBrandId(null); }}
+                          autoFocus
+                        />
+                        <button className="text-xs text-primary font-semibold hover:underline px-1" onClick={() => saveBrand(b.id)}>Lưu</button>
+                        <button className="text-xs text-muted-foreground hover:underline px-1" onClick={() => setEditingBrandId(null)}>Huỷ</button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="flex-1 font-medium">{b.name}</span>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground" onClick={() => { setEditingBrandId(b.id); setEditingBrandName(b.name); }}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button className="p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive" onClick={() => removeBrand(b.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
+                {(data?.brands ?? []).length === 0 && (
+                  <div className="py-4 text-center text-sm text-muted-foreground">Chưa có thương hiệu</div>
+                )}
               </div>
             </div>
+
+            <div className="border-t" />
+
+            {/* Danh mục */}
             <div>
-              <div className="font-medium mb-2">Danh mục (nhóm hàng)</div>
-              <div className="flex gap-2 mb-2">
-                <Input placeholder="Tên danh mục mới..."
-                  value={newCatName}
-                  onChange={(e) => setNewCatName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") addCat(); }} />
-                <Button size="sm" onClick={addCat}><Plus className="h-4 w-4" /></Button>
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Danh mục (nhóm hàng)</span>
+                <span className="text-xs text-muted-foreground">{data?.categories.length ?? 0} mục</span>
               </div>
-              <div className="space-y-1 max-h-36 overflow-y-auto">
-                {data?.categories.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between rounded border px-3 py-1.5 text-sm">
-                    <span>{c.name}</span>
+              {isAdmin && (
+                <div className="flex gap-2 mb-3">
+                  <Input
+                    className="h-9 rounded-xl bg-muted/30 border-0 focus-visible:ring-1"
+                    placeholder="Tên danh mục mới..."
+                    value={newCatName}
+                    onChange={(e) => setNewCatName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") addCat(); }}
+                  />
+                  <Button size="sm" className="h-9 px-3 rounded-xl shrink-0" onClick={addCat}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              <div className="space-y-1.5 max-h-44 overflow-y-auto overscroll-contain">
+                {(data?.categories ?? []).map((c: any) => (
+                  <div key={c.id} className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2 text-sm group hover:bg-muted/30 transition-colors">
+                    {editingCatId === c.id ? (
+                      <>
+                        <Input
+                          className="h-7 flex-1 text-sm rounded-lg"
+                          value={editingCatName}
+                          onChange={(e) => setEditingCatName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") saveCategory(c.id); if (e.key === "Escape") setEditingCatId(null); }}
+                          autoFocus
+                        />
+                        <button className="text-xs text-primary font-semibold hover:underline px-1" onClick={() => saveCategory(c.id)}>Lưu</button>
+                        <button className="text-xs text-muted-foreground hover:underline px-1" onClick={() => setEditingCatId(null)}>Huỷ</button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="flex-1 font-medium">{c.name}</span>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground" onClick={() => { setEditingCatId(c.id); setEditingCatName(c.name); }}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button className="p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive" onClick={() => removeCategory(c.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
+                {(data?.categories ?? []).length === 0 && (
+                  <div className="py-4 text-center text-sm text-muted-foreground">Chưa có danh mục</div>
+                )}
               </div>
             </div>
           </div>
-          <DialogFooter><Button onClick={() => setAdminOpen(false)}>Đóng</Button></DialogFooter>
+
+          <div className="px-6 py-4 border-t bg-muted/10 shrink-0 flex justify-end">
+            <Button variant="outline" className="rounded-xl" onClick={() => setAdminOpen(false)}>Đóng</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </AppShell>

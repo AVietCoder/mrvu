@@ -81,3 +81,9 @@ export const deleteBrand = createServerFn({ method: "POST" })
     await deleteWhere("brands", { id: data.id });
     return { ok: true };
   });
+
+export const deleteCategory = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: { id: string } }) => {
+    await deleteWhere("categories", { id: data.id });
+    return { ok: true };
+  });
