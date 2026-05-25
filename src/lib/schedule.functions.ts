@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { deleteWhere, fetchRows, insertRow, now, supabase, uid, updateWhere } from "./supabase";
+import { deleteWhere, fetchRows, insertRow, now, supabase, uid, updateWhere, logActivity } from "./supabase";
 
 export const listSchedules = createServerFn({ method: "GET" }).handler(async () => {
   const [
@@ -84,6 +84,7 @@ export const createSchedule = createServerFn({ method: "POST" })
       assigned_by: data.assigned_by || null,
       created_at: now(),
     });
+    await logActivity({ action: "create_schedule", detail: `Tạo lịch làm việc: ${data.title} (${data.scheduled_date})`, employee_id: data.created_by });
     return { id };
   });
 
@@ -132,18 +133,21 @@ export const approveSchedule = createServerFn({ method: "POST" })
       );
     }
 
+    await logActivity({ action: "approve_schedule", detail: `Duyệt lịch làm việc ${data.schedule_id} — ${data.user_ids.length} kỹ thuật viên` });
     return { ok: true };
   });
 
 export const updateScheduleStatus = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string; status: string } }) => {
     await updateWhere("schedules", { status: data.status }, { id: data.id });
+    await logActivity({ action: "update_schedule_status", detail: `Cập nhật trạng thái lịch ${data.id} → ${data.status}` });
     return { ok: true };
   });
 
 export const deleteSchedule = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
     await deleteWhere("schedules", { id: data.id });
+    await logActivity({ action: "delete_schedule", detail: `Xóa lịch làm việc ${data.id}` });
     return { ok: true };
   });
 

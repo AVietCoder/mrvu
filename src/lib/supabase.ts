@@ -209,3 +209,22 @@ export async function upsertRows<T = any>(
   if (error) throw new Error(error.message);
   return (data ?? []) as T[];
 }
+
+// ─── Activity log helper (dùng chung cho tất cả modules) ──────────────────
+export async function logActivity(params: {
+  action: string;
+  detail?: string;
+  employee_id?: string | null;
+}): Promise<void> {
+  try {
+    await supabase.from("activity_logs").insert({
+      id: uid(),
+      employee_id: params.employee_id ?? null,
+      action: params.action,
+      detail: params.detail ?? null,
+      created_at: now(),
+    });
+  } catch {
+    // Không để lỗi log làm hỏng luồng chính
+  }
+}

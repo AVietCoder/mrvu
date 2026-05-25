@@ -148,11 +148,34 @@ function OrderDetailPage() {
   const khachCanThanhToanEdit = Math.max(0, editTotal - parseInput(editDeposit));
 
   async function completeOrder() {
+    // Kiểm tra tồn kho ở client trước khi gửi lên server
+    const stock = data?.stock ?? [];
+    const branchId = order.branch_id;
+    const shortages: string[] = [];
+
+    for (const item of orderItems) {
+      const available = stock
+        .filter((s: any) => s.product_id === item.product_id && s.branch_id === branchId)
+        .reduce((sum: number, s: any) => sum + Number(s.qty || 0), 0);
+      const needed = Number(item.qty || 0);
+      if (available < needed) {
+        const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
+        shortages.push(`${prod?.name ?? item.product_id}: cần ${needed}, còn ${available}`);
+      }
+    }
+
+    if (shortages.length > 0) {
+      toast.error("Không đủ hàng để hoàn tất:\n" + shortages.join(" | "), { duration: 6000 });
+      return;
+    }
+
     setCompletingOrder(true);
     try {
       await updateStatusFn({ data: { id: order.id, status: "completed" } });
       toast.success("Đã hoàn tất đơn " + order.code);
       qc.invalidateQueries({ queryKey: ["orders"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi hoàn tất đơn");
     } finally { setCompletingOrder(false); }
   }
   async function cancelOrder() {
@@ -162,6 +185,8 @@ function OrderDetailPage() {
       await updateStatusFn({ data: { id: order.id, status: "cancelled" } });
       toast.success("Đã hủy đơn " + order.code);
       qc.invalidateQueries({ queryKey: ["orders"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi hủy đơn");
     } finally { setCancellingOrder(false); }
   }
 

@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { countRows, deleteWhere, fetchRows, insertRow, now, uid, updateWhere } from "./supabase";
+import { countRows, deleteWhere, fetchRows, insertRow, now, uid, updateWhere, logActivity } from "./supabase";
 
 async function nextSku(): Promise<string> {
   const count = await countRows("products");
@@ -39,12 +39,10 @@ export const upsertProduct = createServerFn({ method: "POST" })
 
     if (data.id) {
       await updateWhere("products", payload, { id: data.id });
+      await logActivity({ action: "update_product", detail: `Cập nhật sản phẩm: ${data.name}` });
     } else {
-      await insertRow("products", {
-        id: uid(),
-        ...payload,
-        created_at: now(),
-      });
+      await insertRow("products", { id: uid(), ...payload, created_at: now() });
+      await logActivity({ action: "create_product", detail: `Thêm sản phẩm: ${data.name}` });
     }
     return { ok: true };
   });
@@ -53,6 +51,7 @@ export const deleteProduct = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
     await deleteWhere("stock", { product_id: data.id });
     await deleteWhere("products", { id: data.id });
+    await logActivity({ action: "delete_product", detail: `Xóa sản phẩm ID: ${data.id}` });
     return { ok: true };
   });
 

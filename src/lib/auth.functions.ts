@@ -10,6 +10,7 @@ import {
   supabase,
   uid,
   updateWhere,
+  logActivity,
 } from "./supabase";
 
 async function loadUser(row: any): Promise<User> {
@@ -39,6 +40,7 @@ export const loginFn = createServerFn({ method: "POST" })
     if (!row) throw new Error("Sai tên đăng nhập hoặc mật khẩu");
     const user = await loadUser(row);
     const session: AuthSession = { user, token: uid() + uid() };
+    await logActivity({ action: "login", detail: `${user.full_name} (${user.username}) đăng nhập`, employee_id: user.id });
     return session;
   });
 
@@ -74,6 +76,7 @@ export const registerFn = createServerFn({ method: "POST" })
       );
     }
 
+    await logActivity({ action: "register", detail: `Tạo tài khoản: ${data.username} (${data.full_name})` });
     return { success: true, username: data.username };
   });
 
@@ -90,6 +93,7 @@ export const changePasswordFn = createServerFn({ method: "POST" })
     if (!u) throw new Error("Mật khẩu cũ không đúng");
 
     await updateWhere("users", { password: data.new_password }, { id: data.user_id });
+    await logActivity({ action: "change_password", detail: "Đổi mật khẩu", employee_id: data.user_id });
     return { success: true };
   });
 
@@ -107,6 +111,7 @@ export const resetPasswordFn = createServerFn({ method: "POST" })
     if (!admin) throw new Error("Không có quyền thực hiện");
 
     await updateWhere("users", { password: data.new_password }, { id: data.user_id });
+    await logActivity({ action: "reset_password", detail: `Admin reset mật khẩu cho user ${data.user_id}`, employee_id: data.admin_id });
     return { success: true };
   });
 
@@ -153,6 +158,7 @@ export const updateUserPermsFn = createServerFn({ method: "POST" })
 export const deleteUserFn = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
     await deleteWhere("users", { id: data.id, is_admin: Number(0) });
+    await logActivity({ action: "delete_user", detail: `Xóa tài khoản user ${data.id}` });
     return { success: true };
   });
 

@@ -11,6 +11,7 @@ import {
   supabase,
   uid,
   updateWhere,
+  logActivity,
 } from "./supabase";
 
 interface ListCustomersArgs {
@@ -102,12 +103,14 @@ export const upsertCustomer = createServerFn({ method: "POST" })
 
     if (data.id) {
       await updateWhere("customers", payload, { id: data.id });
+      await logActivity({ action: "update_customer", detail: `Cập nhật khách hàng: ${data.name}`, employee_id: data._actor_id ?? null });
     } else {
       await insertRow("customers", {
         id: uid(),
         ...payload,
         created_at: now(),
       });
+      await logActivity({ action: "create_customer", detail: `Thêm khách hàng mới: ${data.name}`, employee_id: data._actor_id ?? null });
     }
     return { ok: true };
   });
@@ -115,6 +118,7 @@ export const upsertCustomer = createServerFn({ method: "POST" })
 export const deleteCustomer = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
     await deleteWhere("customers", { id: data.id });
+    await logActivity({ action: "delete_customer", detail: `Xóa khách hàng ID: ${data.id}` });
     return { ok: true };
   });
 
@@ -128,6 +132,7 @@ export const recordPayment = createServerFn({ method: "POST" })
     const current = rows[0]?.debt ?? 0;
     const next = Math.max(0, current - Number(data.amount || 0));
     await updateWhere("customers", { debt: next }, { id: data.customer_id });
+    await logActivity({ action: "customer_payment", detail: `Thu công nợ ${data.amount?.toLocaleString?.() ?? data.amount}đ — KH: ${data.customer_id}` });
     return { ok: true };
   });
 export const getCustomerById = createServerFn({ method: "GET" })

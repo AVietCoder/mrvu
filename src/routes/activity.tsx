@@ -53,6 +53,25 @@ const ACTION_CONFIG: Record<string, { label: string; color: string; dot: string 
   update_product:   { label: "Sửa SP",         color: "bg-green-50 text-green-700 border-green-200",   dot: "bg-green-400" },
   delete_product:   { label: "Xóa SP",         color: "bg-red-50 text-red-700 border-red-200",         dot: "bg-red-400" },
   login:            { label: "Đăng nhập",      color: "bg-slate-50 text-slate-600 border-slate-200",   dot: "bg-slate-400" },
+  register:         { label: "Đăng ký TK",     color: "bg-slate-50 text-slate-700 border-slate-200",   dot: "bg-slate-500" },
+  change_password:  { label: "Đổi MK",         color: "bg-gray-50 text-gray-600 border-gray-200",      dot: "bg-gray-400" },
+  reset_password:   { label: "Reset MK",       color: "bg-orange-50 text-orange-700 border-orange-200", dot: "bg-orange-400" },
+  delete_user:      { label: "Xóa tài khoản",  color: "bg-red-50 text-red-700 border-red-200",         dot: "bg-red-500" },
+  create_employee:  { label: "Tạo NV",         color: "bg-lime-50 text-lime-700 border-lime-200",      dot: "bg-lime-500" },
+  update_employee:  { label: "Sửa NV",         color: "bg-yellow-50 text-yellow-700 border-yellow-200", dot: "bg-yellow-400" },
+  delete_employee:  { label: "Xóa NV",         color: "bg-red-50 text-red-700 border-red-200",         dot: "bg-red-400" },
+  create_branch:    { label: "Tạo chi nhánh",  color: "bg-indigo-50 text-indigo-700 border-indigo-200", dot: "bg-indigo-400" },
+  update_branch:    { label: "Sửa chi nhánh",  color: "bg-blue-50 text-blue-600 border-blue-200",      dot: "bg-blue-300" },
+  delete_branch:    { label: "Xóa chi nhánh",  color: "bg-red-50 text-red-700 border-red-200",         dot: "bg-red-400" },
+  stock_in:         { label: "Nhập kho",        color: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-400" },
+  stock_out:        { label: "Xuất kho",        color: "bg-pink-50 text-pink-700 border-pink-200",      dot: "bg-pink-400" },
+  stock_transfer:   { label: "Chuyển kho",      color: "bg-purple-50 text-purple-700 border-purple-200", dot: "bg-purple-400" },
+  cancel_transfer:  { label: "Huỷ chuyển kho", color: "bg-rose-50 text-rose-700 border-rose-200",      dot: "bg-rose-400" },
+  approve_schedule: { label: "Duyệt lịch",      color: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
+  create_schedule:  { label: "Tạo lịch",        color: "bg-teal-50 text-teal-700 border-teal-200",     dot: "bg-teal-400" },
+  delete_schedule:  { label: "Xóa lịch",        color: "bg-rose-50 text-rose-700 border-rose-200",     dot: "bg-rose-400" },
+  update_schedule_status: { label: "Cập nhật lịch", color: "bg-cyan-50 text-cyan-700 border-cyan-200", dot: "bg-cyan-400" },
+  customer_payment: { label: "Thu công nợ",     color: "bg-green-50 text-green-700 border-green-200",  dot: "bg-green-500" },
 };
 
 function fmtDate(s: string) {
@@ -116,6 +135,7 @@ function ActivityPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["activity_logs", page, search],
     queryFn: () => listFn({ data: { page, search } }),
+    refetchInterval: 30_000, // tự làm mới mỗi 30 giây
     staleTime: 10_000,
     placeholderData: (prev) => prev,
     enabled: isAdmin,

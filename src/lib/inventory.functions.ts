@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { fetchAllRows, fetchRow, fetchRows, insertRow, now, supabase, uid, updateWhere } from "./supabase";
+import { fetchAllRows, fetchRow, fetchRows, insertRow, now, supabase, uid, updateWhere, logActivity } from "./supabase";
 
 type StockItem = { product_id: string; qty: number };
 
@@ -170,6 +170,7 @@ export const createMovement = createServerFn({ method: "POST" })
       created_by: createdBy,
     });
 
+    await logActivity({ action: `stock_${data.type}`, detail: `${data.type === 'in' ? 'Nhập kho' : 'Xuất kho'} ${qty} SP tại chi nhánh ${data.branch_id}${data.note ? ' — ' + data.note : ''}`, employee_id: createdBy });
     return { ok: true };
   });
 
@@ -228,6 +229,7 @@ export const createTransfer = createServerFn({ method: "POST" })
       });
     }
 
+    await logActivity({ action: "stock_transfer", detail: `Chuyển kho: ${data.from_branch} → ${data.to_branch} (${data.items.length} mặt hàng)${data.note ? ' — ' + data.note : ''}`, employee_id: data.created_by || null });
     return { id: tid };
   });
 
@@ -249,7 +251,7 @@ export const confirmTransfer = createServerFn({ method: "POST" })
       { status: "confirmed", confirmed_at: now() },
       { id: data.transfer_id },
     );
-
+    await logActivity({ action: "confirm_transfer", detail: `Xác nhận phiếu chuyển kho ${data.transfer_id}` });
     return { ok: true };
   });
 
@@ -265,5 +267,6 @@ export const cancelTransfer = createServerFn({ method: "POST" })
     }
 
     await updateWhere("stock_transfers", { status: "cancelled" }, { id: data.transfer_id });
+    await logActivity({ action: "cancel_transfer", detail: `Hủy phiếu chuyển kho ${data.transfer_id}` });
     return { ok: true };
   });

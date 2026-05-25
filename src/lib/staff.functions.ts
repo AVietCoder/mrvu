@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { deleteWhere, fetchRows, insertRow, now, uid, updateWhere } from "./supabase";
+import { deleteWhere, fetchRows, insertRow, now, uid, updateWhere, logActivity } from "./supabase";
 
 export const listEmployees = createServerFn({ method: "GET" }).handler(async () => {
   const [employees, branches, logs] = await Promise.all([
@@ -23,12 +23,10 @@ export const upsertEmployee = createServerFn({ method: "POST" })
 
     if (data.id) {
       await updateWhere("employees", payload, { id: data.id });
+      await logActivity({ action: "update_employee", detail: `Cập nhật nhân viên: ${data.name}` });
     } else {
-      await insertRow("employees", {
-        id: uid(),
-        ...payload,
-        created_at: now(),
-      });
+      await insertRow("employees", { id: uid(), ...payload, created_at: now() });
+      await logActivity({ action: "create_employee", detail: `Thêm nhân viên mới: ${data.name} — ${data.role ?? ""}` });
     }
     return { ok: true };
   });
@@ -36,6 +34,7 @@ export const upsertEmployee = createServerFn({ method: "POST" })
 export const deleteEmployee = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
     await deleteWhere("employees", { id: data.id });
+    await logActivity({ action: "delete_employee", detail: `Xóa nhân viên ID: ${data.id}` });
     return { ok: true };
   });
 
@@ -59,12 +58,10 @@ export const upsertBranch = createServerFn({ method: "POST" })
 
     if (data.id) {
       await updateWhere("branches", payload, { id: data.id });
+      await logActivity({ action: "update_branch", detail: `Cập nhật chi nhánh: ${data.name}` });
     } else {
-      await insertRow("branches", {
-        id: uid(),
-        ...payload,
-        created_at: now(),
-      });
+      await insertRow("branches", { id: uid(), ...payload, created_at: now() });
+      await logActivity({ action: "create_branch", detail: `Thêm chi nhánh mới: ${data.name}` });
     }
     return { ok: true };
   });
@@ -72,5 +69,6 @@ export const upsertBranch = createServerFn({ method: "POST" })
 export const deleteBranch = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
     await deleteWhere("branches", { id: data.id });
+    await logActivity({ action: "delete_branch", detail: `Xóa chi nhánh ID: ${data.id}` });
     return { ok: true };
   });

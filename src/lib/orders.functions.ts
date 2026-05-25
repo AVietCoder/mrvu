@@ -10,6 +10,7 @@ import {
   supabase,
   uid,
   updateWhere,
+  logActivity,
 } from "./supabase";
 
 // ─── Gửi email thông báo admin ─────────────────────────────────────────────
@@ -369,7 +370,7 @@ async function autoCreateReceiptForOrder({
 }
 
 export const listOrders = createServerFn({ method: "GET" }).handler(async () => {
-  const [orders, items, products, customers, employees, branches, schedules, schedule_assignments, users] =
+  const [orders, items, products, customers, employees, branches, schedules, schedule_assignments, users, stock] =
     await Promise.all([
       fetchAllRows("orders", { orderBy: "created_at", ascending: false }),
       fetchAllRows("order_items"),
@@ -384,6 +385,7 @@ export const listOrders = createServerFn({ method: "GET" }).handler(async () => 
       }),
       fetchAllRows("schedule_assignments"),
       fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
+      fetchAllRows("stock"),
     ]);
 
   const linkedSchedules = schedules.filter((s: any) => s.order_id != null);
@@ -398,6 +400,7 @@ export const listOrders = createServerFn({ method: "GET" }).handler(async () => 
     schedules: linkedSchedules,
     schedule_assignments,
     users,
+    stock,
   };
 });
 
@@ -636,6 +639,11 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
       } catch (_emailErr) {
         // Lỗi email không ảnh hưởng việc cập nhật trạng thái
       }
+      await logActivity({ action: "complete_order", detail: `Hoàn tất đơn ${currentOrder.code}` });
+    }
+
+    if (data.status === "cancelled") {
+      await logActivity({ action: "cancel_order", detail: `Hủy đơn ${currentOrder.code}` });
     }
 
     return { ok: true };
