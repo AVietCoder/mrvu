@@ -160,11 +160,15 @@ function Page() {
   const [workTypeId, setWorkTypeId] = useState<string>("");
 
   // ── Chấm công ──────────────────────────────────────────────
-  const [attMonth, setAttMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
+  const [attFrom, setAttFrom] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  });
+  const [attTo, setAttTo] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [attDetail, setAttDetail] = useState<any>(null);
   const { data: attData, isLoading: attLoading, refetch: refetchAttendance } = useQuery({
-    queryKey: ["attendance", attMonth],
-    queryFn: () => attendanceFn({ data: { month: attMonth } }),
+    queryKey: ["attendance", attFrom, attTo],
+    queryFn: () => attendanceFn({ data: { date_from: attFrom, date_to: attTo } }),
     enabled: tab === "attendance" && (canApprove || isAdmin || isTech),
   });
 
@@ -709,18 +713,33 @@ function Page() {
             <Card>
               <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                 <div>
-                  <div className="font-medium flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Bảng chấm công tháng {attMonth}</div>
+                  <div className="font-medium flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Bảng chấm công</div>
                   <div className="text-xs text-muted-foreground">
                     Chỉ tính các lịch đã <b>duyệt / đang làm / hoàn thành</b>. Điểm = (1 loại hình + N tính chất) ÷ số NV. Tiền cũng chia đều.
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="month"
-                    value={attMonth}
-                    onChange={(e) => setAttMonth(e.target.value)}
-                    className="h-9 rounded-md border bg-background px-2 text-sm"
-                  />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <span>Từ</span>
+                    <input
+                      type="date"
+                      value={attFrom}
+                      max={attTo}
+                      onChange={(e) => setAttFrom(e.target.value)}
+                      className="h-9 rounded-md border bg-background px-2 text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <span>đến</span>
+                    <input
+                      type="date"
+                      value={attTo}
+                      min={attFrom}
+                      max={new Date().toISOString().slice(0, 10)}
+                      onChange={(e) => setAttTo(e.target.value)}
+                      className="h-9 rounded-md border bg-background px-2 text-sm"
+                    />
+                  </div>
                   <Button size="sm" variant="outline" onClick={() => refetchAttendance()}>Làm mới</Button>
                 </div>
               </div>

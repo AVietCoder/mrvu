@@ -283,14 +283,26 @@ export const deleteWorkType = createServerFn({ method: "POST" })
 
 // ── Bảng chấm công theo tháng ─────────────────────────────────
 // Trả về danh sách NV + tổng điểm/tiền tháng được chọn.
-// month: "YYYY-MM"
+// Supports date_from / date_to (YYYY-MM-DD) or fallback to month (YYYY-MM)
 export const attendanceSummary = createServerFn({ method: "GET" })
-  .handler(async ({ data }: { data?: { month?: string } }) => {
-    const month = data?.month || new Date().toISOString().slice(0, 7);
-    const from = `${month}-01`;
-    // tháng kế tiếp
-    const [y, m] = month.split("-").map(Number);
-    const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+  .handler(async ({ data }: { data?: { month?: string; date_from?: string; date_to?: string } }) => {
+    let from: string;
+    let next: string; // exclusive upper bound
+    let month: string;
+
+    if (data?.date_from && data?.date_to) {
+      from = data.date_from;
+      // next = date_to + 1 day (inclusive end)
+      const toDate = new Date(data.date_to);
+      toDate.setDate(toDate.getDate() + 1);
+      next = toDate.toISOString().slice(0, 10);
+      month = data.date_from.slice(0, 7);
+    } else {
+      month = data?.month || new Date().toISOString().slice(0, 7);
+      from = `${month}-01`;
+      const [y, m] = month.split("-").map(Number);
+      next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+    }
 
     const { data: schedules, error: e1 } = await supabase
       .from("schedules")
