@@ -54,6 +54,7 @@ export const registerFn = createServerFn({ method: "POST" })
       username: string;
       password: string;
       branch_ids?: string[];
+      actor_id?: string; // admin tạo: id admin; tự đăng ký: bỏ trống
     };
   }) => {
     const exists = await fetchRow("users", { eq: { username: data.username }, select: "id" });
@@ -76,7 +77,15 @@ export const registerFn = createServerFn({ method: "POST" })
       );
     }
 
-    await logActivity({ action: "register", detail: `Tạo tài khoản: ${data.username} (${data.full_name})` });
+    // Nếu có admin thực hiện => log với employee_id = admin
+    // Nếu tự đăng ký => log với employee_id = chính user mới tạo (để hiện tên người đăng ký)
+    const actor = data.actor_id || user.id;
+    const byWho = data.actor_id ? "(Admin tạo)" : "(Tự đăng ký)";
+    await logActivity({
+      action: "register",
+      detail: `Tạo tài khoản: ${data.username} - ${data.full_name} ${byWho}`,
+      employee_id: actor,
+    });
     return { success: true, username: data.username };
   });
 
@@ -110,8 +119,13 @@ export const resetPasswordFn = createServerFn({ method: "POST" })
     });
     if (!admin) throw new Error("Không có quyền thực hiện");
 
+    const target = await fetchRow<any>("users", { eq: { id: data.user_id }, select: "username, full_name" });
     await updateWhere("users", { password: data.new_password }, { id: data.user_id });
-    await logActivity({ action: "reset_password", detail: `Admin reset mật khẩu cho user ${data.user_id}`, employee_id: data.admin_id });
+    await logActivity({
+      action: "reset_password",
+      detail: `Admin reset mật khẩu cho ${target?.username || data.user_id}${target?.full_name ? ` (${target.full_name})` : ""}`,
+      employee_id: data.admin_id,
+    });
     return { success: true };
   });
 
@@ -156,9 +170,13 @@ export const updateUserPermsFn = createServerFn({ method: "POST" })
   });
 
 export const deleteUserFn = createServerFn({ method: "POST" })
-  .handler(async ({ data }: { data: { id: string } }) => {
+  .handler(async ({ data }: { data: { id: string; actor_id?: string } }) => {
     await deleteWhere("users", { id: data.id, is_admin: Number(0) });
-    await logActivity({ action: "delete_user", detail: `Xóa tài khoản user ${data.id}` });
+    await logActivity({
+      action: "delete_user",
+      detail: `Xóa tài khoản user ${data.id}`,
+      employee_id: data.actor_id || null,
+    });
     return { success: true };
   });
 

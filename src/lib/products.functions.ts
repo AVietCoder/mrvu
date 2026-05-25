@@ -39,19 +39,31 @@ export const upsertProduct = createServerFn({ method: "POST" })
 
     if (data.id) {
       await updateWhere("products", payload, { id: data.id });
-      await logActivity({ action: "update_product", detail: `Cập nhật sản phẩm: ${data.name}` });
+      await logActivity({
+        action: "update_product",
+        detail: `Cập nhật sản phẩm: ${data.name}`,
+        employee_id: data.actor_id || null,
+      });
     } else {
       await insertRow("products", { id: uid(), ...payload, created_at: now() });
-      await logActivity({ action: "create_product", detail: `Thêm sản phẩm: ${data.name}` });
+      await logActivity({
+        action: "create_product",
+        detail: `Thêm sản phẩm: ${data.name}`,
+        employee_id: data.actor_id || null,
+      });
     }
     return { ok: true };
   });
 
 export const deleteProduct = createServerFn({ method: "POST" })
-  .handler(async ({ data }: { data: { id: string } }) => {
+  .handler(async ({ data }: { data: { id: string; actor_id?: string } }) => {
     await deleteWhere("stock", { product_id: data.id });
     await deleteWhere("products", { id: data.id });
-    await logActivity({ action: "delete_product", detail: `Xóa sản phẩm ID: ${data.id}` });
+    await logActivity({
+      action: "delete_product",
+      detail: `Xóa sản phẩm ID: ${data.id}`,
+      employee_id: data.actor_id || null,
+    });
     return { ok: true };
   });
 

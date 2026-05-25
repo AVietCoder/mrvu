@@ -53,7 +53,7 @@ function parseInput(val: string): number {
 }
 
 function ProductsPage() {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
   const list      = useServerFn(listProducts);
   const upsert    = useServerFn(upsertProduct);
   const del       = useServerFn(deleteProduct);
@@ -131,6 +131,7 @@ function ProductsPage() {
           sale_price: parseInput(form.sale_price),
           min_stock: Number(form.min_stock) || 0,
           image_url: form.image_url.trim() || null,
+          actor_id: user?.id,
         },
       });
       toast.success(form.id ? "Đã cập nhật sản phẩm" : "Đã thêm sản phẩm thành công!");
@@ -141,7 +142,7 @@ function ProductsPage() {
 
   async function remove(id: string, name: string) {
     if (!confirm(`Xóa sản phẩm "${name}"?`)) return;
-    await del({ data: { id } });
+    await del({ data: { id, actor_id: user?.id } });
     toast.success("Đã xóa sản phẩm");
     qc.invalidateQueries({ queryKey: ["products"] });
   }

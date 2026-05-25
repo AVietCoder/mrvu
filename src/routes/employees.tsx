@@ -159,6 +159,7 @@ function Page() {
         data: {
           ...addForm,
           branch_ids: finalBranches,
+          actor_id: me?.id,
         },
       });
       
@@ -247,7 +248,7 @@ function Page() {
     if (!confirm(`Xóa tài khoản "${name}"? Hành động này không thể hoàn tác.`)) return;
 
     try {
-      await doDelete({ data: { id } });
+      await doDelete({ data: { id, actor_id: me?.id } });
       toast.success("Đã xóa tài khoản");
       qc.invalidateQueries({ queryKey: ["users"] });
     } catch (err: any) {

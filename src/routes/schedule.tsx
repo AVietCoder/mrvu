@@ -7,6 +7,8 @@ import {
   listSchedules, createSchedule, approveSchedule,
   updateScheduleStatus, deleteSchedule,
   listWorkDifficulties, upsertWorkDifficulty, deleteWorkDifficulty,
+  listWorkTypes, upsertWorkType, deleteWorkType,
+  attendanceSummary,
 } from "@/lib/schedule.functions";
 import { useAuth } from "@/context/AuthContext";
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -19,7 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CalendarDays, Plus, CheckCircle2, Clock, Trash2,
-  Wrench, ShieldOff, Settings, Pencil, Receipt, ExternalLink, UserCog, Loader2,
+  Wrench, ShieldOff, Settings, Pencil, Receipt, ExternalLink, UserCog, Loader2, BarChart3, Tag, Eye, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { hasPermission } from "@/lib/types";
@@ -72,6 +74,10 @@ function Page() {
   const listDiff  = useServerFn(listWorkDifficulties);
   const upsertDiff= useServerFn(upsertWorkDifficulty);
   const deleteDiff= useServerFn(deleteWorkDifficulty);
+  const listWT    = useServerFn(listWorkTypes);
+  const upsertWT  = useServerFn(upsertWorkType);
+  const deleteWT  = useServerFn(deleteWorkType);
+  const attendanceFn = useServerFn(attendanceSummary);
   const qc = useQueryClient();
 
   const canCreate  = isAdmin || (!!user && hasPermission(user, "create_schedule"));
@@ -83,8 +89,9 @@ function Page() {
 
   const { data } = useQuery({ queryKey: ["schedules"], queryFn: () => listFn() });
   const { data: diffData } = useQuery({ queryKey: ["work-difficulties"], queryFn: () => listDiff() });
+  const { data: wtData } = useQuery({ queryKey: ["work-types"], queryFn: () => listWT() });
 
-  const [tab, setTab] = useState<"calendar" | "list" | "difficulties">("list");
+  const [tab, setTab] = useState<"calendar" | "list" | "difficulties" | "work-types" | "attendance">("list");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterType, setFilterType]     = useState("");
   const [filterDate, setFilterDate]     = useState(new Date().toISOString().slice(0, 10)); // mặc định hôm nay
@@ -140,6 +147,23 @@ function Page() {
   const [diffOpen, setDiffOpen] = useState(false);
   const [diffForm, setDiffForm] = useState<{ id?: string; name: string; description: string; bonus: string }>({
     name: "", description: "", bonus: "0",
+  });
+
+  // ── Dialog loại hình CV ────────────────────────────────────
+  const [wtOpen, setWtOpen] = useState(false);
+  const [wtForm, setWtForm] = useState<{ id?: string; name: string; description: string; price: string }>({
+    name: "", description: "", price: "0",
+  });
+  // Loại hình CV được chọn khi duyệt (mặc định lấy theo schedule.work_type_id)
+  const [workTypeId, setWorkTypeId] = useState<string>("");
+
+  // ── Chấm công ──────────────────────────────────────────────
+  const [attMonth, setAttMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
+  const [attDetail, setAttDetail] = useState<any>(null);
+  const { data: attData, isLoading: attLoading, refetch: refetchAttendance } = useQuery({
+    queryKey: ["attendance", attMonth],
+    queryFn: () => attendanceFn({ data: { month: attMonth } }),
+    enabled: tab === "attendance" && (canApprove || isAdmin),
   });
 
   // Filter + nhóm lịch
@@ -244,6 +268,7 @@ function Page() {
     setAssignedUsers(existing);
     setAssignedDiffs(existingDiffs);
     setTechFees(existingFees.length > 0 ? existingFees : []);
+    setWorkTypeId(s.work_type_id || "");
     setApproveOpen(true);
   }
 
@@ -256,35 +281,64 @@ function Page() {
         user_ids: assignedUsers,
         difficulty_ids: assignedDiffs,
         tech_fees: techFees,
+        work_type_id: workTypeId || null,
+        actor_id: user?.id,
       }});
       toast.success("Đã duyệt và phân công");
       setApproveOpen(false);
       qc.invalidateQueries({ queryKey: ["schedules"] });
+      qc.invalidateQueries({ queryKey: ["attendance"] });
     } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
     finally { setApproving(false); }
   }
 
   async function handleStatus(id: string, status: string) {
-    await statusFn({ data: { id, status } });
+    await statusFn({ data: { id, status, actor_id: user?.id } });
     qc.invalidateQueries({ queryKey: ["schedules"] });
+    qc.invalidateQueries({ queryKey: ["attendance"] });
     toast.success("Đã cập nhật trạng thái");
   }
 
   async function handleDelete(id: string) {
     if (!confirm("Xóa lịch này?")) return;
-    await deleteFn({ data: { id } });
+    await deleteFn({ data: { id, actor_id: user?.id } });
     qc.invalidateQueries({ queryKey: ["schedules"] });
+    qc.invalidateQueries({ queryKey: ["attendance"] });
     toast.success("Đã xóa");
   }
 
   async function handleSaveDiff() {
     try {
-      await upsertDiff({ data: { ...diffForm, bonus: Number(diffForm.bonus) || 0 } });
+      await upsertDiff({ data: { ...diffForm, bonus: Number(diffForm.bonus) || 0, actor_id: user?.id } });
       toast.success("Đã lưu");
       setDiffOpen(false);
       setDiffForm({ name: "", description: "", bonus: "0" });
       qc.invalidateQueries({ queryKey: ["work-difficulties"] });
     } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
+  }
+
+  async function handleSaveWT() {
+    if (!wtForm.name.trim()) return toast.error("Nhập tên loại hình");
+    try {
+      await upsertWT({ data: { ...wtForm, price: Number(wtForm.price) || 0, actor_id: user?.id } });
+      toast.success("Đã lưu loại hình");
+      setWtOpen(false);
+      setWtForm({ name: "", description: "", price: "0" });
+      qc.invalidateQueries({ queryKey: ["work-types"] });
+      qc.invalidateQueries({ queryKey: ["schedules"] });
+    } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
+  }
+
+  async function handleDeleteWT(id: string) {
+    if (!confirm("Xóa loại hình này?")) return;
+    await deleteWT({ data: { id, actor_id: user?.id } });
+    qc.invalidateQueries({ queryKey: ["work-types"] });
+  }
+
+  async function handleDeleteDiff(id: string) {
+    if (!confirm("Xóa tính chất này?")) return;
+    await deleteDiff({ data: { id, actor_id: user?.id } });
+    qc.invalidateQueries({ queryKey: ["work-difficulties"] });
   }
 
   if (!canCreate && !canApprove && !isTech && !isAdmin) {
@@ -305,6 +359,8 @@ function Page() {
           <TabsList>
             <TabsTrigger value="list">Danh sách</TabsTrigger>
             <TabsTrigger value="calendar"><CalendarDays className="h-4 w-4 mr-1" />Thời khóa biểu</TabsTrigger>
+            {(canApprove || isAdmin) && <TabsTrigger value="attendance"><BarChart3 className="h-4 w-4 mr-1" />Chấm công</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="work-types"><Tag className="h-4 w-4 mr-1" />Loại hình CV</TabsTrigger>}
             {isAdmin && <TabsTrigger value="difficulties"><Settings className="h-4 w-4 mr-1" />Tính chất CV</TabsTrigger>}
           </TabsList>
           <div className="ml-auto flex flex-wrap gap-2">
@@ -569,14 +625,17 @@ function Page() {
           <TabsContent value="difficulties">
             <Card>
               <div className="flex items-center justify-between mb-4">
-                <div className="font-medium">Tính chất công việc</div>
+                <div>
+                  <div className="font-medium">Tính chất công việc</div>
+                  <div className="text-xs text-muted-foreground">Mỗi tính chất tick trong 1 lịch = 1 điểm (chia đều theo số NV). Số tiền tương ứng cũng chia đều.</div>
+                </div>
                 <Button size="sm" onClick={() => { setDiffForm({ name: "", description: "", bonus: "0" }); setDiffOpen(true); }}>
                   <Plus className="h-4 w-4 mr-1" /> Thêm
                 </Button>
               </div>
               <table className="w-full text-sm">
                 <thead className="text-left text-muted-foreground border-b">
-                  <tr><th className="py-2 pr-3">Tên</th><th className="pr-3">Mô tả</th><th className="text-right pr-3">Tiền thêm</th><th></th></tr>
+                  <tr><th className="py-2 pr-3">Tên</th><th className="pr-3">Mô tả</th><th className="text-right pr-3">Tiền / lượt</th><th></th></tr>
                 </thead>
                 <tbody>
                   {(diffData as any[] ?? []).map((d: any) => (
@@ -589,15 +648,141 @@ function Page() {
                           setDiffForm({ id: d.id, name: d.name, description: d.description ?? "", bonus: String(d.bonus) });
                           setDiffOpen(true);
                         }}><Pencil className="h-4 w-4" /></Button>
-                        <Button size="icon" variant="ghost" onClick={async () => {
-                          await deleteWorkDifficulty({ data: { id: d.id } });
-                          qc.invalidateQueries({ queryKey: ["work-difficulties"] });
-                        }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        <Button size="icon" variant="ghost" onClick={() => handleDeleteDiff(d.id)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
                       </td>
                     </tr>
                   ))}
+                  {((diffData as any[]) ?? []).length === 0 && (
+                    <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">Chưa có tính chất CV nào</td></tr>
+                  )}
                 </tbody>
               </table>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* ── Loại hình công việc (admin only) ── */}
+        {isAdmin && (
+          <TabsContent value="work-types">
+            <Card>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="font-medium">Loại hình công việc</div>
+                  <div className="text-xs text-muted-foreground">Mỗi lịch chỉ chọn 1 loại hình = 1 điểm (chia đều theo số NV). Tiền cũng chia đều.</div>
+                </div>
+                <Button size="sm" onClick={() => { setWtForm({ name: "", description: "", price: "0" }); setWtOpen(true); }}>
+                  <Plus className="h-4 w-4 mr-1" /> Thêm
+                </Button>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="text-left text-muted-foreground border-b">
+                  <tr><th className="py-2 pr-3">Tên loại hình</th><th className="pr-3">Mô tả</th><th className="text-right pr-3">Đơn giá</th><th></th></tr>
+                </thead>
+                <tbody>
+                  {(wtData as any[] ?? []).map((w: any) => (
+                    <tr key={w.id} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="py-2 pr-3 font-medium">{w.name}</td>
+                      <td className="pr-3 text-muted-foreground">{w.description ?? "—"}</td>
+                      <td className="text-right pr-3 text-green-600 font-medium">{fmtMoney(w.price)}</td>
+                      <td className="text-right">
+                        <Button size="icon" variant="ghost" onClick={() => {
+                          setWtForm({ id: w.id, name: w.name, description: w.description ?? "", price: String(w.price) });
+                          setWtOpen(true);
+                        }}><Pencil className="h-4 w-4" /></Button>
+                        <Button size="icon" variant="ghost" onClick={() => handleDeleteWT(w.id)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                  {((wtData as any[]) ?? []).length === 0 && (
+                    <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">Chưa có loại hình CV nào</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </Card>
+          </TabsContent>
+        )}
+
+        {/* ── Chấm công (admin / approve_schedule) ── */}
+        {(canApprove || isAdmin) && (
+          <TabsContent value="attendance">
+            <Card>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div>
+                  <div className="font-medium flex items-center gap-2"><BarChart3 className="h-4 w-4" /> Bảng chấm công tháng {attMonth}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Chỉ tính các lịch đã <b>duyệt / đang làm / hoàn thành</b>. Điểm = (1 loại hình + N tính chất) ÷ số NV. Tiền cũng chia đều.
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="month"
+                    value={attMonth}
+                    onChange={(e) => setAttMonth(e.target.value)}
+                    className="h-9 rounded-md border bg-background px-2 text-sm"
+                  />
+                  <Button size="sm" variant="outline" onClick={() => refetchAttendance()}>Làm mới</Button>
+                </div>
+              </div>
+              <div className="overflow-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-muted-foreground border-b">
+                    <tr>
+                      <th className="py-2 pr-3">Nhân viên</th>
+                      <th className="pr-3 text-right">Số lịch</th>
+                      <th className="pr-3 text-right">Điểm loại hình</th>
+                      <th className="pr-3 text-right">Điểm tính chất</th>
+                      <th className="pr-3 text-right">Tổng điểm</th>
+                      <th className="pr-3 text-right">Tiền tháng</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attLoading && (
+                      <tr><td colSpan={7} className="py-10 text-center text-muted-foreground">
+                        <Loader2 className="inline h-4 w-4 mr-1 animate-spin" /> Đang tải…
+                      </td></tr>
+                    )}
+                    {!attLoading && (attData?.rows ?? []).length === 0 && (
+                      <tr><td colSpan={7} className="py-10 text-center text-muted-foreground">Không có dữ liệu chấm công trong tháng</td></tr>
+                    )}
+                    {(attData?.rows ?? []).map((r: any) => (
+                      <tr key={r.user_id} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="py-2 pr-3">
+                          <div className="font-medium">{r.full_name}</div>
+                          <div className="text-xs text-muted-foreground">{r.username}</div>
+                        </td>
+                        <td className="pr-3 text-right">{r.schedule_count}</td>
+                        <td className="pr-3 text-right">{r.type_points.toFixed(2)}</td>
+                        <td className="pr-3 text-right">{r.diff_points.toFixed(2)}</td>
+                        <td className="pr-3 text-right font-semibold">{(r.type_points + r.diff_points).toFixed(2)}</td>
+                        <td className="pr-3 text-right text-green-600 font-semibold">{fmtMoney(r.total_money)}</td>
+                        <td className="text-right">
+                          <Button size="sm" variant="outline" onClick={() => setAttDetail(r)}>
+                            <Eye className="h-3 w-3 mr-1" /> Chi tiết
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  {(attData?.rows ?? []).length > 0 && (
+                    <tfoot>
+                      <tr className="border-t bg-muted/30 font-semibold">
+                        <td className="py-2 pr-3">Tổng</td>
+                        <td className="pr-3 text-right">{(attData?.rows ?? []).reduce((s: number, r: any) => s + r.schedule_count, 0)}</td>
+                        <td className="pr-3 text-right">{(attData?.rows ?? []).reduce((s: number, r: any) => s + r.type_points, 0).toFixed(2)}</td>
+                        <td className="pr-3 text-right">{(attData?.rows ?? []).reduce((s: number, r: any) => s + r.diff_points, 0).toFixed(2)}</td>
+                        <td className="pr-3 text-right">{(attData?.rows ?? []).reduce((s: number, r: any) => s + r.type_points + r.diff_points, 0).toFixed(2)}</td>
+                        <td className="pr-3 text-right text-green-700">{fmtMoney((attData?.rows ?? []).reduce((s: number, r: any) => s + r.total_money, 0))}</td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
             </Card>
           </TabsContent>
         )}
@@ -732,10 +917,27 @@ function Page() {
               </div>
             </div>
 
+            {/* Loại hình công việc (1 lựa chọn) */}
+            <div>
+              <Label className="font-medium">Loại hình công việc (chấm công)</Label>
+              <div className="text-xs text-muted-foreground mb-1">Mỗi lịch chỉ chọn 1 loại hình. Điểm = 1 chia đều theo số NV.</div>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={workTypeId}
+                onChange={(e) => setWorkTypeId(e.target.value)}
+              >
+                <option value="">— Không tính loại hình —</option>
+                {((data?.work_types ?? wtData) ?? []).map((w: any) => (
+                  <option key={w.id} value={w.id}>{w.name} — {fmtMoney(w.price)}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Tính chất công việc */}
             <div>
-              <Label className="font-medium">Tính chất công việc</Label>
-              <div className="mt-2 border rounded-md p-2 space-y-1">
+              <Label className="font-medium">Tính chất công việc (chấm công)</Label>
+              <div className="text-xs text-muted-foreground mb-1">Có thể tick nhiều. Mỗi tính chất = 1 điểm chia đều theo số NV.</div>
+              <div className="mt-1 border rounded-md p-2 space-y-1">
                 {(data?.work_difficulties ?? []).map((d: any) => (
                   <label key={d.id} className="flex items-center justify-between text-sm cursor-pointer">
                     <div className="flex items-center gap-2">
@@ -747,8 +949,12 @@ function Page() {
                     <span className="text-green-600 font-medium">+{fmtMoney(d.bonus)}</span>
                   </label>
                 ))}
+                {(data?.work_difficulties ?? []).length === 0 && (
+                  <div className="text-xs text-muted-foreground italic">Chưa có tính chất CV — admin cần tạo trước.</div>
+                )}
               </div>
             </div>
+
 
             {/* thu nhập (bonus) */}
             <div>
@@ -843,6 +1049,135 @@ function Page() {
             <Button variant="outline" onClick={() => setDiffOpen(false)}>Hủy</Button>
             <Button onClick={handleSaveDiff}>Lưu</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog thêm/sửa Loại hình CV ── */}
+      <Dialog open={wtOpen} onOpenChange={setWtOpen}>
+        <DialogContent className="w-full max-w-sm max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{wtForm.id ? "Sửa" : "Thêm"} loại hình công việc</DialogTitle></DialogHeader>
+          <div className="space-y-3" onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.target as HTMLElement).tagName !== "TEXTAREA") {
+              e.preventDefault(); handleSaveWT();
+            }
+          }}>
+            <div><Label>Tên loại hình *</Label>
+              <Input className="mt-1" autoFocus value={wtForm.name} onChange={(e) => setWtForm({...wtForm, name: e.target.value})} />
+            </div>
+            <div><Label>Mô tả</Label>
+              <Input className="mt-1" value={wtForm.description} onChange={(e) => setWtForm({...wtForm, description: e.target.value})} />
+            </div>
+            <div><Label>Đơn giá / lượt (₫)</Label>
+              <Input className="mt-1" type="number" value={wtForm.price} onChange={(e) => setWtForm({...wtForm, price: e.target.value})} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWtOpen(false)}>Hủy</Button>
+            <Button onClick={handleSaveWT}>Lưu</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog chi tiết chấm công 1 nhân viên ── */}
+      <Dialog open={!!attDetail} onOpenChange={(o) => { if (!o) setAttDetail(null); }}>
+        <DialogContent className="w-full max-w-3xl max-h-[92vh] overflow-y-auto">
+          {attDetail && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Chi tiết chấm công — {attDetail.full_name}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div className="rounded-lg border p-3 bg-muted/30">
+                  <div className="text-xs text-muted-foreground">Tháng</div>
+                  <div className="font-semibold">{attData?.month}</div>
+                </div>
+                <div className="rounded-lg border p-3 bg-muted/30">
+                  <div className="text-xs text-muted-foreground">Số lịch</div>
+                  <div className="font-semibold">{attDetail.schedule_count}</div>
+                </div>
+                <div className="rounded-lg border p-3 bg-muted/30">
+                  <div className="text-xs text-muted-foreground">Tổng điểm</div>
+                  <div className="font-semibold">{(attDetail.type_points + attDetail.diff_points).toFixed(2)}</div>
+                </div>
+                <div className="rounded-lg border p-3 bg-green-50 border-green-200">
+                  <div className="text-xs text-green-700">Tổng tiền</div>
+                  <div className="font-semibold text-green-700">{fmtMoney(attDetail.total_money)}</div>
+                </div>
+              </div>
+
+              <div className="font-medium text-sm mb-2">Danh sách công việc đã làm</div>
+              <div className="overflow-auto rounded-lg border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40 text-left text-xs">
+                    <tr>
+                      <th className="py-2 px-3">Ngày</th>
+                      <th className="px-3">Lịch / Đơn hàng</th>
+                      <th className="px-3">Khách hàng</th>
+                      <th className="px-3">Loại hình</th>
+                      <th className="px-3">Tính chất</th>
+                      <th className="px-3 text-right">Chia (NV)</th>
+                      <th className="px-3 text-right">Điểm</th>
+                      <th className="px-3 text-right">Tiền</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attDetail.lines.map((ln: any) => {
+                      const cust = (attData?.customers ?? []).find((c: any) => c.id === ln.customer_id);
+                      const ord = ln.order_id ? (attData?.orders ?? []).find((o: any) => o.id === ln.order_id) : null;
+                      return (
+                        <tr key={ln.schedule_id} className="border-t">
+                          <td className="py-2 px-3 whitespace-nowrap text-xs">
+                            {ln.scheduled_date?.slice(0, 10)} {ln.scheduled_time ?? ""}
+                          </td>
+                          <td className="px-3">
+                            <div className="font-medium">{ln.title}</div>
+                            {ord && (
+                              <Link to="/orders/$id" params={{ id: ord.id }}
+                                className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1">
+                                <Receipt className="h-3 w-3" /> {ord.code} · {fmtMoney(ord.total)}
+                              </Link>
+                            )}
+                          </td>
+                          <td className="px-3 text-xs">{cust?.name ?? "—"}</td>
+                          <td className="px-3 text-xs">
+                            {ln.work_type ? (
+                              <span className="rounded-full bg-blue-100 text-blue-700 px-2 py-0.5">
+                                {ln.work_type.name} ({fmtMoney(ln.work_type.price)})
+                              </span>
+                            ) : <span className="text-muted-foreground">—</span>}
+                          </td>
+                          <td className="px-3 text-xs">
+                            <div className="flex flex-wrap gap-1">
+                              {ln.difficulties.map((d: any) => (
+                                <span key={d.id} className="rounded-full bg-amber-100 text-amber-700 px-2 py-0.5">
+                                  {d.name} (+{fmtMoney(d.bonus)})
+                                </span>
+                              ))}
+                              {ln.difficulties.length === 0 && <span className="text-muted-foreground">—</span>}
+                            </div>
+                          </td>
+                          <td className="px-3 text-right text-xs">{ln.num_people}</td>
+                          <td className="px-3 text-right">
+                            {(ln.type_point_share + ln.diff_point_share).toFixed(2)}
+                          </td>
+                          <td className="px-3 text-right text-green-600 font-medium">{fmtMoney(ln.money_share)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setAttDetail(null)}>
+                  <X className="h-4 w-4 mr-1" /> Đóng
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

@@ -72,6 +72,12 @@ const ACTION_CONFIG: Record<string, { label: string; color: string; dot: string 
   delete_schedule:  { label: "Xóa lịch",        color: "bg-rose-50 text-rose-700 border-rose-200",     dot: "bg-rose-400" },
   update_schedule_status: { label: "Cập nhật lịch", color: "bg-cyan-50 text-cyan-700 border-cyan-200", dot: "bg-cyan-400" },
   customer_payment: { label: "Thu công nợ",     color: "bg-green-50 text-green-700 border-green-200",  dot: "bg-green-500" },
+  create_work_type:     { label: "Thêm loại hình CV",  color: "bg-lime-50 text-lime-700 border-lime-200",     dot: "bg-lime-500" },
+  update_work_type:     { label: "Sửa loại hình CV",   color: "bg-yellow-50 text-yellow-700 border-yellow-200", dot: "bg-yellow-500" },
+  delete_work_type:     { label: "Xóa loại hình CV",   color: "bg-red-50 text-red-700 border-red-200",        dot: "bg-red-500" },
+  create_work_difficulty: { label: "Thêm tính chất CV", color: "bg-lime-50 text-lime-700 border-lime-200",     dot: "bg-lime-400" },
+  update_work_difficulty: { label: "Sửa tính chất CV",  color: "bg-yellow-50 text-yellow-700 border-yellow-200", dot: "bg-yellow-400" },
+  delete_work_difficulty: { label: "Xóa tính chất CV",  color: "bg-red-50 text-red-700 border-red-200",        dot: "bg-red-400" },
 };
 
 function fmtDate(s: string) {
