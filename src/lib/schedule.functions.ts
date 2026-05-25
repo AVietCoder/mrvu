@@ -16,6 +16,7 @@ export const listSchedules = createServerFn({ method: "GET" }).handler(async () 
     products,
     orders,
     order_items,
+    user_permissions,
   ] = await Promise.all([
     fetchRows("schedules", { orderBy: "scheduled_date", ascending: false }),
     fetchRows("schedule_assignments"),
@@ -23,7 +24,7 @@ export const listSchedules = createServerFn({ method: "GET" }).handler(async () 
     fetchRows("tech_fees"),
     fetchRows("work_difficulties", { orderBy: "bonus", ascending: false }),
     fetchRows("work_types", { orderBy: "name" }),
-    fetchRows("users", { select: "id, full_name, username", orderBy: "full_name" }),
+    fetchRows("users", { select: "id, full_name, username, is_admin", orderBy: "full_name" }),
     fetchRows("customers", { select: "id, name, phone, address, ward, district, province", orderBy: "name" }),
     fetchRows("branches", { orderBy: "name" }),
     fetchRows("products", { select: "id, sku, name, tech_fee", orderBy: "name" }),
@@ -34,7 +35,14 @@ export const listSchedules = createServerFn({ method: "GET" }).handler(async () 
       limit: 200,
     }),
     fetchRows("order_items", { select: "order_id, product_id, qty" }),
+    fetchRows("user_permissions", { select: "user_id, permission" }),
   ]);
+
+  // Gắn permissions vào users
+  const usersWithPerms = users.map((u: any) => ({
+    ...u,
+    permissions: (user_permissions as any[]).filter((p: any) => p.user_id === u.id).map((p: any) => p.permission),
+  }));
 
   return {
     schedules,
@@ -43,7 +51,7 @@ export const listSchedules = createServerFn({ method: "GET" }).handler(async () 
     tech_fees,
     work_difficulties,
     work_types,
-    users,
+    users: usersWithPerms,
     customers,
     branches,
     products,
@@ -66,6 +74,7 @@ export const createSchedule = createServerFn({ method: "POST" })
       order_id?: string;
       address?: string;
       note?: string;
+      work_type_id?: string;
       created_by: string;
       assigned_by?: string;
     };
@@ -85,6 +94,7 @@ export const createSchedule = createServerFn({ method: "POST" })
       note: data.note || null,
       created_by: data.created_by,
       assigned_by: data.assigned_by || null,
+      work_type_id: data.work_type_id || null,
       created_at: now(),
     });
     await logActivity({ action: "create_schedule", detail: `Tạo lịch làm việc: ${data.title} (${data.scheduled_date})`, employee_id: data.created_by });

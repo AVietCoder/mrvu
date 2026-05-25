@@ -477,7 +477,7 @@ function OrderDetailPage() {
                     </Button>
                   )}
 
-                  {order.status !== "cancelled" && order.status !== "completed" && (
+                  {order.status !== "cancelled" && (
                     <Button size="sm" variant="destructive" onClick={cancelOrder} disabled={cancellingOrder}>
                       <Ban className="h-4 w-4 mr-1" />
                       {cancellingOrder ? "Đang hủy..." : "Hủy đơn"}

@@ -21,7 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CalendarDays, Plus, CheckCircle2, Clock, Trash2,
-  Wrench, ShieldOff, Settings, Pencil, Receipt, ExternalLink, UserCog, Loader2, BarChart3, Tag, Eye, X,
+  Wrench, ShieldOff, Settings, Pencil, Receipt, ExternalLink, UserCog, Loader2, BarChart3, Tag, Eye, X, Copy, Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { hasPermission } from "@/lib/types";
@@ -112,10 +112,12 @@ function Page() {
     scheduled_time: nowTimeStr, customer_id: "", branch_id: "",
     order_id: "", address: "", note: "",
     assigned_by: "", // Người giao việc
+    work_type_id: "", // Loại hình CV chọn khi tạo
   });
 
   // Dialog xem chi tiết lịch
   const [viewSchedule, setViewSchedule] = useState<any>(null);
+  const [copied, setCopied] = useState(false);
 
   // Khi chọn đơn → auto-fill khách hàng / chi nhánh / địa chỉ + tiêu đề gợi ý
   function pickOrder(orderId: string) {
@@ -163,7 +165,7 @@ function Page() {
   const { data: attData, isLoading: attLoading, refetch: refetchAttendance } = useQuery({
     queryKey: ["attendance", attMonth],
     queryFn: () => attendanceFn({ data: { month: attMonth } }),
-    enabled: tab === "attendance" && (canApprove || isAdmin),
+    enabled: tab === "attendance" && (canApprove || isAdmin || isTech),
   });
 
   // Filter + nhóm lịch
@@ -225,14 +227,8 @@ function Page() {
       return sum + (wdiff?.bonus ?? 0);
     }, 0);
     const diffBonus = diffBonusPerTask * numPeople;
-    // Tiền đơn hàng liên kết
-    const schedule = (data?.schedules ?? []).find((s: any) => s.id === scheduleId);
-    const linkedOrder: any = schedule?.order_id
-      ? (data?.orders ?? []).find((o: any) => o.id === schedule.order_id)
-      : null;
-    const orderTotal = linkedOrder?.total ?? 0;
-
-    const totalPool = bonusTotal + diffBonus + orderTotal;
+    // Tiền đơn hàng KHÔNG tính vào lương kỹ thuật viên
+    const totalPool = bonusTotal + diffBonus;
     return totalPool / numPeople;
   }
 
@@ -246,13 +242,14 @@ function Page() {
         branch_id: createForm.branch_id || undefined,
         order_id: createForm.order_id || undefined,
         assigned_by: createForm.assigned_by || undefined,
+        work_type_id: createForm.work_type_id || undefined,
       }});
       toast.success("Đã tạo lịch" + (createForm.order_id ? " (đã liên kết đơn hàng)" : ""));
       setCreateOpen(false);
       setCreateForm({
         title: "", type: "install", scheduled_date: todayStr,
         scheduled_time: nowTimeStr, customer_id: "", branch_id: "",
-        order_id: "", address: "", note: "", assigned_by: "",
+        order_id: "", address: "", note: "", assigned_by: "", work_type_id: "",
       });
       qc.invalidateQueries({ queryKey: ["schedules"] });
       qc.invalidateQueries({ queryKey: ["orders"] });
@@ -359,7 +356,7 @@ function Page() {
           <TabsList>
             <TabsTrigger value="list">Danh sách</TabsTrigger>
             <TabsTrigger value="calendar"><CalendarDays className="h-4 w-4 mr-1" />Thời khóa biểu</TabsTrigger>
-            {(canApprove || isAdmin) && <TabsTrigger value="attendance"><BarChart3 className="h-4 w-4 mr-1" />Chấm công</TabsTrigger>}
+            {(canApprove || isAdmin || isTech) && <TabsTrigger value="attendance"><BarChart3 className="h-4 w-4 mr-1" />Chấm công</TabsTrigger>}
             {isAdmin && <TabsTrigger value="work-types"><Tag className="h-4 w-4 mr-1" />Loại hình CV</TabsTrigger>}
             {isAdmin && <TabsTrigger value="difficulties"><Settings className="h-4 w-4 mr-1" />Tính chất CV</TabsTrigger>}
           </TabsList>
@@ -448,7 +445,7 @@ function Page() {
                           </Link>
                         )}
 
-                        {customer && <div className="text-xs text-muted-foreground mb-1">👤 {customer.name}</div>}
+                        {customer && (canApprove || isAdmin) && <div className="text-xs text-muted-foreground mb-1">👤 {customer.name}</div>}
                         {s.address && <div className="text-xs text-muted-foreground mb-1">📍 {s.address}</div>}
 
                         {/* Người phụ trách */}
@@ -551,7 +548,7 @@ function Page() {
                     <th className="py-2 pr-3">Tiêu đề</th>
                     <th className="pr-3">Loại</th>
                     <th className="pr-3">Ngày</th>
-                    <th className="pr-3">Khách hàng</th>
+                    {!isTech && !canApprove ? <th className="pr-3">Khách hàng</th> : null}
                     <th className="pr-3">Người phụ trách</th>
                     <th className="pr-3">Người giao việc</th>
                     <th className="pr-3">Người tạo</th>
@@ -574,7 +571,7 @@ function Page() {
                         <td className="py-2 pr-3 font-medium max-w-[200px] truncate">{s.title}</td>
                         <td className="pr-3"><span className={`text-xs rounded-full px-2 py-0.5 ${typeInfo?.color}`}>{typeInfo?.label}</span></td>
                         <td className="pr-3 text-xs whitespace-nowrap">{s.scheduled_date?.slice(0,10)} {s.scheduled_time}</td>
-                        <td className="pr-3 text-muted-foreground text-sm">{customer?.name ?? "—"}</td>
+                        {!isTech && !canApprove ? <td className="pr-3 text-muted-foreground text-sm">{customer?.name ?? "—"}</td> : null}
                         <td className="pr-3">
                           <div className="flex flex-wrap gap-1">
                             {assignees.map((a: any) => {
@@ -707,7 +704,7 @@ function Page() {
         )}
 
         {/* ── Chấm công (admin / approve_schedule) ── */}
-        {(canApprove || isAdmin) && (
+        {(canApprove || isAdmin || isTech) && (
           <TabsContent value="attendance">
             <Card>
               <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -749,7 +746,7 @@ function Page() {
                     {!attLoading && (attData?.rows ?? []).length === 0 && (
                       <tr><td colSpan={7} className="py-10 text-center text-muted-foreground">Không có dữ liệu chấm công trong tháng</td></tr>
                     )}
-                    {(attData?.rows ?? []).map((r: any) => (
+                    {(attData?.rows ?? []).filter((r: any) => isTech && !canApprove && !isAdmin ? r.user_id === user?.id : true).map((r: any) => (
                       <tr key={r.user_id} className="border-b last:border-0 hover:bg-muted/30">
                         <td className="py-2 pr-3">
                           <div className="font-medium">{r.full_name}</div>
@@ -768,11 +765,11 @@ function Page() {
                       </tr>
                     ))}
                   </tbody>
-                  {(attData?.rows ?? []).length > 0 && (
+                  {(attData?.rows ?? []).filter((r: any) => isTech && !canApprove && !isAdmin ? r.user_id === user?.id : true).length > 0 && (
                     <tfoot>
                       <tr className="border-t bg-muted/30 font-semibold">
                         <td className="py-2 pr-3">Tổng</td>
-                        <td className="pr-3 text-right">{(attData?.rows ?? []).reduce((s: number, r: any) => s + r.schedule_count, 0)}</td>
+                        <td className="pr-3 text-right">{(attData?.rows ?? []).filter((r: any) => isTech && !canApprove && !isAdmin ? r.user_id === user?.id : true).reduce((s: number, r: any) => s + r.schedule_count, 0)}</td>
                         <td className="pr-3 text-right">{(attData?.rows ?? []).reduce((s: number, r: any) => s + r.type_points, 0).toFixed(2)}</td>
                         <td className="pr-3 text-right">{(attData?.rows ?? []).reduce((s: number, r: any) => s + r.diff_points, 0).toFixed(2)}</td>
                         <td className="pr-3 text-right">{(attData?.rows ?? []).reduce((s: number, r: any) => s + r.type_points + r.diff_points, 0).toFixed(2)}</td>
@@ -888,6 +885,15 @@ function Page() {
                 placeholder="Tìm người dùng..."
                 options={(data?.users ?? []).map((u: any) => ({ value: u.id, label: u.full_name }))}
               /></div>
+            <div><Label>Loại hình công việc</Label>
+              <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={createForm.work_type_id}
+                onChange={(e) => setCreateForm({...createForm, work_type_id: e.target.value})}>
+                <option value="">— Chưa chọn loại hình —</option>
+                {((data?.work_types ?? wtData) ?? []).map((w: any) => (
+                  <option key={w.id} value={w.id}>{w.name} — {fmtMoney(w.price)}</option>
+                ))}
+              </select></div>
             <div><Label>Ghi chú</Label>
               <Input className="mt-1" value={createForm.note}
                 onChange={(e) => setCreateForm({...createForm, note: e.target.value})} /></div>
@@ -904,16 +910,20 @@ function Page() {
           <div className="space-y-4">
             {/* Phân công người */}
             <div>
-              <Label className="font-medium">Phân công nhân viên</Label>
+              <Label className="font-medium">Phân công nhân viên kỹ thuật</Label>
+              <div className="text-xs text-muted-foreground mb-1">Chỉ hiện nhân viên có quyền kỹ thuật.</div>
               <div className="mt-2 border rounded-md p-2 space-y-1 max-h-40 overflow-y-auto">
-                {(data?.users ?? []).map((u: any) => (
+                {(data?.users ?? []).filter((u: any) => u.is_admin || (u.permissions ?? []).includes("technician")).map((u: any) => (
                   <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer">
                     <input type="checkbox"
                       checked={assignedUsers.includes(u.id)}
                       onChange={() => setAssignedUsers((p) => p.includes(u.id) ? p.filter((x) => x !== u.id) : [...p, u.id])}
-                    /> {u.full_name}
+                    /> {u.full_name}{u.is_admin ? <span className="ml-1 text-xs text-blue-600">(Admin)</span> : null}
                   </label>
                 ))}
+                {(data?.users ?? []).filter((u: any) => u.is_admin || (u.permissions ?? []).includes("technician")).length === 0 && (
+                  <div className="text-xs text-muted-foreground italic">Chưa có nhân viên kỹ thuật — cần phân quyền trước.</div>
+                )}
               </div>
             </div>
 
@@ -994,11 +1004,9 @@ function Page() {
                   return s + (d?.bonus ?? 0);
                 }, 0) * numPeople;
                 // Tiền đơn hàng liên kết
-                const linkedOrder: any = approveTarget?.order_id
-                  ? (data?.orders ?? []).find((o: any) => o.id === approveTarget.order_id)
-                  : null;
-                const orderTotal = linkedOrder?.total ?? 0;
-                const totalPool = bonusTotal + diffBonus + orderTotal;
+                // orderTotal không tính vào lương
+                // Tiền đơn không tính vào lương kỹ thuật
+                const totalPool = bonusTotal + diffBonus;
                 const perPerson = totalPool / numPeople;
                 return (
                   <div className="rounded-md bg-muted/50 p-2 text-sm space-y-1">
@@ -1008,11 +1016,7 @@ function Page() {
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>Tính chất CV × {numPeople} người</span><span>{fmtMoney(diffBonus)}</span>
                     </div>
-                    {orderTotal > 0 && (
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Tiền đơn hàng</span><span>{fmtMoney(orderTotal)}</span>
-                      </div>
-                    )}
+                    {/* Tiền đơn hàng không tính vào lương kỹ thuật */}
                     <div className="flex justify-between font-semibold border-t pt-1">
                       <span>Tiền công / người ({numPeople} người)</span>
                       <span className="text-green-600">{fmtMoney(perPerson)}</span>
@@ -1328,6 +1332,47 @@ function Page() {
                   })()}
                 </div>
 
+                {/* Nội dung tin nhắn */}
+                {(() => {
+                  const workType = s.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === s.work_type_id) : null;
+                  const orderInfo = linkedOrder ? `${linkedOrder.code} — ${fmtMoney(linkedOrder.total)}` : "Không có";
+                  const assigneeNames = assignees.map((a: any) => { const u = data?.users.find((u: any) => u.id === a.user_id); return u?.full_name ?? a.user_id; }).join(", ") || "Chưa phân công";
+                  const msgContent = [
+                    "📋 Nội dung đơn hàng:",
+                    "",
+                    `• Tiêu đề: ${s.title}`,
+                    `• Loại công việc: ${SCHEDULE_TYPES.find((t) => t.value === s.type)?.label ?? s.type}`,
+                    workType ? `• Loại hình: ${workType.name}` : null,
+                    `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`,
+                    customer ? `• Khách hàng: ${customer.name}${customer.phone ? " — " + customer.phone : ""}` : null,
+                    s.address ? `• Địa chỉ: ${s.address}` : null,
+                    linkedOrder ? `• Đơn hàng: ${orderInfo}` : null,
+                    assignees.length > 0 ? `• Người thực hiện: ${assigneeNames}` : null,
+                    assigner ? `• Người giao việc: ${assigner.full_name}` : null,
+                    creator ? `• Người tạo lịch: ${creator.full_name}` : null,
+                    s.note ? `• Ghi chú: ${s.note}` : null,
+                    `• Trạng thái: ${STATUS_LABELS[s.status]?.label ?? s.status}`,
+                  ].filter(Boolean).join("\n");
+                  
+                  function copyMsg() {
+                    navigator.clipboard.writeText(msgContent).then(() => {
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    });
+                  }
+                  
+                  return (
+                    <div className="rounded-lg border bg-muted/30 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-xs font-medium text-muted-foreground">📋 Nội dung tin nhắn</div>
+                        <Button size="sm" variant="outline" onClick={copyMsg} className="h-7 text-xs">
+                          {copied ? <><Check className="h-3 w-3 mr-1 text-green-600" /> Đã copy!</> : <><Copy className="h-3 w-3 mr-1" /> Copy</>}
+                        </Button>
+                      </div>
+                      <pre className="text-xs whitespace-pre-wrap text-foreground/80 leading-relaxed">{msgContent}</pre>
+                    </div>
+                  );
+                })()}
                 <DialogFooter className="flex-wrap gap-2">
                   {canApprove && s.status === "pending" && (
                     <Button variant="outline" onClick={() => { setViewSchedule(null); openApprove(s); }}>

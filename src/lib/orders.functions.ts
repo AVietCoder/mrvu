@@ -310,6 +310,20 @@ async function revertCompletedOrderSideEffects(order: any, lineItems: LineItem[]
   }
 }
 
+
+async function revertCashVouchersForOrder(orderCode: string) {
+  // Xóa tất cả phiếu thu/chi liên quan đến mã đơn hàng này
+  const { data: vouchers } = await supabase
+    .from("cash_vouchers")
+    .select("id, code, note")
+    .like("note", `%${orderCode}%`);
+  if (vouchers && vouchers.length > 0) {
+    for (const v of vouchers) {
+      await deleteWhere("cash_vouchers", { id: v.id }).catch(() => undefined);
+    }
+  }
+}
+
 async function nextOrderCode() {
   const count = await countRows("orders");
   return "HD" + String(count + 1).padStart(6, "0");
@@ -643,7 +657,31 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
     }
 
     if (data.status === "cancelled") {
-      await logActivity({ action: "cancel_order", detail: `Hủy đơn ${currentOrder.code}` });
+      // Rollback: hoàn lại công nợ khách hàng nếu đơn đang là reserved (đặt cọc)
+      if (currentOrder.status === "reserved" || currentOrder.status === "draft") {
+        if (currentOrder.customer_id) {
+          const customerRows = await fetchRows<{ debt: number; total_buy: number }>("customers", {
+            eq: { id: currentOrder.customer_id },
+            select: "debt, total_buy",
+            limit: 1,
+          });
+          const currentDebt = customerRows[0]?.debt ?? 0;
+          const currentTotalBuy = customerRows[0]?.total_buy ?? 0;
+          const deposit = Number(currentOrder.deposit || 0);
+          // Hoàn lại tiền cọc đã trừ vào công nợ (nếu có)
+          const updates: Record<string, number> = {};
+          if (deposit > 0) {
+            // Nếu đặt cọc đã tạo thành công nợ thì hoàn lại
+            updates.debt = Math.max(0, currentDebt - deposit);
+          }
+          if (Object.keys(updates).length) {
+            await updateWhere("customers", updates, { id: currentOrder.customer_id });
+          }
+        }
+      }
+      // Xóa phiếu thu chi liên quan đến đơn hàng bị hủy
+      await revertCashVouchersForOrder(currentOrder.code);
+      await logActivity({ action: "cancel_order", detail: `Hủy đơn ${currentOrder.code} — đã rollback phiếu thu chi` });
     }
 
     return { ok: true };
