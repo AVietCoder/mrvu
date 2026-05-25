@@ -222,7 +222,7 @@ function ProductsPage() {
   return (
     <AppShell title="Quản lý hàng hóa" loading={isLoading && !data}>
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+      <div className="hidden md:grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <Card>
           <div className="flex items-center gap-2 mb-1"><Package className="h-4 w-4 text-muted-foreground" /><div className="text-xs text-muted-foreground uppercase">Tổng sản phẩm</div></div>
           <div className="text-2xl font-semibold">{(data?.products ?? []).length}</div>

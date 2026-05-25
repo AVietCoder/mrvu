@@ -12,6 +12,160 @@ import {
   updateWhere,
 } from "./supabase";
 
+// ─── Gửi email thông báo admin ─────────────────────────────────────────────
+async function getAdminEmail(): Promise<string | null> {
+  try {
+    const { data } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "admin_email")
+      .single();
+    return data?.value?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+async function getSiteName(): Promise<string> {
+  try {
+    const { data } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "site_name")
+      .single();
+    return data?.value?.trim() || "Mr.Vũ POS";
+  } catch {
+    return "Mr.Vũ POS";
+  }
+}
+
+async function sendOrderNotificationEmail(params: {
+  adminEmail: string;
+  siteName: string;
+  orderCode: string;
+  eventType: "new_order" | "completed";
+  customerName?: string;
+  branchName?: string;
+  total: number;
+  items: Array<{ productName: string; qty: number; unitPrice: number }>;
+  note?: string;
+  paymentMethodLabel?: string;
+}) {
+  const moneyFmt = (n: number) =>
+    new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
+
+  const eventLabel =
+    params.eventType === "new_order" ? "🛒 ĐƠN HÀNG MỚI" : "✅ ĐƠN HOÀN THÀNH";
+
+  const itemsHtml = params.items
+    .map(
+      (it, i) =>
+        `<tr style="border-bottom:1px solid #f0f0f0">
+          <td style="padding:8px 12px;color:#666">${i + 1}</td>
+          <td style="padding:8px 12px;font-weight:500">${it.productName}</td>
+          <td style="padding:8px 12px;text-align:center">${it.qty}</td>
+          <td style="padding:8px 12px;text-align:right">${moneyFmt(it.unitPrice)}</td>
+          <td style="padding:8px 12px;text-align:right;font-weight:600;color:#15803d">${moneyFmt(it.qty * it.unitPrice)}</td>
+        </tr>`
+    )
+    .join("");
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>${eventLabel}</title></head>
+<body style="margin:0;padding:0;background:#f5f7fa;font-family:Arial,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7fa;padding:32px 16px">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
+        <!-- Header -->
+        <tr><td style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);padding:24px 32px;color:#fff">
+          <div style="font-size:13px;opacity:0.85;margin-bottom:4px">${params.siteName}</div>
+          <div style="font-size:22px;font-weight:700">${eventLabel}</div>
+          <div style="font-size:13px;opacity:0.85;margin-top:6px">
+            Mã đơn: <strong style="font-family:monospace">${params.orderCode}</strong>
+            &nbsp;|&nbsp; ${new Date().toLocaleString("vi-VN")}
+          </div>
+        </td></tr>
+        <!-- Info grid -->
+        <tr><td style="padding:24px 32px">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="padding:0 12px 16px 0;vertical-align:top;width:50%">
+                <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Khách hàng</div>
+                <div style="font-weight:600;font-size:15px">${params.customerName || "Khách lẻ"}</div>
+              </td>
+              <td style="padding:0 0 16px 12px;vertical-align:top">
+                <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Chi nhánh</div>
+                <div style="font-weight:600;font-size:15px">${params.branchName || "—"}</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 12px 0 0;vertical-align:top">
+                <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Thanh toán</div>
+                <div style="font-weight:600">${params.paymentMethodLabel || "—"}</div>
+              </td>
+              <td style="padding:0 0 0 12px;vertical-align:top">
+                <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Tổng tiền</div>
+                <div style="font-weight:700;font-size:18px;color:#15803d">${moneyFmt(params.total)}</div>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+        <!-- Items table -->
+        <tr><td style="padding:0 32px 24px">
+          <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#666;margin-bottom:8px">Sản phẩm</div>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+            <thead>
+              <tr style="background:#f9fafb;font-size:12px;color:#888;text-transform:uppercase">
+                <th style="padding:8px 12px;text-align:left;font-weight:600">#</th>
+                <th style="padding:8px 12px;text-align:left;font-weight:600">Sản phẩm</th>
+                <th style="padding:8px 12px;text-align:center;font-weight:600">SL</th>
+                <th style="padding:8px 12px;text-align:right;font-weight:600">Đơn giá</th>
+                <th style="padding:8px 12px;text-align:right;font-weight:600">Thành tiền</th>
+              </tr>
+            </thead>
+            <tbody>${itemsHtml}</tbody>
+          </table>
+        </td></tr>
+        ${params.note ? `<tr><td style="padding:0 32px 24px"><div style="background:#fef9c3;border-radius:8px;padding:12px 16px;font-size:14px"><strong>Ghi chú:</strong> ${params.note}</div></td></tr>` : ""}
+        <!-- Footer -->
+        <tr><td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb">
+          <div style="font-size:12px;color:#9ca3af;text-align:center">
+            Email tự động từ ${params.siteName} — Không trả lời email này
+          </div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  const subject =
+    params.eventType === "new_order"
+      ? `[${params.siteName}] Đơn hàng mới: ${params.orderCode} — ${params.customerName || "Khách lẻ"}`
+      : `[${params.siteName}] Hoàn thành đơn: ${params.orderCode} — ${params.customerName || "Khách lẻ"}`;
+
+  // Gửi qua Supabase edge function "send-email" (nếu có)
+  // hoặc qua SMTP bằng fetch nếu tự cấu hình
+  // Hiện tại dùng Resend API nếu có RESEND_API_KEY trong env
+  const resendKey = process.env.RESEND_API_KEY;
+  if (!resendKey) return; // Chưa cấu hình — bỏ qua
+
+  await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: `${params.siteName} <noreply@resend.dev>`,
+      to: [params.adminEmail],
+      subject,
+      html,
+    }),
+  });
+}
+
 type LineItem = { product_id: string; qty: number; unit_price: number; discount?: number };
 type ProductBrief = { id: string; name: string; sku?: string };
 type StockBrief = { product_id: string; qty: number };
@@ -340,7 +494,44 @@ export const createOrder = createServerFn({ method: "POST" })
         created_at: createdAt,
       });
 
-      return { ok: true, code, receipt_code: receipt?.code ?? null };
+      // Gửi email thông báo admin
+      try {
+        const [adminEmail, siteName] = await Promise.all([getAdminEmail(), getSiteName()]);
+        if (adminEmail) {
+          const productIds = data.items.map((it: any) => it.product_id);
+          const productMap = await loadProductNames(productIds);
+          let customerName: string | undefined;
+          if (data.customer_id) {
+            const custRows = await fetchRows<any>("customers", { eq: { id: data.customer_id }, select: "name", limit: 1 });
+            customerName = custRows[0]?.name;
+          }
+          let branchName: string | undefined;
+          if (data.branch_id) {
+            const branchRows = await fetchRows<any>("branches", { eq: { id: data.branch_id }, select: "name", limit: 1 });
+            branchName = branchRows[0]?.name;
+          }
+          await sendOrderNotificationEmail({
+            adminEmail,
+            siteName,
+            orderCode: code,
+            eventType: "new_order",
+            customerName,
+            branchName,
+            total,
+            paymentMethodLabel,
+            note: data.note,
+            items: data.items.map((it: any) => ({
+              productName: productMap.get(it.product_id)?.name ?? it.product_id,
+              qty: it.qty,
+              unitPrice: it.unit_price,
+            })),
+          });
+        }
+      } catch (_emailErr) {
+        // Lỗi email không ảnh hưởng đơn hàng
+      }
+
+      return { ok: true, code, receipt_code: receipt?.code ?? null, id: oid };
     } catch (err) {
       if (receipt?.id) {
         await deleteWhere("cash_vouchers", { id: receipt.id }).catch(() => undefined);
@@ -406,6 +597,45 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
         createdAt: now(),
         notePrefix: "Hoàn tất đơn",
       });
+
+      // Gửi email thông báo admin khi hoàn thành đơn
+      try {
+        const [adminEmail, siteName] = await Promise.all([getAdminEmail(), getSiteName()]);
+        if (adminEmail) {
+          const productIds = currentItems.map((it: any) => it.product_id);
+          const productMap = await loadProductNames(productIds);
+          let customerName: string | undefined;
+          if (currentOrder.customer_id) {
+            const custRows = await fetchRows<any>("customers", { eq: { id: currentOrder.customer_id }, select: "name", limit: 1 });
+            customerName = custRows[0]?.name;
+          }
+          let branchName: string | undefined;
+          if (currentOrder.branch_id) {
+            const branchRows = await fetchRows<any>("branches", { eq: { id: currentOrder.branch_id }, select: "name", limit: 1 });
+            branchName = branchRows[0]?.name;
+          }
+          const pm: "tien_mat" | "ngan_hang" =
+            currentOrder.payment_method === "ngan_hang" ? "ngan_hang" : "tien_mat";
+          await sendOrderNotificationEmail({
+            adminEmail,
+            siteName,
+            orderCode: currentOrder.code,
+            eventType: "completed",
+            customerName,
+            branchName,
+            total: Number(currentOrder.total || 0),
+            paymentMethodLabel: pm === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt",
+            note: currentOrder.note,
+            items: currentItems.map((it: any) => ({
+              productName: productMap.get(it.product_id)?.name ?? it.product_id,
+              qty: it.qty,
+              unitPrice: it.unit_price,
+            })),
+          });
+        }
+      } catch (_emailErr) {
+        // Lỗi email không ảnh hưởng việc cập nhật trạng thái
+      }
     }
 
     return { ok: true };

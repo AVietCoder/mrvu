@@ -225,6 +225,8 @@ function Page() {
   const [discountPct, setDiscountPct] = useState("0");
   const [useDiscountPct, setUseDiscountPct] = useState(false);
   const [includeVat, setIncludeVat] = useState(false);
+  const [vatMode, setVatMode] = useState<"8" | "10" | "custom">("10");
+  const [vatCustomPercent, setVatCustomPercent] = useState("5");
   const [depositRaw, setDepositRaw] = useState("0");
   const [note, setNote] = useState("");
 
@@ -262,8 +264,21 @@ function Page() {
     : parseInput(discountRaw);
   const afterDiscount = Math.max(0, subtotal - discountAmt);
 
-  // VAT 10%
-  const vatAmt = includeVat ? Math.round(afterDiscount * 0.1) : 0;
+  // VAT linh hoạt: 8%, 10%, hoặc tự nhập số tiền
+  // VAT linh hoạt: 8%, 10%, hoặc tự nhập %
+  const customVatRate =
+    Math.min(100, Math.max(0, parseFloat(vatCustomPercent) || 0)) / 100;
+
+  const vatRate =
+    vatMode === "8"
+      ? 0.08
+      : vatMode === "10"
+        ? 0.1
+        : customVatRate;
+
+  const vatAmt = includeVat
+    ? Math.round(afterDiscount * vatRate)
+    : 0;
   const total = afterDiscount + vatAmt;
   const khachCanThanhToan = Math.max(0, total - deposit);
 
@@ -388,6 +403,8 @@ function Page() {
     setDiscountPct("0");
     setUseDiscountPct(false);
     setIncludeVat(false);
+    setVatMode("10");
+    setVatCustomPercent("5");
     setDepositRaw("0");
     setNote("");
     setCreateScheduleOnOrder(false);
@@ -887,7 +904,7 @@ function Page() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-1 gap-3">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <Label>Giảm giá</Label>
@@ -938,18 +955,64 @@ function Page() {
                 </div>
               </div>
 
-              {/* VAT */}
-              <label className="flex items-center gap-2 cursor-pointer select-none rounded-lg border px-3 py-2.5 hover:bg-muted/30 transition-colors">
-                <Checkbox
-                  checked={includeVat}
-                  onCheckedChange={(v) => setIncludeVat(!!v)}
-                  id="vat"
-                />
-                <span className="text-sm font-medium">Thu thuế VAT (10%)</span>
+              {/* VAT linh hoạt */}
+              <div className="rounded-lg border overflow-hidden">
+                <label className="flex items-center gap-2 cursor-pointer select-none px-3 py-2.5 hover:bg-muted/30 transition-colors">
+                  <Checkbox
+                    checked={includeVat}
+                    onCheckedChange={(v) => setIncludeVat(!!v)}
+                    id="vat"
+                  />
+                  <span className="text-sm font-medium">Thu thuế VAT</span>
+                  {includeVat && (
+                    <span className="ml-auto text-sm font-semibold text-orange-600">+ {fmt(vatAmt)}</span>
+                  )}
+                </label>
                 {includeVat && (
-                  <span className="ml-auto text-sm font-semibold text-orange-600">+ {fmt(vatAmt)}</span>
+                  <div className="border-t px-3 py-2.5 bg-orange-50/40 flex flex-wrap items-center gap-3">
+                    <span className="text-xs text-muted-foreground font-medium">Thuế suất:</span>
+                    {(["8", "10"] as const).map(rate => (
+                      <label key={rate} className="flex items-center gap-1.5 cursor-pointer text-sm">
+                        <input
+                          type="radio"
+                          name="vat-rate"
+                          value={rate}
+                          checked={vatMode === rate}
+                          onChange={() => setVatMode(rate)}
+                          className="accent-primary"
+                        />
+                        {rate}%
+                      </label>
+                    ))}
+                    <label className="flex items-center gap-1.5 cursor-pointer text-sm">
+                      <input
+                        type="radio"
+                        name="vat-rate"
+                        value="custom"
+                        checked={vatMode === "custom"}
+                        onChange={() => setVatMode("custom")}
+                        className="accent-primary"
+                      />
+                      Tự nhập
+                    </label>
+                    {vatMode === "custom" && (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          className="w-24 h-7 text-sm"
+                          placeholder="% VAT"
+                          value={vatCustomPercent}
+                          onChange={(e) => setVatCustomPercent(e.target.value)}
+                          onFocus={(e) => e.target.select()}
+                        />
+                        <span className="text-sm text-muted-foreground">%</span>
+                      </div>
+                    )}
+                  </div>
                 )}
-              </label>
+              </div>
 
               <div>
                 <Label>Ghi chú</Label>
@@ -1071,7 +1134,13 @@ function Page() {
                 )}
                 {includeVat && (
                   <div className="flex justify-between text-sm mt-1 text-orange-600">
-                    <span>Thuế VAT (10%)</span>
+                    <span>
+                      Thuế VAT (
+                      {vatMode === "custom"
+                        ? `${vatCustomPercent || 0}%`
+                        : `${vatMode}%`}
+                      )
+                    </span>
                     <span>+ {fmt(vatAmt)}</span>
                   </div>
                 )}
@@ -1158,7 +1227,7 @@ function Page() {
                     )}
                     {receiptOrder.includeVat && (
                       <div className="flex justify-between text-orange-600">
-                        <span>Thuế VAT (10%)</span>
+                        <span>Thuế VAT</span>
                         <span>+ {moneyFmt(receiptOrder.vatAmt)}</span>
                       </div>
                     )}
