@@ -13,6 +13,13 @@ import {
   logActivity,
 } from "./supabase";
 
+function requireEnv(name: string, value: string | undefined): string {
+  if (!value) {
+    throw new Error(`Missing environment variable: ${name}`);
+  }
+  return value;
+}
+
 // ─── Gửi email thông báo admin ─────────────────────────────────────────────
 async function getAdminEmail(): Promise<string | null> {
   try {
@@ -149,7 +156,9 @@ async function sendOrderNotificationEmail(params: {
   // Gửi qua Supabase edge function "send-email" (nếu có)
   // hoặc qua SMTP bằng fetch nếu tự cấu hình
   // Hiện tại dùng Resend API nếu có RESEND_API_KEY trong env
-  const resendKey = process.env.RESEND_API_KEY;
+
+
+  const resendKey = requireEnv("RESEND_API_KEY", import.meta.env.RESEND_API_KEY as string | undefined);
   if (!resendKey) return; // Chưa cấu hình — bỏ qua
 
   await fetch("https://api.resend.com/emails", {
