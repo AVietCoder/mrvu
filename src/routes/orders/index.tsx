@@ -885,7 +885,7 @@ function Page() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-1 gap-3">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <Label>Giảm giá</Label>
