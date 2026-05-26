@@ -464,20 +464,20 @@ function OrderDetailPage() {
                 </div>
               </div>
 
-              {isAdmin && !editing && (
+              {!editing && (
                 <div className="flex gap-2 flex-wrap">
                   <Button size="sm" variant="outline" onClick={printOrderSlip}>
                     <Printer className="h-4 w-4 mr-1" /> In hóa đơn
                   </Button>
 
-                  {(order.status === "reserved" || order.status === "draft") && (
+                  {isAdmin && (order.status === "reserved" || order.status === "draft") && (
                     <Button size="sm" onClick={completeOrder} disabled={completingOrder}>
                       <CheckCircle2 className="h-4 w-4 mr-1" />
                       {completingOrder ? "Đang xử lý..." : "Hoàn tất"}
                     </Button>
                   )}
 
-                  {order.status !== "cancelled" && (
+                  {isAdmin && order.status !== "cancelled" && (
                     <Button size="sm" variant="destructive" onClick={cancelOrder} disabled={cancellingOrder}>
                       <Ban className="h-4 w-4 mr-1" />
                       {cancellingOrder ? "Đang hủy..." : "Hủy đơn"}
