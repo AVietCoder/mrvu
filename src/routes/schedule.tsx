@@ -1215,15 +1215,6 @@ function Page() {
                   <div className="space-y-2">
                     <div className="font-medium text-sm">Nhân sự liên quan</div>
                     <div className="grid grid-cols-1 gap-2">
-                      {creator && (
-                        <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2">
-                          <UserCog className="h-4 w-4 text-muted-foreground shrink-0" />
-                          <div>
-                            <div className="text-xs text-muted-foreground">Người tạo lịch</div>
-                            <div className="font-medium text-sm">{creator.full_name}</div>
-                          </div>
-                        </div>
-                      )}
                       {assigner && (
                         <div className="flex items-center gap-3 rounded-lg border bg-orange-50 border-orange-200 px-3 py-2">
                           <UserCog className="h-4 w-4 text-orange-600 shrink-0" />
