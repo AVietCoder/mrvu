@@ -783,7 +783,10 @@ function Page() {
                   )}
 
                   {items.map((item, idx) => {
+                    const currentProd = (data?.products ?? []).find((x: any) => x.id === item.product_id);
+                    const currentStock = currentProd?.stock ?? 0;
                     const lineTotal = item.qty * item.unit_price - item.discount;
+                    
                     return (
                       <div key={idx} className="flex flex-col gap-1.5 rounded-lg border p-2 bg-muted/20">
                         <div className="flex items-center gap-2">
@@ -804,7 +807,7 @@ function Page() {
                             options={(data?.products ?? []).map((p: any) => ({
                               value: p.id,
                               label: p.name,
-                              sub: p.sku ?? undefined,
+                              sub: p.sku ? `SKU: ${p.sku} | Tồn: ${p.stock ?? 0}` : `Tồn: ${p.stock ?? 0}`,
                             }))}
                           />
                           <button
@@ -862,8 +865,11 @@ function Page() {
                               setItems(n);
                             }}
                           />
-                          <div className="text-right text-sm font-semibold text-primary shrink-0 min-w-[80px]">
-                            {fmt(lineTotal)}
+                          <div className="flex flex-col justify-center text-right shrink-0 min-w-[100px]">
+                            <span className="text-sm font-semibold text-primary">{fmt(lineTotal)}</span>
+                            <span className={`text-[11px] font-medium ${currentStock < item.qty ? "text-destructive" : "text-muted-foreground"}`}>
+                              Kho: {currentStock}
+                            </span>
                           </div>
                         </div>
                       </div>

@@ -75,6 +75,130 @@ function fromLocalInput(v: string): string {
   return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 }
 
+// ── VoucherForm — Đưa ra ngoài Page để tránh re-render gây lag input ────────
+function VoucherForm({
+  kind, f, setF, voucherTypes, staffOptions, customerOptions, isAdmin
+}: {
+  kind: "thu" | "chi";
+  f: any;
+  setF: (v: any) => void;
+  voucherTypes: any[];
+  staffOptions: any[];
+  customerOptions: any[];
+  isAdmin: boolean;
+}) {
+  const typeOpts = voucherTypes
+    .filter((t: any) => t.kind === kind)
+    .map((t: any) => ({ value: t.id, label: t.name }));
+
+  return (
+    <div className="space-y-3">
+      {/* Số tiền */}
+      <div>
+        <Label>Số tiền <span className="text-destructive">*</span></Label>
+        <Input
+          className="mt-1"
+          value={f.amount}
+          onChange={(e) => setF({ ...f, amount: fmtInput(e.target.value) })}
+          onFocus={(e) => e.target.select()}
+          placeholder="0"
+        />
+      </div>
+
+      {/* Loại thu/chi */}
+      <div>
+        <Label>Loại {kind === "thu" ? "thu" : "chi"}</Label>
+        <SearchableSelect
+          className="w-full"
+          value={f.voucherTypeId}
+          onChange={(v) => setF({ ...f, voucherTypeId: v })}
+          emptyLabel="-- Không chọn --"
+          placeholder="Tìm loại..."
+          options={typeOpts}
+        />
+      </div>
+
+      {kind === "thu" ? (
+        <>
+          {/* Người thu tiền (user/nhân viên) */}
+          <div>
+            <Label>Người thu tiền</Label>
+            <SearchableSelect
+              className="w-full"
+              value={f.collectorUserId}
+              onChange={(v) => setF({ ...f, collectorUserId: v })}
+              emptyLabel="-- Không chọn --"
+              placeholder="Tìm nhân viên..."
+              options={staffOptions}
+              disabled={!isAdmin}  // non-admin bị khoá, luôn là bản thân
+            />
+            {!isAdmin && (
+              <p className="text-xs text-muted-foreground mt-1">Mặc định là bạn đang đăng nhập</p>
+            )}
+          </div>
+
+          {/* Người nộp tiền (customer) */}
+          <div>
+            <Label>Người nộp tiền</Label>
+            <SearchableSelect
+              className="w-full"
+              value={f.payerCustomerId}
+              onChange={(v) => setF({ ...f, payerCustomerId: v })}
+              emptyLabel="-- Không chọn --"
+              placeholder="Tìm khách hàng..."
+              options={customerOptions}
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Người chi tiền (user/nhân viên) */}
+          <div>
+            <Label>Người chi tiền</Label>
+            <SearchableSelect
+              className="w-full"
+              value={f.payerUserId}
+              onChange={(v) => setF({ ...f, payerUserId: v })}
+              emptyLabel="-- Không chọn --"
+              placeholder="Tìm nhân viên..."
+              options={staffOptions}
+              disabled={!isAdmin}
+            />
+            {!isAdmin && (
+              <p className="text-xs text-muted-foreground mt-1">Mặc định là bạn đang đăng nhập</p>
+            )}
+          </div>
+
+          {/* Người nhận tiền (customer) */}
+          <div>
+            <Label>Người nhận tiền</Label>
+            <SearchableSelect
+              className="w-full"
+              value={f.receiverCustomerId}
+              onChange={(v) => setF({ ...f, receiverCustomerId: v })}
+              emptyLabel="-- Không chọn --"
+              placeholder="Tìm khách hàng..."
+              options={customerOptions}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Ghi chú */}
+      <div>
+        <Label>Ghi chú</Label>
+        <Input
+          className="mt-1"
+          value={f.note}
+          onChange={(e) => setF({ ...f, note: e.target.value })}
+          placeholder="Ghi chú thêm..."
+        />
+      </div>
+
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 function Page() {
   const { user, isAdmin } = useAuth();
@@ -244,6 +368,7 @@ function Page() {
 
   // ── save ──────────────────────────────────────────────────────────────
   async function handleCreate() {
+    if (saving) return; // Chặn double click gửi request trùng
     if (!parseInput(form.amount)) return toast.error("Nhập số tiền");
     setSaving(true);
     try {
@@ -270,6 +395,7 @@ function Page() {
   }
 
   async function handleEdit() {
+    if (saving) return; // Chặn double click
     if (!parseInput(editForm.amount)) return toast.error("Nhập số tiền");
     setSaving(true);
     try {
@@ -293,6 +419,7 @@ function Page() {
   }
 
   async function handleCancel() {
+    if (saving) return; // Chặn double click
     setSaving(true);
     try {
       await cancelFn({ data: { id: selectedVoucher.id } });
@@ -314,125 +441,6 @@ function Page() {
     } catch (e: any) { toast.error(e.message); }
   }
 
-  // ── VoucherForm — shared between create & edit ────────────────────────
-  function VoucherForm({
-    kind, f, setF,
-  }: {
-    kind: "thu" | "chi";
-    f: typeof form;
-    setF: (v: typeof form) => void;
-  }) {
-    const typeOpts = voucherTypes
-      .filter((t: any) => t.kind === kind)
-      .map((t: any) => ({ value: t.id, label: t.name }));
-
-    return (
-      <div className="space-y-3">
-        {/* Số tiền */}
-        <div>
-          <Label>Số tiền <span className="text-destructive">*</span></Label>
-          <Input
-            className="mt-1"
-            value={f.amount}
-            onChange={(e) => setF({ ...f, amount: fmtInput(e.target.value) })}
-            onFocus={(e) => e.target.select()}
-            placeholder="0"
-          />
-        </div>
-
-        {/* Loại thu/chi */}
-        <div>
-          <Label>Loại {kind === "thu" ? "thu" : "chi"}</Label>
-          <SearchableSelect
-            className="w-full"
-            value={f.voucherTypeId}
-            onChange={(v) => setF({ ...f, voucherTypeId: v })}
-            emptyLabel="-- Không chọn --"
-            placeholder="Tìm loại..."
-            options={typeOpts}
-          />
-        </div>
-
-        {kind === "thu" ? (
-          <>
-            {/* Người thu tiền (user/nhân viên) */}
-            <div>
-              <Label>Người thu tiền</Label>
-              <SearchableSelect
-                className="w-full"
-                value={f.collectorUserId}
-                onChange={(v) => setF({ ...f, collectorUserId: v })}
-                emptyLabel="-- Không chọn --"
-                placeholder="Tìm nhân viên..."
-                options={staffOptions}
-                disabled={!isAdmin}  // non-admin bị khoá, luôn là bản thân
-              />
-              {!isAdmin && (
-                <p className="text-xs text-muted-foreground mt-1">Mặc định là bạn đang đăng nhập</p>
-              )}
-            </div>
-
-            {/* Người nộp tiền (customer) */}
-            <div>
-              <Label>Người nộp tiền</Label>
-              <SearchableSelect
-                className="w-full"
-                value={f.payerCustomerId}
-                onChange={(v) => setF({ ...f, payerCustomerId: v })}
-                emptyLabel="-- Không chọn --"
-                placeholder="Tìm khách hàng..."
-                options={customerOptions}
-              />
-            </div>
-          </>
-        ) : (
-          <>
-            {/* Người chi tiền (user/nhân viên) */}
-            <div>
-              <Label>Người chi tiền</Label>
-              <SearchableSelect
-                className="w-full"
-                value={f.payerUserId}
-                onChange={(v) => setF({ ...f, payerUserId: v })}
-                emptyLabel="-- Không chọn --"
-                placeholder="Tìm nhân viên..."
-                options={staffOptions}
-                disabled={!isAdmin}
-              />
-              {!isAdmin && (
-                <p className="text-xs text-muted-foreground mt-1">Mặc định là bạn đang đăng nhập</p>
-              )}
-            </div>
-
-            {/* Người nhận tiền (customer) */}
-            <div>
-              <Label>Người nhận tiền</Label>
-              <SearchableSelect
-                className="w-full"
-                value={f.receiverCustomerId}
-                onChange={(v) => setF({ ...f, receiverCustomerId: v })}
-                emptyLabel="-- Không chọn --"
-                placeholder="Tìm khách hàng..."
-                options={customerOptions}
-              />
-            </div>
-          </>
-        )}
-
-        {/* Ghi chú */}
-        <div>
-          <Label>Ghi chú</Label>
-          <Input
-            className="mt-1"
-            value={f.note}
-            onChange={(e) => setF({ ...f, note: e.target.value })}
-            placeholder="Ghi chú thêm..."
-          />
-        </div>
-
-      </div>
-    );
-  }
 
   // ── render ────────────────────────────────────────────────────────────
   return (
@@ -790,7 +798,15 @@ function Page() {
               </div>
             </div>
 
-            <VoucherForm kind={createKind} f={form} setF={setForm} />
+            <VoucherForm 
+              kind={createKind} 
+              f={form} 
+              setF={setForm}
+              voucherTypes={voucherTypes}
+              staffOptions={staffOptions}
+              customerOptions={customerOptions}
+              isAdmin={isAdmin} 
+            />
           </div>
 
           <DialogFooter>
@@ -812,6 +828,10 @@ function Page() {
             kind={selectedVoucher?.type ?? "thu"}
             f={editForm}
             setF={setEditForm}
+            voucherTypes={voucherTypes}
+            staffOptions={staffOptions}
+            customerOptions={customerOptions}
+            isAdmin={isAdmin}
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenEdit(false)}>Hủy</Button>

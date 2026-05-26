@@ -2,7 +2,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   listSchedules, createSchedule, approveSchedule,
   updateScheduleStatus, deleteSchedule,
@@ -84,6 +84,21 @@ function Page() {
   const canApprove = isAdmin || (!!user && hasPermission(user, "approve_schedule"));
   const isTech     = !isAdmin && !!user && hasPermission(user, "technician");
 
+const userBranchIds = useMemo(() => {
+  if (!user || isAdmin) return new Set<string>();
+
+  const ids = [
+    (user as any).branch_id,
+    (user as any).branch?.id,
+    ...(Array.isArray((user as any).branch_ids) ? (user as any).branch_ids : []),
+    ...(Array.isArray((user as any).branchIds) ? (user as any).branchIds : []),
+    ...(Array.isArray((user as any).branches) ? (user as any).branches.map((b: any) => b?.id).filter(Boolean) : []),
+  ].filter(Boolean).map(String);
+
+  return new Set(ids);
+}, [user, isAdmin]);
+
+
   const [creating, setCreating] = useState(false);
   const [approving, setApproving] = useState(false);
 
@@ -91,10 +106,51 @@ function Page() {
   const { data: diffData } = useQuery({ queryKey: ["work-difficulties"], queryFn: () => listDiff() });
   const { data: wtData } = useQuery({ queryKey: ["work-types"], queryFn: () => listWT() });
 
+  const branchOptions = useMemo(() => {
+    const branches = data?.branches ?? [];
+    if (isAdmin || userBranchIds.size === 0) return branches;
+    return branches.filter((b: any) => userBranchIds.has(String(b.id)));
+  }, [data?.branches, isAdmin, userBranchIds]);
+
+  const branchNameById = useMemo(
+    () => new Map((data?.branches ?? []).map((b: any) => [String(b.id), String(b.name ?? "")])),
+    [data?.branches],
+  );
+
+  function getScheduleBranchIds(schedule: any) {
+    return Array.from(
+      new Set(
+        [schedule?.branch_id, ...(Array.isArray(schedule?.branch_ids) ? schedule.branch_ids : [])]
+          .filter(Boolean)
+          .map(String),
+      ),
+    );
+  }
+
+  function getScheduleBranchNames(schedule: any) {
+    return getScheduleBranchIds(schedule)
+      .map((id) => branchNameById.get(id))
+      .filter(Boolean) as string[];
+  }
+
   const [tab, setTab] = useState<"calendar" | "list" | "difficulties" | "work-types" | "attendance">("list");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterType, setFilterType]     = useState("");
   const [filterDate, setFilterDate]     = useState(new Date().toISOString().slice(0, 10)); // mặc định hôm nay
+  const [branchFilterIds, setBranchFilterIds] = useState<string[]>([]);
+
+  const selectedBranchNames = useMemo(() => {
+    if (branchFilterIds.length === 0) return [];
+    const map = new Map((branchOptions ?? []).map((b: any) => [String(b.id), String(b.name ?? "")]));
+    return branchFilterIds.map((id) => map.get(id)).filter(Boolean) as string[];
+  }, [branchFilterIds, branchOptions]);
+
+  const toggleBranchFilter = (id: string) => {
+    setBranchFilterIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const clearBranchFilter = () => setBranchFilterIds([]);
+  const selectAllBranchFilter = () => setBranchFilterIds(branchOptions.map((b: any) => String(b.id)));
 
   // Search / sort / pagination cho tab Danh sách
   const [search, setSearch] = useState("");
@@ -109,13 +165,31 @@ function Page() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({
     title: "", type: "install", scheduled_date: todayStr,
-    scheduled_time: nowTimeStr, customer_id: "", branch_id: "",
+    scheduled_time: nowTimeStr, customer_id: "", branch_id: "", branch_ids: [] as string[],
     order_id: "", address: "", note: "",
   });
+
+  useEffect(() => {
+    if (!createOpen) return;
+    if (createForm.branch_ids.length === 0 && createForm.branch_id) return;
+    if (createForm.branch_ids.length === 0 && branchOptions.length === 1) {
+      const onlyId = String(branchOptions[0].id);
+      setCreateBranches([onlyId]);
+    }
+  }, [createOpen, branchOptions, createForm.branch_id, createForm.branch_ids.length]);
 
   // Dialog xem chi tiết lịch
   const [viewSchedule, setViewSchedule] = useState<any>(null);
   const [copied, setCopied] = useState(false);
+
+  function setCreateBranches(nextIds: string[]) {
+    const unique = Array.from(new Set(nextIds.filter(Boolean).map(String)));
+    setCreateForm((f) => ({
+      ...f,
+      branch_ids: unique,
+      branch_id: unique[0] ?? "",
+    }));
+  }
 
   // Khi chọn đơn → auto-fill khách hàng / chi nhánh / địa chỉ + tiêu đề gợi ý
   function pickOrder(orderId: string) {
@@ -130,6 +204,7 @@ function Page() {
       ...f,
       order_id: orderId,
       customer_id: order.customer_id || f.customer_id,
+      branch_ids: order.branch_id ? [String(order.branch_id)] : f.branch_ids,
       branch_id: order.branch_id || f.branch_id,
       address: addrParts.join(", ") || f.address,
       title: f.title || `Lắp đặt - ${order.code}${cust ? ` - ${cust.name}` : ""}`,
@@ -181,6 +256,19 @@ function Page() {
       // Chỉ có quyền tạo lịch: chỉ thấy lịch mình tạo (không phân công được)
       list = list.filter((s: any) => s.created_by === user.id);
     }
+    // Người dùng thường: chỉ thấy lịch thuộc các chi nhánh của họ
+    if (!isAdmin && userBranchIds.size > 0) {
+      list = list.filter((s: any) => {
+        const scheduleBranchIds = getScheduleBranchIds(s);
+        if (scheduleBranchIds.length === 0) return false;
+        return scheduleBranchIds.some((id: string) => userBranchIds.has(id));
+      });
+    }
+
+    if (branchFilterIds.length > 0) {
+      list = list.filter((s: any) => getScheduleBranchIds(s).some((id: string) => branchFilterIds.includes(id)));
+    }
+
     // canApprove (hoặc admin): thấy tất cả lịch — không lọc thêm
     if (filterStatus) list = list.filter((s: any) => s.status === filterStatus);
     if (filterType) list = list.filter((s: any) => s.type === filterType);
@@ -203,7 +291,7 @@ function Page() {
       return sortBy === "oldest" ? da.localeCompare(db) : db.localeCompare(da);
     });
     return list;
-  }, [data, isTech, user, filterStatus, filterType, filterDate, search, sortBy]);
+  }, [data, isTech, user, filterStatus, filterType, filterDate, search, sortBy, branchFilterIds]);
 
   const pagedSchedules = useMemo(
     () => mySchedules.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
@@ -237,9 +325,15 @@ function Page() {
     if (!user) return;
     setCreating(true);
     try {
+      const selectedBranchIds = createForm.branch_ids.length > 0
+        ? createForm.branch_ids
+        : createForm.branch_id
+          ? [createForm.branch_id]
+          : [];
       await createFn({ data: { ...createForm, created_by: user.id,
         customer_id: createForm.customer_id || undefined,
-        branch_id: createForm.branch_id || undefined,
+        branch_id: selectedBranchIds[0] || undefined,
+        branch_ids: selectedBranchIds.length > 0 ? selectedBranchIds : undefined,
         order_id: createForm.order_id || undefined,
         assigned_by: user.id,
       }});
@@ -247,7 +341,7 @@ function Page() {
       setCreateOpen(false);
       setCreateForm({
         title: "", type: "install", scheduled_date: todayStr,
-        scheduled_time: nowTimeStr, customer_id: "", branch_id: "",
+        scheduled_time: nowTimeStr, customer_id: "", branch_id: "", branch_ids: [],
         order_id: "", address: "", note: "",
       });
       qc.invalidateQueries({ queryKey: ["schedules"] });
@@ -351,38 +445,203 @@ function Page() {
   return (
     <AppShell title="Lịch làm việc">
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <TabsList>
-            <TabsTrigger value="list">Danh sách</TabsTrigger>
-            <TabsTrigger value="calendar"><CalendarDays className="h-4 w-4 mr-1" />Thời khóa biểu</TabsTrigger>
-            {(canApprove || isAdmin || isTech) && <TabsTrigger value="attendance"><BarChart3 className="h-4 w-4 mr-1" />Chấm công</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="work-types"><Tag className="h-4 w-4 mr-1" />Loại hình CV</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="difficulties"><Settings className="h-4 w-4 mr-1" />Tính chất CV</TabsTrigger>}
-          </TabsList>
-          <div className="ml-auto flex flex-wrap gap-2">
-            {/* Lọc theo ngày — mặc định hôm nay */}
-            <input
-              type="date"
-              className="h-9 rounded-md border bg-background px-2 text-sm"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-            />
-            <select className="h-9 rounded-md border bg-background px-2 text-sm"
-              value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-              <option value="">Tất cả trạng thái</option>
-              {Object.entries(STATUS_LABELS).map(([v, {label}]) => <option key={v} value={v}>{label}</option>)}
-            </select>
-            <select className="h-9 rounded-md border bg-background px-2 text-sm"
-              value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-              <option value="">Tất cả loại</option>
-              {SCHEDULE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-            {canCreate && (
-              <Button size="sm" onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4 mr-1" /> Tạo lịch
-              </Button>
+        <div className="mb-4 rounded-2xl border bg-card p-3 sm:p-4 shadow-sm">
+         <div className="space-y-4">
+  {/* Tabs row */}
+  <div className="w-full overflow-x-auto pb-1 scrollbar-none">
+    <TabsList className="inline-flex h-11 w-max items-center justify-start gap-1.5 rounded-xl bg-muted/40 p-1 text-muted-foreground shadow-sm">
+      <TabsTrigger
+        value="list"
+        className="rounded-lg px-4 py-1.5 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm"
+      >
+        Danh sách
+      </TabsTrigger>
+
+      <TabsTrigger
+        value="calendar"
+        className="rounded-lg px-4 py-1.5 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm"
+      >
+        <CalendarDays className="mr-2 h-4 w-4" />
+        Thời khóa biểu
+      </TabsTrigger>
+
+      {(canApprove || isAdmin || isTech) && (
+        <TabsTrigger
+          value="attendance"
+          className="rounded-lg px-4 py-1.5 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm"
+        >
+          <BarChart3 className="mr-2 h-4 w-4" />
+          Chấm công
+        </TabsTrigger>
+      )}
+
+      {isAdmin && (
+        <TabsTrigger
+          value="work-types"
+          className="rounded-lg px-4 py-1.5 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm"
+        >
+          <Tag className="mr-2 h-4 w-4" />
+          Loại hình CV
+        </TabsTrigger>
+      )}
+
+      {isAdmin && (
+        <TabsTrigger
+          value="difficulties"
+          className="rounded-lg px-4 py-1.5 text-sm font-medium transition-all data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm"
+        >
+          <Settings className="mr-2 h-4 w-4" />
+          Tính chất CV
+        </TabsTrigger>
+      )}
+    </TabsList>
+  </div>
+
+  {/* Filter row */}
+  <div className="grid w-full gap-3 sm:grid-cols-2 xl:grid-cols-6">
+    <div className="sm:col-span-2 xl:col-span-2">
+      <Label className="mb-1 block text-xs font-medium text-muted-foreground">
+        Chi nhánh
+      </Label>
+
+      <div className="rounded-xl border bg-background p-2">
+        <div className="mb-2 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={selectAllBranchFilter}
+            disabled={branchOptions.length === 0}
+          >
+            Chọn tất cả
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={clearBranchFilter}
+            disabled={branchFilterIds.length === 0}
+          >
+            Bỏ chọn
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {selectedBranchNames.length > 0 ? (
+            selectedBranchNames.map((name) => (
+              <span
+                key={name}
+                className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+              >
+                {name}
+              </span>
+            ))
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              {branchOptions.length > 0 ? "Tất cả chi nhánh" : "Không có chi nhánh khả dụng"}
+            </span>
+          )}
+        </div>
+
+        <div className="mt-2 max-h-36 overflow-y-auto rounded-lg border bg-muted/20 p-1.5">
+          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+            {branchOptions.map((b: any) => {
+              const id = String(b.id);
+              const checked = branchFilterIds.includes(id);
+
+              return (
+                <label
+                  key={b.id}
+                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-background"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleBranchFilter(id)}
+                  />
+                  <span className="truncate">{b.name}</span>
+                </label>
+              );
+            })}
+
+            {branchOptions.length === 0 && (
+              <div className="px-2 py-1 text-xs text-muted-foreground">
+                Không có chi nhánh phù hợp.
+              </div>
             )}
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <Label className="mb-1 block text-xs font-medium text-muted-foreground">
+        Ngày
+      </Label>
+      <input
+        type="date"
+        className="h-10 w-full rounded-lg border bg-background px-3 text-sm"
+        value={filterDate}
+        onChange={(e) => setFilterDate(e.target.value)}
+      />
+    </div>
+
+    <div>
+      <Label className="mb-1 block text-xs font-medium text-muted-foreground">
+        Trạng thái
+      </Label>
+      <select
+        className="h-10 w-full rounded-lg border bg-background px-3 text-sm"
+        value={filterStatus}
+        onChange={(e) => setFilterStatus(e.target.value)}
+      >
+        <option value="">Tất cả trạng thái</option>
+        {Object.entries(STATUS_LABELS).map(([v, { label }]) => (
+          <option key={v} value={v}>
+            {label}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    <div>
+      <Label className="mb-1 block text-xs font-medium text-muted-foreground">
+        Loại
+      </Label>
+      <select
+        className="h-10 w-full rounded-lg border bg-background px-3 text-sm"
+        value={filterType}
+        onChange={(e) => setFilterType(e.target.value)}
+      >
+        <option value="">Tất cả loại</option>
+        {SCHEDULE_TYPES.map((t) => (
+          <option key={t.value} value={t.value}>
+            {t.label}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    {canCreate && (
+      <div className="sm:col-span-2 xl:col-span-1 xl:self-end">
+        <Button
+          className="h-10 w-full"
+          size="sm"
+          onClick={() => {
+            setCreateForm((f) => ({
+              ...f,
+              branch_id: f.branch_id || (branchOptions.length === 1 ? branchOptions[0].id : f.branch_id),
+            }));
+            setCreateOpen(true);
+          }}
+        >
+          <Plus className="mr-1 h-4 w-4" />
+          Tạo lịch
+        </Button>
+      </div>
+    )}
+  </div>
+</div>
         </div>
 
         {/* ── Thời khóa biểu ── */}
@@ -400,7 +659,7 @@ function Page() {
                   </span>
                   <span className="text-xs bg-primary/10 text-primary rounded-full px-2 py-0.5">{schedules.length} lịch</span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                   {schedules.map((s: any) => {
                     const typeInfo = SCHEDULE_TYPES.find((t) => t.value === s.type);
                     const status = STATUS_LABELS[s.status];
@@ -412,21 +671,35 @@ function Page() {
                       : null;
 
                     return (
-                      <Card key={s.id} className="relative">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div className="min-w-0">
-                            <div className="font-medium text-sm">{s.title}</div>
+                      <Card key={s.id} className="relative h-full">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-sm leading-snug break-words">{s.title}</div>
                             {s.scheduled_time && (
-                              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                              <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                                 <Clock className="h-3 w-3" /> {s.scheduled_time}
                               </div>
                             )}
                           </div>
-                          <div className="flex flex-col gap-1 items-end shrink-0">
+                          <div className="flex flex-wrap gap-1 sm:flex-col sm:items-end shrink-0">
                             <span className={`text-xs rounded-full px-2 py-0.5 ${typeInfo?.color}`}>{typeInfo?.label}</span>
                             <span className={`text-xs rounded-full px-2 py-0.5 ${status?.color}`}>{status?.label}</span>
                           </div>
                         </div>
+
+                        {(() => {
+                          const branchNames = getScheduleBranchNames(s);
+                          if (branchNames.length === 0) return null;
+                          return (
+                            <div className="mb-2 flex flex-wrap gap-1.5">
+                              {branchNames.map((name) => (
+                                <span key={name} className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                                  {name}
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
 
                         {linkedOrder && (
                           <Link
@@ -539,14 +812,100 @@ function Page() {
             total={mySchedules.length}
             totalLabel="lịch"
           />
-          <Card>
+
+          <div className="mt-3 grid gap-3 md:hidden">
+            {pagedSchedules.map((s: any) => {
+              const typeInfo = SCHEDULE_TYPES.find((t) => t.value === s.type);
+              const status = STATUS_LABELS[s.status];
+              const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id);
+              const customer = data?.customers.find((c: any) => c.id === s.customer_id);
+              const techPay = isTech ? calcTechPay(s.id) : null;
+              const assigner = s.assigned_by ? data?.users.find((u: any) => u.id === s.assigned_by) : null;
+              const creator = s.created_by ? data?.users.find((u: any) => u.id === s.created_by) : null;
+              const branchNames = getScheduleBranchNames(s);
+              return (
+                <Card key={s.id} className="cursor-pointer" onClick={() => setViewSchedule(s)}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium leading-snug break-words">{s.title}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {s.scheduled_date?.slice(0,10)} {s.scheduled_time ?? ""}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className={`text-[11px] rounded-full px-2 py-0.5 ${typeInfo?.color}`}>{typeInfo?.label}</span>
+                      <span className={`text-[11px] rounded-full px-2 py-0.5 ${status?.color}`}>{status?.label}</span>
+                    </div>
+                  </div>
+
+                  {branchNames.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {branchNames.map((name) => (
+                        <span key={name} className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-3 space-y-1.5 text-sm">
+                    {!isTech && !canApprove && (
+                      <div className="text-muted-foreground">Khách hàng: <span className="text-foreground">{customer?.name ?? "—"}</span></div>
+                    )}
+                    <div className="text-muted-foreground">Phụ trách: <span className="text-foreground">
+                      {assignees.length > 0
+                        ? assignees.map((a: any) => data?.users.find((u: any) => u.id === a.user_id)?.full_name ?? "?").join(", ")
+                        : "Chưa phân công"}
+                    </span></div>
+                    <div className="text-muted-foreground">Người tạo: <span className="text-foreground">{creator?.full_name ?? "—"}</span></div>
+                    {assigner && (
+                      <div className="text-muted-foreground">Giao việc: <span className="text-foreground">{assigner.full_name}</span></div>
+                    )}
+                    {isTech && (
+                      <div className="font-semibold text-green-600">Tiền công: {techPay ? fmtMoney(techPay) : "—"}</div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {canApprove && s.status === "pending" && (
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openApprove(s); }}>Duyệt</Button>
+                    )}
+                    {canApprove && s.status === "approved" && (
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleStatus(s.id, "in_progress"); }}>Bắt đầu</Button>
+                    )}
+                    {(canApprove || isTech) && s.status === "in_progress" && (
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleStatus(s.id, "done"); }}>
+                        <CheckCircle2 className="h-3 w-3 mr-1" /> Hoàn thành
+                      </Button>
+                    )}
+                    {canApprove && s.status === "approved" && (
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openApprove(s); }}>
+                        <Pencil className="h-3 w-3 mr-1" /> Sửa
+                      </Button>
+                    )}
+                    {(isAdmin || canCreate) && !["done","cancelled"].includes(s.status) && (
+                      <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}>
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+            {pagedSchedules.length === 0 && (
+              <div className="py-10 text-center text-sm text-muted-foreground">Không có lịch nào</div>
+            )}
+          </div>
+
+          <Card className="hidden md:block mt-3">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[560px]">
+              <table className="w-full text-sm min-w-[720px]">
                 <thead className="text-left text-muted-foreground border-b">
                   <tr>
                     <th className="py-2 pr-3">Tiêu đề</th>
                     <th className="pr-3">Loại</th>
                     <th className="pr-3">Ngày</th>
+                    <th className="pr-3">Chi nhánh</th>
                     {!isTech && !canApprove ? <th className="pr-3">Khách hàng</th> : null}
                     <th className="pr-3">Người phụ trách</th>
                     <th className="pr-3">Người tạo</th>
@@ -564,11 +923,19 @@ function Page() {
                     const techPay = isTech ? calcTechPay(s.id) : null;
                     const assigner = s.assigned_by ? data?.users.find((u: any) => u.id === s.assigned_by) : null;
                     const creator = s.created_by ? data?.users.find((u: any) => u.id === s.created_by) : null;
+                    const branchNames = getScheduleBranchNames(s);
                     return (
                       <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => setViewSchedule(s)}>
                         <td className="py-2 pr-3 font-medium max-w-[200px] truncate">{s.title}</td>
                         <td className="pr-3"><span className={`text-xs rounded-full px-2 py-0.5 ${typeInfo?.color}`}>{typeInfo?.label}</span></td>
                         <td className="pr-3 text-xs whitespace-nowrap">{s.scheduled_date?.slice(0,10)} {s.scheduled_time}</td>
+                        <td className="pr-3">
+                          <div className="flex flex-wrap gap-1">
+                            {branchNames.length > 0 ? branchNames.map((name) => (
+                              <span key={name} className="text-xs rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">{name}</span>
+                            )) : <span className="text-xs text-muted-foreground">—</span>}
+                          </div>
+                        </td>
                         {!isTech && !canApprove ? <td className="pr-3 text-muted-foreground text-sm">{customer?.name ?? "—"}</td> : null}
                         <td className="pr-3">
                           <div className="flex flex-wrap gap-1">
@@ -595,12 +962,13 @@ function Page() {
                     );
                   })}
                   {mySchedules.length === 0 && (
-                    <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">Không có lịch nào</td></tr>
+                    <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">Không có lịch nào</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
           </Card>
+
           <Pagination
             page={page}
             pageSize={PAGE_SIZE}
@@ -609,7 +977,6 @@ function Page() {
             label="lịch"
           />
         </TabsContent>
-
         {/* ── Tính chất công việc (admin only) ── */}
         {isAdmin && (
           <TabsContent value="difficulties">
@@ -850,14 +1217,57 @@ function Page() {
               <div><Label>Giờ</Label>
                 <Input className="mt-1" type="time" value={createForm.scheduled_time}
                   onChange={(e) => setCreateForm({...createForm, scheduled_time: e.target.value})} /></div>
-              <div><Label>Chi nhánh</Label>
-                <SearchableSelect
-                  value={createForm.branch_id}
-                  onChange={(v) => setCreateForm({...createForm, branch_id: v})}
-                  emptyLabel="-- Chọn --"
-                  placeholder="Tìm chi nhánh..."
-                  options={(data?.branches ?? []).map((b: any) => ({ value: b.id, label: b.name }))}
-                /></div>
+              <div className="sm:col-span-2">
+                <Label>Chi nhánh</Label>
+                <div className="mt-2 rounded-md border bg-background p-2">
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setCreateBranches(branchOptions.map((b: any) => String(b.id)))}
+                      disabled={branchOptions.length === 0}
+                    >
+                      Chọn tất cả
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setCreateBranches([])}
+                    >
+                      Bỏ chọn
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      Đã chọn: {createForm.branch_ids.length > 0 ? createForm.branch_ids.length : (createForm.branch_id ? 1 : 0)} chi nhánh
+                    </span>
+                  </div>
+                  <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+                    {branchOptions.map((b: any) => {
+                      const checked = createForm.branch_ids.includes(String(b.id)) || createForm.branch_id === String(b.id);
+                      return (
+                        <label key={b.id} className="flex items-center gap-2 text-sm cursor-pointer rounded-md px-2 py-1 hover:bg-muted/40">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const id = String(b.id);
+                              const next = checked
+                                ? createForm.branch_ids.filter((x) => x !== id)
+                                : [...createForm.branch_ids, id];
+                              setCreateBranches(next);
+                            }}
+                          />
+                          <span>{b.name}</span>
+                        </label>
+                      );
+                    })}
+                    {branchOptions.length === 0 && (
+                      <div className="px-2 py-2 text-xs text-muted-foreground">Không có chi nhánh phù hợp.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
             <div><Label>Khách hàng</Label>
               <SearchableSelect
@@ -1203,6 +1613,22 @@ function Page() {
                         <div className="font-medium">{s.address}</div>
                       </div>
                     )}
+                    {(() => {
+                      const branchNames = getScheduleBranchNames(s);
+                      if (branchNames.length === 0) return null;
+                      return (
+                        <div className="col-span-2 rounded-lg border bg-muted/30 p-3">
+                          <div className="text-xs text-muted-foreground mb-1">Chi nhánh</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {branchNames.map((name) => (
+                              <span key={name} className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {s.note && (
                       <div className="col-span-2 rounded-lg border bg-muted/30 p-3">
                         <div className="text-xs text-muted-foreground mb-1">Ghi chú</div>
