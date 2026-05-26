@@ -278,8 +278,8 @@ function ProductsPage() {
           <div className="text-muted-foreground">Đang tải...</div>
         ) : (
           <>
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[700px]">
                 <thead className="text-left text-muted-foreground border-b">
                   <tr>
                     <th className="py-2 pr-3 w-10 text-center hidden md:table-cell">STT</th>

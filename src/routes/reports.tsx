@@ -175,7 +175,7 @@ function Page() {
 
             <Card>
               <div className="font-medium mb-3">Cảnh báo tồn kho thấp</div>
-              <table className="w-full text-sm">
+              <table className="w-full text-sm min-w-[480px]">
                 <thead className="text-left text-muted-foreground border-b">
                   <tr><th className="py-2">Sản phẩm</th><th className="text-right">Tồn</th><th className="text-right">Min</th></tr>
                 </thead>
@@ -197,7 +197,7 @@ function Page() {
 
           <Card>
             <div className="font-medium mb-3">Công nợ phải thu</div>
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[480px]">
               <thead className="text-left text-muted-foreground border-b">
                 <tr><th className="py-2">Khách hàng</th><th className="text-right">Công nợ</th></tr>
               </thead>

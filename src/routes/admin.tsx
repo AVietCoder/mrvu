@@ -10,9 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   ImagePlus, Palette, Building2, Phone, Mail,
-  FileText, Save, CheckCircle2, Trash2,
+  FileText, Save, CheckCircle2, Trash2, Printer, Eye,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
@@ -79,6 +81,49 @@ function AdminPage() {
   const [saving, setSaving]           = useState(false);
   const [saved, setSaved]             = useState(false);
 
+  // ── Print / Email Templates ─────────────────────────────────
+  // ── 4 template keys ─────────────────────────────────────────────────────
+  type TplKey = "order_invoice" | "import_slip" | "transfer_slip" | "email_order";
+  const TEMPLATE_META: Record<TplKey, { label: string; icon: string; desc: string }> = {
+    order_invoice: { label: "Hóa đơn bán hàng", icon: "🧾", desc: "In khi tạo/hoàn tất đơn hàng" },
+    import_slip:   { label: "Phiếu nhập kho",    icon: "📦", desc: "In khi nhập hàng vào kho" },
+    transfer_slip: { label: "Phiếu chuyển kho",  icon: "🔄", desc: "In khi chuyển hàng giữa kho" },
+    email_order:   { label: "Email thông báo",   icon: "✉️",  desc: "Nội dung gửi email cho khách & admin" },
+  };
+  const TEMPLATE_DEFAULTS: Record<TplKey, { header: string; footer: string; warranty: string; showWarranty: boolean; emailSubject?: string }> = {
+    order_invoice: {
+      header: "PHIẾU XUẤT KHO KIỂM BẢO HÀNH",
+      footer: "Quạt trần {Ten_Cua_Hang} chân thành cảm ơn sự tin tưởng của Quý khách hàng!",
+      warranty: "LƯU Ý: {Ten_Cua_Hang} KHUYẾN CÁO CẦN KIỂM TRA QUẠT ĐỊNH KỲ ÍT NHẤT 6 THÁNG/LẦN ĐỂ ĐẢM BẢO AN TOÀN TRONG QUÁ TRÌNH SỬ DỤNG.",
+      showWarranty: true,
+    },
+    import_slip: {
+      header: "PHIẾU NHẬP KHO",
+      footer: "",
+      warranty: "Hàng hoá được kiểm tra đầy đủ trước khi nhập kho. Mọi khiếu nại về số lượng/chất lượng vui lòng phản hồi trong vòng 24 giờ.",
+      showWarranty: true,
+    },
+    transfer_slip: {
+      header: "PHIẾU CHUYỂN KHO",
+      footer: "",
+      warranty: "Hàng hoá đã được kiểm tra đầy đủ trước khi bàn giao. Người nhận ký xác nhận chịu trách nhiệm sau khi nhận hàng.",
+      showWarranty: true,
+    },
+    email_order: {
+      header: "",
+      footer: "Email tự động từ {Ten_Cua_Hang} — Vui lòng không trả lời email này.",
+      warranty: "",
+      showWarranty: false,
+      emailSubject: "[{Ten_Cua_Hang}] Đơn hàng {Ma_Don_Hang} — {Khach_Hang}",
+    },
+  };
+
+  const [printTpl, setPrintTpl] = useState<Record<string, any>>({});
+  const [activeTpl, setActiveTpl] = useState<TplKey>("order_invoice");
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [templateSaved, setTemplateSaved] = useState(false);
+  const [previewTpl, setPreviewTpl] = useState(false);
+
   // Sync server settings -> local form state whenever settings load/refetch
   useEffect(() => {
     if (!settings) return;
@@ -91,7 +136,34 @@ function AdminPage() {
     setTaxCode(settings.tax_code ?? "");
     setAdminEmail(settings.admin_email ?? "");
     try { setBankAccounts(JSON.parse(settings.bank_accounts || "[]")); } catch { setBankAccounts([]); }
+    // Load print templates
+    try {
+      const saved = JSON.parse((settings as any).print_templates || "{}");
+      setPrintTpl(saved);
+    } catch { setPrintTpl({}); }
   }, [settings]);
+
+  async function savePrintTemplates() {
+    setTemplateSaving(true);
+    try {
+      await updateSettingsFn({ data: { print_templates: JSON.stringify(printTpl) } as any });
+      qc.invalidateQueries({ queryKey: ["site_settings"] });
+      setTemplateSaved(true);
+      setTimeout(() => setTemplateSaved(false), 2500);
+      toast.success("Đã lưu mẫu in!");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi lưu mẫu in");
+    } finally {
+      setTemplateSaving(false);
+    }
+  }
+
+  function getTplField(key: TplKey, field: string): string {
+    return printTpl[key]?.[field] ?? (TEMPLATE_DEFAULTS[key] as any)[field] ?? "";
+  }
+  function setTplField(key: TplKey, field: string, val: any) {
+    setPrintTpl((prev: any) => ({ ...prev, [key]: { ...(prev[key] ?? {}), [field]: val } }));
+  }
 
   function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -226,7 +298,7 @@ function AdminPage() {
           subtitle="Tông màu chính hiển thị xuyên suốt giao diện"
         >
           {/* Preset swatches */}
-          <div className="grid grid-cols-4 gap-2 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             {PRESET_COLORS.map((c) => {
               const active = primaryColor === c.value;
               return (
@@ -366,7 +438,7 @@ function AdminPage() {
         >
           <div className="space-y-3">
             {bankAccounts.map((ba, idx) => (
-              <div key={idx} className="grid grid-cols-2 gap-2 rounded-lg border p-3 bg-muted/20 relative">
+              <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border p-3 bg-muted/20 relative">
                 <button
                   type="button"
                   className="absolute top-2 right-2 p-1 hover:text-destructive text-muted-foreground"
@@ -406,6 +478,193 @@ function AdminPage() {
             >
               <span className="text-lg leading-none">+</span> Thêm tài khoản ngân hàng
             </button>
+          </div>
+        </SectionCard>
+
+        {/* ── Mẫu in & Email ──────────────────────────── */}
+        <SectionCard
+          icon={<Printer className="h-5 w-5" />}
+          title="Mẫu in & Email"
+          subtitle="Tùy chỉnh nội dung phiếu in và email gửi khách — chỉ Admin"
+        >
+          {/* Tab selector */}
+          <div className="flex flex-wrap gap-2 mb-5">
+            {(Object.entries(TEMPLATE_META) as [TplKey, any][]).map(([key, m]) => (
+              <button key={key} type="button"
+                onClick={() => setActiveTpl(key)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+                  activeTpl === key
+                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                    : "border-border bg-background hover:bg-muted"
+                }`}>
+                <span>{m.icon}</span>
+                <span>{m.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Active template editor */}
+          {(Object.keys(TEMPLATE_META) as TplKey[]).map((key) => activeTpl !== key ? null : (
+            <div key={key} className="space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <div className="font-semibold">{TEMPLATE_META[key].icon} {TEMPLATE_META[key].label}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{TEMPLATE_META[key].desc}</div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" type="button"
+                    onClick={() => setPrintTpl((p: any) => { const n = {...p}; delete n[key]; return n; })}>
+                    Khôi phục mặc định
+                  </Button>
+                  <Button size="sm" variant="outline" type="button"
+                    onClick={() => setPreviewTpl(!previewTpl)}>
+                    <Eye className="h-3.5 w-3.5 mr-1" /> {previewTpl ? "Ẩn xem trước" : "Xem trước"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className={`grid gap-4 ${previewTpl ? "lg:grid-cols-2" : "grid-cols-1"}`}>
+                {/* LEFT: form fields */}
+                <div className="space-y-3">
+                  {key !== "email_order" ? (
+                    <>
+                      <div>
+                        <Label className="text-xs mb-1">Tiêu đề phiếu</Label>
+                        <Input value={getTplField(key, "header")}
+                          onChange={(e) => setTplField(key, "header", e.target.value)}
+                          placeholder={TEMPLATE_DEFAULTS[key].header} />
+                      </div>
+                      <div>
+                        <Label className="text-xs mb-1">Chân trang</Label>
+                        <Input value={getTplField(key, "footer")}
+                          onChange={(e) => setTplField(key, "footer", e.target.value)}
+                          placeholder={TEMPLATE_DEFAULTS[key].footer || "Để trống nếu không cần"} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Label className="text-xs">Hiển thị chính sách bảo hành / lưu ý</Label>
+                          <button type="button"
+                            onClick={() => setTplField(key, "showWarranty", !getTplField(key, "showWarranty") )}
+                            className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${getTplField(key,"showWarranty") ? "bg-primary" : "bg-muted-foreground/30"}`}>
+                            <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5 ${getTplField(key,"showWarranty") ? "translate-x-4" : "translate-x-0.5"}`} />
+                          </button>
+                        </div>
+                        {getTplField(key, "showWarranty") && (
+                          <Textarea value={getTplField(key, "warranty")}
+                            onChange={(e) => setTplField(key, "warranty", e.target.value)}
+                            className="min-h-[80px] text-sm"
+                            placeholder={TEMPLATE_DEFAULTS[key].warranty} />
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <Label className="text-xs mb-1">Tiêu đề email (Subject)</Label>
+                        <Input value={getTplField(key, "emailSubject")}
+                          onChange={(e) => setTplField(key, "emailSubject", e.target.value)}
+                          placeholder={TEMPLATE_DEFAULTS[key].emailSubject} />
+                      </div>
+                      <div>
+                        <Label className="text-xs mb-1">Chân trang email</Label>
+                        <Input value={getTplField(key, "footer")}
+                          onChange={(e) => setTplField(key, "footer", e.target.value)}
+                          placeholder={TEMPLATE_DEFAULTS[key].footer} />
+                      </div>
+                    </>
+                  )}
+                  <div className="rounded-lg bg-muted/40 border px-3 py-2 text-xs text-muted-foreground leading-relaxed">
+                    <strong>Biến tự động:</strong>{" "}
+                    {["{Ten_Cua_Hang}","{Ma_Don_Hang}","{Khach_Hang}","{Dia_Chi}","{So_Dien_Thoai}","{Ngay}","{Thang}","{Nam}","{Tong_Tien}","{Nguoi_Lap}"].join(" · ")}
+                  </div>
+                </div>
+
+                {/* RIGHT: live preview */}
+                {previewTpl && (
+                  <div className="rounded-xl border bg-white shadow-sm overflow-auto text-[13px] font-sans text-gray-800" style={{minHeight:380}}>
+                    {/* Preview header */}
+                    <div className="flex items-center gap-3 px-5 pt-5 pb-3 border-b">
+                      {logoUrl && <img src={logoUrl} alt="" className="h-10 object-contain" />}
+                      <div>
+                        {siteName && <div className="font-bold text-base">{siteName.toUpperCase()}</div>}
+                        {address && <div className="text-xs text-gray-500">{address}</div>}
+                        {phone && <div className="text-xs text-gray-500">ĐT: {phone}</div>}
+                      </div>
+                    </div>
+                    <div className="px-5 pt-4">
+                      <div className="text-center mb-3">
+                        <div className="font-bold text-base uppercase tracking-wide">
+                          {(getTplField(key,"header") || TEMPLATE_DEFAULTS[key].header).replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">Ngày: 26/05/2026 &nbsp;|&nbsp; Số phiếu: HD000001</div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                        <div><strong>Khách hàng:</strong> Nguyễn Văn A</div>
+                        <div><strong>Điện thoại:</strong> 0909 123 456</div>
+                        <div><strong>Địa chỉ:</strong> 123 Đường ABC, TP.HCM</div>
+                        <div><strong>Chi nhánh:</strong> Cửa hàng chính</div>
+                      </div>
+                      <table className="w-full text-xs border-collapse mb-3" style={{borderTop:"1px solid #ddd"}}>
+                        <thead><tr className="bg-gray-50">
+                          <th className="border border-gray-200 px-2 py-1 text-left">STT</th>
+                          <th className="border border-gray-200 px-2 py-1 text-left">Tên hàng hóa</th>
+                          <th className="border border-gray-200 px-2 py-1 text-center">SL</th>
+                          <th className="border border-gray-200 px-2 py-1 text-right">Đơn giá</th>
+                          <th className="border border-gray-200 px-2 py-1 text-right">Thành tiền</th>
+                        </tr></thead>
+                        <tbody>
+                          <tr><td className="border border-gray-200 px-2 py-1 text-center">1</td><td className="border border-gray-200 px-2 py-1">Quạt trần MR.VŨ 120cm</td><td className="border border-gray-200 px-2 py-1 text-center">2</td><td className="border border-gray-200 px-2 py-1 text-right">1.800.000</td><td className="border border-gray-200 px-2 py-1 text-right">3.600.000</td></tr>
+                          <tr><td className="border border-gray-200 px-2 py-1 text-center">2</td><td className="border border-gray-200 px-2 py-1">Quạt đứng MR.VŨ Pro</td><td className="border border-gray-200 px-2 py-1 text-center">1</td><td className="border border-gray-200 px-2 py-1 text-right">950.000</td><td className="border border-gray-200 px-2 py-1 text-right">950.000</td></tr>
+                        </tbody>
+                      </table>
+                      <div className="text-right text-xs space-y-0.5 mb-3">
+                        <div>Tổng tiền: <strong>4.550.000 ₫</strong></div>
+                        <div>Chiết khấu: 0 ₫</div>
+                        <div className="text-base font-bold text-green-700">Còn lại: 4.550.000 ₫</div>
+                      </div>
+                      {/* Signatures */}
+                      {key !== "email_order" && (
+                        <div className="grid grid-cols-4 gap-2 text-center text-xs border-t pt-3 mb-3">
+                          {["Kỹ thuật","Nhân viên","Khách hàng","Thủ kho"].map(r => (
+                            <div key={r}><div className="font-medium">{r}</div><div className="text-gray-400 text-[10px]">(Ký, ghi rõ họ tên)</div><div className="mt-8 border-t border-dashed border-gray-300 pt-1 text-gray-300">__________</div></div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Checklist for order */}
+                      {key === "order_invoice" && (
+                        <div className="border rounded-lg p-3 mb-3 text-xs">
+                          <div className="font-medium mb-2">Vui lòng chọn nội dung dưới đây</div>
+                          {["Đã giao hàng đúng mẫu và đầy đủ phụ kiện","Đã lắp đặt hoàn thiện, Quạt chạy ổn định","Đã hướng dẫn sử dụng","Đã thanh toán tiền mặt theo số tiền trên phiếu"].map(item => (
+                            <div key={item} className="flex items-center gap-2 mb-1"><span className="w-3.5 h-3.5 border border-gray-400 rounded-sm inline-block" />{item}</div>
+                          ))}
+                          <div className="flex justify-between mt-2"><span>Khách hàng xác nhận</span><span>Ho tên: ___________</span></div>
+                        </div>
+                      )}
+                      {/* Warranty note */}
+                      {getTplField(key, "showWarranty") && getTplField(key, "warranty") && (
+                        <div className="text-xs font-semibold border-t pt-2 mb-2 uppercase leading-relaxed">
+                          {(getTplField(key,"warranty")||"").replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
+                        </div>
+                      )}
+                      {/* Footer */}
+                      {(getTplField(key,"footer")||TEMPLATE_DEFAULTS[key].footer) && (
+                        <div className="text-center text-xs text-gray-500 border-t pt-2 pb-4">
+                          {(getTplField(key,"footer")||TEMPLATE_DEFAULTS[key].footer).replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+
+          <div className="flex justify-end mt-5 pt-4 border-t">
+            <Button onClick={savePrintTemplates} disabled={templateSaving}
+              className="h-9 px-6 text-sm gap-2"
+              style={templateSaved ? { backgroundColor: "#16a34a" } : {}}>
+              {templateSaved ? <><CheckCircle2 className="h-4 w-4" /> Đã lưu!</> : templateSaving ? "Đang lưu..." : <><Save className="h-4 w-4" /> Lưu mẫu in</>}
+            </Button>
           </div>
         </SectionCard>
 

@@ -92,7 +92,15 @@ function printOrderSlip({
   includeVat,
   data,
   siteSettings,
+  tpl,
 }: any) {
+  // Resolve template fields (admin customised or defaults)
+  const tplHeader   = tpl?.header   ?? "PHIẾU XUẤT KHO KIỂM BẢO HÀNH";
+  const tplFooter   = tpl?.footer   ?? "Quạt trần chân thành cảm ơn sự tin tưởng của Quý khách hàng!";
+  const tplWarranty = (tpl?.showWarranty !== false && tpl?.showWarranty !== undefined ? tpl?.showWarranty : true)
+    ? (tpl?.warranty ?? "LƯU Ý: KHUYẾN CÁO CẦN KIỂM TRA QUẠT ĐỊNH KỲ ÍT NHẤT 6 THÁNG/LẦN ĐỂ ĐẢM BẢO AN TOÀN TRONG QUÁ TRÌNH SỬ DỤNG.")
+    : "";
+  const siteName = siteSettings?.site_name ?? "";
   const moneyFmt = (n: number) =>
     new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
 
@@ -146,7 +154,7 @@ function printOrderSlip({
   <div class="header">
   ${siteSettings?.logo_url ? `<img src="${siteSettings.logo_url}" alt="Logo" style="height:60px;object-fit:contain;margin-bottom:8px" />` : ""}
   ${siteSettings?.site_name ? `<div style="font-size:15px;font-weight:600;color:#444;margin-bottom:4px">${siteSettings.site_name}</div>` : ""}
-  <div class="title">PHIẾU ĐẶT HÀNG</div>
+  <div class="title">${tplHeader.replace("{Ten_Cua_Hang}", siteName || "Mr.Vũ").toUpperCase()}</div>
   <div class="sub">Ngày: ${new Date().toLocaleDateString("vi-VN")} &nbsp;|&nbsp; Trạng thái: ${statusLabels[status] ?? status}${siteSettings?.phone ? ` &nbsp;|&nbsp; ĐT: ${siteSettings.phone}` : ""}</div></div>
   <div class="info-grid">
     <div><strong>Khách hàng:</strong> ${custName}</div>
@@ -171,10 +179,16 @@ function printOrderSlip({
     <div class="total-main" style="color:#15803d;margin-top:8px">Khách cần thanh toán: ${moneyFmt(Math.max(0, total - deposit))}</div>
   </div>
   ${note ? `<div style="margin-top:20px;font-size:14px"><strong>Ghi chú:</strong> ${note}</div>` : ""}
-  <div class="sign">
-    <div class="sign-box"><div>Người lập phiếu</div><div style="margin-top:60px;font-weight:600">....................</div></div>
-    <div class="sign-box"><div>Khách hàng xác nhận</div><div style="margin-top:60px">....................</div></div>
+  <div style="margin-top:32px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:20px;text-align:center;font-size:13px">
+    ${["Kỹ thuật","Nhân viên","Khách hàng","Thủ kho"].map(r=>`<div><div style="font-weight:600">${r}</div><div style="color:#999;font-size:11px">(Ký, ghi rõ họ tên)</div><div style="margin-top:50px;border-top:1px dashed #bbb;padding-top:4px;color:#ccc">__________</div></div>`).join("")}
   </div>
+  <div style="margin-top:24px;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+    <div style="font-weight:600;margin-bottom:8px">Vui lòng chọn nội dung dưới đây</div>
+    ${["Đã giao hàng đúng mẫu và đầy đủ phụ kiện","Đã lắp đặt hoàn thiện, Quạt chạy ổn định","Đã hướng dẫn sử dụng","Đã thanh toán tiền mặt theo số tiền trên phiếu"].map(it=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="display:inline-block;width:14px;height:14px;border:1px solid #aaa;border-radius:2px"></span>${it}</div>`).join("")}
+    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px"><span><strong>Khách hàng xác nhận</strong></span><span>Họ tên: ___________________</span></div>
+  </div>
+  ${tplWarranty ? `<div style="margin-top:18px;font-size:12px;font-weight:700;text-transform:uppercase;line-height:1.6;border-top:1px solid #eee;padding-top:12px">${tplWarranty.replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}</div>` : ""}
+  ${tplFooter ? `<div style="margin-top:14px;text-align:center;font-size:13px;color:#555;border-top:1px solid #eee;padding-top:12px">${tplFooter.replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}</div>` : ""}
   </body></html>`);
 
   pw.document.close();
@@ -1276,6 +1290,7 @@ function Page() {
                       includeVat: receiptOrder.includeVat,
                       data,
                       siteSettings,
+                      tpl: (() => { try { return JSON.parse(siteSettings?.print_templates || "{}").order_invoice; } catch { return {}; } })(),
                     });
                   }
                 }}

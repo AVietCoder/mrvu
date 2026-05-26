@@ -111,8 +111,6 @@ function Page() {
     title: "", type: "install", scheduled_date: todayStr,
     scheduled_time: nowTimeStr, customer_id: "", branch_id: "",
     order_id: "", address: "", note: "",
-    assigned_by: "", // Người giao việc
-    work_type_id: "", // Loại hình CV chọn khi tạo
   });
 
   // Dialog xem chi tiết lịch
@@ -160,11 +158,9 @@ function Page() {
   const [workTypeId, setWorkTypeId] = useState<string>("");
 
   // ── Chấm công ──────────────────────────────────────────────
-  const [attFrom, setAttFrom] = useState<string>(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-  });
-  const [attTo, setAttTo] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [attPickedDate, setAttPickedDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const attFrom = attPickedDate.slice(0, 7) + "-01";
+  const attTo = attPickedDate;
   const [attDetail, setAttDetail] = useState<any>(null);
   const { data: attData, isLoading: attLoading, refetch: refetchAttendance } = useQuery({
     queryKey: ["attendance", attFrom, attTo],
@@ -245,15 +241,14 @@ function Page() {
         customer_id: createForm.customer_id || undefined,
         branch_id: createForm.branch_id || undefined,
         order_id: createForm.order_id || undefined,
-        assigned_by: createForm.assigned_by || undefined,
-        work_type_id: createForm.work_type_id || undefined,
+        assigned_by: user.id,
       }});
       toast.success("Đã tạo lịch" + (createForm.order_id ? " (đã liên kết đơn hàng)" : ""));
       setCreateOpen(false);
       setCreateForm({
         title: "", type: "install", scheduled_date: todayStr,
         scheduled_time: nowTimeStr, customer_id: "", branch_id: "",
-        order_id: "", address: "", note: "", assigned_by: "", work_type_id: "",
+        order_id: "", address: "", note: "",
       });
       qc.invalidateQueries({ queryKey: ["schedules"] });
       qc.invalidateQueries({ queryKey: ["orders"] });
@@ -545,8 +540,8 @@ function Page() {
             totalLabel="lịch"
           />
           <Card>
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[560px]">
                 <thead className="text-left text-muted-foreground border-b">
                   <tr>
                     <th className="py-2 pr-3">Tiêu đề</th>
@@ -554,7 +549,6 @@ function Page() {
                     <th className="pr-3">Ngày</th>
                     {!isTech && !canApprove ? <th className="pr-3">Khách hàng</th> : null}
                     <th className="pr-3">Người phụ trách</th>
-                    <th className="pr-3">Người giao việc</th>
                     <th className="pr-3">Người tạo</th>
                     <th className="pr-3">Trạng thái</th>
                     {isTech && <th className="pr-3">Tiền công</th>}
@@ -586,13 +580,8 @@ function Page() {
                           </div>
                         </td>
                         <td className="pr-3">
-                          {assigner ? (
-                            <span className="text-xs bg-orange-100 text-orange-700 rounded-full px-2 py-0.5">{assigner.full_name}</span>
-                          ) : <span className="text-xs text-muted-foreground">—</span>}
-                        </td>
-                        <td className="pr-3">
                           {creator ? (
-                            <span className="text-xs bg-muted rounded-full px-2 py-0.5">{creator.full_name}</span>
+                            <span className="text-xs bg-orange-100 text-orange-700 rounded-full px-2 py-0.5">{creator.full_name}</span>
                           ) : <span className="text-xs text-muted-foreground">—</span>}
                         </td>
                         <td className="pr-3"><span className={`text-xs rounded-full px-2 py-0.5 ${status?.color}`}>{status?.label}</span></td>
@@ -720,31 +709,23 @@ function Page() {
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <span>Từ</span>
+                    <span>Chọn ngày:</span>
                     <input
                       type="date"
-                      value={attFrom}
-                      max={attTo}
-                      onChange={(e) => setAttFrom(e.target.value)}
+                      value={attPickedDate}
+                      max={new Date().toISOString().slice(0, 10)}
+                      onChange={(e) => setAttPickedDate(e.target.value)}
                       className="h-9 rounded-md border bg-background px-2 text-sm"
                     />
                   </div>
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <span>đến</span>
-                    <input
-                      type="date"
-                      value={attTo}
-                      min={attFrom}
-                      max={new Date().toISOString().slice(0, 10)}
-                      onChange={(e) => setAttTo(e.target.value)}
-                      className="h-9 rounded-md border bg-background px-2 text-sm"
-                    />
+                  <div className="text-xs text-muted-foreground">
+                    ({attFrom} → {attTo})
                   </div>
                   <Button size="sm" variant="outline" onClick={() => refetchAttendance()}>Làm mới</Button>
                 </div>
               </div>
-              <div className="overflow-auto">
-                <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[640px]">
                   <thead className="text-left text-muted-foreground border-b">
                     <tr>
                       <th className="py-2 pr-3">Nhân viên</th>
@@ -862,17 +843,15 @@ function Page() {
             <div><Label>Tiêu đề *</Label>
               <Input className="mt-1" value={createForm.title}
                 onChange={(e) => setCreateForm({...createForm, title: e.target.value})} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Loại công việc</Label>
-                <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  value={createForm.type} onChange={(e) => setCreateForm({...createForm, type: e.target.value})}>
-                  {SCHEDULE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div><Label>Ngày *</Label>
                 <Input className="mt-1" type="date" value={createForm.scheduled_date}
                   onChange={(e) => setCreateForm({...createForm, scheduled_date: e.target.value})} /></div>
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground flex items-center">
+                Loại công việc sẽ được chọn khi duyệt và phân công.
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div><Label>Giờ</Label>
                 <Input className="mt-1" type="time" value={createForm.scheduled_time}
                   onChange={(e) => setCreateForm({...createForm, scheduled_time: e.target.value})} /></div>
@@ -896,23 +875,7 @@ function Page() {
             <div><Label>Địa chỉ lắp đặt</Label>
               <Input className="mt-1" value={createForm.address}
                 onChange={(e) => setCreateForm({...createForm, address: e.target.value})} /></div>
-            <div><Label>Người giao việc</Label>
-              <SearchableSelect
-                value={createForm.assigned_by}
-                onChange={(v) => setCreateForm({...createForm, assigned_by: v})}
-                emptyLabel="— Không chỉ định —"
-                placeholder="Tìm người dùng..."
-                options={(data?.users ?? []).map((u: any) => ({ value: u.id, label: u.full_name }))}
-              /></div>
-            <div><Label>Loại hình công việc</Label>
-              <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                value={createForm.work_type_id}
-                onChange={(e) => setCreateForm({...createForm, work_type_id: e.target.value})}>
-                <option value="">— Chưa chọn loại hình —</option>
-                {((data?.work_types ?? wtData) ?? []).map((w: any) => (
-                  <option key={w.id} value={w.id}>{w.name} — {fmtMoney(w.price)}</option>
-                ))}
-              </select></div>
+
             <div><Label>Ghi chú</Label>
               <Input className="mt-1" value={createForm.note}
                 onChange={(e) => setCreateForm({...createForm, note: e.target.value})} /></div>
@@ -1112,7 +1075,7 @@ function Page() {
                   Chi tiết chấm công — {attDetail.full_name}
                 </DialogTitle>
               </DialogHeader>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                 <div className="rounded-lg border p-3 bg-muted/30">
                   <div className="text-xs text-muted-foreground">Tháng</div>
                   <div className="font-semibold">{attData?.month}</div>
@@ -1354,8 +1317,26 @@ function Page() {
                 {/* Nội dung tin nhắn */}
                 {(() => {
                   const workType = s.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === s.work_type_id) : null;
-                  const orderInfo = linkedOrder ? `${linkedOrder.code} — ${fmtMoney(linkedOrder.total)}` : "Không có";
                   const assigneeNames = assignees.map((a: any) => { const u = data?.users.find((u: any) => u.id === a.user_id); return u?.full_name ?? a.user_id; }).join(", ") || "Chưa phân công";
+                  // Build product lines from order_items
+                  const orderItemLines: string[] = [];
+                  if (linkedOrder) {
+                    const items = (data?.order_items ?? []).filter((oi: any) => oi.order_id === linkedOrder.id);
+                    if (items.length > 0) {
+                      orderItemLines.push(`• Đơn hàng: ${linkedOrder.code} — ${fmtMoney(linkedOrder.total)}`);
+                      for (const oi of items) {
+                        const prod = (data?.products ?? []).find((p: any) => p.id === oi.product_id);
+                        const pname = prod?.name ?? oi.product_id;
+                        orderItemLines.push(`  - ${pname} × ${oi.qty}`);
+                      }
+                    } else {
+                      orderItemLines.push(`• Đơn hàng: ${linkedOrder.code} — ${fmtMoney(linkedOrder.total)}`);
+                    }
+                  }
+                  // Assigned user lines
+                  const assigneeLines: string[] = assignees.length > 0
+                    ? assignees.map((a: any) => { const u = data?.users.find((u: any) => u.id === a.user_id); return `  - ${u?.full_name ?? a.user_id}`; })
+                    : [];
                   const msgContent = [
                     "📋 Nội dung đơn hàng:",
                     "",
@@ -1365,13 +1346,14 @@ function Page() {
                     `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`,
                     customer ? `• Khách hàng: ${customer.name}${customer.phone ? " — " + customer.phone : ""}` : null,
                     s.address ? `• Địa chỉ: ${s.address}` : null,
-                    linkedOrder ? `• Đơn hàng: ${orderInfo}` : null,
-                    assignees.length > 0 ? `• Người thực hiện: ${assigneeNames}` : null,
+                    ...orderItemLines,
                     assigner ? `• Người giao việc: ${assigner.full_name}` : null,
                     creator ? `• Người tạo lịch: ${creator.full_name}` : null,
+                    assignees.length > 0 ? `• Người thực hiện:` : null,
+                    ...assigneeLines,
                     s.note ? `• Ghi chú: ${s.note}` : null,
                     `• Trạng thái: ${STATUS_LABELS[s.status]?.label ?? s.status}`,
-                  ].filter(Boolean).join("\n");
+                  ].filter((v) => v !== null).join("\n");
                   
                   function copyMsg() {
                     navigator.clipboard.writeText(msgContent).then(() => {

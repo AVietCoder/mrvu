@@ -215,7 +215,7 @@ function ActivityPage() {
 
       {/* Table */}
       <div className="rounded-2xl overflow-hidden border bg-background shadow-sm">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm min-w-[560px]">
           <thead className="bg-muted/40 border-b text-left">
             <tr>
               <th className="py-3 px-5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Thời gian</th>

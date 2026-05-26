@@ -372,8 +372,8 @@ function CustomersPage() {
           totalLabel="khách"
         />
 
-        <div className="mt-4 overflow-auto">
-          <table className="w-full text-sm">
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead className="border-b text-left text-muted-foreground">
               <tr>
                 <th className="py-2 pr-3">Tên khách hàng</th>

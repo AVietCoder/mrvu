@@ -979,8 +979,8 @@ function Page() {
           </div>
         </div>
 
-        <div className="max-h-[420px] overflow-y-auto rounded-xl border">
-          <table className="w-full text-sm">
+        <div className="max-h-[420px] overflow-auto rounded-xl border">
+          <table className="w-full text-sm min-w-[600px]">
             <thead className="sticky top-0 bg-background border-b z-10">
               <tr className="text-muted-foreground">
                 <th className="px-4 py-3 text-left">Thời gian</th>
@@ -1220,7 +1220,7 @@ function Page() {
                   bg-white
                   shadow-sm
                 ">
-                  <table className="w-full min-w-[920px] text-sm">
+                  <table className="w-full min-w-[780px] text-sm">
                     <thead className="
                       sticky
                       top-0
@@ -1767,6 +1767,16 @@ function Page() {
                                   )?.name
                                 }`;
 
+                        // Resolve admin template
+                        const _invTplKey = type === "transfer" ? "transfer_slip" : "import_slip";
+                        const _invTpls = (() => { try { return JSON.parse(siteSettings?.print_templates || "{}"); } catch { return {}; } })();
+                        const _tpl = _invTpls[_invTplKey] ?? {};
+                        const _siteName = siteSettings?.site_name ?? "";
+                        const _tplHeader   = (_tpl.header   ?? (type === "transfer" ? "PHIẾU CHUYỂN KHO" : "PHIẾU NHẬP KHO")).replace("{Ten_Cua_Hang}", _siteName);
+                        const _tplFooter   = (_tpl.footer   ?? "").replace("{Ten_Cua_Hang}", _siteName);
+                        const _showWarranty = _tpl.showWarranty !== false;
+                        const _tplWarranty = _showWarranty ? ((_tpl.warranty ?? (type === "transfer" ? "Hàng hoá đã được kiểm tra đầy đủ trước khi bàn giao. Người nhận ký xác nhận chịu trách nhiệm sau khi nhận hàng." : "Hàng hoá được kiểm tra đầy đủ trước khi nhập kho. Mọi khiếu nại vui lòng phản hồi trong vòng 24 giờ.")).replace("{Ten_Cua_Hang}", _siteName)) : "";
+
                         const printWindow =
                           window.open("", "_blank");
 
@@ -1868,7 +1878,7 @@ function Page() {
                                 ${siteSettings?.logo_url ? `<img src="${siteSettings.logo_url}" alt="Logo" style="height:60px;object-fit:contain;margin-bottom:8px" />` : ""}
                                 ${siteSettings?.site_name ? `<div style="font-size:15px;font-weight:600;color:#444;margin-bottom:6px">${siteSettings.site_name}</div>` : ""}
                                 <div class="title">
-                                  ${voucherTitle.toUpperCase()}
+                                  ${_tplHeader.toUpperCase()}
                                 </div>
 
                                 <div class="sub">
@@ -1968,30 +1978,11 @@ function Page() {
                                   : ""
                               }
 
-                              <div class="sign">
-                                <div class="sign-box">
-                                  <div>
-                                    Người lập phiếu
-                                  </div>
-
-                                  <div style="margin-top:70px;font-weight:600">
-                                    ${
-                                      user?.full_name ||
-                                      "................"
-                                    }
-                                  </div>
-                                </div>
-
-                                <div class="sign-box">
-                                  <div>
-                                    Người nhận
-                                  </div>
-
-                                  <div style="margin-top:70px">
-                                    ........................
-                                  </div>
-                                </div>
+                              <div style="margin-top:32px;display:grid;grid-template-columns:repeat(4,1fr);gap:20px;text-align:center;font-size:13px">
+                                ${["Kỹ thuật","Nhân viên","Khách hàng","Thủ kho"].map(r=>`<div><div style="font-weight:600">${r}</div><div style="color:#999;font-size:11px">(Ký, ghi rõ họ tên)</div><div style="margin-top:50px;border-top:1px dashed #bbb;padding-top:4px;color:#ccc">__________</div></div>`).join("")}
                               </div>
+                              ${_tplWarranty ? `<div style="margin-top:18px;font-size:12px;font-weight:700;text-transform:uppercase;line-height:1.6;border-top:1px solid #eee;padding-top:12px">${_tplWarranty}</div>` : ""}
+                              ${_tplFooter ? `<div style="margin-top:14px;text-align:center;font-size:13px;color:#555;border-top:1px solid #eee;padding-top:12px">${_tplFooter}</div>` : ""}
                             </body>
                           </html>
                         `);

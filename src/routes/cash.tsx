@@ -541,7 +541,7 @@ function Page() {
         {/* ── Table ── */}
         <div className="rounded-lg border overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[600px]">
               <thead className="bg-muted/50 text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2.5 text-left font-medium">Mã phiếu</th>
