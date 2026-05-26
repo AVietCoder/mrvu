@@ -837,3 +837,55 @@ export const updateOrder = createServerFn({ method: "POST" })
       throw err;
     }
   });
+
+export const returnOrder = createServerFn({ method: "POST" }).handler(
+  async ({
+    data,
+  }: {
+    data: {
+      order_id: string;
+      customer_id?: string;
+      branch_id: string;
+      items: {
+        product_id: string;
+        return_qty: number;
+        unit_price: number;
+      }[];
+      refund_total: number;
+      note?: string;
+      status: "returned" | "partially_returned";
+    };
+  }) => {
+    if (!data.items?.length) {
+      throw new Error("Không có sản phẩm trả hàng");
+    }
+
+    return await db.transaction(async (tx) => {
+      for (const item of data.items) {
+        if (item.return_qty <= 0) continue;
+
+        await tx
+          .update(schema.stock)
+          .set({
+            qty: sql`qty + ${item.return_qty}`,
+          })
+          .where(
+            and(
+              eq(schema.stock.product_id, item.product_id),
+              eq(schema.stock.branch_id, data.branch_id),
+            ),
+          );
+      }
+
+      await tx
+        .update(schema.orders)
+        .set({
+          status: data.status,
+          updated_at: new Date(),
+        })
+        .where(eq(schema.orders.id, data.order_id));
+
+      return { success: true };
+    });
+  },
+);

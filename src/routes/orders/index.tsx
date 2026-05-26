@@ -59,12 +59,14 @@ function parseInput(val: string): number {
 }
 
 const PAGE_SIZE = 20;
-
+// Thêm 2 status này vào dòng 48 (ngay dưới cancelled):
 const STATUS_LABEL: Record<string, string> = {
   completed: "Hoàn tất",
   reserved: "Đặt hàng",
   draft: "Nháp",
   cancelled: "Hủy",
+  returned: "Đã trả hàng",
+  partially_returned: "Trả hàng 1 phần",
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -72,7 +74,12 @@ const STATUS_COLOR: Record<string, string> = {
   reserved: "bg-yellow-100 text-yellow-700",
   draft: "bg-gray-100 text-gray-700",
   cancelled: "bg-red-100 text-red-700",
+  returned: "bg-purple-100 text-purple-700",
+  partially_returned: "bg-purple-50 text-purple-600 border border-purple-200",
 };
+
+// Bên dưới hàm Page() -> Filter Slot (Dòng ~550) thêm tùy chọn lọc:
+
 
 function printOrderSlip({
   items,
@@ -1256,19 +1263,21 @@ function Page() {
           filterSlot={
             <div className="flex flex-wrap gap-2">
               {activeTab === "orders" && (
-                <select
-                  className="h-9 rounded-md border bg-background px-2 text-sm"
-                  value={filterStatus}
-                  onChange={(e) => {
-                    setFilterStatus(e.target.value);
-                    setPage(1);
-                  }}
-                >
-                  <option value="">Tất cả trạng thái</option>
-                  <option value="completed">Hoàn tất</option>
-                  <option value="draft">Nháp</option>
-                  <option value="cancelled">Hủy</option>
-                </select>
+<select
+  className="h-9 rounded-md border bg-background px-2 text-sm"
+  value={filterStatus}
+  onChange={(e) => {
+    setFilterStatus(e.target.value);
+    setPage(1);
+  }}
+>
+  <option value="">Tất cả trạng thái</option>
+  <option value="completed">Hoàn tất</option>
+  <option value="partially_returned">Trả hàng 1 phần</option>
+  <option value="returned">Đã trả hàng</option>
+  <option value="draft">Nháp</option>
+  <option value="cancelled">Hủy</option>
+</select>
               )}
 
               <select
