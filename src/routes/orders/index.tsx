@@ -1,10 +1,9 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { listOrders, createOrder } from "@/lib/orders.functions";
-import { createSchedule } from "@/lib/schedule.functions";
-import { SCHEDULE_TYPES } from "@/lib/types";
+import { createSchedule, listWorkTypes } from "@/lib/schedule.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -94,7 +93,6 @@ function printOrderSlip({
   siteSettings,
   tpl,
 }: any) {
-  // Resolve template fields (admin customised or defaults)
   const tplHeader   = tpl?.header   ?? "PHIẾU XUẤT KHO KIỂM BẢO HÀNH";
   const tplFooter   = tpl?.footer   ?? "Quạt trần chân thành cảm ơn sự tin tưởng của Quý khách hàng!";
   const tplWarranty = (tpl?.showWarranty !== false && tpl?.showWarranty !== undefined ? tpl?.showWarranty : true)
@@ -201,6 +199,7 @@ function Page() {
   const listFn = useServerFn(listOrders);
   const create = useServerFn(createOrder);
   const createScheduleFn = useServerFn(createSchedule);
+  const listWorkTypesFn = useServerFn(listWorkTypes);
   const qc = useQueryClient();
 
   const { data } = useQuery({
@@ -214,12 +213,16 @@ function Page() {
     queryFn: () => getSettingsFn(),
   });
 
+  const { data: workTypes = [] } = useQuery({
+    queryKey: ["workTypes"],
+    queryFn: () => listWorkTypesFn(),
+  });
+
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<"orders" | "reserved">("orders");
   const [page, setPage] = useState(1);
 
-  // Receipt modal after order creation
   const [receiptOrder, setReceiptOrder] = useState<any>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
 
@@ -244,13 +247,12 @@ function Page() {
   const [depositRaw, setDepositRaw] = useState("0");
   const [note, setNote] = useState("");
 
-  // Lịch làm việc kèm theo
   const todayStr = new Date().toISOString().slice(0, 10);
   const nowTimeStr = new Date().toTimeString().slice(0, 5);
   const [createScheduleOnOrder, setCreateScheduleOnOrder] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({
     title: "",
-    type: "install",
+    work_type_id: "",
     scheduled_date: todayStr,
     scheduled_time: nowTimeStr,
     address: "",
@@ -262,9 +264,34 @@ function Page() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterBranch, setFilterBranch] = useState("");
 
-  const discount = useDiscountPct
-    ? 0
-    : parseInput(discountRaw);
+  const customerMap = useMemo(
+    () => new Map((data?.customers ?? []).map((c: any) => [c.id, c])),
+    [data?.customers],
+  );
+
+  useEffect(() => {
+    if (createScheduleOnOrder) {
+      const cust = customer ? customerMap.get(customer) : null;
+      const currentType = workTypes.find((t: any) => t.id === scheduleForm.work_type_id);
+      const currentTypeLabel = currentType?.name ?? "Công việc";
+      
+      const autoTitle = cust 
+        ? `${currentTypeLabel} — ${cust.name}` 
+        : `${currentTypeLabel} — Khách lẻ`;
+
+      const autoAddress = cust
+        ? [cust.address, cust.ward, cust.province].filter(Boolean).join(", ")
+        : "";
+
+      setScheduleForm(f => ({
+        ...f,
+        title: autoTitle,
+        address: f.address || autoAddress,
+      }));
+    }
+  }, [customer, scheduleForm.work_type_id, createScheduleOnOrder, customerMap, workTypes]);
+
+  const discount = useDiscountPct ? 0 : parseInput(discountRaw);
   const deposit = parseInput(depositRaw);
 
   const subtotal = useMemo(
@@ -272,34 +299,16 @@ function Page() {
     [items],
   );
 
-  // Giảm giá: theo % hoặc theo số tiền cố định
   const discountAmt = useDiscountPct
     ? Math.round(subtotal * (Math.min(100, Math.max(0, parseFloat(discountPct) || 0)) / 100))
     : parseInput(discountRaw);
   const afterDiscount = Math.max(0, subtotal - discountAmt);
 
-  // VAT linh hoạt: 8%, 10%, hoặc tự nhập số tiền
-  // VAT linh hoạt: 8%, 10%, hoặc tự nhập %
-  const customVatRate =
-    Math.min(100, Math.max(0, parseFloat(vatCustomPercent) || 0)) / 100;
-
-  const vatRate =
-    vatMode === "8"
-      ? 0.08
-      : vatMode === "10"
-        ? 0.1
-        : customVatRate;
-
-  const vatAmt = includeVat
-    ? Math.round(afterDiscount * vatRate)
-    : 0;
+  const customVatRate = Math.min(100, Math.max(0, parseFloat(vatCustomPercent) || 0)) / 100;
+  const vatRate = vatMode === "8" ? 0.08 : vatMode === "10" ? 0.1 : customVatRate;
+  const vatAmt = includeVat ? Math.round(afterDiscount * vatRate) : 0;
   const total = afterDiscount + vatAmt;
   const khachCanThanhToan = Math.max(0, total - deposit);
-
-  const customerMap = useMemo(
-    () => new Map((data?.customers ?? []).map((c: any) => [c.id, c])),
-    [data?.customers],
-  );
 
   const branchMap = useMemo(
     () => new Map((data?.branches ?? []).map((b: any) => [b.id, b])),
@@ -336,7 +345,6 @@ function Page() {
 
   function applyFilter(list: typeof allOrders) {
     const q = search.trim().toLowerCase();
-
     return list
       .filter((o) => {
         const custName = customerMap.get(o.customer_id)?.name ?? "";
@@ -350,34 +358,18 @@ function Page() {
       .sort((a, b) => {
         if (sortBy === "total_desc") return b.total - a.total;
         if (sortBy === "total_asc") return a.total - b.total;
-        if (sortBy === "oldest") {
-          return (
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-          );
-        }
+        if (sortBy === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
   }
 
   const filteredOrders = useMemo(
     () => applyFilter(activeTab === "reserved" ? reservedOrders : invoiceOrders),
-    [
-      activeTab,
-      reservedOrders,
-      invoiceOrders,
-      search,
-      sortBy,
-      filterStatus,
-      filterBranch,
-      customerMap,
-    ],
+    [activeTab, reservedOrders, invoiceOrders, search, sortBy, filterStatus, filterBranch, customerMap],
   );
 
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
-  const pagedOrders = filteredOrders.slice(
-    (page - 1) * PAGE_SIZE,
-    page * PAGE_SIZE,
-  );
+  const pagedOrders = filteredOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function handleSearch(v: string) {
     setSearch(v);
@@ -390,6 +382,10 @@ function Page() {
   }
 
   function handleTab(t: "orders" | "reserved") {
+    handleTabExecute(t);
+  }
+
+  function handleTabExecute(t: "orders" | "reserved") {
     setActiveTab(t);
     setPage(1);
     setSearch("");
@@ -398,11 +394,7 @@ function Page() {
 
   function reset() {
     const allowedBranches = (data?.branches ?? []).filter(
-      (b: any) =>
-        isAdmin ||
-        !user ||
-        user.branch_ids.length === 0 ||
-        user.branch_ids.includes(b.id),
+      (b: any) => isAdmin || !user || user.branch_ids.length === 0 || user.branch_ids.includes(b.id),
     );
 
     setItems([]);
@@ -424,7 +416,7 @@ function Page() {
     setCreateScheduleOnOrder(false);
     setScheduleForm({
       title: "",
-      type: "install",
+      work_type_id: workTypes?.[0]?.id || "",
       scheduled_date: new Date().toISOString().slice(0, 10),
       scheduled_time: new Date().toTimeString().slice(0, 5),
       address: "",
@@ -471,7 +463,6 @@ function Page() {
         },
       });
 
-      // Tạo lịch làm việc nếu người dùng tick
       if (createScheduleOnOrder && scheduleForm.title && user) {
         try {
           await createScheduleFn({
@@ -489,7 +480,6 @@ function Page() {
         }
       }
 
-      // Chuẩn bị dữ liệu phiếu thu để hiển thị
       setReceiptOrder({
         ...r,
         subtotal,
@@ -512,8 +502,6 @@ function Page() {
       setOpen(false);
       qc.invalidateQueries({ queryKey: ["orders"] });
       qc.invalidateQueries({ queryKey: ["schedules"] });
-
-      // Tự động mở phiếu thu
       setReceiptOpen(true);
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi");
@@ -522,11 +510,7 @@ function Page() {
     }
   }
 
-  function OrderTable({
-    rows,
-  }: {
-    rows: typeof allOrders;
-  }) {
+  function OrderTable({ rows }: { rows: typeof allOrders }) {
     return (
       <div className="overflow-x-auto">
         <table className="w-full text-sm min-w-[680px]">
@@ -668,13 +652,7 @@ function Page() {
                     onChange={setBranch}
                     placeholder="Tìm chi nhánh..."
                     options={(data?.branches ?? [])
-                      .filter(
-                        (b: any) =>
-                          isAdmin ||
-                          !user ||
-                          user.branch_ids.length === 0 ||
-                          user.branch_ids.includes(b.id),
-                      )
+                      .filter((b: any) => isAdmin || !user || user.branch_ids.length === 0 || user.branch_ids.includes(b.id))
                       .map((b: any) => ({ value: b.id, label: b.name }))}
                   />
                 </div>
@@ -782,7 +760,6 @@ function Page() {
                               >Copy</button>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground mt-1">Nội dung tin nhắn khi chuyển tiền</p>
                         </div>
                       </div>
                     );
@@ -794,8 +771,7 @@ function Page() {
                 <div className="flex items-center justify-between mb-2">
                   <Label>Sản phẩm</Label>
                   <Button size="sm" type="button" variant="outline" onClick={addItem}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Thêm SP
+                    <Plus className="h-4 w-4 mr-1" /> Thêm SP
                   </Button>
                 </div>
 
@@ -808,20 +784,14 @@ function Page() {
 
                   {items.map((item, idx) => {
                     const lineTotal = item.qty * item.unit_price - item.discount;
-
                     return (
-                      <div
-                        key={idx}
-                        className="flex flex-col gap-1.5 rounded-lg border p-2 bg-muted/20"
-                      >
+                      <div key={idx} className="flex flex-col gap-1.5 rounded-lg border p-2 bg-muted/20">
                         <div className="flex items-center gap-2">
                           <SearchableSelect
                             className="flex-1"
                             value={item.product_id}
                             onChange={(val) => {
-                              const p = (data?.products ?? []).find(
-                                (x: any) => x.id === val,
-                              );
+                              const p = (data?.products ?? []).find((x: any) => x.id === val);
                               const next = [...items];
                               next[idx] = {
                                 ...next[idx],
@@ -837,13 +807,10 @@ function Page() {
                               sub: p.sku ?? undefined,
                             }))}
                           />
-
                           <button
                             type="button"
                             className="flex items-center justify-center rounded-md border hover:text-destructive p-1.5 shrink-0"
-                            onClick={() =>
-                              setItems(items.filter((_, i) => i !== idx))
-                            }
+                            onClick={() => setItems(items.filter((_, i) => i !== idx))}
                           >
                             <X className="h-4 w-4" />
                           </button>
@@ -862,22 +829,17 @@ function Page() {
                             >
                               <Minus className="h-3.5 w-3.5" />
                             </button>
-
                             <input
                               type="number"
-                              className="w-12 text-center text-sm py-1.5 bg-background border-0 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              className="w-12 text-center text-sm py-1.5 bg-background border-0 outline-none [appearance:textfield]"
                               value={item.qty}
                               min={1}
                               onChange={(e) => {
                                 const n = [...items];
-                                n[idx].qty = Math.max(
-                                  1,
-                                  Number(e.target.value) || 1,
-                                );
+                                n[idx].qty = Math.max(1, Number(e.target.value) || 1);
                                 setItems(n);
                               }}
                             />
-
                             <button
                               type="button"
                               className="px-2 py-1.5 hover:bg-muted transition-colors border-l text-muted-foreground hover:text-foreground"
@@ -890,24 +852,16 @@ function Page() {
                               <Plus className="h-3.5 w-3.5" />
                             </button>
                           </div>
-
                           <Input
                             className="flex-1"
                             placeholder="Đơn giá"
-                            value={
-                              item.unit_price === 0
-                                ? ""
-                                : new Intl.NumberFormat("vi-VN").format(
-                                    item.unit_price,
-                                  )
-                            }
+                            value={item.unit_price === 0 ? "" : new Intl.NumberFormat("vi-VN").format(item.unit_price)}
                             onChange={(e) => {
                               const n = [...items];
                               n[idx].unit_price = parseInput(e.target.value);
                               setItems(n);
                             }}
                           />
-
                           <div className="text-right text-sm font-semibold text-primary shrink-0 min-w-[80px]">
                             {fmt(lineTotal)}
                           </div>
@@ -918,7 +872,7 @@ function Page() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <Label>Giảm giá</Label>
@@ -953,9 +907,6 @@ function Page() {
                       onFocus={(e) => e.target.select()}
                     />
                   )}
-                  {useDiscountPct && discountAmt > 0 && (
-                    <p className="text-xs text-muted-foreground mt-0.5">≈ {fmt(discountAmt)}</p>
-                  )}
                 </div>
 
                 <div>
@@ -969,18 +920,11 @@ function Page() {
                 </div>
               </div>
 
-              {/* VAT linh hoạt */}
               <div className="rounded-lg border overflow-hidden">
                 <label className="flex items-center gap-2 cursor-pointer select-none px-3 py-2.5 hover:bg-muted/30 transition-colors">
-                  <Checkbox
-                    checked={includeVat}
-                    onCheckedChange={(v) => setIncludeVat(!!v)}
-                    id="vat"
-                  />
+                  <Checkbox checked={includeVat} onCheckedChange={(v) => setIncludeVat(!!v)} id="vat" />
                   <span className="text-sm font-medium">Thu thuế VAT</span>
-                  {includeVat && (
-                    <span className="ml-auto text-sm font-semibold text-orange-600">+ {fmt(vatAmt)}</span>
-                  )}
+                  {includeVat && <span className="ml-auto text-sm font-semibold text-orange-600">+ {fmt(vatAmt)}</span>}
                 </label>
                 {includeVat && (
                   <div className="border-t px-3 py-2.5 bg-orange-50/40 flex flex-wrap items-center gap-3">
@@ -1019,7 +963,6 @@ function Page() {
                           placeholder="% VAT"
                           value={vatCustomPercent}
                           onChange={(e) => setVatCustomPercent(e.target.value)}
-                          onFocus={(e) => e.target.select()}
                         />
                         <span className="text-sm text-muted-foreground">%</span>
                       </div>
@@ -1029,107 +972,83 @@ function Page() {
               </div>
 
               <div>
-                <Label>Ghi chú</Label>
-                <Input
-                  className="mt-1"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                />
+                <Label>Ghi chú đơn hàng</Label>
+                <Input className="mt-1" value={note} onChange={(e) => setNote(e.target.value)} />
               </div>
 
-              {/* Lịch làm việc */}
               <div className="rounded-lg border overflow-hidden">
                 <label className="flex items-center gap-2 cursor-pointer select-none bg-blue-50/60 px-3 py-2.5 hover:bg-blue-100/60 transition-colors">
                   <Checkbox
                     checked={createScheduleOnOrder}
-                    onCheckedChange={(v) => {
-                      setCreateScheduleOnOrder(!!v);
-                      if (v) {
-                        const cust = customer ? customerMap.get(customer) : null;
-                        const schedType = SCHEDULE_TYPES.find(t => t.value === scheduleForm.type) ?? SCHEDULE_TYPES[0];
-                        const autoTitle = cust
-                          ? `${schedType.label} - ${cust.name}`
-                          : schedType.label;
-                        const autoAddress = cust
-                          ? [cust.address, cust.ward, cust.province].filter(Boolean).join(", ")
-                          : "";
-                        setScheduleForm(f => ({
-                          ...f,
-                          title: f.title || autoTitle,
-                          address: f.address || autoAddress,
-                        }));
-                      }
-                    }}
+                    onCheckedChange={(v) => setCreateScheduleOnOrder(!!v)}
                     id="create-schedule"
                   />
                   <CalendarDays className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-medium text-blue-900">Tạo lịch làm việc luôn</span>
+                  <span className="text-sm font-medium text-blue-900">Tạo lịch làm việc đi kèm luôn</span>
                 </label>
                 {createScheduleOnOrder && (
                   <div className="p-3 space-y-3 bg-blue-50/20 border-t">
                     <div>
-                      <Label className="text-xs">Tiêu đề lịch *</Label>
+                      <Label className="text-xs font-semibold">Tiêu đề lịch làm việc *</Label>
                       <Input
-                        className="mt-1 h-8 text-sm"
+                        className="mt-1 h-9 text-sm font-medium"
                         value={scheduleForm.title}
                         onChange={(e) => setScheduleForm({ ...scheduleForm, title: e.target.value })}
-                        placeholder="VD: Lắp đặt - Khách ABC"
+                        placeholder="Tiêu đề tự động tạo ra hoặc nhập mới..."
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <Label className="text-xs">Loại</Label>
+                        <Label className="text-xs font-semibold">Loại hình công việc</Label>
                         <select
-                          className="mt-1 h-8 w-full rounded-md border bg-background px-2 text-sm"
-                          value={scheduleForm.type}
-                          onChange={(e) => {
-                            const newType = e.target.value;
-                            const cust = customer ? customerMap.get(customer) : null;
-                            const schedType = SCHEDULE_TYPES.find(t => t.value === newType) ?? SCHEDULE_TYPES[0];
-                            const autoTitle = cust
-                              ? `${schedType.label} - ${cust.name}`
-                              : schedType.label;
-                            setScheduleForm(f => ({
-                              ...f,
-                              type: newType,
-                              title: autoTitle,
-                            }));
-                          }}
+                          className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          value={scheduleForm.work_type_id}
+                          onChange={(e) => setScheduleForm({ ...scheduleForm, work_type_id: e.target.value })}
                         >
-                          {SCHEDULE_TYPES.map((t) => (
-                            <option key={t.value} value={t.value}>{t.label}</option>
+                          <option value="">-- Chọn loại công việc --</option>
+                          {workTypes?.map((t: any) => (
+                            <option key={t.id} value={t.id}>{t.name} {t.price ? `(${fmt(t.price)})` : ""}</option>
                           ))}
                         </select>
                       </div>
                       <div>
-                        <Label className="text-xs">Ngày</Label>
+                        <Label className="text-xs font-semibold">Ngày thực hiện</Label>
                         <Input
                           type="date"
-                          className="mt-1 h-8 text-sm"
+                          className="mt-1 h-9 text-sm"
                           value={scheduleForm.scheduled_date}
                           onChange={(e) => setScheduleForm({ ...scheduleForm, scheduled_date: e.target.value })}
                         />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <Label className="text-xs">Giờ</Label>
+                        <Label className="text-xs font-semibold">Giờ thực hiện</Label>
                         <Input
                           type="time"
-                          className="mt-1 h-8 text-sm"
+                          className="mt-1 h-9 text-sm"
                           value={scheduleForm.scheduled_time}
                           onChange={(e) => setScheduleForm({ ...scheduleForm, scheduled_time: e.target.value })}
                         />
                       </div>
                       <div>
-                        <Label className="text-xs">Địa chỉ</Label>
+                        <Label className="text-xs font-semibold">Địa chỉ công việc</Label>
                         <Input
-                          className="mt-1 h-8 text-sm"
+                          className="mt-1 h-9 text-sm"
                           value={scheduleForm.address}
                           onChange={(e) => setScheduleForm({ ...scheduleForm, address: e.target.value })}
-                          placeholder="Địa chỉ lắp đặt"
+                          placeholder="Địa chỉ giao hàng / lắp đặt..."
                         />
                       </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-semibold">Ghi chú công việc</Label>
+                      <Input
+                        className="mt-1 h-9 text-sm"
+                        value={scheduleForm.note}
+                        onChange={(e) => setScheduleForm({ ...scheduleForm, note: e.target.value })}
+                        placeholder="Nội dung nhắc nhở thêm cho kỹ thuật..."
+                      />
                     </div>
                   </div>
                 )}
@@ -1148,13 +1067,7 @@ function Page() {
                 )}
                 {includeVat && (
                   <div className="flex justify-between text-sm mt-1 text-orange-600">
-                    <span>
-                      Thuế VAT (
-                      {vatMode === "custom"
-                        ? `${vatCustomPercent || 0}%`
-                        : `${vatMode}%`}
-                      )
-                    </span>
+                    <span>Thuế VAT ({vatMode === "custom" ? `${vatCustomPercent || 0}%` : `${vatMode}%`})</span>
                     <span>+ {fmt(vatAmt)}</span>
                   </div>
                 )}
@@ -1175,18 +1088,10 @@ function Page() {
               </div>
 
               <DialogFooter className="flex-col sm:flex-row gap-2">
-                <Button
-                  variant="outline"
-                  className="w-full sm:w-auto"
-                  onClick={() => setOpen(false)}
-                >
+                <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
                   Hủy
                 </Button>
-                <Button
-                  className="w-full sm:w-auto"
-                  onClick={submit}
-                  disabled={submitting}
-                >
+                <Button className="w-full sm:w-auto" onClick={submit} disabled={submitting}>
                   {submitting ? (
                     <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang tạo...</>
                   ) : "Tạo đơn"}
@@ -1196,7 +1101,6 @@ function Page() {
           </DialogContent>
         </Dialog>
 
-        {/* ── Phiếu thu tự động sau khi đặt hàng ── */}
         <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
           <DialogContent className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -1261,9 +1165,7 @@ function Page() {
                     </div>
                   </div>
 
-                  {receiptOrder.note && (
-                    <div className="text-muted-foreground text-xs">Ghi chú: {receiptOrder.note}</div>
-                  )}
+                  {receiptOrder.note && <div className="text-muted-foreground text-xs">Ghi chú: {receiptOrder.note}</div>}
                 </div>
               );
             })()}
@@ -1306,35 +1208,24 @@ function Page() {
 
         {reservedOrders.length > 0 && (
           <span className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1 flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            {reservedOrders.length} đơn đặt hàng chờ giao
+            <Clock className="h-3 w-3" /> {reservedOrders.length} đơn đặt hàng chờ giao
           </span>
         )}
       </div>
 
       <div className="flex gap-1 mb-3 border-b overflow-x-auto">
         <button
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-            activeTab === "orders"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "orders" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           onClick={() => handleTab("orders")}
         >
-          <ShoppingBag className="h-4 w-4 inline mr-1" />
-          Hóa đơn bán hàng
+          <ShoppingBag className="h-4 w-4 inline mr-1" /> Hóa đơn bán hàng
         </button>
 
         <button
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 whitespace-nowrap ${
-            activeTab === "reserved"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 whitespace-nowrap ${activeTab === "reserved" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           onClick={() => handleTab("reserved")}
         >
-          <Clock className="h-4 w-4 inline mr-1" />
-          Đơn đặt hàng
+          <Clock className="h-4 w-4 inline mr-1" /> Đơn đặt hàng
           {reservedOrders.length > 0 && (
             <span className="text-xs bg-yellow-100 text-yellow-700 rounded-full px-1.5 py-0.5">
               {reservedOrders.length}
@@ -1384,9 +1275,7 @@ function Page() {
               >
                 <option value="">Tất cả chi nhánh</option>
                 {(data?.branches ?? []).map((b: any) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
+                  <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
             </div>
@@ -1400,41 +1289,19 @@ function Page() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between mt-4 pt-3 border-t text-sm flex-wrap gap-2">
             <span className="text-muted-foreground">
-              {(page - 1) * PAGE_SIZE + 1}–
-              {Math.min(page * PAGE_SIZE, filteredOrders.length)} /{" "}
-              {filteredOrders.length}
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filteredOrders.length)} / {filteredOrders.length}
             </span>
 
             <div className="flex items-center gap-1">
-              <Button
-                size="icon"
-                variant="outline"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
+              <Button size="icon" variant="outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-
-              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map(
-                (n) => (
-                  <Button
-                    key={n}
-                    size="sm"
-                    variant={n === page ? "default" : "outline"}
-                    className="w-8 h-8 p-0"
-                    onClick={() => setPage(n)}
-                  >
-                    {n}
-                  </Button>
-                ),
-              )}
-
-              <Button
-                size="icon"
-                variant="outline"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-              >
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map((n) => (
+                <Button key={n} size="sm" variant={n === page ? "default" : "outline"} className="w-8 h-8 p-0" onClick={() => setPage(n)}>
+                  {n}
+                </Button>
+              ))}
+              <Button size="icon" variant="outline" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
