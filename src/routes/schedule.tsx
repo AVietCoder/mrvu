@@ -843,14 +843,9 @@ function Page() {
             <div><Label>Tiêu đề *</Label>
               <Input className="mt-1" value={createForm.title}
                 onChange={(e) => setCreateForm({...createForm, title: e.target.value})} /></div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div><Label>Ngày *</Label>
                 <Input className="mt-1" type="date" value={createForm.scheduled_date}
                   onChange={(e) => setCreateForm({...createForm, scheduled_date: e.target.value})} /></div>
-              <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground flex items-center">
-                Loại công việc sẽ được chọn khi duyệt và phân công.
-              </div>
-            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div><Label>Giờ</Label>
                 <Input className="mt-1" type="time" value={createForm.scheduled_time}
@@ -1268,7 +1263,7 @@ function Page() {
                   )}
 
                   {/* Tiền công */}
-                  {(fees.length > 0 || diffIds.length > 0) && (() => {
+                  {(fees.length > 0 || diffIds.length > 0 || s.type || s.work_type_id) && (() => {
                     const numPeople = Math.max(1, assignees.length);
                     const bonusTotal = fees.reduce((sum: number, f: any) => sum + f.qty * f.unit_fee, 0);
                     const diffBonusPerTask = diffIds.reduce((sum: number, d: any) => {
@@ -1276,13 +1271,27 @@ function Page() {
                       return sum + (wd?.bonus ?? 0);
                     }, 0);
                     const diffBonus = diffBonusPerTask * numPeople;
-                    const orderTotal = linkedOrder?.total ?? 0;
-                    const totalPool = bonusTotal + diffBonus + orderTotal;
+                    const totalPool = bonusTotal + diffBonus;
                     const perPerson = totalPool / numPeople;
+                    const workType = s.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === s.work_type_id) : null;
+                    const workTypeLabel = workType?.name ?? "—";
+                    const workTypePrice = workType?.price;
+                    console.log(workTypePrice)
+                    const scheduleTypeLabel = SCHEDULE_TYPES.find((t) => t.value === s.type)?.label ?? s.type ?? "—";
                     return (
                     <div>
                       <div className="font-medium text-sm mb-2">Tiền công dự kiến</div>
                       <div className="space-y-1.5">
+                        <div className="grid grid-cols-1 gap-1.5">
+                          <div className="flex justify-between text-sm rounded border px-3 py-2">
+                            <span>Loại hình công việc</span>
+
+                            <span className="font-medium text-foreground">
+                              {workTypeLabel}
+                              {workTypePrice !== undefined ? ` • ${fmtMoney(workTypePrice)}` : ""}
+                            </span>
+                          </div>
+                        </div>
                         {fees.map((f: any) => (
                           <div key={f.product_id} className="flex justify-between text-sm rounded border px-3 py-2">
                             <span>{f.product_id} × {f.qty}</span>
@@ -1298,12 +1307,6 @@ function Page() {
                             </div>
                           ) : null;
                         })}
-                        {(() => { const linkedOrder2: any = s.order_id ? (data?.orders ?? []).find((o: any) => o.id === s.order_id) : null; return linkedOrder2?.total > 0 ? (
-                          <div className="flex justify-between text-sm rounded border px-3 py-2">
-                            <span>Tiền đơn hàng</span>
-                            <span className="font-medium text-green-600">+{fmtMoney(linkedOrder2.total)}</span>
-                          </div>
-                        ) : null; })()}
                         <div className="flex justify-between font-semibold text-sm rounded border border-green-200 bg-green-50 px-3 py-2">
                           <span>Tiền công / người ({numPeople} người)</span>
                           <span className="text-green-700">{fmtMoney(perPerson)}</span>
@@ -1341,8 +1344,8 @@ function Page() {
                     "📋 Nội dung đơn hàng:",
                     "",
                     `• Tiêu đề: ${s.title}`,
-                    `• Loại công việc: ${SCHEDULE_TYPES.find((t) => t.value === s.type)?.label ?? s.type}`,
-                    workType ? `• Loại hình: ${workType.name}` : null,
+                    `• Công việc: ${SCHEDULE_TYPES.find((t) => t.value === s.type)?.label ?? s.type}`,
+                    workType ? `• Loại hình công việc: ${workType.name}` : null,
                     `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`,
                     customer ? `• Khách hàng: ${customer.name}${customer.phone ? " — " + customer.phone : ""}` : null,
                     s.address ? `• Địa chỉ: ${s.address}` : null,
