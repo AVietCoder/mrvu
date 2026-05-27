@@ -3,7 +3,7 @@ import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { getCustomerById, upsertCustomer } from "@/lib/customers.functions";
+import { getCustomerById, upsertCustomer, collectCustomerPayment } from "@/lib/customers.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ import {
   ShoppingBag,
   Clock,
   User,
+  Banknote,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -146,6 +147,7 @@ function CustomerDetailPage() {
 
   const getCustomer = useServerFn(getCustomerById);
   const upsert = useServerFn(upsertCustomer);
+  const collectPaymentFn = useServerFn(collectCustomerPayment);
 
   const { data, isLoading } = useQuery({
     queryKey: ["customer-detail", id],
@@ -154,6 +156,11 @@ function CustomerDetailPage() {
   });
 
   const [editOpen, setEditOpen] = useState(false);
+  const [payOpen, setPayOpen] = useState(false);
+  const [payAmount, setPayAmount] = useState("");
+  const [payNote, setPayNote] = useState("");
+  const [payBranch, setPayBranch] = useState("");
+  const [submittingPay, setSubmittingPay] = useState(false);
   const [form, setForm] = useState<FormState>({
     name: "",
     phone: "",
@@ -195,6 +202,46 @@ function CustomerDetailPage() {
       debt: String(customer.debt ?? 0),
     });
     setEditOpen(true);
+  }
+
+  function fmtInput(val: string): string {
+    const num = val.replace(/\D/g, "");
+    if (!num) return "";
+    return new Intl.NumberFormat("vi-VN").format(Number(num));
+  }
+
+  function parseInput(val: string): number {
+    return Number(val.replace(/\D/g, "")) || 0;
+  }
+
+  function openPayDialog() {
+    setPayAmount("");
+    setPayNote("");
+    setPayOpen(true);
+  }
+
+  async function handleCollectPayment() {
+    const amount = parseInput(payAmount);
+    if (amount <= 0) return toast.error("Nhập số tiền cần thu");
+    setSubmittingPay(true);
+    try {
+      const result = await collectPaymentFn({
+        data: {
+          customer_id: customer.id,
+          amount,
+          branch_id: payBranch || customer.branch_id || "",
+          note: payNote || undefined,
+        },
+      });
+      toast.success(`Đã tạo phiếu thu ${result.code} — Còn nợ: ${fmt(result.new_debt)}`);
+      setPayOpen(false);
+      qc.invalidateQueries({ queryKey: ["customer-detail", id] });
+      qc.invalidateQueries({ queryKey: ["customers"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi tạo phiếu thu");
+    } finally {
+      setSubmittingPay(false);
+    }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -247,6 +294,11 @@ function CustomerDetailPage() {
         <Button size="sm" variant="outline" className="ml-auto" onClick={startEdit}>
           <Pencil className="h-4 w-4 mr-1" /> Chỉnh sửa
         </Button>
+        {Number(customer.debt || 0) > 0 && (
+          <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={openPayDialog}>
+            <Banknote className="h-4 w-4 mr-1" /> Thu tiền
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -308,7 +360,15 @@ function CustomerDetailPage() {
                   <span className="text-sm text-muted-foreground flex items-center gap-1">
                     <TrendingDown className="h-4 w-4 text-destructive" /> Công nợ
                   </span>
-                  <span className="font-bold text-destructive">{fmt(customer.debt)}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-destructive">{fmt(customer.debt)}</span>
+                    <button
+                      onClick={openPayDialog}
+                      className="text-xs text-green-700 border border-green-300 bg-green-50 hover:bg-green-100 rounded px-1.5 py-0.5 font-medium"
+                    >
+                      Thu tiền
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -455,6 +515,62 @@ function CustomerDetailPage() {
               <Button type="submit">Lưu</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Thu tiền Dialog */}
+      <Dialog open={payOpen} onOpenChange={setPayOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-700">
+              <Banknote className="h-5 w-5" /> Thu tiền từ khách
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm flex justify-between">
+              <span className="text-muted-foreground">Công nợ hiện tại</span>
+              <span className="font-bold text-destructive">{fmt(customer.debt)}</span>
+            </div>
+            <div>
+              <Label>Số tiền thu (₫) *</Label>
+              <Input
+                className="mt-1"
+                autoFocus
+                value={payAmount}
+                onChange={(e) => setPayAmount(fmtInput(e.target.value))}
+                onFocus={(e) => e.target.select()}
+                placeholder="Nhập số tiền..."
+              />
+            </div>
+            <div>
+              <Label>Ghi chú</Label>
+              <Input
+                className="mt-1"
+                value={payNote}
+                onChange={(e) => setPayNote(e.target.value)}
+                placeholder="Nội dung thu tiền..."
+              />
+            </div>
+            {parseInput(payAmount) > 0 && (
+              <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm flex justify-between">
+                <span className="text-muted-foreground">Còn lại sau khi thu</span>
+                <span className="font-bold text-green-700">{fmt(Math.max(0, Number(customer.debt) - parseInput(payAmount)))}</span>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setPayOpen(false)}>
+              Hủy
+            </Button>
+            <Button
+              className="w-full sm:w-auto bg-green-600 hover:bg-green-700"
+              onClick={handleCollectPayment}
+              disabled={submittingPay}
+            >
+              <Banknote className="h-4 w-4 mr-1" />
+              {submittingPay ? "Đang xử lý..." : "Xác nhận thu tiền"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AppShell>

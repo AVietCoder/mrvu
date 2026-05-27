@@ -324,18 +324,41 @@ async function revertCashVouchersForOrder(orderCode: string) {
   }
 }
 
-async function nextOrderCode() {
-  const count = await countRows("orders");
-  return "HD" + String(count + 1).padStart(6, "0");
+async function nextOrderCode(): Promise<string> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const count = await countRows("orders");
+    const candidate = "HD" + String(count + 1 + attempt).padStart(6, "0");
+    const { data: existing } = await supabase
+      .from("orders")
+      .select("id")
+      .eq("code", candidate)
+      .maybeSingle();
+    if (!existing) return candidate;
+  }
+  const ts = Date.now().toString().slice(-6);
+  return "HD" + ts;
 }
 
-async function nextCashCode(type: "thu" | "chi") {
+async function nextCashCode(type: "thu" | "chi"): Promise<string> {
   const prefix = type === "thu" ? "PT" : "PC";
-  const { count } = await supabase
-    .from("cash_vouchers")
-    .select("id", { count: "exact", head: true })
-    .eq("type", type);
-  return prefix + String((count ?? 0) + 1).padStart(6, "0");
+  // Retry up to 10 times to handle concurrent inserts (race condition)
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const { count } = await supabase
+      .from("cash_vouchers")
+      .select("id", { count: "exact", head: true })
+      .eq("type", type);
+    const candidate = prefix + String((count ?? 0) + 1 + attempt).padStart(6, "0");
+    const { data: existing } = await supabase
+      .from("cash_vouchers")
+      .select("id")
+      .eq("code", candidate)
+      .maybeSingle();
+    if (!existing) return candidate;
+  }
+  // Absolute fallback: timestamp+random to guarantee uniqueness
+  const ts = Date.now().toString().slice(-6);
+  const rand = Math.floor(Math.random() * 100).toString().padStart(2, "0");
+  return prefix + ts + rand;
 }
 
 async function autoCreateReceiptForOrder({
@@ -836,4 +859,137 @@ export const updateOrder = createServerFn({ method: "POST" })
       }
       throw err;
     }
+  });
+
+export const createReturnOrder = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: any }) => {
+    // data: { original_order_id, items: [{product_id, qty, unit_price, discount}], discount, refunded_to_customer, note, branch_id, customer_id, employee_id }
+    const originalRows = await fetchRows<any>("orders", {
+      eq: { id: data.original_order_id },
+      select: "id, code, customer_id, branch_id, employee_id, total, deposit, paid, payment_method, status",
+      limit: 1,
+    });
+    const originalOrder = originalRows[0];
+    if (!originalOrder) throw new Error("Không tìm thấy đơn hàng gốc");
+
+    const subtotal = data.items.reduce(
+      (s: number, it: any) => s + it.qty * it.unit_price - (it.discount || 0),
+      0,
+    );
+    const discount = Number(data.discount || 0);
+    const total = Math.max(0, subtotal - discount);
+    const refundedToCustomer = Number(data.refunded_to_customer || 0);
+
+    // Tạo mã phiếu trả hàng
+    // Retry loop to avoid duplicate key race condition for return order code
+    let returnCode: string = "";
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const { count: returnCount } = await supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .like("code", "TH%");
+      const candidate = "TH" + String((returnCount ?? 0) + 1 + attempt).padStart(6, "0");
+      const { data: existingReturn } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("code", candidate)
+        .maybeSingle();
+      if (!existingReturn) { returnCode = candidate; break; }
+    }
+    if (!returnCode) {
+      const ts = Date.now().toString().slice(-6);
+      returnCode = "TH" + ts;
+    }
+
+    const returnId = uid();
+    const createdAt = now();
+
+    // Tạo đơn trả hàng (status = "returned")
+    await insertRow("orders", {
+      id: returnId,
+      code: returnCode,
+      customer_id: data.customer_id || originalOrder.customer_id || null,
+      branch_id: data.branch_id || originalOrder.branch_id,
+      employee_id: data.employee_id || originalOrder.employee_id || null,
+      status: "returned",
+      subtotal,
+      discount,
+      total,
+      deposit: 0,
+      paid: refundedToCustomer,
+      payment_method: originalOrder.payment_method || "tien_mat",
+      note: data.note ? `[Trả hàng đơn ${originalOrder.code}] ${data.note}` : `[Trả hàng đơn ${originalOrder.code}]`,
+      created_at: createdAt,
+    });
+
+    for (const it of data.items) {
+      const itemTotal = it.qty * it.unit_price - (it.discount || 0);
+      await insertRow("order_items", {
+        id: uid(),
+        order_id: returnId,
+        product_id: it.product_id,
+        qty: Number(it.qty),
+        unit_price: Number(it.unit_price),
+        discount: Number(it.discount || 0),
+        total: itemTotal,
+      });
+    }
+
+    // Hoàn lại tồn kho
+    const branchId = data.branch_id || originalOrder.branch_id;
+    for (const it of data.items) {
+      await adjustStock(it.product_id, branchId, Number(it.qty));
+    }
+
+    // Cập nhật công nợ khách hàng (giảm total_buy, giảm debt)
+    const customerId = data.customer_id || originalOrder.customer_id;
+    if (customerId) {
+      const custRows = await fetchRows<{ debt: number; total_buy: number }>("customers", {
+        eq: { id: customerId },
+        select: "debt, total_buy",
+        limit: 1,
+      });
+      const currentDebt = custRows[0]?.debt ?? 0;
+      const currentTotalBuy = custRows[0]?.total_buy ?? 0;
+      await updateWhere("customers", {
+        total_buy: Math.max(0, currentTotalBuy - total),
+        debt: Math.max(0, currentDebt - total),
+      }, { id: customerId });
+    }
+
+    // Tạo phiếu chi nếu đã trả tiền cho khách
+    if (refundedToCustomer > 0) {
+      const cashCode = await nextCashCode("chi");
+      const pm = originalOrder.payment_method === "ngan_hang" ? "ngan_hang" : "tien_mat";
+      await insertRow("cash_vouchers", {
+        id: uid(),
+        code: cashCode,
+        type: "chi",
+        fund_type: pm,
+        branch_id: branchId,
+        amount: refundedToCustomer,
+        voucher_type_id: null,
+        collector_user_id: data.employee_id || originalOrder.employee_id || null,
+        payer_customer_id: null,
+        payer_user_id: null,
+        receiver_customer_id: customerId || null,
+        note: `Hoàn tiền trả hàng ${returnCode} (đơn gốc ${originalOrder.code})`,
+        accounting: true,
+        status: "active",
+        created_by: data.employee_id || originalOrder.employee_id || null,
+        created_at: createdAt,
+      });
+    }
+
+    // Cập nhật trạng thái đơn gốc thành partially_returned hoặc returned
+    // (đơn gốc vẫn giữ nguyên trạng thái, chỉ ghi chú)
+    await updateWhere("orders", {
+      note: originalOrder.note
+        ? `${originalOrder.note} | Đã trả hàng: ${returnCode}`
+        : `Đã trả hàng: ${returnCode}`,
+    }, { id: data.original_order_id });
+
+    await logActivity({ action: "create_return", detail: `Trả hàng ${returnCode} từ đơn ${originalOrder.code}` });
+
+    return { ok: true, code: returnCode, id: returnId };
   });

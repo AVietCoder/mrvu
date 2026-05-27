@@ -8,13 +8,21 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { listOrders, updateOrderStatus, updateOrder } from "@/lib/orders.functions";
+import { listOrders, updateOrderStatus, updateOrder, createReturnOrder } from "@/lib/orders.functions";
 import { getSettings } from "@/lib/settings.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   ArrowLeft,
   CalendarDays,
@@ -33,6 +41,7 @@ import {
   Save,
   Ban,
   Printer,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -88,6 +97,7 @@ function OrderDetailPage() {
   const listFn = useServerFn(listOrders);
   const updateStatusFn = useServerFn(updateOrderStatus);
   const updateOrderFn = useServerFn(updateOrder);
+  const createReturnFn = useServerFn(createReturnOrder);
   const getSettingsFn = useServerFn(getSettings);
   const qc = useQueryClient();
   const router = useRouter();
@@ -113,6 +123,14 @@ function OrderDetailPage() {
 
   const [completingOrder, setCompletingOrder] = useState(false);
   const [cancellingOrder, setCancellingOrder] = useState(false);
+
+  // Return order state
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [returnItems, setReturnItems] = useState<LineItem[]>([]);
+  const [returnDiscount, setReturnDiscount] = useState("0");
+  const [returnRefunded, setReturnRefunded] = useState("0");
+  const [returnNote, setReturnNote] = useState("");
+  const [submittingReturn, setSubmittingReturn] = useState(false);
 
   const order = useMemo(
     () => (data?.orders ?? []).find((o: any) => o.id === id),
@@ -213,6 +231,58 @@ function OrderDetailPage() {
   );
   const editTotal = Math.max(0, editSubtotal - parseInput(editDiscount));
   const khachCanThanhToanEdit = Math.max(0, editTotal - parseInput(editDeposit));
+
+  function startReturn() {
+    setReturnItems(
+      orderItems.map((i: any) => ({
+        product_id: i.product_id,
+        qty: i.qty,
+        unit_price: i.unit_price,
+        discount: i.discount ?? 0,
+      }))
+    );
+    setReturnDiscount(String(order.discount ?? 0));
+    setReturnRefunded("0");
+    setReturnNote("");
+    setReturnOpen(true);
+  }
+
+  const returnSubtotal = useMemo(
+    () => returnItems.reduce((s, i) => s + i.qty * i.unit_price - i.discount, 0),
+    [returnItems]
+  );
+  const returnTotal = Math.max(0, returnSubtotal - parseInput(returnDiscount));
+  const khachCanNhanLai = returnTotal;
+
+  async function submitReturn() {
+    if (returnItems.length === 0) return toast.error("Chưa có sản phẩm trả");
+    setSubmittingReturn(true);
+    try {
+      const result = await createReturnFn({
+        data: {
+          original_order_id: id,
+          items: returnItems,
+          discount: parseInput(returnDiscount),
+          refunded_to_customer: parseInput(returnRefunded),
+          note: returnNote || undefined,
+          branch_id: order.branch_id,
+          customer_id: order.customer_id || undefined,
+          employee_id: order.employee_id || undefined,
+        },
+      });
+
+      await qc.invalidateQueries({ queryKey: ["orders"] });
+      await router.invalidate();
+      await refetch();
+
+      toast.success(`Đã tạo phiếu trả hàng ${result.code}`);
+      setReturnOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi tạo phiếu trả hàng");
+    } finally {
+      setSubmittingReturn(false);
+    }
+  }
 
   async function completeOrder() {
     const stock = data?.stock ?? [];
@@ -474,6 +544,12 @@ function OrderDetailPage() {
                     <Button size="sm" onClick={completeOrder} disabled={completingOrder}>
                       <CheckCircle2 className="h-4 w-4 mr-1" />
                       {completingOrder ? "Đang xử lý..." : "Hoàn tất"}
+                    </Button>
+                  )}
+
+                  {isAdmin && order.status === "completed" && (
+                    <Button size="sm" variant="outline" className="border-orange-300 text-orange-700 hover:bg-orange-50" onClick={startReturn}>
+                      <RotateCcw className="h-4 w-4 mr-1" /> Trả hàng
                     </Button>
                   )}
 
@@ -840,6 +916,154 @@ function OrderDetailPage() {
           </Card>
         </div>
       </div>
+      {/* Return Order Dialog */}
+      <Dialog open={returnOpen} onOpenChange={setReturnOpen}>
+        <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-700">
+              <RotateCcw className="h-5 w-5" /> Trả hàng — {order?.code}
+            </DialogTitle>
+            <DialogDescription>
+              Chỉnh sửa sản phẩm và số lượng cần trả. Tiền đã trả khách mặc định là 0 (chưa trả).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-sm font-semibold">Sản phẩm trả hàng</Label>
+                <Button size="sm" variant="outline" onClick={() => {
+                  const p = (data?.products ?? [])[0];
+                  if (!p) return;
+                  setReturnItems([...returnItems, { product_id: p.id, qty: 1, unit_price: (p as any).sale_price ?? 0, discount: 0 }]);
+                }}>
+                  <Plus className="h-4 w-4 mr-1" /> Thêm SP
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {returnItems.length === 0 && (
+                  <div className="text-sm text-muted-foreground py-2">Chưa có sản phẩm.</div>
+                )}
+                {returnItems.map((item, idx) => {
+                  const lineTotal = item.qty * item.unit_price - item.discount;
+                  return (
+                    <div key={idx} className="grid grid-cols-12 gap-1.5 items-center">
+                      <div className="col-span-5">
+                        <SearchableSelect
+                          value={item.product_id}
+                          onChange={(val) => {
+                            const p = (data?.products ?? []).find((x: any) => x.id === val);
+                            const next = [...returnItems];
+                            next[idx] = { ...next[idx], product_id: val, unit_price: (p as any)?.sale_price ?? 0 };
+                            setReturnItems(next);
+                          }}
+                          placeholder="Chọn sản phẩm..."
+                          options={(data?.products ?? []).map((p: any) => ({ value: p.id, label: p.name, sub: p.sku ?? undefined }))}
+                        />
+                      </div>
+                      <Input
+                        type="number"
+                        className="col-span-1"
+                        placeholder="SL"
+                        value={item.qty}
+                        min={1}
+                        onChange={(e) => {
+                          const n = [...returnItems];
+                          n[idx].qty = Math.max(1, Number(e.target.value) || 1);
+                          setReturnItems(n);
+                        }}
+                      />
+                      <Input
+                        className="col-span-3"
+                        placeholder="Đơn giá"
+                        value={item.unit_price === 0 ? "" : new Intl.NumberFormat("vi-VN").format(item.unit_price)}
+                        onChange={(e) => {
+                          const n = [...returnItems];
+                          n[idx].unit_price = parseInput(e.target.value);
+                          setReturnItems(n);
+                        }}
+                      />
+                      <div className="col-span-2 text-right text-xs font-medium text-muted-foreground">
+                        {fmt(lineTotal)}
+                      </div>
+                      <button
+                        type="button"
+                        className="col-span-1 flex items-center justify-center rounded-md border hover:text-destructive p-1"
+                        onClick={() => setReturnItems(returnItems.filter((_, i) => i !== idx))}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label>Giảm giá trên phiếu trả (₫)</Label>
+                <Input
+                  className="mt-1"
+                  value={returnDiscount}
+                  onChange={(e) => setReturnDiscount(fmtInput(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
+              <div>
+                <Label>Tiền đã trả lại khách (₫)</Label>
+                <Input
+                  className="mt-1"
+                  value={returnRefunded}
+                  onChange={(e) => setReturnRefunded(fmtInput(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                  placeholder="Mặc định 0 — chưa trả"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label>Ghi chú</Label>
+              <Input className="mt-1" value={returnNote} onChange={(e) => setReturnNote(e.target.value)} placeholder="Lý do trả hàng..." />
+            </div>
+
+            <div className="rounded-lg border p-3 bg-orange-50/40 space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Tạm tính</span>
+                <span>{fmt(returnSubtotal)}</span>
+              </div>
+              {parseInput(returnDiscount) > 0 && (
+                <div className="flex justify-between text-red-600">
+                  <span>Giảm giá</span>
+                  <span>- {fmt(parseInput(returnDiscount))}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-bold text-orange-800 border-t pt-1.5">
+                <span>Khách cần nhận lại</span>
+                <span>{fmt(khachCanNhanLai)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Đã trả lại khách</span>
+                <span>{fmt(parseInput(returnRefunded))}</span>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setReturnOpen(false)}>
+              Hủy
+            </Button>
+            <Button
+              className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700"
+              onClick={submitReturn}
+              disabled={submittingReturn}
+            >
+              <RotateCcw className="h-4 w-4 mr-1" />
+              {submittingReturn ? "Đang tạo..." : "Xác nhận trả hàng"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, useEffect } from "react";
 import { listOrders, createOrder } from "@/lib/orders.functions";
 import { createSchedule, listWorkTypes } from "@/lib/schedule.functions";
+import { upsertCustomer } from "@/lib/customers.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -22,6 +23,7 @@ import {
   ExternalLink,
   Minus,
   Loader2,
+  UserPlus,
 } from "lucide-react";
 import {
   Dialog,
@@ -207,6 +209,7 @@ function Page() {
   const create = useServerFn(createOrder);
   const createScheduleFn = useServerFn(createSchedule);
   const listWorkTypesFn = useServerFn(listWorkTypes);
+  const upsertCustomerFn = useServerFn(upsertCustomer);
   const qc = useQueryClient();
 
   const { data } = useQuery({
@@ -232,6 +235,12 @@ function Page() {
 
   const [receiptOrder, setReceiptOrder] = useState<any>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
+
+  // Quick create customer state
+  const [quickCustOpen, setQuickCustOpen] = useState(false);
+  const [quickCustName, setQuickCustName] = useState("");
+  const [quickCustPhone, setQuickCustPhone] = useState("");
+  const [savingCust, setSavingCust] = useState(false);
 
   const [items, setItems] = useState<LineItem[]>([]);
   const [customer, setCustomer] = useState("");
@@ -397,6 +406,36 @@ function Page() {
     setPage(1);
     setSearch("");
     setFilterStatus("");
+  }
+
+  async function handleQuickCreateCustomer() {
+    if (!quickCustName.trim()) return toast.error("Nhập tên khách hàng");
+    setSavingCust(true);
+    try {
+      await upsertCustomerFn({
+        data: {
+          name: quickCustName.trim(),
+          phone: quickCustPhone.trim() || undefined,
+          group_name: "le",
+          debt: 0,
+        },
+      });
+      await qc.invalidateQueries({ queryKey: ["orders"] });
+      toast.success(`Đã tạo khách hàng: ${quickCustName.trim()}`);
+      setQuickCustOpen(false);
+      setQuickCustName("");
+      setQuickCustPhone("");
+      // Auto-select the new customer after data refreshes
+      setTimeout(async () => {
+        const fresh = await listFn();
+        const newCust = (fresh?.customers ?? []).find((c: any) => c.name === quickCustName.trim() && (!quickCustPhone || c.phone === quickCustPhone));
+        if (newCust) setCustomer(newCust.id);
+      }, 500);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi tạo khách hàng");
+    } finally {
+      setSavingCust(false);
+    }
   }
 
   function reset() {
@@ -638,7 +677,16 @@ function Page() {
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <Label>Khách hàng</Label>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label>Khách hàng</Label>
+                    <button
+                      type="button"
+                      className="flex items-center gap-0.5 text-xs text-primary hover:underline"
+                      onClick={() => { setQuickCustName(""); setQuickCustPhone(""); setQuickCustOpen(true); }}
+                    >
+                      <UserPlus className="h-3.5 w-3.5" /> Tạo mới
+                    </button>
+                  </div>
                   <SearchableSelect
                     value={customer}
                     onChange={setCustomer}
@@ -1111,6 +1159,48 @@ function Page() {
                 </Button>
               </DialogFooter>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Quick Create Customer Dialog */}
+        <Dialog open={quickCustOpen} onOpenChange={setQuickCustOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <UserPlus className="h-5 w-5 text-primary" /> Tạo khách hàng nhanh
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label>Tên khách hàng *</Label>
+                <Input
+                  className="mt-1"
+                  autoFocus
+                  value={quickCustName}
+                  onChange={(e) => setQuickCustName(e.target.value)}
+                  placeholder="Nhập tên khách..."
+                  onKeyDown={(e) => { if (e.key === "Enter") handleQuickCreateCustomer(); }}
+                />
+              </div>
+              <div>
+                <Label>Số điện thoại</Label>
+                <Input
+                  className="mt-1"
+                  value={quickCustPhone}
+                  onChange={(e) => setQuickCustPhone(e.target.value)}
+                  placeholder="Số điện thoại (tùy chọn)"
+                />
+              </div>
+            </div>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button variant="outline" className="w-full sm:w-auto" onClick={() => setQuickCustOpen(false)}>
+                Hủy
+              </Button>
+              <Button className="w-full sm:w-auto" onClick={handleQuickCreateCustomer} disabled={savingCust}>
+                <UserPlus className="h-4 w-4 mr-1" />
+                {savingCust ? "Đang tạo..." : "Tạo khách hàng"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 

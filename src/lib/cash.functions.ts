@@ -28,11 +28,26 @@ export const listCash = createServerFn({ method: "GET" }).handler(async () => {
 export const createCashVoucher = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: any }) => {
     const prefix = data.type === "thu" ? "PT" : "PC";
-    const { count } = await supabase
-      .from("cash_vouchers")
-      .select("id", { count: "exact", head: true })
-      .eq("type", data.type);
-    const code = prefix + String((count ?? 0) + 1).padStart(6, "0");
+    // Retry loop to avoid duplicate key race condition
+    let code: string = "";
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const { count } = await supabase
+        .from("cash_vouchers")
+        .select("id", { count: "exact", head: true })
+        .eq("type", data.type);
+      const candidate = prefix + String((count ?? 0) + 1 + attempt).padStart(6, "0");
+      const { data: existing } = await supabase
+        .from("cash_vouchers")
+        .select("id")
+        .eq("code", candidate)
+        .maybeSingle();
+      if (!existing) { code = candidate; break; }
+    }
+    if (!code) {
+      const ts = Date.now().toString().slice(-6);
+      const rand = Math.floor(Math.random() * 100).toString().padStart(2, "0");
+      code = prefix + ts + rand;
+    }
 
     await insertRow("cash_vouchers", {
       id: uid(),

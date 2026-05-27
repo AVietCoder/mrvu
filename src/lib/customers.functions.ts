@@ -153,3 +153,63 @@ export const getCustomerById = createServerFn({ method: "GET" })
       orders,
     };
   });
+export const collectCustomerPayment = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: { customer_id: string; amount: number; branch_id: string; employee_id?: string; note?: string; fund_type?: string } }) => {
+    const amount = Number(data.amount || 0);
+    if (amount <= 0) throw new Error("Số tiền phải lớn hơn 0");
+
+    // Retry loop to avoid duplicate key race condition
+    let code: string = "";
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const { count } = await supabase
+        .from("cash_vouchers")
+        .select("id", { count: "exact", head: true })
+        .eq("type", "thu");
+      const candidate = "PT" + String((count ?? 0) + 1 + attempt).padStart(6, "0");
+      const { data: existing } = await supabase
+        .from("cash_vouchers")
+        .select("id")
+        .eq("code", candidate)
+        .maybeSingle();
+      if (!existing) { code = candidate; break; }
+    }
+    if (!code) {
+      const ts = Date.now().toString().slice(-6);
+      const rand = Math.floor(Math.random() * 100).toString().padStart(2, "0");
+      code = "PT" + ts + rand;
+    }
+    const fundType = data.fund_type === "ngan_hang" ? "ngan_hang" : "tien_mat";
+
+    await insertRow("cash_vouchers", {
+      id: uid(),
+      code,
+      type: "thu",
+      fund_type: fundType,
+      branch_id: data.branch_id,
+      amount,
+      voucher_type_id: null,
+      collector_user_id: data.employee_id || null,
+      payer_customer_id: data.customer_id,
+      payer_user_id: null,
+      receiver_customer_id: null,
+      note: data.note || `Thu tiền công nợ từ khách`,
+      accounting: true,
+      status: "active",
+      created_by: data.employee_id || null,
+      created_at: now(),
+    });
+
+    // Giảm công nợ khách hàng
+    const custRows = await fetchRows<{ debt: number }>("customers", {
+      eq: { id: data.customer_id },
+      select: "debt",
+      limit: 1,
+    });
+    const currentDebt = custRows[0]?.debt ?? 0;
+    const newDebt = Math.max(0, currentDebt - amount);
+    await updateWhere("customers", { debt: newDebt }, { id: data.customer_id });
+
+    await logActivity({ action: "collect_payment", detail: `Thu ${amount.toLocaleString("vi-VN")} ₫ từ khách (${code})`, employee_id: data.employee_id || null });
+
+    return { ok: true, code, new_debt: newDebt };
+  });
