@@ -9,6 +9,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { listOrders, updateOrderStatus, updateOrder, createReturnOrder } from "@/lib/orders.functions";
+import { updateScheduleOrderLink } from "@/lib/schedule.functions";
 import { getSettings } from "@/lib/settings.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -42,6 +43,9 @@ import {
   Ban,
   Printer,
   RotateCcw,
+  Percent,
+  Link2,
+  Link2Off,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -121,6 +125,8 @@ function OrderDetailPage() {
     queryFn: () => getSettingsFn(),
   });
 
+  const updateScheduleLinkFn = useServerFn(updateScheduleOrderLink);
+
   const [completingOrder, setCompletingOrder] = useState(false);
   const [cancellingOrder, setCancellingOrder] = useState(false);
 
@@ -145,9 +151,11 @@ function OrderDetailPage() {
     [data, id]
   );
 
-  // Có quyền sửa nếu: admin, HOẶC có quyền create_order VÀ đơn chưa hoàn tất (completed/cancelled)
+  // Có quyền sửa nếu: admin, HOẶC có quyền create_order VÀ là người tạo đơn VÀ đơn chưa hoàn tất/hủy
   const canEdit = isAdmin || (
     (user?.permissions?.includes("create_order") || false) &&
+    !!order &&
+    (order.created_by === user?.id || order.employee_id === user?.id) &&
     order?.status !== "completed" &&
     order?.status !== "cancelled"
   );
@@ -160,9 +168,13 @@ function OrderDetailPage() {
   const [editStatus, setEditStatus] = useState("");
   const [editPaymentMethod, setEditPaymentMethod] = useState<"tien_mat" | "ngan_hang">("tien_mat");
   const [editDiscount, setEditDiscount] = useState("0");
+  const [editDiscountMode, setEditDiscountMode] = useState<"amount" | "percent">("amount");
+  const [editVat, setEditVat] = useState("0"); // VAT % (0, 5, 8, 10)
   const [editDeposit, setEditDeposit] = useState("0");
   const [editNote, setEditNote] = useState("");
   const [saving, setSaving] = useState(false);
+  // Schedule link editing
+  const [editScheduleLinks, setEditScheduleLinks] = useState<string[]>([]); // schedule IDs linked to this order
 
   function startEdit() {
     if (!order) return;
@@ -180,8 +192,11 @@ function OrderDetailPage() {
     setEditStatus(order.status);
     setEditPaymentMethod(order.payment_method ?? "tien_mat");
     setEditDiscount(String(order.discount ?? 0));
+    setEditDiscountMode("amount");
+    setEditVat("0");
     setEditDeposit(String(order.deposit ?? 0));
     setEditNote(order.note ?? "");
+    setEditScheduleLinks(linkedSchedules.map((s: any) => s.id));
     setEditing(true);
   }
 

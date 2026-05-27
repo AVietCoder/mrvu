@@ -417,3 +417,14 @@ export const attendanceSummary = createServerFn({ method: "GET" })
       orders,
     };
   });
+
+export const updateScheduleOrderLink = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: { schedule_id: string; order_id: string | null; actor_id?: string } }) => {
+    await updateWhere("schedules", { order_id: data.order_id || null }, { id: data.schedule_id });
+    await logActivity({
+      action: "update_schedule_link",
+      detail: `Cập nhật liên kết đơn hàng cho lịch ${data.schedule_id}`,
+      employee_id: data.actor_id || null,
+    });
+    return { ok: true };
+  });

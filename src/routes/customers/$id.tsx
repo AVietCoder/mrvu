@@ -30,6 +30,7 @@ import {
   Banknote,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute("/customers/$id")({
   head: () => ({ meta: [{ title: "Chi tiết khách hàng — QuatTran POS" }] }),
@@ -145,6 +146,7 @@ type FormState = {
 function CustomerDetailPage() {
   const { id } = useParams({ from: "/customers/$id" });
   const qc = useQueryClient();
+  const { isAdmin, user } = useAuth();
 
   const getCustomer = useServerFn(getCustomerById);
   const upsert = useServerFn(upsertCustomer);
@@ -184,7 +186,11 @@ function CustomerDetailPage() {
 
   const customer = data?.customer ?? null;
   const customerOrders = data?.orders ?? [];
-  const branches = data?.branches ?? [];
+  const allBranches = data?.branches ?? [];
+  // Nhân viên chỉ thấy chi nhánh mình được phân công
+  const branches = isAdmin || !user?.branch_ids?.length
+    ? allBranches
+    : allBranches.filter((b: any) => user.branch_ids.includes(b.id));
   const completedOrders = customerOrders.filter(
     (o: any) => o.status === "completed"
   );
@@ -229,7 +235,12 @@ function CustomerDetailPage() {
     setPayAmount("");
     setPayNote("");
     setPayFundType("tien_mat");
-    setPayBranch(customer?.branch_id ?? "");
+    // Mặc định chi nhánh: ưu tiên chi nhánh khách hàng → chi nhánh nhân viên → trống
+    const defaultBranch = customer?.branch_id
+      || (branches.length === 1 ? branches[0].id : "")
+      || user?.branch_ids?.[0]
+      || "";
+    setPayBranch(defaultBranch);
     setBankAccountIdx("");
     setBankContent("");
     setPayOpen(true);
