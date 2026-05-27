@@ -18,7 +18,7 @@ export const listCash = createServerFn({ method: "GET" }).handler(async () => {
     fetchAllRows("cash_vouchers", { orderBy: "created_at", ascending: false }),
     fetchRows("branches", { orderBy: "name" }),
     fetchRows("users", { select: "id, full_name, is_admin", orderBy: "full_name" }),
-    fetchAllRows("customers", { select: "id, name, phone", orderBy: "name" }),
+    fetchAllRows("customers", { select: "id, name, phone", orderBy: "created_at", ascending: false }),
     fetchRows("cash_voucher_types", { orderBy: "name" }),
   ]);
   return { vouchers, branches, users, customers, voucherTypes };

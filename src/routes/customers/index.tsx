@@ -161,7 +161,7 @@ function CustomersPage() {
   const [viewId, setViewId] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("name");
+  const [sortBy, setSortBy] = useState("date");
   const [page, setPage] = useState(1);
 
   const [filterGroup, setFilterGroup] = useState("");
@@ -335,12 +335,12 @@ function CustomersPage() {
           onSearch={(v) => { setSearch(v); setPage(1); }}
           placeholder="Tìm tên, số điện thoại..."
           sortOptions={[
+            { value: "date", label: "Mới nhất" },
             { value: "name", label: "Tên A→Z" },
             { value: "total_buy_desc", label: "Tổng bán (cao→thấp)" },
             { value: "total_buy_asc", label: "Tổng bán (thấp→cao)" },
             { value: "debt_desc", label: "Nợ nhiều nhất" },
             { value: "debt_asc", label: "Nợ ít nhất" },
-            { value: "date", label: "Mới nhất" },
           ]}
           sortValue={sortBy}
           onSort={(v) => { setSortBy(v); setPage(1); }}

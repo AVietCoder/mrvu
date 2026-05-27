@@ -412,7 +412,7 @@ export const listOrders = createServerFn({ method: "GET" }).handler(async () => 
       fetchAllRows("orders", { orderBy: "created_at", ascending: false }),
       fetchAllRows("order_items"),
       fetchAllRows("products", { orderBy: "name" }),
-      fetchAllRows("customers", { orderBy: "name" }),
+      fetchAllRows("customers", { orderBy: "created_at", ascending: false }),
       fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
       fetchRows("branches", { orderBy: "name" }),
       fetchAllRows("schedules", {

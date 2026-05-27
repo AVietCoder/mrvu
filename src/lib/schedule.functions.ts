@@ -25,7 +25,7 @@ export const listSchedules = createServerFn({ method: "GET" }).handler(async () 
     fetchRows("work_difficulties", { orderBy: "bonus", ascending: false }),
     fetchRows("work_types", { orderBy: "name" }),
     fetchRows("users", { select: "id, full_name, username, is_admin", orderBy: "full_name" }),
-    fetchRows("customers", { select: "id, name, phone, address, ward, district, province", orderBy: "name" }),
+    fetchRows("customers", { select: "id, name, phone, address, ward, district, province", orderBy: "created_at", ascending: false }),
     fetchRows("branches", { orderBy: "name" }),
     fetchRows("products", { select: "id, sku, name, tech_fee", orderBy: "name" }),
     fetchRows("orders", {
@@ -323,7 +323,7 @@ export const attendanceSummary = createServerFn({ method: "GET" })
       fetchRows("work_types"),
       fetchRows("work_difficulties"),
       fetchRows("users", { select: "id, full_name, username" }),
-      fetchRows("customers", { select: "id, name, phone" }),
+      fetchRows("customers", { select: "id, name, phone", orderBy: "created_at", ascending: false }),
       fetchRows("orders", { select: "id, code, total" }),
     ]);
 
