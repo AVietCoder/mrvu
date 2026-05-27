@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { getCustomerById, upsertCustomer, collectCustomerPayment } from "@/lib/customers.functions";
+import { getSettings } from "@/lib/settings.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,11 +149,17 @@ function CustomerDetailPage() {
   const getCustomer = useServerFn(getCustomerById);
   const upsert = useServerFn(upsertCustomer);
   const collectPaymentFn = useServerFn(collectCustomerPayment);
+  const getSettingsFn = useServerFn(getSettings);
 
   const { data, isLoading } = useQuery({
     queryKey: ["customer-detail", id],
     enabled: !!id,
     queryFn: () => getCustomer({ data: { id: id! } }),
+  });
+
+  const { data: siteSettings } = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => getSettingsFn(),
   });
 
   const [editOpen, setEditOpen] = useState(false);
@@ -161,6 +168,8 @@ function CustomerDetailPage() {
   const [payNote, setPayNote] = useState("");
   const [payBranch, setPayBranch] = useState("");
   const [payFundType, setPayFundType] = useState<"tien_mat" | "ngan_hang">("tien_mat");
+  const [bankAccountIdx, setBankAccountIdx] = useState<string>("");
+  const [bankContent, setBankContent] = useState("");
   const [submittingPay, setSubmittingPay] = useState(false);
   const [form, setForm] = useState<FormState>({
     name: "",
@@ -221,6 +230,8 @@ function CustomerDetailPage() {
     setPayNote("");
     setPayFundType("tien_mat");
     setPayBranch(customer?.branch_id ?? "");
+    setBankAccountIdx("");
+    setBankContent("");
     setPayOpen(true);
   }
 
@@ -235,7 +246,7 @@ function CustomerDetailPage() {
           amount,
           branch_id: payBranch || customer.branch_id || "",
           fund_type: payFundType,
-          note: payNote || undefined,
+          note: payNote || (payFundType === "ngan_hang" && bankContent ? `CK: ${bankContent}` : undefined),
         },
       });
       toast.success(`Đã tạo phiếu thu ${result.code} — Còn nợ: ${fmt(result.new_debt)}`);
@@ -525,7 +536,7 @@ function CustomerDetailPage() {
 
       {/* Thu tiền Dialog */}
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-green-700">
               <Banknote className="h-5 w-5" /> Thu tiền từ khách
@@ -554,10 +565,14 @@ function CustomerDetailPage() {
                 <select
                   className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                   value={payFundType}
-                  onChange={(e) => setPayFundType(e.target.value as any)}
+                  onChange={(e) => {
+                    setPayFundType(e.target.value as any);
+                    setBankAccountIdx("");
+                    setBankContent("");
+                  }}
                 >
                   <option value="tien_mat">Tiền mặt</option>
-                  <option value="ngan_hang">Ngân hàng</option>
+                  <option value="ngan_hang">Chuyển khoản (Ngân hàng)</option>
                 </select>
               </div>
               <div>
@@ -574,6 +589,74 @@ function CustomerDetailPage() {
                 </select>
               </div>
             </div>
+
+            {/* Phần ngân hàng — chỉ hiện khi chọn chuyển khoản */}
+            {payFundType === "ngan_hang" && (() => {
+              const bankList: any[] = (() => {
+                try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
+                catch { return []; }
+              })();
+              return (
+                <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50/40 p-3">
+                  {bankList.length > 0 && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Chọn tài khoản nhận tiền</Label>
+                      <select
+                        className="mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm"
+                        value={bankAccountIdx}
+                        onChange={(e) => {
+                          const idx = e.target.value;
+                          setBankAccountIdx(idx);
+                          if (idx !== "") {
+                            const ba = bankList[parseInt(idx)];
+                            if (ba && !bankContent) {
+                              setBankContent(`${siteSettings?.site_name ?? "CK"} ${ba.account_number}`);
+                            }
+                          }
+                        }}
+                      >
+                        <option value="">— Chọn STK —</option>
+                        {bankList.map((ba: any, i: number) => (
+                          <option key={i} value={String(i)}>
+                            {ba.bank} - {ba.account_number} ({ba.account_name})
+                          </option>
+                        ))}
+                      </select>
+                      {bankAccountIdx !== "" && (() => {
+                        const ba = bankList[parseInt(bankAccountIdx)];
+                        return ba ? (
+                          <div className="mt-1.5 rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
+                            <div className="font-semibold text-sm">{ba.bank}</div>
+                            <div>STK: <span className="font-mono font-bold tracking-wide">{ba.account_number}</span></div>
+                            <div>Chủ TK: {ba.account_name}</div>
+                            {ba.note && <div className="text-blue-600">{ba.note}</div>}
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+                  )}
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Nội dung chuyển khoản</Label>
+                    <div className="mt-1 relative">
+                      <Input
+                        value={bankContent}
+                        onChange={(e) => setBankContent(e.target.value)}
+                        placeholder="VD: THUTIEN NGUYEN VAN A"
+                        className="pr-12 font-mono text-sm"
+                      />
+                      {bankContent && (
+                        <button
+                          type="button"
+                          className="absolute right-2 top-2 text-xs text-primary hover:underline"
+                          onClick={() => { navigator.clipboard.writeText(bankContent); toast.success("Đã copy nội dung CK!"); }}
+                        >Copy</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div>
               <Label>Ghi chú</Label>
               <Input
