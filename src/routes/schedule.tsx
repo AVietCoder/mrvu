@@ -217,6 +217,7 @@ const userBranchIds = useMemo(() => {
   const [assignedUsers, setAssignedUsers] = useState<string[]>([]);
   const [assignedDiffs, setAssignedDiffs] = useState<string[]>([]);
   const [techFees, setTechFees] = useState<{ product_id: string; qty: number; unit_fee: number }[]>([]);
+  const [approveDate, setApproveDate] = useState<string>("");
 
   // ── Dialog tính chất CV ────────────────────────────────────
   const [diffOpen, setDiffOpen] = useState(false);
@@ -359,6 +360,7 @@ const userBranchIds = useMemo(() => {
     setAssignedDiffs(existingDiffs);
     setTechFees(existingFees.length > 0 ? existingFees : []);
     setWorkTypeId(s.work_type_id || "");
+    setApproveDate(s.scheduled_date?.slice(0, 10) ?? "");
     setApproveOpen(true);
   }
 
@@ -372,6 +374,7 @@ const userBranchIds = useMemo(() => {
         difficulty_ids: assignedDiffs,
         tech_fees: techFees,
         work_type_id: workTypeId || null,
+        scheduled_date: approveDate || null,
         actor_id: user?.id,
       }});
       toast.success("Đã duyệt và phân công");
@@ -1295,6 +1298,17 @@ const userBranchIds = useMemo(() => {
         <DialogContent className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Duyệt lịch & Phân công</DialogTitle></DialogHeader>
           <div className="space-y-4">
+            {/* Ngày thực hiện */}
+            <div>
+              <Label className="font-medium">Ngày thực hiện</Label>
+              <input
+                type="date"
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={approveDate}
+                onChange={(e) => setApproveDate(e.target.value)}
+              />
+            </div>
+
             {/* Phân công người */}
             <div>
               <Label className="font-medium">Phân công nhân viên kỹ thuật</Label>

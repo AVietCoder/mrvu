@@ -148,9 +148,12 @@ export const getCustomerById = createServerFn({ method: "GET" })
       ascending: false,
     });
 
+    const branches = await fetchRows("branches", { orderBy: "name" });
+
     return {
       customer: customer[0] ?? null,
       orders,
+      branches,
     };
   });
 export const collectCustomerPayment = createServerFn({ method: "POST" })

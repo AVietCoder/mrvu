@@ -160,6 +160,7 @@ function CustomerDetailPage() {
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
   const [payBranch, setPayBranch] = useState("");
+  const [payFundType, setPayFundType] = useState<"tien_mat" | "ngan_hang">("tien_mat");
   const [submittingPay, setSubmittingPay] = useState(false);
   const [form, setForm] = useState<FormState>({
     name: "",
@@ -174,6 +175,7 @@ function CustomerDetailPage() {
 
   const customer = data?.customer ?? null;
   const customerOrders = data?.orders ?? [];
+  const branches = data?.branches ?? [];
   const completedOrders = customerOrders.filter(
     (o: any) => o.status === "completed"
   );
@@ -217,6 +219,8 @@ function CustomerDetailPage() {
   function openPayDialog() {
     setPayAmount("");
     setPayNote("");
+    setPayFundType("tien_mat");
+    setPayBranch(customer?.branch_id ?? "");
     setPayOpen(true);
   }
 
@@ -230,6 +234,7 @@ function CustomerDetailPage() {
           customer_id: customer.id,
           amount,
           branch_id: payBranch || customer.branch_id || "",
+          fund_type: payFundType,
           note: payNote || undefined,
         },
       });
@@ -541,6 +546,33 @@ function CustomerDetailPage() {
                 onFocus={(e) => e.target.select()}
                 placeholder="Nhập số tiền..."
               />
+            </div>
+            {/* Hình thức thanh toán + Chi nhánh */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Hình thức thanh toán</Label>
+                <select
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={payFundType}
+                  onChange={(e) => setPayFundType(e.target.value as any)}
+                >
+                  <option value="tien_mat">Tiền mặt</option>
+                  <option value="ngan_hang">Ngân hàng</option>
+                </select>
+              </div>
+              <div>
+                <Label>Chi nhánh</Label>
+                <select
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={payBranch}
+                  onChange={(e) => setPayBranch(e.target.value)}
+                >
+                  <option value="">-- Mặc định --</option>
+                  {branches.map((b: any) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div>
               <Label>Ghi chú</Label>

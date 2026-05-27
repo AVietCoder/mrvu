@@ -111,12 +111,15 @@ export const approveSchedule = createServerFn({ method: "POST" })
       difficulty_ids: string[];
       tech_fees: { product_id: string; qty: number; unit_fee: number }[];
       work_type_id?: string | null;
+      scheduled_date?: string | null;
       actor_id?: string;
     };
   }) => {
+    const updateFields: Record<string, any> = { status: "approved", work_type_id: data.work_type_id || null };
+    if (data.scheduled_date) updateFields.scheduled_date = data.scheduled_date;
     await updateWhere(
       "schedules",
-      { status: "approved", work_type_id: data.work_type_id || null },
+      updateFields,
       { id: data.schedule_id },
     );
 
