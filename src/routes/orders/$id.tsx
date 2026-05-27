@@ -93,7 +93,7 @@ function parseInput(val: string): number {
 
 function OrderDetailPage() {
   const { id } = useParams({ from: "/orders/$id" });
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const listFn = useServerFn(listOrders);
   const updateStatusFn = useServerFn(updateOrderStatus);
   const updateOrderFn = useServerFn(updateOrder);
@@ -143,6 +143,13 @@ function OrderDetailPage() {
   const linkedSchedules = useMemo(
     () => (data?.schedules ?? []).filter((s: any) => s.order_id === id),
     [data, id]
+  );
+
+  // Có quyền sửa nếu: admin, HOẶC có quyền create_order VÀ đơn chưa hoàn tất (completed/cancelled)
+  const canEdit = isAdmin || (
+    (user?.permissions?.includes("create_order") || false) &&
+    order?.status !== "completed" &&
+    order?.status !== "cancelled"
   );
 
   const [editing, setEditing] = useState(false);
@@ -461,7 +468,7 @@ function OrderDetailPage() {
         <span>/</span>
         <span className="text-foreground font-medium font-mono">{order.code}</span>
 
-        {isAdmin && !editing && (
+        {canEdit && !editing && (
           <Button size="sm" variant="outline" className="ml-auto" onClick={startEdit}>
             <Pencil className="h-4 w-4 mr-1" /> Chỉnh sửa đơn
           </Button>
