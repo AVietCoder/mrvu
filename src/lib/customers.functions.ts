@@ -93,11 +93,22 @@ export const upsertCustomer = createServerFn({ method: "POST" })
     const payload = {
       name: data.name,
       phone: data.phone || null,
+      email: data.email || null,
+      gender: data.gender || null,
+      birthday: data.birthday || null,
       ward: data.ward || null,
       district: data.district || null,
       province: data.province || null,
       address: data.address || null,
       group_name: data.group_name,
+      customer_type: data.customer_type || "ca_nhan",
+      company_name: data.company_name || null,
+      tax_code: data.tax_code || null,
+      cccd: data.cccd || null,
+      passport_no: data.passport_no || null,
+      bank_name: data.bank_name || null,
+      bank_account: data.bank_account || null,
+      note: data.note || null,
       debt: data.debt || 0,
     };
 

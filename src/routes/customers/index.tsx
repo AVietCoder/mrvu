@@ -43,6 +43,7 @@ import {
   User,
   MapPin,
   Wallet,
+  Landmark,
 } from "lucide-react";
 
 import { toast } from "sonner";
@@ -131,20 +132,44 @@ type FormState = {
   id?: string;
   name: string;
   phone: string;
+  email: string;
+  gender: string;
+  birthday: string;
   province: string;
+  district: string;
   ward: string;
   address: string;
   group_name: string;
+  customer_type: "ca_nhan" | "to_chuc";
+  company_name: string;
+  tax_code: string;
+  cccd: string;
+  passport_no: string;
+  bank_name: string;
+  bank_account: string;
+  note: string;
   debt: string;
 };
 
 const empty: FormState = {
   name: "",
   phone: "",
+  email: "",
+  gender: "",
+  birthday: "",
   province: "",
+  district: "",
   ward: "",
   address: "",
   group_name: "le",
+  customer_type: "ca_nhan",
+  company_name: "",
+  tax_code: "",
+  cccd: "",
+  passport_no: "",
+  bank_name: "",
+  bank_account: "",
+  note: "",
   debt: "0",
 };
 
@@ -219,10 +244,22 @@ function CustomersPage() {
       id: c.id,
       name: c.name,
       phone: c.phone ?? "",
+      email: c.email ?? "",
+      gender: c.gender ?? "",
+      birthday: c.birthday ? c.birthday.slice(0, 10) : "",
       province: c.province ?? "",
+      district: c.district ?? "",
       ward: c.ward ?? "",
       address: c.address ?? "",
-      group_name: c.group_name,
+      group_name: c.group_name ?? "le",
+      customer_type: c.customer_type ?? "ca_nhan",
+      company_name: c.company_name ?? "",
+      tax_code: c.tax_code ?? "",
+      cccd: c.cccd ?? "",
+      passport_no: c.passport_no ?? "",
+      bank_name: c.bank_name ?? "",
+      bank_account: c.bank_account ?? "",
+      note: c.note ?? "",
       debt: String(c.debt),
     });
 
@@ -476,25 +513,45 @@ function CustomersPage() {
           </DialogHeader>
 
           <form onSubmit={handleSave} className="p-4 space-y-5">
-            {/* PHẦN 1: THÔNG TIN CƠ BẢN */}
+
+            {/* ── PHẦN 1: THÔNG TIN CƠ BẢN ── */}
             <div className="space-y-4 p-5 bg-muted/30 rounded-xl border border-border/70">
-              <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider mb-0.5">
+              <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
                 <User className="h-4 w-4" /> Thông tin cơ bản
               </div>
-              
+
+              {/* Loại khách hàng */}
+              <div className="flex gap-4">
+                {(["ca_nhan", "to_chuc"] as const).map((t) => (
+                  <label key={t} className="flex items-center gap-2 cursor-pointer text-sm">
+                    <input
+                      type="radio"
+                      name="customer_type"
+                      value={t}
+                      checked={form.customer_type === t}
+                      onChange={() => setForm({ ...form, customer_type: t })}
+                      className="accent-primary"
+                    />
+                    {t === "ca_nhan" ? "Cá nhân" : "Tổ chức / Hộ kinh doanh"}
+                  </label>
+                ))}
+              </div>
+
+              {/* Tên + SĐT */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-1 md:col-span-2">
-                  <Label className="text-xs font-medium">Họ và tên khách hàng <span className="text-destructive">*</span></Label>
+                <div className="md:col-span-2 space-y-1">
+                  <Label className="text-xs font-medium">
+                    {form.customer_type === "to_chuc" ? "Tên người mua" : "Họ và tên"} <span className="text-destructive">*</span>
+                  </Label>
                   <Input
-                    className="bg-background focus-visible:ring-primary/40 mt-1"
-                    placeholder="Nhập tên đầy đủ (Ví dụ: Nguyễn Văn A)"
+                    className="bg-background mt-1"
+                    placeholder="Nhập tên đầy đủ"
                     value={form.name}
                     required
                     autoFocus
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
                   />
                 </div>
-
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Số điện thoại</Label>
                   <Input
@@ -506,65 +563,177 @@ function CustomersPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-1 md:col-span-1">
-                  <Label className="text-xs font-medium">Nhóm đối tác</Label>
-                  <select
-                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    value={form.group_name}
-                    onChange={(e) => setForm({ ...form, group_name: e.target.value })}
-                  >
-                    {Object.entries(groupLabel).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+              {/* Email + Giới tính + Ngày sinh (cá nhân) */}
+              {form.customer_type === "ca_nhan" && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1 sm:col-span-1">
+                    <Label className="text-xs font-medium">Email</Label>
+                    <Input
+                      className="bg-background mt-1"
+                      placeholder="email@gmail.com"
+                      value={form.email}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Giới tính</Label>
+                    <select
+                      className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={form.gender}
+                      onChange={(e) => setForm({ ...form, gender: e.target.value })}
+                    >
+                      <option value="">-- Chọn --</option>
+                      <option value="nam">Nam</option>
+                      <option value="nu">Nữ</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Ngày sinh</Label>
+                    <Input
+                      type="date"
+                      className="bg-background mt-1"
+                      value={form.birthday}
+                      onChange={(e) => setForm({ ...form, birthday: e.target.value })}
+                    />
+                  </div>
                 </div>
-                
-                {/* Tận dụng khoảng trống hàng ngang khi form rộng */}
-                <div className="hidden md:flex md:col-span-2 items-center text-xs text-muted-foreground pt-5 italic">
-                  * Vui lòng chọn đúng phân nhóm để áp dụng chính sách giá đại lý/bán lẻ chuẩn xác.
+              )}
+
+              {/* Nhóm + CCCD + Hộ chiếu (cá nhân) */}
+              {form.customer_type === "ca_nhan" && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Nhóm đối tác</Label>
+                    <select
+                      className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={form.group_name}
+                      onChange={(e) => setForm({ ...form, group_name: e.target.value })}
+                    >
+                      {Object.entries(groupLabel).map(([v, l]) => (
+                        <option key={v} value={v}>{l}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Số CCCD / CMND</Label>
+                    <Input
+                      className="bg-background mt-1"
+                      placeholder="Nhập số CCCD/CMND"
+                      value={form.cccd}
+                      onChange={(e) => setForm({ ...form, cccd: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Số hộ chiếu</Label>
+                    <Input
+                      className="bg-background mt-1"
+                      placeholder="Nhập số hộ chiếu"
+                      value={form.passport_no}
+                      onChange={(e) => setForm({ ...form, passport_no: e.target.value })}
+                    />
+                  </div>
                 </div>
+              )}
+
+              {/* Tổ chức: tên công ty + MST + email + nhóm */}
+              {form.customer_type === "to_chuc" && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Tên công ty / Hộ kinh doanh</Label>
+                      <Input
+                        className="bg-background mt-1"
+                        placeholder="Nhập tên công ty"
+                        value={form.company_name}
+                        onChange={(e) => setForm({ ...form, company_name: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Mã số thuế</Label>
+                      <Input
+                        className="bg-background mt-1"
+                        placeholder="Nhập mã số thuế"
+                        value={form.tax_code}
+                        onChange={(e) => setForm({ ...form, tax_code: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Email</Label>
+                      <Input
+                        className="bg-background mt-1"
+                        placeholder="email@company.com"
+                        value={form.email}
+                        onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-medium">Nhóm đối tác</Label>
+                      <select
+                        className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={form.group_name}
+                        onChange={(e) => setForm({ ...form, group_name: e.target.value })}
+                      >
+                        {Object.entries(groupLabel).map(([v, l]) => (
+                          <option key={v} value={v}>{l}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Ghi chú */}
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Ghi chú</Label>
+                <Input
+                  className="bg-background mt-1"
+                  placeholder="Ghi chú thêm về khách hàng..."
+                  value={form.note}
+                  onChange={(e) => setForm({ ...form, note: e.target.value })}
+                />
               </div>
             </div>
 
-            {/* PHẦN 2: ĐỊA CHỈ LIÊN HỆ */}
+            {/* ── PHẦN 2: ĐỊA CHỈ LIÊN HỆ ── */}
             <div className="space-y-4 p-5 bg-muted/30 rounded-xl border border-border/70">
-              <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider mb-0.5">
+              <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
                 <MapPin className="h-4 w-4" /> Địa chỉ liên hệ
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Tỉnh / Thành phố</Label>
                   <select
-                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                     value={form.province}
                     onChange={(e) => setForm({ ...form, province: e.target.value })}
                   >
                     <option value="">-- Chọn tỉnh thành --</option>
-                    {PROVINCES.map((province) => (
-                      <option key={province} value={province}>
-                        {province}
-                      </option>
-                    ))}
+                    {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
-
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Quận / Huyện</Label>
+                  <Input
+                    className="bg-background mt-1"
+                    placeholder="Nhập quận/huyện"
+                    value={form.district}
+                    onChange={(e) => setForm({ ...form, district: e.target.value })}
+                  />
+                </div>
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Phường / Xã</Label>
                   <Input
                     className="bg-background mt-1"
-                    placeholder="Nhập Phường, Xã, Thị trấn"
+                    placeholder="Nhập phường/xã"
                     value={form.ward}
                     onChange={(e) => setForm({ ...form, ward: e.target.value })}
                   />
                 </div>
               </div>
-
               <div className="space-y-1">
-                <Label className="text-xs font-medium">Tên đường, Số nhà, Số ngõ hẻm</Label>
+                <Label className="text-xs font-medium">Số nhà, tên đường</Label>
                 <Input
                   className="bg-background mt-1"
                   placeholder="Ví dụ: Số 123, đường Trần Hưng Đạo"
@@ -574,12 +743,39 @@ function CustomersPage() {
               </div>
             </div>
 
-            {/* PHẦN 3: TÀI CHÍNH CÔNG NỢ */}
+            {/* ── PHẦN 3: NGÂN HÀNG ── */}
             <div className="space-y-4 p-5 bg-muted/30 rounded-xl border border-border/70">
-              <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider mb-0.5">
+              <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
+                <Landmark className="h-4 w-4" /> Thông tin ngân hàng
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Ngân hàng</Label>
+                  <Input
+                    className="bg-background mt-1"
+                    placeholder="VD: Vietcombank, Techcombank..."
+                    value={form.bank_name}
+                    onChange={(e) => setForm({ ...form, bank_name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Số tài khoản ngân hàng</Label>
+                  <Input
+                    className="bg-background mt-1 font-mono"
+                    placeholder="Nhập số tài khoản"
+                    value={form.bank_account}
+                    onChange={(e) => setForm({ ...form, bank_account: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* ── PHẦN 4: TÀI CHÍNH CÔNG NỢ ── */}
+            <div className="space-y-4 p-5 bg-muted/30 rounded-xl border border-border/70">
+              <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
                 <Wallet className="h-4 w-4" /> Thiết lập tài chính
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Dư nợ công nợ đầu kỳ (nếu có)</Label>
                   <div className="relative mt-1">
@@ -588,33 +784,20 @@ function CustomersPage() {
                       inputMode="numeric"
                       placeholder="0"
                       value={form.debt}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          debt: e.target.value.replace(/[^\d.]/g, ""),
-                        })
-                      }
+                      onChange={(e) => setForm({ ...form, debt: e.target.value.replace(/[^\d.]/g, "") })}
                     />
                     <div className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">đ</div>
                   </div>
                 </div>
-                <div className="text-xs text-muted-foreground pt-4 md:pt-5">
-                  Khoản tiền khách hàng đang nợ cửa hàng tính tới thời điểm tạo tài khoản này.
-                </div>
+                <p className="text-xs text-muted-foreground pt-0 md:pt-6">
+                  Khoản tiền khách đang nợ cửa hàng tính tới thời điểm tạo tài khoản.
+                </p>
               </div>
             </div>
 
             <DialogFooter className="pt-3 border-t gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setOpen(false)}
-              >
-                Hủy bỏ
-              </Button>
-              <Button type="submit" className="px-6">
-                Lưu thông tin
-              </Button>
+              <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Hủy bỏ</Button>
+              <Button type="submit" className="px-6">Lưu thông tin</Button>
             </DialogFooter>
           </form>
         </DialogContent>
