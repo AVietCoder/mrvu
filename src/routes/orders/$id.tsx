@@ -159,7 +159,8 @@ function OrderDetailPage() {
     order?.status !== "completed" &&
     order?.status !== "cancelled"
   );
-
+  const canManageOrder =
+    isAdmin || (user?.permissions?.includes("create_order") || false);
   const [editing, setEditing] = useState(false);
   const [editItems, setEditItems] = useState<LineItem[]>([]);
   const [editCustomer, setEditCustomer] = useState("");
@@ -591,33 +592,48 @@ function OrderDetailPage() {
                 </div>
               </div>
 
-              {!editing && (
-                <div className="flex gap-2 flex-wrap">
-                  <Button size="sm" variant="outline" onClick={printOrderSlip}>
-                    <Printer className="h-4 w-4 mr-1" /> In hóa đơn
-                  </Button>
+            {!editing && (
+              <div className="flex gap-2 flex-wrap">
+                <Button size="sm" variant="outline" onClick={printOrderSlip}>
+                  <Printer className="h-4 w-4 mr-1" /> In hóa đơn
+                </Button>
 
-                  {isAdmin && (order.status === "reserved" || order.status === "draft") && (
-                    <Button size="sm" onClick={completeOrder} disabled={completingOrder}>
+                {canManageOrder &&
+                  (order.status === "reserved" || order.status === "draft") && (
+                    <Button
+                      size="sm"
+                      onClick={completeOrder}
+                      disabled={completingOrder}
+                    >
                       <CheckCircle2 className="h-4 w-4 mr-1" />
                       {completingOrder ? "Đang xử lý..." : "Hoàn tất"}
                     </Button>
                   )}
 
-                  {isAdmin && order.status === "completed" && (
-                    <Button size="sm" variant="outline" className="border-orange-300 text-orange-700 hover:bg-orange-50" onClick={startReturn}>
-                      <RotateCcw className="h-4 w-4 mr-1" /> Trả hàng
-                    </Button>
-                  )}
+                {canManageOrder && order.status === "completed" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                    onClick={startReturn}
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1" /> Trả hàng
+                  </Button>
+                )}
 
-                  {isAdmin && order.status !== "cancelled" && (
-                    <Button size="sm" variant="destructive" onClick={cancelOrder} disabled={cancellingOrder}>
-                      <Ban className="h-4 w-4 mr-1" />
-                      {cancellingOrder ? "Đang hủy..." : "Hủy đơn"}
-                    </Button>
-                  )}
-                </div>
-              )}
+                {isAdmin && order.status !== "cancelled" && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={cancelOrder}
+                    disabled={cancellingOrder}
+                  >
+                    <Ban className="h-4 w-4 mr-1" />
+                    {cancellingOrder ? "Đang hủy..." : "Hủy đơn"}
+                  </Button>
+                )}
+              </div>
+            )}
             </div>
 
             {!editing ? (
