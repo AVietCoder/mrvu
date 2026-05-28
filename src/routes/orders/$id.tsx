@@ -606,7 +606,7 @@ function OrderDetailPage() {
                       disabled={completingOrder}
                     >
                       <CheckCircle2 className="h-4 w-4 mr-1" />
-                      {completingOrder ? "Đang xử lý..." : "Hoàn tất"}
+                      {completingOrder ? "Đang xử lý..." : "Tạo hóa đơn"}
                     </Button>
                   )}
 
