@@ -875,7 +875,7 @@ ${order.note ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-r
                           {/* ✅ Nút In hóa đơn trong list view */}
                           {linkedOrder && (
                             <Button size="sm" variant="outline" className="text-primary border-primary/30" onClick={() => printOrderFromSchedule(linkedOrder, siteSettings)}>
-                              <Printer className="h-3 w-3 mr-1" /> In HĐ
+                              <Printer className="h-3 w-3 mr-1" /> In hóa đơn
                             </Button>
                           )}
                           {canApprove && s.status === "pending" && (
