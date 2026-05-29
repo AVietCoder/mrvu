@@ -1417,7 +1417,7 @@ function OrderDetailPage() {
                   </div>
                   <Input
                     className="text-right font-mono text-lg h-12 border-2 focus:border-primary"
-                    value={payAmountRaw === "" ? "" : moneyFmtLocal(paid).replace(" ₫", "")}
+                    value={payAmountRaw}
                     onChange={(e) => setPayAmountRaw(e.target.value.replace(/\D/g, ""))}
                     onFocus={(e) => e.target.select()}
                     placeholder={moneyFmtLocal(khachCan).replace(" ₫", "")}

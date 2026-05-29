@@ -349,7 +349,7 @@ function CustomerDetailPage() {
         <Button size="sm" variant="outline" className="ml-auto" onClick={startEdit}>
           <Pencil className="h-4 w-4 mr-1" /> Chỉnh sửa
         </Button>
-        {Number(customer.debt || 0) > 0 && (
+        {displayDebt > 0 && (
           <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={openPayDialog}>
             <Banknote className="h-4 w-4 mr-1" /> Thu tiền
           </Button>
@@ -907,7 +907,7 @@ function CustomerDetailPage() {
           <div className="space-y-3">
             <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm flex justify-between">
               <span className="text-muted-foreground">Công nợ hiện tại</span>
-              <span className="font-bold text-destructive">{fmt(customer.debt)}</span>
+              <span className="font-bold text-destructive">{fmt(displayDebt)}</span>
             </div>
 
             <div>
@@ -1035,7 +1035,7 @@ function CustomerDetailPage() {
               <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm flex justify-between">
                 <span className="text-muted-foreground">Còn lại sau khi thu</span>
                 <span className="font-bold text-green-700">
-                  {fmt(Math.max(0, Number(customer.debt) - parseInput(payAmount)))}
+                  {fmt(Math.max(0, displayDebt - parseInput(payAmount)))}
                 </span>
               </div>
             )}

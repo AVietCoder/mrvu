@@ -4,7 +4,8 @@ import { ChevronDown, Search, X } from "lucide-react";
 export type SelectOption = {
   value: string;
   label: string;
-  sub?: string; // optional subtitle (e.g. phone number)
+  sub?: string;       // optional subtitle (e.g. phone number)
+  disabled?: boolean; // ✅ per-option disabled
 };
 
 type Props = {
@@ -134,8 +135,9 @@ export function SearchableSelect({
               filtered.map((o) => (
                 <div
                   key={o.value}
-                  onClick={() => select(o.value)}
-                  className={`px-3 py-2 text-sm cursor-pointer hover:bg-accent
+                  onClick={() => { if (!o.disabled) select(o.value); }}
+                  className={`px-3 py-2 text-sm
+                    ${o.disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer hover:bg-accent"}
                     ${o.value === value ? "bg-accent/60 font-medium" : ""}`}
                 >
                   <div>{o.label}</div>

@@ -563,11 +563,12 @@ function Page() {
 
     setSubmitting(true);
     try {
-      // Nếu khách trả đủ hoặc thừa → completed; ngược lại giữ status đã chọn
-      const finalStatus = khachThanhToan >= khachCanThanhToan && khachCanThanhToan > 0
+      // finalStatus:
+      // - Nếu user đã chọn "completed" → luôn completed (dù paid=0, debt sẽ được cộng)
+      // - Nếu paid > 0 (bất kể status chọn) → completed
+      // - Còn lại → giữ status user đã chọn (reserved/draft)
+      const finalStatus = status === "completed" || khachThanhToan > 0
         ? "completed"
-        : khachThanhToan > 0 && khachCanThanhToan > 0
-        ? "completed"    // trả 1 phần cũng ghi completed, phần còn lại tính công nợ
         : status;
 
       const r = await create({
@@ -1290,7 +1291,13 @@ function Page() {
                 )}
 
                 {/* Tính vào công nợ */}
-                {congNo > 0 && (
+                {khachThanhToan === 0 && khachCanThanhToan > 0 && (
+                  <div className="flex justify-between items-center text-sm pt-2 border-t text-orange-500">
+                    <span>Chưa thanh toán — tính vào công nợ</span>
+                    <span className="font-semibold">- {fmt(khachCanThanhToan)}</span>
+                  </div>
+                )}
+                {congNo > 0 && khachThanhToan > 0 && (
                   <div className="flex justify-between items-center text-sm pt-2 border-t">
                     <span className="text-muted-foreground">Tính vào công nợ</span>
                     <span className="font-semibold text-red-600">- {fmt(congNo)}</span>

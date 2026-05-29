@@ -414,8 +414,16 @@ function Page() {
       note:               v.note ?? "",
       fundType:           v.fund_type,
       branchId:           v.branch_id,
-      bankAccountIdx:     "",
-      bankContent:        "",
+      // ✅ Khi edit phiếu NH: tìm lại bankAccountIdx từ note (note lưu số TK)
+      bankAccountIdx:     (() => {
+        if (v.fund_type !== "ngan_hang" || !v.note) return "";
+        try {
+          const list = JSON.parse(siteSettings?.bank_accounts || "[]");
+          const idx = list.findIndex((ba: any) => v.note?.includes(ba.account_number));
+          return idx >= 0 ? String(idx) : "";
+        } catch { return ""; }
+      })(),
+      bankContent:        v.fund_type === "ngan_hang" && v.note ? v.note.split(" — ")[0] : "",
     });
     setOpenEdit(true);
   }
