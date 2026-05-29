@@ -225,6 +225,7 @@ function CustomersPage() {
 
   const customers = data?.customers ?? [];
   const orders = data?.orders ?? [];
+  const viewCustomer = viewId ? customers.find((x) => x.id === viewId) ?? null : null;
 
   const totalDebtorCount = data?.meta?.totalDebtorCount ?? 0;
   const totalAllDebt = data?.meta?.totalAllDebt ?? 0;
@@ -273,6 +274,16 @@ function CustomersPage() {
         data: {
           ...form,
           debt: Number(form.debt) || 0,
+
+          // lưu người tạo
+          _actor_id: user?.id ?? null,
+
+          created_by_name:
+            user?.full_name ||
+            user?.name ||
+            user?.username ||
+            user?.email ||
+            "Admin",
         },
       });
 
@@ -456,9 +467,11 @@ function CustomersPage() {
                     {[c.address, c.ward, c.province].filter(Boolean).join(", ") || "—"}
                   </td>
                   <td className="pr-3 text-right font-medium text-green-600">{fmt(c.total_buy || 0)}</td>
-                  <td className={`pr-3 text-right font-medium ${c.debt > 0 ? "text-destructive" : "text-muted-foreground"}`}>
-                    {c.debt > 0 ? fmt(c.debt) : "—"}
-                  </td>
+                  <td
+  className={"pr-3 text-right font-medium text-destructive"}
+>
+  {fmt(c.debt || 0)}
+</td>
                   <td className="text-right" onClick={(e) => e.stopPropagation()}>
                     <Link
                       to="/customers/$id"
@@ -791,6 +804,82 @@ function CustomersPage() {
               <Button type="submit" className="px-6">Lưu thông tin</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!viewCustomer} onOpenChange={(o) => { if (!o) setViewId(null); }}>
+        <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto rounded-2xl border-none p-0 shadow-2xl">
+          {viewCustomer && (
+            <>
+              <DialogHeader className="border-b bg-muted/40 px-6 pb-4 pt-6">
+                <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+                  <div className="rounded-lg bg-primary/10 p-1.5 text-primary">
+                    <Users className="h-5 w-5" />
+                  </div>
+                  Thông tin khách hàng
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-xs text-muted-foreground">
+                  Xem nhanh toàn bộ thông tin đã nhập của khách hàng.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-5 p-6">
+                <div className="rounded-xl border bg-muted/20 p-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-lg font-bold">{viewCustomer.name}</div>
+                    <span className={`rounded-full px-2 py-0.5 text-xs ${groupColor[viewCustomer.group_name] ?? "bg-gray-100 text-gray-700"}`}>
+                      {groupLabel[viewCustomer.group_name] ?? viewCustomer.group_name}
+                    </span>
+                    <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700">
+                      {viewCustomer.customer_type === "to_chuc" ? "Tổ chức / Hộ kinh doanh" : "Cá nhân"}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2 text-sm">
+                    <div><div className="text-xs uppercase text-muted-foreground">Số điện thoại</div><div className="font-medium">{viewCustomer.phone ?? "—"}</div></div>
+                    <div><div className="text-xs uppercase text-muted-foreground">Email</div><div className="font-medium break-all">{viewCustomer.email ?? "—"}</div></div>
+                    <div><div className="text-xs uppercase text-muted-foreground">Giới tính</div><div className="font-medium">{viewCustomer.gender === "nam" ? "Nam" : viewCustomer.gender === "nu" ? "Nữ" : "—"}</div></div>
+                    <div><div className="text-xs uppercase text-muted-foreground">Ngày sinh</div><div className="font-medium">{viewCustomer.birthday ? new Date(viewCustomer.birthday).toLocaleDateString("vi-VN") : "—"}</div></div>
+                    <div className="md:col-span-2"><div className="text-xs uppercase text-muted-foreground">Địa chỉ</div><div className="font-medium">{[viewCustomer.address, viewCustomer.ward, viewCustomer.province].filter(Boolean).join(", ") || "—"}</div></div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-xl border bg-background p-4">
+                    <div className="mb-3 text-xs font-bold uppercase tracking-wider text-primary">Thông tin cá nhân / doanh nghiệp</div>
+                    <div className="space-y-3 text-sm">
+                      {viewCustomer.customer_type === "to_chuc" ? (
+                        <>
+                          <div><div className="text-xs uppercase text-muted-foreground">Tên công ty / Hộ kinh doanh</div><div className="font-medium">{viewCustomer.company_name || "—"}</div></div>
+                          <div><div className="text-xs uppercase text-muted-foreground">Mã số thuế</div><div className="font-medium">{viewCustomer.tax_code || "—"}</div></div>
+                        </>
+                      ) : (
+                        <>
+                          <div><div className="text-xs uppercase text-muted-foreground">Số CCCD / CMND</div><div className="font-medium">{viewCustomer.cccd || "—"}</div></div>
+                          <div><div className="text-xs uppercase text-muted-foreground">Số hộ chiếu</div><div className="font-medium">{viewCustomer.passport_no || "—"}</div></div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-background p-4">
+                    <div className="mb-3 text-xs font-bold uppercase tracking-wider text-primary">Thông tin tài chính</div>
+                    <div className="space-y-3 text-sm">
+                      <div><div className="text-xs uppercase text-muted-foreground">Ngân hàng</div><div className="font-medium">{viewCustomer.bank_name || "—"}</div></div>
+                      <div><div className="text-xs uppercase text-muted-foreground">Số tài khoản</div><div className="font-medium font-mono">{viewCustomer.bank_account || "—"}</div></div>
+                      <div><div className="text-xs uppercase text-muted-foreground">Công nợ</div><div className={`font-semibold ${Number(viewCustomer.debt || 0) > 0 ? "text-destructive" : Number(viewCustomer.debt || 0) < 0 ? "text-green-600" : "text-muted-foreground"}`}>{Number(viewCustomer.debt || 0) > 0 ? fmt(viewCustomer.debt) : Number(viewCustomer.debt || 0) < 0 ? `-${fmt(Math.abs(Number(viewCustomer.debt || 0)))}` : fmt(0)}</div></div>
+                    </div>
+                  </div>
+                </div>
+
+                {viewCustomer.note && (
+                  <div className="rounded-xl border bg-muted/20 p-4 text-sm">
+                    <div className="mb-1 text-xs font-bold uppercase tracking-wider text-primary">Ghi chú</div>
+                    <div className="whitespace-pre-wrap text-muted-foreground">{viewCustomer.note}</div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

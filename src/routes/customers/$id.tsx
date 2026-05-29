@@ -3,7 +3,11 @@ import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { getCustomerById, upsertCustomer, collectCustomerPayment } from "@/lib/customers.functions";
+import {
+  getCustomerById,
+  upsertCustomer,
+  collectCustomerPayment,
+} from "@/lib/customers.functions";
 import { getSettings } from "@/lib/settings.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -38,8 +42,6 @@ import {
   CalendarDays,
   Users,
   Receipt,
-  CheckCircle2,
-  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -169,19 +171,42 @@ function CustomerDetailPage() {
   const paymentHistory = data?.paymentHistory ?? [];
   const allUsers = data?.users ?? [];
 
-  const branches = isAdmin || !user?.branch_ids?.length
-    ? allBranches
-    : allBranches.filter((b: any) => user.branch_ids.includes(b.id));
+  const branches =
+    isAdmin || !user?.branch_ids?.length
+      ? allBranches
+      : allBranches.filter((b: any) => user.branch_ids.includes(b.id));
 
   const completedOrders = customerOrders.filter((o: any) => o.status === "completed");
-  const pendingOrders = customerOrders.filter((o: any) => o.status !== "completed" && o.status !== "cancelled");
+  const pendingOrders = customerOrders.filter(
+    (o: any) => o.status !== "completed" && o.status !== "cancelled"
+  );
   const cancelledOrders = customerOrders.filter((o: any) => o.status === "cancelled");
   const totalSpent = completedOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0);
   const totalPaid = paymentHistory.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
 
   const creatorName = useMemo(() => {
-    if (!customer?.created_by) return null;
-    return allUsers.find((u: any) => u.id === customer.created_by)?.full_name ?? null;
+    if (!customer) return null;
+
+    const byCreatedByName =
+      customer.created_by_name ||
+      customer.creator_name ||
+      customer.created_by_user_name ||
+      null;
+
+    if (byCreatedByName) return byCreatedByName;
+
+    if (customer.created_by) {
+      const foundUser = allUsers.find((u: any) => u.id === customer.created_by);
+      return (
+        foundUser?.full_name ||
+        foundUser?.name ||
+        foundUser?.username ||
+        foundUser?.email ||
+        String(customer.created_by)
+      );
+    }
+
+    return "Admin";
   }, [customer, allUsers]);
 
   function fmtInput(val: string): string {
@@ -227,9 +252,10 @@ function CustomerDetailPage() {
         data: {
           ...form,
           debt: Number(form.debt) || 0,
-          _actor_id: user?.id,
+          _actor_id: user?.id ?? null,
         },
       });
+
       toast.success("Đã cập nhật khách hàng!");
       setEditOpen(false);
       qc.invalidateQueries({ queryKey: ["customer-detail", id] });
@@ -246,7 +272,8 @@ function CustomerDetailPage() {
     const defaultBranch =
       customer?.branch_id ||
       (branches.length === 1 ? branches[0].id : "") ||
-      user?.branch_ids?.[0] || "";
+      user?.branch_ids?.[0] ||
+      "";
     setPayBranch(defaultBranch);
     setBankAccountIdx("");
     setBankContent("");
@@ -254,8 +281,11 @@ function CustomerDetailPage() {
   }
 
   async function handleCollectPayment() {
+    if (!customer) return;
+
     const amount = parseInput(payAmount);
     if (amount <= 0) return toast.error("Nhập số tiền cần thu");
+
     setSubmittingPay(true);
     try {
       const result = await collectPaymentFn({
@@ -265,9 +295,12 @@ function CustomerDetailPage() {
           branch_id: payBranch || customer.branch_id || "",
           fund_type: payFundType,
           employee_id: user?.id,
-          note: payNote || (payFundType === "ngan_hang" && bankContent ? `CK: ${bankContent}` : undefined),
+          note:
+            payNote ||
+            (payFundType === "ngan_hang" && bankContent ? `CK: ${bankContent}` : undefined),
         },
       });
+
       toast.success(`Đã tạo phiếu thu ${result.code} — Còn nợ: ${fmt(result.new_debt)}`);
       setPayOpen(false);
       qc.invalidateQueries({ queryKey: ["customer-detail", id] });
@@ -293,7 +326,10 @@ function CustomerDetailPage() {
         <div className="text-center py-16">
           <p className="text-muted-foreground mb-4">Không tìm thấy khách hàng.</p>
           <Link to="/customers">
-            <Button variant="outline"><ArrowLeft className="h-4 w-4 mr-1" />Quay lại</Button>
+            <Button variant="outline">
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Quay lại
+            </Button>
           </Link>
         </div>
       </AppShell>
@@ -302,7 +338,6 @@ function CustomerDetailPage() {
 
   return (
     <AppShell title={customer.name}>
-      {/* Breadcrumb + actions */}
       <div className="mb-5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
         <Link to="/customers" className="hover:text-foreground flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" /> Khách hàng
@@ -316,12 +351,11 @@ function CustomerDetailPage() {
           <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={openPayDialog}>
             <Banknote className="h-4 w-4 mr-1" /> Thu tiền
           </Button>
-        )}      </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* LEFT COLUMN */}
         <div className="space-y-4">
-          {/* Profile card */}
           <Card>
             <div className="flex items-start gap-3 mb-4">
               <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -330,11 +364,17 @@ function CustomerDetailPage() {
               <div>
                 <h2 className="text-lg font-bold">{customer.name}</h2>
                 <div className="flex flex-wrap gap-1 mt-1">
-                  <span className={`text-xs rounded-full px-2 py-0.5 ${groupColor[customer.group_name] ?? "bg-gray-100 text-gray-700"}`}>
+                  <span
+                    className={`text-xs rounded-full px-2 py-0.5 ${
+                      groupColor[customer.group_name] ?? "bg-gray-100 text-gray-700"
+                    }`}
+                  >
                     {groupLabel[customer.group_name] ?? customer.group_name}
                   </span>
                   {customer.customer_type === "to_chuc" && (
-                    <span className="text-xs rounded-full px-2 py-0.5 bg-indigo-100 text-indigo-700">Tổ chức</span>
+                    <span className="text-xs rounded-full px-2 py-0.5 bg-indigo-100 text-indigo-700">
+                      Tổ chức
+                    </span>
                   )}
                 </div>
               </div>
@@ -356,10 +396,7 @@ function CustomerDetailPage() {
               {(customer.address || customer.province) && (
                 <div className="flex items-start gap-2 text-muted-foreground">
                   <MapPin className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>
-                    {[customer.address, customer.ward, customer.province]
-                      .filter(Boolean).join(", ")}
-                  </span>
+                  <span>{[customer.address, customer.ward, customer.province].filter(Boolean).join(", ")}</span>
                 </div>
               )}
               {customer.gender && (
@@ -376,7 +413,6 @@ function CustomerDetailPage() {
               )}
             </div>
 
-            {/* Extra info if to_chuc */}
             {customer.customer_type === "to_chuc" && (customer.company_name || customer.tax_code) && (
               <div className="mt-3 pt-3 border-t space-y-1.5 text-sm">
                 {customer.company_name && (
@@ -394,7 +430,6 @@ function CustomerDetailPage() {
               </div>
             )}
 
-            {/* CCCD/Passport for ca_nhan */}
             {customer.customer_type !== "to_chuc" && (customer.cccd || customer.passport_no) && (
               <div className="mt-3 pt-3 border-t space-y-1.5 text-sm">
                 {customer.cccd && (
@@ -412,39 +447,37 @@ function CustomerDetailPage() {
               </div>
             )}
 
-            {/* Bank info */}
             {(customer.bank_name || customer.bank_account) && (
               <div className="mt-3 pt-3 border-t space-y-1.5 text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Landmark className="h-4 w-4 shrink-0" />
-                  <span>
-                    {[customer.bank_name, customer.bank_account].filter(Boolean).join(" — ")}
-                  </span>
+                  <span>{[customer.bank_name, customer.bank_account].filter(Boolean).join(" — ")}</span>
                 </div>
               </div>
             )}
 
-            {/* Note */}
-            {customer.note && (
-              <div className="mt-3 pt-3 border-t text-sm text-muted-foreground italic">
-                {customer.note}
-              </div>
-            )}
-
-            {/* Creator info */}
             <div className="mt-3 pt-3 border-t text-xs text-muted-foreground space-y-0.5">
-              {creatorName && (
-                <div>Người tạo: <span className="font-medium text-foreground">{creatorName}</span></div>
-              )}
+              <div>
+                Người tạo:{" "}
+                <span className="font-medium text-foreground">
+                  {creatorName || "Admin"}
+                </span>
+              </div>
               {customer.created_at && (
-                <div>Ngày tạo: <span className="font-medium text-foreground">
-                  {new Date(customer.created_at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                </span></div>
+                <div>
+                  Ngày tạo:{" "}
+                  <span className="font-medium text-foreground">
+                    {new Date(customer.created_at).toLocaleDateString("vi-VN", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                    })}
+                  </span>
+                </div>
               )}
             </div>
           </Card>
 
-          {/* Stats card */}
           <Card>
             <h3 className="font-semibold mb-3">Thống kê</h3>
             <div className="space-y-3">
@@ -476,32 +509,37 @@ function CustomerDetailPage() {
                   <span className="font-semibold text-green-600">{fmt(totalPaid)}</span>
                 </div>
               )}
-              {Number(customer.debt || 0) !== 0 && (
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground flex items-center gap-1">
-                    <TrendingDown className="h-4 w-4 text-destructive" />
-                    {Number(customer.debt) < 0 ? "Thanh toán thừa" : "Công nợ"}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className={`font-bold ${Number(customer.debt) < 0 ? "text-green-600" : "text-destructive"}`}>
-                      {Number(customer.debt) < 0 ? `+${fmt(Math.abs(customer.debt))}` : fmt(customer.debt)}
-                    </span>
-                    {Number(customer.debt) > 0 && (
-                      <button
-                        onClick={openPayDialog}
-                        className="text-xs text-green-700 border border-green-300 bg-green-50 hover:bg-green-100 rounded px-1.5 py-0.5 font-medium"
-                      >
-                        Thu tiền
-                      </button>
-                    )}
-                  </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground flex items-center gap-1">
+                  <TrendingDown className="h-4 w-4 text-destructive" />
+                  {"Công nợ"}
+                </span>
+                <div className="flex items-center gap-2">
+                  <span
+  className={`font-bold ${
+    Number(customer.debt) < 0
+      ? "text-green-600"
+      : Number(customer.debt) > 0
+      ? "text-destructive"
+      : "text-muted-foreground"
+  }`}
+>
+  {fmt(Number(customer.debt || 0))}
+</span>
+                  {Number(customer.debt) > 0 && (
+                    <button
+                      onClick={openPayDialog}
+                      className="text-xs text-green-700 border border-green-300 bg-green-50 hover:bg-green-100 rounded px-1.5 py-0.5 font-medium"
+                    >
+                      Thu tiền
+                    </button>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </Card>
         </div>
 
-        {/* RIGHT COLUMN */}
         <div className="lg:col-span-2 space-y-4">
           {pendingOrders.length > 0 && (
             <Card>
@@ -513,7 +551,6 @@ function CustomerDetailPage() {
             </Card>
           )}
 
-          {/* Tab: Đơn hàng | Lịch sử thanh toán */}
           <Card>
             <div className="flex gap-1 border-b mb-4">
               <button
@@ -544,16 +581,18 @@ function CustomerDetailPage() {
 
             {activeTab === "orders" ? (
               completedOrders.length === 0 ? (
-                <div className="text-sm text-muted-foreground text-center py-6">Chưa có hóa đơn hoàn tất</div>
+                <div className="text-sm text-muted-foreground text-center py-6">
+                  Chưa có hóa đơn hoàn tất
+                </div>
               ) : (
                 <OrderTable orders={completedOrders} />
               )
+            ) : paymentHistory.length === 0 ? (
+              <div className="text-sm text-muted-foreground text-center py-6">
+                Chưa có lịch sử thu tiền
+              </div>
             ) : (
-              paymentHistory.length === 0 ? (
-                <div className="text-sm text-muted-foreground text-center py-6">Chưa có lịch sử thu tiền</div>
-              ) : (
-                <PaymentHistoryTable payments={paymentHistory} users={allUsers} />
-              )
+              <PaymentHistoryTable payments={paymentHistory} users={allUsers} />
             )}
           </Card>
 
@@ -568,9 +607,11 @@ function CustomerDetailPage() {
         </div>
       </div>
 
-      {/* ─── Edit Dialog (full fields) ─── */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent style={{ padding: 0 }} className="max-h-[92vh] max-w-2xl overflow-y-auto p-0 rounded-2xl border-none shadow-2xl">
+        <DialogContent
+          style={{ padding: 0 }}
+          className="max-h-[92vh] max-w-2xl overflow-y-auto p-0 rounded-2xl border-none shadow-2xl"
+        >
           <DialogHeader className="px-6 pt-6 pb-4 bg-muted/40 border-b">
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <div className="p-1.5 bg-primary/10 text-primary rounded-lg">
@@ -579,12 +620,13 @@ function CustomerDetailPage() {
               Cập nhật thông tin khách hàng
             </DialogTitle>
           </DialogHeader>
+
           <form onSubmit={handleSave} className="p-4 space-y-5">
-            {/* Loại khách hàng */}
             <div className="space-y-4 p-5 bg-muted/30 rounded-xl border">
               <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
                 <User className="h-4 w-4" /> Thông tin cơ bản
               </div>
+
               <div className="flex gap-4">
                 {(["ca_nhan", "to_chuc"] as const).map((t) => (
                   <label key={t} className="flex items-center gap-2 cursor-pointer text-sm">
@@ -600,18 +642,28 @@ function CustomerDetailPage() {
                   </label>
                 ))}
               </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="md:col-span-2 space-y-1">
                   <Label className="text-xs font-medium">
-                    {form.customer_type === "to_chuc" ? "Tên người mua" : "Họ và tên"} <span className="text-destructive">*</span>
+                    {form.customer_type === "to_chuc" ? "Tên người mua" : "Họ và tên"}{" "}
+                    <span className="text-destructive">*</span>
                   </Label>
-                  <Input className="bg-background mt-1" value={form.name} required autoFocus
-                    onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                  <Input
+                    className="bg-background mt-1"
+                    value={form.name}
+                    required
+                    autoFocus
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Số điện thoại</Label>
-                  <Input className="bg-background mt-1" value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                  <Input
+                    className="bg-background mt-1"
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  />
                 </div>
               </div>
 
@@ -620,13 +672,20 @@ function CustomerDetailPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-1">
                       <Label className="text-xs font-medium">Email</Label>
-                      <Input className="bg-background mt-1" placeholder="email@gmail.com" value={form.email}
-                        onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                      <Input
+                        className="bg-background mt-1"
+                        placeholder="email@gmail.com"
+                        value={form.email}
+                        onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs font-medium">Giới tính</Label>
-                      <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
+                      <select
+                        className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={form.gender}
+                        onChange={(e) => setForm({ ...form, gender: e.target.value })}
+                      >
                         <option value="">-- Chọn --</option>
                         <option value="nam">Nam</option>
                         <option value="nu">Nữ</option>
@@ -634,27 +693,45 @@ function CustomerDetailPage() {
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs font-medium">Ngày sinh</Label>
-                      <Input type="date" className="bg-background mt-1" value={form.birthday}
-                        onChange={(e) => setForm({ ...form, birthday: e.target.value })} />
+                      <Input
+                        type="date"
+                        className="bg-background mt-1"
+                        value={form.birthday}
+                        onChange={(e) => setForm({ ...form, birthday: e.target.value })}
+                      />
                     </div>
                   </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-1">
                       <Label className="text-xs font-medium">Nhóm đối tác</Label>
-                      <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        value={form.group_name} onChange={(e) => setForm({ ...form, group_name: e.target.value })}>
-                        {Object.entries(groupLabel).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      <select
+                        className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={form.group_name}
+                        onChange={(e) => setForm({ ...form, group_name: e.target.value })}
+                      >
+                        {Object.entries(groupLabel).map(([v, l]) => (
+                          <option key={v} value={v}>
+                            {l}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs font-medium">Số CCCD / CMND</Label>
-                      <Input className="bg-background mt-1" value={form.cccd}
-                        onChange={(e) => setForm({ ...form, cccd: e.target.value })} />
+                      <Input
+                        className="bg-background mt-1"
+                        value={form.cccd}
+                        onChange={(e) => setForm({ ...form, cccd: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs font-medium">Số hộ chiếu</Label>
-                      <Input className="bg-background mt-1" value={form.passport_no}
-                        onChange={(e) => setForm({ ...form, passport_no: e.target.value })} />
+                      <Input
+                        className="bg-background mt-1"
+                        value={form.passport_no}
+                        onChange={(e) => setForm({ ...form, passport_no: e.target.value })}
+                      />
                     </div>
                   </div>
                 </>
@@ -665,26 +742,43 @@ function CustomerDetailPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <Label className="text-xs font-medium">Tên công ty / Hộ kinh doanh</Label>
-                      <Input className="bg-background mt-1" value={form.company_name}
-                        onChange={(e) => setForm({ ...form, company_name: e.target.value })} />
+                      <Input
+                        className="bg-background mt-1"
+                        value={form.company_name}
+                        onChange={(e) => setForm({ ...form, company_name: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs font-medium">Mã số thuế</Label>
-                      <Input className="bg-background mt-1" value={form.tax_code}
-                        onChange={(e) => setForm({ ...form, tax_code: e.target.value })} />
+                      <Input
+                        className="bg-background mt-1"
+                        value={form.tax_code}
+                        onChange={(e) => setForm({ ...form, tax_code: e.target.value })}
+                      />
                     </div>
                   </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <Label className="text-xs font-medium">Email</Label>
-                      <Input className="bg-background mt-1" value={form.email}
-                        onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                      <Input
+                        className="bg-background mt-1"
+                        value={form.email}
+                        onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs font-medium">Nhóm đối tác</Label>
-                      <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        value={form.group_name} onChange={(e) => setForm({ ...form, group_name: e.target.value })}>
-                        {Object.entries(groupLabel).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      <select
+                        className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        value={form.group_name}
+                        onChange={(e) => setForm({ ...form, group_name: e.target.value })}
+                      >
+                        {Object.entries(groupLabel).map(([v, l]) => (
+                          <option key={v} value={v}>
+                            {l}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -693,12 +787,14 @@ function CustomerDetailPage() {
 
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Ghi chú</Label>
-                <Input className="bg-background mt-1" value={form.note}
-                  onChange={(e) => setForm({ ...form, note: e.target.value })} />
+                <Input
+                  className="bg-background mt-1"
+                  value={form.note}
+                  onChange={(e) => setForm({ ...form, note: e.target.value })}
+                />
               </div>
             </div>
 
-            {/* Địa chỉ */}
             <div className="space-y-4 p-5 bg-muted/30 rounded-xl border">
               <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
                 <MapPin className="h-4 w-4" /> Địa chỉ liên hệ
@@ -706,26 +802,40 @@ function CustomerDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Tỉnh / Thành phố</Label>
-                  <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={form.province} onChange={(e) => setForm({ ...form, province: e.target.value })}>
+                  <select
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={form.province}
+                    onChange={(e) => setForm({ ...form, province: e.target.value })}
+                  >
                     <option value="">-- Chọn tỉnh thành --</option>
-                    {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
+                    {PROVINCES.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Phường / Xã</Label>
-                  <Input className="bg-background mt-1" placeholder="Nhập phường/xã"
-                    value={form.ward} onChange={(e) => setForm({ ...form, ward: e.target.value })} />
+                  <Input
+                    className="bg-background mt-1"
+                    placeholder="Nhập phường/xã"
+                    value={form.ward}
+                    onChange={(e) => setForm({ ...form, ward: e.target.value })}
+                  />
                 </div>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Số nhà, tên đường</Label>
-                <Input className="bg-background mt-1" placeholder="Ví dụ: Số 123, đường Trần Hưng Đạo"
-                  value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+                <Input
+                  className="bg-background mt-1"
+                  placeholder="Ví dụ: Số 123, đường Trần Hưng Đạo"
+                  value={form.address}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                />
               </div>
             </div>
 
-            {/* Ngân hàng */}
             <div className="space-y-4 p-5 bg-muted/30 rounded-xl border">
               <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
                 <Landmark className="h-4 w-4" /> Thông tin ngân hàng
@@ -733,18 +843,24 @@ function CustomerDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Ngân hàng</Label>
-                  <Input className="bg-background mt-1" placeholder="VD: Vietcombank..." value={form.bank_name}
-                    onChange={(e) => setForm({ ...form, bank_name: e.target.value })} />
+                  <Input
+                    className="bg-background mt-1"
+                    placeholder="VD: Vietcombank..."
+                    value={form.bank_name}
+                    onChange={(e) => setForm({ ...form, bank_name: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Số tài khoản</Label>
-                  <Input className="bg-background mt-1 font-mono" value={form.bank_account}
-                    onChange={(e) => setForm({ ...form, bank_account: e.target.value })} />
+                  <Input
+                    className="bg-background mt-1 font-mono"
+                    value={form.bank_account}
+                    onChange={(e) => setForm({ ...form, bank_account: e.target.value })}
+                  />
                 </div>
               </div>
             </div>
 
-            {/* Công nợ */}
             <div className="space-y-4 p-5 bg-muted/30 rounded-xl border">
               <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
                 <Wallet className="h-4 w-4" /> Công nợ
@@ -752,23 +868,33 @@ function CustomerDetailPage() {
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Dư nợ hiện tại</Label>
                 <div className="relative mt-1">
-                  <Input className="pl-8 bg-background font-medium text-destructive" inputMode="numeric"
+                  <Input
+                    className="pl-8 bg-background font-medium text-destructive"
+                    inputMode="numeric"
                     value={form.debt}
-                    onChange={(e) => setForm({ ...form, debt: e.target.value.replace(/[^\d.]/g, "") })} />
-                  <div className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">đ</div>
+                    onChange={(e) =>
+                      setForm({ ...form, debt: e.target.value.replace(/[^\d.]/g, "") })
+                    }
+                  />
+                  <div className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">
+                    đ
+                  </div>
                 </div>
               </div>
             </div>
 
             <DialogFooter className="pt-3 border-t gap-2">
-              <Button type="button" variant="ghost" onClick={() => setEditOpen(false)}>Hủy bỏ</Button>
-              <Button type="submit" className="px-6">Lưu thông tin</Button>
+              <Button type="button" variant="ghost" onClick={() => setEditOpen(false)}>
+                Hủy bỏ
+              </Button>
+              <Button type="submit" className="px-6">
+                Lưu thông tin
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Thu tiền Dialog */}
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -781,81 +907,128 @@ function CustomerDetailPage() {
               <span className="text-muted-foreground">Công nợ hiện tại</span>
               <span className="font-bold text-destructive">{fmt(customer.debt)}</span>
             </div>
+
             <div>
               <Label>Số tiền thu (₫) *</Label>
-              <Input className="mt-1" autoFocus value={payAmount}
+              <Input
+                className="mt-1"
+                autoFocus
+                value={payAmount}
                 onChange={(e) => setPayAmount(fmtInput(e.target.value))}
                 onFocus={(e) => e.target.select()}
-                placeholder="Nhập số tiền..." />
+                placeholder="Nhập số tiền..."
+              />
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Hình thức thanh toán</Label>
-                <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                <select
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                   value={payFundType}
-                  onChange={(e) => { setPayFundType(e.target.value as any); setBankAccountIdx(""); setBankContent(""); }}>
+                  onChange={(e) => {
+                    setPayFundType(e.target.value as any);
+                    setBankAccountIdx("");
+                    setBankContent("");
+                  }}
+                >
                   <option value="tien_mat">Tiền mặt</option>
                   <option value="ngan_hang">Chuyển khoản (Ngân hàng)</option>
                 </select>
               </div>
               <div>
                 <Label>Chi nhánh</Label>
-                <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  value={payBranch} onChange={(e) => setPayBranch(e.target.value)}>
+                <select
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={payBranch}
+                  onChange={(e) => setPayBranch(e.target.value)}
+                >
                   <option value="">-- Mặc định --</option>
-                  {branches.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  {branches.map((b: any) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
 
-            {payFundType === "ngan_hang" && (() => {
-              const bankList: any[] = (() => {
-                try { return JSON.parse(siteSettings?.bank_accounts || "[]"); } catch { return []; }
-              })();
-              return (
-                <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50/40 p-3">
-                  {bankList.length > 0 && (
+            {payFundType === "ngan_hang" &&
+              (() => {
+                const bankList: any[] = (() => {
+                  try {
+                    return JSON.parse(siteSettings?.bank_accounts || "[]");
+                  } catch {
+                    return [];
+                  }
+                })();
+
+                return (
+                  <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50/40 p-3">
+                    {bankList.length > 0 && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Tài khoản nhận tiền</Label>
+                        <select
+                          className="mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm"
+                          value={bankAccountIdx}
+                          onChange={(e) => {
+                            const idx = e.target.value;
+                            setBankAccountIdx(idx);
+                            if (idx !== "") {
+                              const ba = bankList[parseInt(idx)];
+                              if (ba && !bankContent) {
+                                setBankContent(`${siteSettings?.site_name ?? "CK"} ${ba.account_number}`);
+                              }
+                            }
+                          }}
+                        >
+                          <option value="">— Chọn STK —</option>
+                          {bankList.map((ba: any, i: number) => (
+                            <option key={i} value={String(i)}>
+                              {ba.bank} - {ba.account_number} ({ba.account_name})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     <div>
-                      <Label className="text-xs text-muted-foreground">Tài khoản nhận tiền</Label>
-                      <select className="mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm"
-                        value={bankAccountIdx}
-                        onChange={(e) => {
-                          const idx = e.target.value;
-                          setBankAccountIdx(idx);
-                          if (idx !== "") {
-                            const ba = bankList[parseInt(idx)];
-                            if (ba && !bankContent) setBankContent(`${siteSettings?.site_name ?? "CK"} ${ba.account_number}`);
-                          }
-                        }}>
-                        <option value="">— Chọn STK —</option>
-                        {bankList.map((ba: any, i: number) => (
-                          <option key={i} value={String(i)}>{ba.bank} - {ba.account_number} ({ba.account_name})</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Nội dung chuyển khoản</Label>
-                    <div className="mt-1 relative">
-                      <Input value={bankContent} onChange={(e) => setBankContent(e.target.value)}
-                        placeholder="VD: THUTIEN NGUYEN VAN A" className="pr-12 font-mono text-sm" />
-                      {bankContent && (
-                        <button type="button" className="absolute right-2 top-2 text-xs text-primary hover:underline"
-                          onClick={() => { navigator.clipboard.writeText(bankContent); toast.success("Đã copy!"); }}>
-                          Copy
-                        </button>
-                      )}
+                      <Label className="text-xs text-muted-foreground">Nội dung chuyển khoản</Label>
+                      <div className="mt-1 relative">
+                        <Input
+                          value={bankContent}
+                          onChange={(e) => setBankContent(e.target.value)}
+                          placeholder="VD: THUTIEN NGUYEN VAN A"
+                          className="pr-12 font-mono text-sm"
+                        />
+                        {bankContent && (
+                          <button
+                            type="button"
+                            className="absolute right-2 top-2 text-xs text-primary hover:underline"
+                            onClick={() => {
+                              navigator.clipboard.writeText(bankContent);
+                              toast.success("Đã copy!");
+                            }}
+                          >
+                            Copy
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })()}
+                );
+              })()}
 
             <div>
               <Label>Ghi chú</Label>
-              <Input className="mt-1" value={payNote} onChange={(e) => setPayNote(e.target.value)}
-                placeholder="Nội dung thu tiền..." />
+              <Input
+                className="mt-1"
+                value={payNote}
+                onChange={(e) => setPayNote(e.target.value)}
+                placeholder="Nội dung thu tiền..."
+              />
             </div>
+
             {parseInput(payAmount) > 0 && (
               <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm flex justify-between">
                 <span className="text-muted-foreground">Còn lại sau khi thu</span>
@@ -865,10 +1038,16 @@ function CustomerDetailPage() {
               </div>
             )}
           </div>
+
           <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setPayOpen(false)}>Hủy</Button>
-            <Button className="w-full sm:w-auto bg-green-600 hover:bg-green-700"
-              onClick={handleCollectPayment} disabled={submittingPay}>
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setPayOpen(false)}>
+              Hủy
+            </Button>
+            <Button
+              className="w-full sm:w-auto bg-green-600 hover:bg-green-700"
+              onClick={handleCollectPayment}
+              disabled={submittingPay}
+            >
               <Banknote className="h-4 w-4 mr-1" />
               {submittingPay ? "Đang xử lý..." : "Xác nhận thu tiền"}
             </Button>
@@ -900,7 +1079,11 @@ function OrderTable({ orders }: { orders: any[] }) {
                 {new Date(o.created_at).toLocaleDateString("vi-VN")}
               </td>
               <td className="pr-2">
-                <span className={`inline-block rounded-full px-2 py-0.5 text-xs ${STATUS_COLOR[o.status] ?? "bg-secondary"}`}>
+                <span
+                  className={`inline-block rounded-full px-2 py-0.5 text-xs ${
+                    STATUS_COLOR[o.status] ?? "bg-secondary"
+                  }`}
+                >
                   {STATUS_LABEL[o.status] ?? o.status}
                 </span>
               </td>
@@ -908,8 +1091,11 @@ function OrderTable({ orders }: { orders: any[] }) {
                 {new Intl.NumberFormat("vi-VN").format(o.total)} ₫
               </td>
               <td className="text-right">
-                <Link to="/orders/$id" params={{ id: o.id }}
-                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
+                <Link
+                  to="/orders/$id"
+                  params={{ id: o.id }}
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+                >
                   <ExternalLink className="h-3.5 w-3.5" />
                 </Link>
               </td>
@@ -922,7 +1108,12 @@ function OrderTable({ orders }: { orders: any[] }) {
 }
 
 function PaymentHistoryTable({ payments, users }: { payments: any[]; users: any[] }) {
-  const getUserName = (id: string) => users.find((u: any) => u.id === id)?.full_name ?? "—";
+  const getUserName = (id: string) =>
+    users.find((u: any) => u.id === id)?.full_name ??
+    users.find((u: any) => u.id === id)?.name ??
+    users.find((u: any) => u.id === id)?.username ??
+    "—";
+
   const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n));
 
   return (
@@ -947,15 +1138,25 @@ function PaymentHistoryTable({ payments, users }: { payments: any[]; users: any[
               </td>
               <td className="pr-2">
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  {p.fund_type === "ngan_hang"
-                    ? <><Landmark className="h-3 w-3" />Ngân hàng</>
-                    : <><Wallet className="h-3 w-3" />Tiền mặt</>}
+                  {p.fund_type === "ngan_hang" ? (
+                    <>
+                      <Landmark className="h-3 w-3" />
+                      Ngân hàng
+                    </>
+                  ) : (
+                    <>
+                      <Wallet className="h-3 w-3" />
+                      Tiền mặt
+                    </>
+                  )}
                 </span>
               </td>
               <td className="pr-2 text-xs text-muted-foreground">
                 {getUserName(p.collector_user_id)}
               </td>
-              <td className="pr-2 text-xs text-muted-foreground max-w-[150px] truncate">{p.note ?? "—"}</td>
+              <td className="pr-2 text-xs text-muted-foreground max-w-[150px] truncate">
+                {p.note ?? "—"}
+              </td>
               <td className="text-right pr-2 font-bold text-green-600">
                 +{moneyFmt(p.amount)} ₫
               </td>

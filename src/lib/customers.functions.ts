@@ -120,6 +120,7 @@ export const upsertCustomer = createServerFn({ method: "POST" })
         id: uid(),
         ...payload,
         created_by: data._actor_id || null,
+        created_by_name: data.created_by_name || null,
         created_at: now(),
       });
       await logActivity({ action: "create_customer", detail: `Thêm khách hàng mới: ${data.name}`, employee_id: data._actor_id ?? null });

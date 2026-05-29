@@ -489,10 +489,14 @@ function Page() {
           payer_user_id:        selectedVoucher.type === "chi" ? (editForm.payerUserId || null) : null,
           receiver_customer_id: selectedVoucher.type === "chi" ? (editForm.receiverCustomerId || null) : null,
           note:                 buildNote(editForm),
+          fund_type:            editForm.fundType,
+          branch_id:            editForm.branchId,
         },
       });
+      await qc.invalidateQueries({ queryKey: ["cash"] });
+      await qc.refetchQueries({ queryKey: ["cash"] });
       toast.success("Cập nhật phiếu thành công");
-      qc.invalidateQueries({ queryKey: ["cash"] });
+      setSelectedVoucher(null);
       setOpenEdit(false);
     } catch (e: any) { toast.error(e.message); }
     finally { setSaving(false); }
