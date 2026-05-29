@@ -95,448 +95,6 @@ function parseInput(val: string): number {
   return Number(val.replace(/\D/g, "")) || 0;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SHARED INVOICE PRINTER  — dùng chung cho orders/index, orders/$id, schedule
-// ─────────────────────────────────────────────────────────────────────────────
-function buildInvoiceHtml({
-  order,
-  custName, custPhone, custAddress,
-  branchName, empName,
-  items, products,
-  moneyFmt,
-  ss,          // siteSettings
-  tplOverride, // object {header?, footer?, warranty?, showWarranty?} từ admin
-}: any): string {
-  const _site   = ss?.site_name?.trim() || "Mr.Vũ";
-  const _tpl    = tplOverride ?? (() => {
-    try { return JSON.parse(ss?.print_templates || "{}").order_invoice ?? {}; } catch { return {}; }
-  })();
-  const _header  = (_tpl.header   ?? "PHIẾU XUẤT KHO / KIỂM BẢO HÀNH").replace("{Ten_Cua_Hang}", _site);
-  const _footer  = (_tpl.footer   ?? `${_site} — Cảm ơn Quý khách đã tin tưởng sử dụng dịch vụ!`).replace("{Ten_Cua_Hang}", _site);
-  const _showW   = _tpl.showWarranty !== false;
-  const _warranty = _showW
-    ? ((_tpl.warranty ?? `LƯU Ý: ${_site} KHUYẾN CÁO KIỂM TRA THIẾT BỊ ĐỊNH KỲ ÍT NHẤT 6 THÁNG/LẦN ĐỂ ĐẢM BẢO AN TOÀN.`).replace("{Ten_Cua_Hang}", _site))
-    : "";
-
-  const statusMap: Record<string, string> = { completed: "Hoàn tất", reserved: "Đặt hàng", draft: "Nháp" };
-  const pmLabel = order.payment_method === "ngan_hang" ? "Chuyển khoản" : "Tiền mặt";
-  const dateStr = order.created_at
-    ? new Date(order.created_at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })
-    : new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
-
-  const rows = (items ?? []).map((item: any, i: number) => {
-    const prod = (products ?? []).find((p: any) => p.id === item.product_id);
-    const qty = Number(item.qty ?? 0);
-    const price = Number(item.unit_price ?? 0);
-    const disc = Number(item.discount ?? 0);
-    const lineTotal = qty * price - disc;
-    return `
-    <tr>
-      <td class="tc">${i + 1}</td>
-      <td class="pl">${prod?.name ?? item.product_id ?? "—"}</td>
-      <td class="tc">${qty}</td>
-      <td class="tr">${moneyFmt(price)}</td>
-      <td class="tr fw">${moneyFmt(lineTotal)}</td>
-    </tr>`;
-  }).join("");
-
-  const subtotal  = Number(order.subtotal  ?? 0);
-  const discount  = Number(order.discount  ?? 0);
-  const vatAmt    = Number(order.vat_amount ?? 0);
-  const total     = Number(order.total     ?? 0);
-  const deposit   = Number(order.deposit   ?? 0);
-  const paid      = Number(order.paid      ?? 0);
-  const remaining = Math.max(0, total - deposit - paid);
-
-  return `<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${_header} — ${order.code ?? ""}</title>
-<style>
-/* ── Reset ── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-/* ── Base ── */
-body {
-  font-family: 'Segoe UI', 'Arial Unicode MS', Tahoma, 'DejaVu Sans', Arial, sans-serif;
-  font-size: 13.5px;
-  color: #1a1a2e;
-  background: #fff;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-  padding: 36px 40px;
-}
-.page { max-width: 780px; margin: 0 auto; }
-
-/* ── Header ── */
-.hdr {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 28px;
-  padding-bottom: 20px;
-  border-bottom: 2.5px solid #1d4ed8;
-}
-.hdr-left { flex: 1; }
-.logo { height: 56px; object-fit: contain; margin-bottom: 8px; display: block; }
-.shop-name {
-  font-size: 19px; font-weight: 800; color: #1d4ed8;
-  letter-spacing: -0.3px; line-height: 1.2;
-}
-.shop-meta { font-size: 11.5px; color: #64748b; line-height: 1.75; margin-top: 5px; }
-.hdr-right { text-align: right; flex-shrink: 0; }
-.inv-badge {
-  display: inline-block;
-  background: #1d4ed8;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  padding: 4px 10px;
-  border-radius: 4px;
-  margin-bottom: 8px;
-}
-.inv-title {
-  font-size: 16px; font-weight: 800;
-  color: #111; text-transform: uppercase;
-  letter-spacing: 0.5px; line-height: 1.3;
-  margin-bottom: 8px;
-}
-.inv-meta { font-size: 12px; color: #64748b; line-height: 2; }
-.inv-meta strong { color: #374151; }
-
-/* ── Info grid ── */
-.info-wrap {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 14px 18px;
-  margin-bottom: 22px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px 32px;
-}
-.info-cell .lbl {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: #94a3b8;
-  margin-bottom: 2px;
-}
-.info-cell .val {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
-}
-.info-full { grid-column: span 2; }
-
-/* ── Divider ── */
-.divider { border: none; border-top: 1px solid #e2e8f0; margin: 18px 0; }
-
-/* ── Table ── */
-.items-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 20px;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid #e2e8f0;
-}
-.items-table thead tr {
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
-  color: #fff;
-}
-.items-table th {
-  padding: 11px 10px;
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-}
-.items-table tbody tr:nth-child(even) { background: #f8fafc; }
-.items-table tbody tr:hover { background: #eff6ff; }
-.items-table td {
-  padding: 10px;
-  font-size: 13px;
-  border-bottom: 1px solid #f1f5f9;
-  vertical-align: middle;
-}
-.tc { text-align: center; }
-.tr { text-align: right; }
-.pl { padding-left: 14px; }
-.fw { font-weight: 700; }
-
-/* ── Totals ── */
-.totals-wrap { display: flex; justify-content: flex-end; margin-bottom: 24px; }
-.totals-box {
-  min-width: 280px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  overflow: hidden;
-}
-.t-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 16px;
-  font-size: 13px;
-  border-bottom: 1px solid #f1f5f9;
-}
-.t-row:last-child { border-bottom: none; }
-.t-row.discount { color: #16a34a; }
-.t-row.vat      { color: #d97706; }
-.t-row.deposit  { color: #b45309; }
-.t-row.paid-amt { color: #0891b2; }
-.t-row.grand {
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 800;
-  padding: 11px 16px;
-}
-
-/* ── Note ── */
-.note-box {
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-left: 4px solid #f59e0b;
-  border-radius: 6px;
-  padding: 10px 14px;
-  font-size: 13px;
-  margin-bottom: 22px;
-}
-
-/* ── Checklist ── */
-.check-box {
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 14px 18px;
-  margin-bottom: 22px;
-}
-.check-title {
-  font-size: 12.5px;
-  font-weight: 700;
-  margin-bottom: 10px;
-  color: #1e293b;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.check-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-  font-size: 12.5px;
-  color: #374151;
-}
-.checkbox {
-  width: 14px; height: 14px;
-  border: 1.5px solid #cbd5e1;
-  border-radius: 3px;
-  flex-shrink: 0;
-  display: inline-block;
-}
-.customer-confirm {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px dashed #e2e8f0;
-  font-size: 11.5px;
-  color: #64748b;
-}
-
-/* ── Signatures ── */
-.sign-section { margin-top: 12px; }
-.sign-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-  text-align: center;
-}
-.sign-card {
-  padding: 8px;
-}
-.sign-role {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 3px;
-}
-.sign-hint {
-  font-size: 10.5px;
-  color: #94a3b8;
-  margin-bottom: 44px;
-}
-.sign-line {
-  border-top: 1.5px dashed #cbd5e1;
-  padding-top: 5px;
-  font-size: 10.5px;
-  color: #cbd5e1;
-  letter-spacing: 1px;
-}
-
-/* ── Warranty ── */
-.warranty-box {
-  margin-top: 20px;
-  padding: 12px 16px;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-  border-left: 4px solid #f97316;
-  border-radius: 6px;
-  font-size: 11.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  line-height: 1.8;
-  color: #9a3412;
-}
-
-/* ── Footer ── */
-.footer-text {
-  margin-top: 18px;
-  text-align: center;
-  font-size: 12.5px;
-  color: #64748b;
-  border-top: 1px solid #f1f5f9;
-  padding-top: 14px;
-  line-height: 1.6;
-}
-
-/* ── Print ── */
-@media print {
-  body { padding: 10px 14px; }
-  .items-table tbody tr:hover { background: inherit; }
-}
-</style>
-</head>
-<body>
-<div class="page">
-
-  <!-- HEADER -->
-  <div class="hdr">
-    <div class="hdr-left">
-      ${ss?.logo_url ? `<img class="logo" src="${ss.logo_url}" alt="logo">` : ""}
-      <div class="shop-name">${_site}</div>
-      <div class="shop-meta">
-        ${ss?.address    ? `<span>📍 ${ss.address}</span><br>` : ""}
-        ${ss?.phone      ? `<span>📞 ${ss.phone}</span>` : ""}
-        ${ss?.phone && ss?.email ? "&nbsp;&nbsp;|&nbsp;&nbsp;" : ""}
-        ${ss?.email      ? `<span>✉ ${ss.email}</span>` : ""}
-        ${ss?.tax_code   ? `<br><span>MST: ${ss.tax_code}</span>` : ""}
-      </div>
-    </div>
-    <div class="hdr-right">
-      <div class="inv-badge">Hóa đơn bán hàng</div>
-      <div class="inv-title">${_header}</div>
-      <div class="inv-meta">
-        <strong>Mã phiếu</strong>&ensp;${order.code ?? "—"}<br>
-        <strong>Ngày lập</strong>&ensp;${dateStr}<br>
-        <strong>Trạng thái</strong>&ensp;${statusMap[order.status] ?? order.status ?? "—"}
-      </div>
-    </div>
-  </div>
-
-  <!-- INFO -->
-  <div class="info-wrap">
-    <div class="info-cell">
-      <div class="lbl">Khách hàng</div>
-      <div class="val">${custName ?? "Khách lẻ"}${custPhone ? `&ensp;<span style="color:#64748b;font-weight:400">📞 ${custPhone}</span>` : ""}</div>
-    </div>
-    <div class="info-cell">
-      <div class="lbl">Chi nhánh</div>
-      <div class="val">${branchName ?? "—"}</div>
-    </div>
-    <div class="info-cell">
-      <div class="lbl">Nhân viên</div>
-      <div class="val">${empName ?? "—"}</div>
-    </div>
-    <div class="info-cell">
-      <div class="lbl">Hình thức thanh toán</div>
-      <div class="val">${pmLabel}</div>
-    </div>
-    ${custAddress ? `
-    <div class="info-cell info-full">
-      <div class="lbl">Địa chỉ lắp đặt</div>
-      <div class="val">${custAddress}</div>
-    </div>` : ""}
-  </div>
-
-  <!-- PRODUCTS -->
-  <table class="items-table">
-    <thead>
-      <tr>
-        <th class="tc" style="width:44px">#</th>
-        <th style="text-align:left;padding-left:14px">Tên sản phẩm</th>
-        <th class="tc" style="width:58px">SL</th>
-        <th class="tr" style="width:130px">Đơn giá</th>
-        <th class="tr" style="width:140px">Thành tiền</th>
-      </tr>
-    </thead>
-    <tbody>${rows}</tbody>
-  </table>
-
-  <!-- TOTALS -->
-  <div class="totals-wrap">
-    <div class="totals-box">
-      <div class="t-row"><span>Tạm tính</span><span>${moneyFmt(subtotal)}</span></div>
-      ${discount  > 0 ? `<div class="t-row discount"><span>Giảm giá</span><span>− ${moneyFmt(discount)}</span></div>` : ""}
-      ${vatAmt    > 0 ? `<div class="t-row vat"     ><span>Thuế VAT</span><span>+ ${moneyFmt(vatAmt)}</span></div>` : ""}
-      <div class="t-row" style="font-weight:700"><span>Tổng cộng</span><span>${moneyFmt(total)}</span></div>
-      ${deposit   > 0 ? `<div class="t-row deposit"><span>Đã đặt cọc</span><span>− ${moneyFmt(deposit)}</span></div>` : ""}
-      ${paid      > 0 ? `<div class="t-row paid-amt"><span>Đã thanh toán</span><span>− ${moneyFmt(paid)}</span></div>` : ""}
-      <div class="t-row grand"><span>Khách cần trả</span><span>${moneyFmt(remaining)}</span></div>
-    </div>
-  </div>
-
-  <!-- NOTE -->
-  ${order.note ? `<div class="note-box"><strong>📝 Ghi chú:</strong>&ensp;${order.note}</div>` : ""}
-
-  <!-- CHECKLIST -->
-  <div class="check-box">
-    <div class="check-title">✅&nbsp; Xác nhận bàn giao</div>
-    ${["Đã giao hàng đúng mẫu và đầy đủ phụ kiện",
-       "Đã lắp đặt hoàn thiện, thiết bị hoạt động ổn định",
-       "Đã hướng dẫn sử dụng và bảo quản sản phẩm",
-       "Đã thanh toán đúng số tiền ghi trên phiếu"]
-      .map(t => `<div class="check-item"><span class="checkbox"></span><span>${t}</span></div>`)
-      .join("")}
-    <div class="customer-confirm">
-      <strong>Xác nhận của khách hàng</strong>
-      <span>Họ và tên: &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&ensp; Chữ ký: &emsp;&emsp;&emsp;&emsp;&emsp;</span>
-    </div>
-  </div>
-
-  <!-- SIGNATURES -->
-  <div class="sign-section">
-    <div class="sign-grid">
-      ${["Kỹ thuật lắp đặt","Nhân viên bán hàng","Khách hàng","Thủ kho"]
-        .map(r => `
-        <div class="sign-card">
-          <div class="sign-role">${r}</div>
-          <div class="sign-hint">(Ký và ghi rõ họ tên)</div>
-          <div class="sign-line">. . . . . . . . . .</div>
-        </div>`).join("")}
-    </div>
-  </div>
-
-  <!-- WARRANTY -->
-  ${_warranty ? `<div class="warranty-box">⚠&ensp;${_warranty}</div>` : ""}
-
-  <!-- FOOTER -->
-  ${_footer ? `<div class="footer-text">${_footer}</div>` : ""}
-
-</div>
-</body>
-</html>`;
-}
-
 function OrderDetailPage() {
   const { id } = useParams({ from: "/orders/$id" });
   const { isAdmin, user } = useAuth();
@@ -893,28 +451,130 @@ function OrderDetailPage() {
 
   function printOrderSlip() {
     if (!order) return;
-    const moneyFmt  = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
-    const ss        = siteSettings as any;
+    const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
     const custObj   = (data?.customers ?? []).find((c: any) => c.id === order.customer_id);
     const branchObj = (data?.branches  ?? []).find((b: any) => b.id === order.branch_id);
     const empObj    = (data?.employees ?? []).find((e: any) => e.id === order.employee_id);
-    const _tpl      = (() => { try { return JSON.parse(ss?.print_templates || "{}").order_invoice ?? {}; } catch { return {}; } })();
+    const ss = siteSettings as any;
+    // Load print template from admin settings
+    const _tpls = (() => { try { return JSON.parse(ss?.print_templates || "{}"); } catch { return {}; } })();
+    const _tpl = _tpls["order_invoice"] ?? {};
+    const _siteName = ss?.site_name ?? "Mr.Vũ";
+    const _tplHeader = (_tpl.header ?? "PHIẾU XUẤT KHO KIỂM BẢO HÀNH").replace("{Ten_Cua_Hang}", _siteName);
+    const _tplFooter = (_tpl.footer ?? `Quạt trần ${_siteName} chân thành cảm ơn sự tin tưởng của Quý khách hàng!`).replace("{Ten_Cua_Hang}", _siteName);
+    const _showWarranty = _tpl.showWarranty !== false;
+    const _tplWarranty = _showWarranty
+      ? ((_tpl.warranty ?? `LƯU Ý: ${_siteName} KHUYẾN CÁO CẦN KIỂM TRA QUẠT ĐỊNH KỲ ÍT NHẤT 6 THÁNG/LẦN ĐỂ ĐẢM BẢO AN TOÀN TRONG QUÁ TRÌNH SỬ DỤNG.`).replace("{Ten_Cua_Hang}", _siteName))
+      : "";
+
+    const rows = orderItems.map((item: any, i: number) => {
+      const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
+      const lineTotal = item.qty * item.unit_price - (item.discount ?? 0);
+      return `<tr>
+        <td style="text-align:center;padding:8px 6px;border-bottom:1px solid #e5e7eb">${i+1}</td>
+        <td style="padding:8px 6px;border-bottom:1px solid #e5e7eb">${prod?.name ?? item.product_id}</td>
+        <td style="text-align:center;padding:8px 6px;border-bottom:1px solid #e5e7eb">${item.qty}</td>
+        <td style="text-align:right;padding:8px 6px;border-bottom:1px solid #e5e7eb">${moneyFmt(item.unit_price)}</td>
+        <td style="text-align:right;padding:8px 6px;border-bottom:1px solid #e5e7eb;font-weight:600">${moneyFmt(lineTotal)}</td>
+      </tr>`;
+    }).join("");
+
+    const statusLabels: Record<string, string> = { completed: "Hoàn tất", reserved: "Đặt hàng", draft: "Nháp" };
+    const pmLabel = order.payment_method === "ngan_hang" ? "Chuyển khoản" : "Tiền mặt";
+
+    const html = `<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Hóa đơn ${order.code}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:32px}
+.page{max-width:760px;margin:0 auto}
+.header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #e5e7eb}
+.shop-name{font-size:18px;font-weight:700;color:#1d4ed8}
+.shop-info{font-size:11px;color:#6b7280;line-height:1.7;margin-top:4px}
+.inv-title{font-size:20px;font-weight:800;text-transform:uppercase;color:#111;text-align:right;line-height:1.2}
+.inv-meta{font-size:11px;color:#6b7280;text-align:right;margin-top:6px;line-height:1.8}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px 16px}
+.info-label{color:#6b7280;font-size:10.5px;text-transform:uppercase;letter-spacing:0.4px}
+.info-value{font-weight:600;color:#111;font-size:12.5px;margin-top:1px}
+table{width:100%;border-collapse:collapse;margin-bottom:16px}
+thead tr{background:#1d4ed8;color:#fff}th{padding:10px 8px;font-size:12px;font-weight:600}
+.total-section{display:flex;justify-content:flex-end;margin-bottom:20px}
+.total-box{min-width:270px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden}
+.total-row{display:flex;justify-content:space-between;padding:7px 14px;font-size:13px;border-bottom:1px solid #f3f4f6}
+.total-row.grand{background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;border-bottom:none}
+.checklist{border:1px solid #e5e7eb;border-radius:6px;padding:12px 16px;margin-bottom:20px;font-size:12px}
+.sign-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;text-align:center;margin-top:8px}
+.warranty{margin-top:16px;padding:10px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;line-height:1.7;color:#9a3412}
+.footer{margin-top:14px;text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #f3f4f6;padding-top:12px}
+@media print{body{padding:0}}
+</style></head><body><div class="page">
+<div class="header">
+  <div>
+    ${ss?.logo_url ? `<img src="${ss.logo_url}" alt="Logo" style="height:52px;object-fit:contain;margin-bottom:6px;display:block">` : ""}
+    <div class="shop-name">${ss?.site_name ?? "Mr.Vũ"}</div>
+    <div class="shop-info">
+      ${ss?.address ? `📍 ${ss.address}<br>` : ""}
+      ${ss?.phone ? `📞 ${ss.phone}` : ""}${ss?.phone && ss?.email ? " &nbsp;|&nbsp; " : ""}${ss?.email ? `✉ ${ss.email}` : ""}
+      ${ss?.tax_code ? `<br>MST: ${ss.tax_code}` : ""}
+    </div>
+  </div>
+  <div>
+    <div class="inv-title">${_tplHeader}</div>
+    <div class="inv-meta">
+      <strong>Mã phiếu:</strong> ${order.code}<br>
+      <strong>Ngày:</strong> ${new Date(order.created_at).toLocaleDateString("vi-VN")}<br>
+      <strong>Trạng thái:</strong> ${statusLabels[order.status] ?? order.status}
+    </div>
+  </div>
+</div>
+<div class="info-grid">
+  <div><div class="info-label">Khách hàng</div><div class="info-value">${custObj?.name ?? "Khách lẻ"}${custObj?.phone ? " — " + custObj.phone : ""}</div></div>
+  <div><div class="info-label">Chi nhánh</div><div class="info-value">${branchObj?.name ?? "—"}</div></div>
+  <div><div class="info-label">Nhân viên</div><div class="info-value">${empObj?.name ?? "—"}</div></div>
+  <div><div class="info-label">Hình thức TT</div><div class="info-value">${pmLabel}</div></div>
+  ${custObj?.address ? `<div style="grid-column:span 2"><div class="info-label">Địa chỉ</div><div class="info-value">${custObj.address}</div></div>` : ""}
+</div>
+<table>
+  <thead><tr>
+    <th style="width:42px;text-align:center">STT</th><th>Sản phẩm</th>
+    <th style="width:56px;text-align:center">SL</th>
+    <th style="width:120px;text-align:right">Đơn giá</th>
+    <th style="width:130px;text-align:right">Thành tiền</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="total-section"><div class="total-box">
+  <div class="total-row"><span>Tạm tính</span><span>${moneyFmt(order.subtotal)}</span></div>
+  ${Number(order.discount) > 0 ? `<div class="total-row" style="color:#16a34a"><span>Giảm giá</span><span>- ${moneyFmt(order.discount)}</span></div>` : ""}
+  ${Number(order.vat_amount) > 0 ? `<div class="total-row" style="color:#d97706"><span>Thuế VAT</span><span>+ ${moneyFmt(order.vat_amount)}</span></div>` : ""}
+  <div class="total-row"><span>Tổng cộng</span><span style="font-weight:700">${moneyFmt(order.total)}</span></div>
+  ${Number(order.deposit) > 0 ? `<div class="total-row" style="color:#b45309"><span>Đặt cọc</span><span>- ${moneyFmt(order.deposit)}</span></div>` : ""}
+  ${Number(order.paid) > 0 ? `<div class="total-row" style="color:#059669"><span>Đã thanh toán</span><span>- ${moneyFmt(order.paid)}</span></div>` : ""}
+  <div class="total-row grand"><span>Khách cần trả</span><span>${moneyFmt(Math.max(0, order.total - (order.deposit ?? 0) - (order.paid ?? 0)))}</span></div>
+</div></div>
+${order.note ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:10px 14px;font-size:12.5px;margin-bottom:20px"><strong>Ghi chú:</strong> ${order.note}</div>` : ""}
+<div class="checklist">
+  <div style="font-weight:700;margin-bottom:8px;font-size:12.5px">Xác nhận bàn giao:</div>
+  ${["Đã giao hàng đúng mẫu và đầy đủ phụ kiện","Đã lắp đặt hoàn thiện, quạt chạy ổn định","Đã hướng dẫn sử dụng và bảo quản","Đã thanh toán đúng số tiền trên phiếu"]
+    .map(it=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:13px;height:13px;border:1.5px solid #9ca3af;border-radius:2px;display:inline-block;flex-shrink:0"></span><span>${it}</span></div>`).join("")}
+  <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:11px;color:#6b7280">
+    <strong>Khách hàng xác nhận</strong><span>Họ và tên: _________________ &nbsp;&nbsp; Chữ ký: ______________</span>
+  </div>
+</div>
+<div class="sign-grid">
+  ${["Kỹ thuật","Nhân viên","Khách hàng","Thủ kho"].map(r=>`
+    <div>
+      <div style="font-weight:700;font-size:12px;margin-bottom:3px">${r}</div>
+      <div style="font-size:11px;color:#9ca3af;margin-bottom:44px">(Ký, ghi rõ họ tên)</div>
+      <div style="border-top:1px dashed #d1d5db;padding-top:4px;font-size:11px;color:#d1d5db">___________</div>
+    </div>`).join("")}
+</div>
+${_tplWarranty ? `<div class="warranty">⚠ ${_tplWarranty}</div>` : ""}
+${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
+</div></body></html>`;
 
     const pw = window.open("", "_blank");
     if (!pw) return;
-    pw.document.write(buildInvoiceHtml({
-      order,
-      custName:    custObj?.name,
-      custPhone:   custObj?.phone,
-      custAddress: custObj?.address,
-      branchName:  branchObj?.name,
-      empName:     empObj?.name,
-      items:       orderItems,
-      products:    data?.products ?? [],
-      moneyFmt,
-      ss,
-      tplOverride: _tpl,
-    }));
+    pw.document.write(html);
     pw.document.close();
     setTimeout(() => pw.print(), 300);
   }
@@ -1721,7 +1381,7 @@ function OrderDetailPage() {
               try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
               catch { return []; }
             })();
-            const khachCan = Math.max(0, (order.total ?? 0) - (order.deposit ?? 0));
+            const khachCan = Math.max(0, (order.total ?? 0) - (order.deposit ?? 0) - (order.discount ?? 0));
             const paid = parseInput(payAmountRaw);
             const congNo = Math.max(0, khachCan - paid);
             const tienThua = Math.max(0, paid - khachCan);
@@ -1854,12 +1514,6 @@ function OrderDetailPage() {
                   <div className="flex justify-between text-sm pt-1 border-t text-green-600">
                     <span>✓ Thanh toán đủ</span>
                     <span className="font-semibold">{moneyFmtLocal(paid)}</span>
-                  </div>
-                )}
-                {paid === 0 && khachCan > 0 && (
-                  <div className="flex justify-between text-sm pt-1 border-t text-orange-500">
-                    <span>Chưa thanh toán — tính vào công nợ</span>
-                    <span className="font-semibold">- {moneyFmtLocal(khachCan)}</span>
                   </div>
                 )}
 
