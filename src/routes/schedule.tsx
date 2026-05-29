@@ -65,7 +65,7 @@ function groupByDate(schedules: any[]) {
 }
 
 function Page() {
-  const { user, isAdmin , activeBranchId } = useAuth();
+  const { user, isAdmin } = useAuth();
   const listFn    = useServerFn(listSchedules);
   const createFn  = useServerFn(createSchedule);
   const approveFn = useServerFn(approveSchedule);
@@ -138,6 +138,15 @@ const userBranchIds = useMemo(() => {
   const [filterType, setFilterType]     = useState("");
   const [filterDate, setFilterDate]     = useState(new Date().toISOString().slice(0, 10)); // mặc định hôm nay
   const [branchFilterIds, setBranchFilterIds] = useState<string[]>([]);
+
+  // ✅ Mặc định chọn tất cả chi nhánh khi data load xong lần đầu
+  const [branchFilterInitialized, setBranchFilterInitialized] = useState(false);
+  useEffect(() => {
+    if (!branchFilterInitialized && branchOptions.length > 0) {
+      setBranchFilterIds(branchOptions.map((b: any) => String(b.id)));
+      setBranchFilterInitialized(true);
+    }
+  }, [branchOptions, branchFilterInitialized]);
 
   const selectedBranchNames = useMemo(() => {
     if (branchFilterIds.length === 0) return [];
