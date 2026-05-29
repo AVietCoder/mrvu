@@ -701,7 +701,7 @@ function CustomersPage() {
               <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
                 <MapPin className="h-4 w-4" /> Địa chỉ liên hệ
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Tỉnh / Thành phố</Label>
                   <select
@@ -712,15 +712,6 @@ function CustomersPage() {
                     <option value="">-- Chọn tỉnh thành --</option>
                     {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs font-medium">Quận / Huyện</Label>
-                  <Input
-                    className="bg-background mt-1"
-                    placeholder="Nhập quận/huyện"
-                    value={form.district}
-                    onChange={(e) => setForm({ ...form, district: e.target.value })}
-                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Phường / Xã</Label>

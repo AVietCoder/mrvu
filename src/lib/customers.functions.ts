@@ -142,7 +142,7 @@ export const recordPayment = createServerFn({ method: "POST" })
       limit: 1,
     });
     const current = rows[0]?.debt ?? 0;
-    const next = Math.max(0, current - Number(data.amount || 0));
+    const next = current - Number(data.amount || 0);  // Cho phép âm
     await updateWhere("customers", { debt: next }, { id: data.customer_id });
     await logActivity({ action: "customer_payment", detail: `Thu công nợ ${data.amount?.toLocaleString?.() ?? data.amount}đ — KH: ${data.customer_id}` });
     return { ok: true };
@@ -228,14 +228,14 @@ export const collectCustomerPayment = createServerFn({ method: "POST" })
       created_at: now(),
     });
 
-    // Giảm công nợ khách hàng
+    // Cập nhật công nợ khách hàng (cho phép âm nếu thanh toán thừa)
     const custRows = await fetchRows<{ debt: number }>("customers", {
       eq: { id: data.customer_id },
       select: "debt",
       limit: 1,
     });
     const currentDebt = custRows[0]?.debt ?? 0;
-    const newDebt = Math.max(0, currentDebt - amount);
+    const newDebt = currentDebt - amount;   // Không clamp về 0 — âm = thanh toán thừa
     await updateWhere("customers", { debt: newDebt }, { id: data.customer_id });
 
     await logActivity({ action: "collect_payment", detail: `Thu ${amount.toLocaleString("vi-VN")} ₫ từ khách (${code})`, employee_id: data.employee_id || null });

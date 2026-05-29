@@ -96,7 +96,6 @@ type EditFormState = {
   gender: string;
   birthday: string;
   province: string;
-  district: string;
   ward: string;
   address: string;
   group_name: string;
@@ -150,7 +149,6 @@ function CustomerDetailPage() {
     gender: "",
     birthday: "",
     province: "",
-    district: "",
     ward: "",
     address: "",
     group_name: "le",
@@ -206,7 +204,6 @@ function CustomerDetailPage() {
       gender: customer.gender ?? "",
       birthday: customer.birthday ? customer.birthday.slice(0, 10) : "",
       province: customer.province ?? "",
-      district: customer.district ?? "",
       ward: customer.ward ?? "",
       address: customer.address ?? "",
       group_name: customer.group_name ?? "le",
@@ -319,8 +316,7 @@ function CustomerDetailPage() {
           <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={openPayDialog}>
             <Banknote className="h-4 w-4 mr-1" /> Thu tiền
           </Button>
-        )}
-      </div>
+        )}      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* LEFT COLUMN */}
@@ -361,7 +357,7 @@ function CustomerDetailPage() {
                 <div className="flex items-start gap-2 text-muted-foreground">
                   <MapPin className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>
-                    {[customer.address, customer.ward, customer.district, customer.province]
+                    {[customer.address, customer.ward, customer.province]
                       .filter(Boolean).join(", ")}
                   </span>
                 </div>
@@ -480,19 +476,24 @@ function CustomerDetailPage() {
                   <span className="font-semibold text-green-600">{fmt(totalPaid)}</span>
                 </div>
               )}
-              {Number(customer.debt || 0) > 0 && (
+              {Number(customer.debt || 0) !== 0 && (
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-muted-foreground flex items-center gap-1">
-                    <TrendingDown className="h-4 w-4 text-destructive" /> Công nợ
+                    <TrendingDown className="h-4 w-4 text-destructive" />
+                    {Number(customer.debt) < 0 ? "Thanh toán thừa" : "Công nợ"}
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-destructive">{fmt(customer.debt)}</span>
-                    <button
-                      onClick={openPayDialog}
-                      className="text-xs text-green-700 border border-green-300 bg-green-50 hover:bg-green-100 rounded px-1.5 py-0.5 font-medium"
-                    >
-                      Thu tiền
-                    </button>
+                    <span className={`font-bold ${Number(customer.debt) < 0 ? "text-green-600" : "text-destructive"}`}>
+                      {Number(customer.debt) < 0 ? `+${fmt(Math.abs(customer.debt))}` : fmt(customer.debt)}
+                    </span>
+                    {Number(customer.debt) > 0 && (
+                      <button
+                        onClick={openPayDialog}
+                        className="text-xs text-green-700 border border-green-300 bg-green-50 hover:bg-green-100 rounded px-1.5 py-0.5 font-medium"
+                      >
+                        Thu tiền
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -702,7 +703,7 @@ function CustomerDetailPage() {
               <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
                 <MapPin className="h-4 w-4" /> Địa chỉ liên hệ
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Tỉnh / Thành phố</Label>
                   <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -712,20 +713,15 @@ function CustomerDetailPage() {
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs font-medium">Quận / Huyện</Label>
-                  <Input className="bg-background mt-1" value={form.district}
-                    onChange={(e) => setForm({ ...form, district: e.target.value })} />
-                </div>
-                <div className="space-y-1">
                   <Label className="text-xs font-medium">Phường / Xã</Label>
-                  <Input className="bg-background mt-1" value={form.ward}
-                    onChange={(e) => setForm({ ...form, ward: e.target.value })} />
+                  <Input className="bg-background mt-1" placeholder="Nhập phường/xã"
+                    value={form.ward} onChange={(e) => setForm({ ...form, ward: e.target.value })} />
                 </div>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Số nhà, tên đường</Label>
-                <Input className="bg-background mt-1" value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })} />
+                <Input className="bg-background mt-1" placeholder="Ví dụ: Số 123, đường Trần Hưng Đạo"
+                  value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
               </div>
             </div>
 

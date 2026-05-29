@@ -24,6 +24,9 @@ import {
   Minus,
   Loader2,
   UserPlus,
+  MapPin,
+  Landmark,
+  Wallet,
 } from "lucide-react";
 import {
   Dialog,
@@ -61,6 +64,24 @@ function parseInput(val: string): number {
 }
 
 const PAGE_SIZE = 20;
+
+const PROVINCES = [
+  "An Giang","Bà Rịa - Vũng Tàu","Bắc Giang","Bắc Kạn","Bạc Liêu","Bắc Ninh","Bến Tre",
+  "Bình Định","Bình Dương","Bình Phước","Bình Thuận","Cà Mau","Cần Thơ","Cao Bằng","Đà Nẵng",
+  "Đắk Lắk","Đắk Nông","Điện Biên","Đồng Nai","Đồng Tháp","Gia Lai","Hà Giang","Hà Nam",
+  "Hà Nội","Hà Tĩnh","Hải Dương","Hải Phòng","Hậu Giang","Hòa Bình","Hưng Yên","Khánh Hòa",
+  "Kiên Giang","Kon Tum","Lai Châu","Lâm Đồng","Lạng Sơn","Lào Cai","Long An","Nam Định",
+  "Nghệ An","Ninh Bình","Ninh Thuận","Phú Thọ","Phú Yên","Quảng Bình","Quảng Nam","Quảng Ngãi",
+  "Quảng Ninh","Quảng Trị","Sóc Trăng","Sơn La","Tây Ninh","Thái Bình","Thái Nguyên","Thanh Hóa",
+  "Thừa Thiên Huế","Tiền Giang","TP. Hồ Chí Minh","Trà Vinh","Tuyên Quang","Vĩnh Long","Vĩnh Phúc","Yên Bái",
+];
+
+const GROUP_LABEL: Record<string, string> = {
+  le: "Khách lẻ",
+  dai_ly: "Đại lý",
+  vip: "VIP",
+  cong_trinh: "Công trình",
+};
 // Thêm 2 status này vào dòng 48 (ngay dưới cancelled):
 const STATUS_LABEL: Record<string, string> = {
   completed: "Hoàn tất",
@@ -244,6 +265,18 @@ function Page() {
   const [quickCustGroup, setQuickCustGroup] = useState("le");
   const [quickCustType, setQuickCustType] = useState<"ca_nhan"|"to_chuc">("ca_nhan");
   const [quickCustNote, setQuickCustNote] = useState("");
+  const [quickCustGender, setQuickCustGender] = useState("");
+  const [quickCustBirthday, setQuickCustBirthday] = useState("");
+  const [quickCustProvince, setQuickCustProvince] = useState("");
+  const [quickCustWard, setQuickCustWard] = useState("");
+  const [quickCustAddress, setQuickCustAddress] = useState("");
+  const [quickCustCccd, setQuickCustCccd] = useState("");
+  const [quickCustPassport, setQuickCustPassport] = useState("");
+  const [quickCustCompany, setQuickCustCompany] = useState("");
+  const [quickCustTaxCode, setQuickCustTaxCode] = useState("");
+  const [quickCustBankName, setQuickCustBankName] = useState("");
+  const [quickCustBankAccount, setQuickCustBankAccount] = useState("");
+  const [quickCustDebt, setQuickCustDebt] = useState("0");
   const [savingCust, setSavingCust] = useState(false);
 
   const [items, setItems] = useState<LineItem[]>([]);
@@ -412,6 +445,15 @@ function Page() {
     setFilterStatus("");
   }
 
+  function resetQuickCustForm() {
+    setQuickCustName(""); setQuickCustPhone(""); setQuickCustEmail("");
+    setQuickCustGroup("le"); setQuickCustType("ca_nhan"); setQuickCustNote("");
+    setQuickCustGender(""); setQuickCustBirthday(""); setQuickCustProvince("");
+    setQuickCustWard(""); setQuickCustAddress(""); setQuickCustCccd("");
+    setQuickCustPassport(""); setQuickCustCompany(""); setQuickCustTaxCode("");
+    setQuickCustBankName(""); setQuickCustBankAccount(""); setQuickCustDebt("0");
+  }
+
   async function handleQuickCreateCustomer() {
     if (!quickCustName.trim()) return toast.error("Nhập tên khách hàng");
     setSavingCust(true);
@@ -421,26 +463,34 @@ function Page() {
           name: quickCustName.trim(),
           phone: quickCustPhone.trim() || undefined,
           email: quickCustEmail.trim() || undefined,
+          gender: quickCustGender || undefined,
+          birthday: quickCustBirthday || undefined,
+          province: quickCustProvince || undefined,
+          ward: quickCustWard || undefined,
+          address: quickCustAddress.trim() || undefined,
           group_name: quickCustGroup,
           customer_type: quickCustType,
+          company_name: quickCustCompany.trim() || undefined,
+          tax_code: quickCustTaxCode.trim() || undefined,
+          cccd: quickCustCccd.trim() || undefined,
+          passport_no: quickCustPassport.trim() || undefined,
+          bank_name: quickCustBankName.trim() || undefined,
+          bank_account: quickCustBankAccount.trim() || undefined,
           note: quickCustNote.trim() || undefined,
-          debt: 0,
+          debt: Number(quickCustDebt) || 0,
           _actor_id: user?.id,
         },
       });
       await qc.invalidateQueries({ queryKey: ["orders"] });
       toast.success(`Đã tạo khách hàng: ${quickCustName.trim()}`);
       setQuickCustOpen(false);
-      setQuickCustName("");
-      setQuickCustPhone("");
-      setQuickCustEmail("");
-      setQuickCustGroup("le");
-      setQuickCustType("ca_nhan");
-      setQuickCustNote("");
+      const savedName = quickCustName.trim();
+      const savedPhone = quickCustPhone.trim();
+      resetQuickCustForm();
       // Auto-select the new customer after data refreshes
       setTimeout(async () => {
         const fresh = await listFn();
-        const newCust = (fresh?.customers ?? []).find((c: any) => c.name === quickCustName.trim() && (!quickCustPhone || c.phone === quickCustPhone));
+        const newCust = (fresh?.customers ?? []).find((c: any) => c.name === savedName && (!savedPhone || c.phone === savedPhone));
         if (newCust) setCustomer(newCust.id);
       }, 500);
     } catch (e: any) {
@@ -698,7 +748,7 @@ function Page() {
                     <button
                       type="button"
                       className="flex items-center gap-0.5 text-xs text-primary hover:underline"
-                      onClick={() => { setQuickCustName(""); setQuickCustPhone(""); setQuickCustOpen(true); }}
+                      onClick={() => { resetQuickCustForm(); setQuickCustOpen(true); }}
                     >
                       <UserPlus className="h-3.5 w-3.5" /> Tạo mới
                     </button>
@@ -1178,74 +1228,207 @@ function Page() {
           </DialogContent>
         </Dialog>
 
-        {/* Quick Create Customer Dialog */}
+        {/* Quick Create Customer Dialog — Full form đồng bộ với trang Khách hàng */}
         <Dialog open={quickCustOpen} onOpenChange={setQuickCustOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <UserPlus className="h-5 w-5 text-primary" /> Tạo khách hàng nhanh
+          <DialogContent style={{ padding: 0 }} className="max-h-[92vh] max-w-2xl overflow-y-auto p-0 rounded-2xl border-none shadow-2xl">
+            <DialogHeader className="px-6 pt-6 pb-4 bg-muted/40 border-b">
+              <DialogTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
+                <div className="p-1.5 bg-primary/10 text-primary rounded-lg">
+                  <UserPlus className="h-5 w-5" />
+                </div>
+                Thêm khách hàng mới
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-3">
-              {/* Loại KH */}
-              <div className="flex gap-4">
-                {(["ca_nhan", "to_chuc"] as const).map((t) => (
-                  <label key={t} className="flex items-center gap-2 cursor-pointer text-sm">
-                    <input type="radio" name="qc_type" value={t}
-                      checked={quickCustType === t}
-                      onChange={() => setQuickCustType(t)}
-                      className="accent-primary" />
-                    {t === "ca_nhan" ? "Cá nhân" : "Tổ chức"}
-                  </label>
-                ))}
+
+            <div className="p-4 space-y-5">
+              {/* PHẦN 1: THÔNG TIN CƠ BẢN */}
+              <div className="space-y-4 p-5 bg-muted/30 rounded-xl border border-border/70">
+                <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
+                  <UserPlus className="h-4 w-4" /> Thông tin cơ bản
+                </div>
+                <div className="flex gap-4">
+                  {(["ca_nhan", "to_chuc"] as const).map((t) => (
+                    <label key={t} className="flex items-center gap-2 cursor-pointer text-sm">
+                      <input type="radio" name="qc_cust_type" value={t}
+                        checked={quickCustType === t}
+                        onChange={() => setQuickCustType(t)}
+                        className="accent-primary" />
+                      {t === "ca_nhan" ? "Cá nhân" : "Tổ chức / Hộ kinh doanh"}
+                    </label>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-2 space-y-1">
+                    <Label className="text-xs font-medium">
+                      {quickCustType === "to_chuc" ? "Tên người mua" : "Họ và tên"} <span className="text-destructive">*</span>
+                    </Label>
+                    <Input className="bg-background mt-1" placeholder="Nhập tên đầy đủ"
+                      value={quickCustName} autoFocus
+                      onChange={(e) => setQuickCustName(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Số điện thoại</Label>
+                    <Input className="bg-background mt-1" placeholder="0912xxxxxx"
+                      value={quickCustPhone} onChange={(e) => setQuickCustPhone(e.target.value)} />
+                  </div>
+                </div>
+                {quickCustType === "ca_nhan" && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">Email</Label>
+                        <Input className="bg-background mt-1" placeholder="email@gmail.com"
+                          value={quickCustEmail} onChange={(e) => setQuickCustEmail(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">Giới tính</Label>
+                        <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          value={quickCustGender} onChange={(e) => setQuickCustGender(e.target.value)}>
+                          <option value="">-- Chọn --</option>
+                          <option value="nam">Nam</option>
+                          <option value="nu">Nữ</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">Ngày sinh</Label>
+                        <Input type="date" className="bg-background mt-1"
+                          value={quickCustBirthday} onChange={(e) => setQuickCustBirthday(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">Nhóm đối tác</Label>
+                        <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          value={quickCustGroup} onChange={(e) => setQuickCustGroup(e.target.value)}>
+                          {Object.entries(GROUP_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">Số CCCD / CMND</Label>
+                        <Input className="bg-background mt-1" placeholder="Nhập số CCCD/CMND"
+                          value={quickCustCccd} onChange={(e) => setQuickCustCccd(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">Số hộ chiếu</Label>
+                        <Input className="bg-background mt-1" placeholder="Nhập số hộ chiếu"
+                          value={quickCustPassport} onChange={(e) => setQuickCustPassport(e.target.value)} />
+                      </div>
+                    </div>
+                  </>
+                )}
+                {quickCustType === "to_chuc" && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">Tên công ty / Hộ kinh doanh</Label>
+                        <Input className="bg-background mt-1" placeholder="Nhập tên công ty"
+                          value={quickCustCompany} onChange={(e) => setQuickCustCompany(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">Mã số thuế</Label>
+                        <Input className="bg-background mt-1" placeholder="Nhập mã số thuế"
+                          value={quickCustTaxCode} onChange={(e) => setQuickCustTaxCode(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">Email</Label>
+                        <Input className="bg-background mt-1" placeholder="email@company.com"
+                          value={quickCustEmail} onChange={(e) => setQuickCustEmail(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">Nhóm đối tác</Label>
+                        <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          value={quickCustGroup} onChange={(e) => setQuickCustGroup(e.target.value)}>
+                          {Object.entries(GROUP_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </>
+                )}
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Ghi chú</Label>
+                  <Input className="bg-background mt-1" placeholder="Ghi chú thêm về khách hàng..."
+                    value={quickCustNote} onChange={(e) => setQuickCustNote(e.target.value)} />
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <Label>Họ và tên *</Label>
-                  <Input className="mt-1" autoFocus value={quickCustName}
-                    onChange={(e) => setQuickCustName(e.target.value)}
-                    placeholder="Nhập tên khách..."
-                    onKeyDown={(e) => { if (e.key === "Enter") handleQuickCreateCustomer(); }} />
+
+              {/* PHẦN 2: ĐỊA CHỈ */}
+              <div className="space-y-4 p-5 bg-muted/30 rounded-xl border border-border/70">
+                <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
+                  <MapPin className="h-4 w-4" /> Địa chỉ liên hệ
                 </div>
-                <div>
-                  <Label>Số điện thoại</Label>
-                  <Input className="mt-1" value={quickCustPhone}
-                    onChange={(e) => setQuickCustPhone(e.target.value)}
-                    placeholder="0xxx..." />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Tỉnh / Thành phố</Label>
+                    <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={quickCustProvince} onChange={(e) => setQuickCustProvince(e.target.value)}>
+                      <option value="">-- Chọn tỉnh thành --</option>
+                      {PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Phường / Xã</Label>
+                    <Input className="bg-background mt-1" placeholder="Nhập phường/xã"
+                      value={quickCustWard} onChange={(e) => setQuickCustWard(e.target.value)} />
+                  </div>
                 </div>
-                <div>
-                  <Label>Email</Label>
-                  <Input className="mt-1" value={quickCustEmail}
-                    onChange={(e) => setQuickCustEmail(e.target.value)}
-                    placeholder="email@..." />
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Số nhà, tên đường</Label>
+                  <Input className="bg-background mt-1" placeholder="Ví dụ: Số 123, đường Trần Hưng Đạo"
+                    value={quickCustAddress} onChange={(e) => setQuickCustAddress(e.target.value)} />
                 </div>
-                <div>
-                  <Label>Nhóm khách</Label>
-                  <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={quickCustGroup} onChange={(e) => setQuickCustGroup(e.target.value)}>
-                    <option value="le">Khách lẻ</option>
-                    <option value="dai_ly">Đại lý</option>
-                    <option value="vip">VIP</option>
-                    <option value="cong_trinh">Công trình</option>
-                  </select>
+              </div>
+
+              {/* PHẦN 3: NGÂN HÀNG */}
+              <div className="space-y-4 p-5 bg-muted/30 rounded-xl border border-border/70">
+                <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
+                  <Landmark className="h-4 w-4" /> Thông tin ngân hàng
                 </div>
-                <div>
-                  <Label>Ghi chú</Label>
-                  <Input className="mt-1" value={quickCustNote}
-                    onChange={(e) => setQuickCustNote(e.target.value)}
-                    placeholder="Ghi chú (tuỳ chọn)" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Ngân hàng</Label>
+                    <Input className="bg-background mt-1" placeholder="VD: Vietcombank, Techcombank..."
+                      value={quickCustBankName} onChange={(e) => setQuickCustBankName(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Số tài khoản ngân hàng</Label>
+                    <Input className="bg-background mt-1 font-mono" placeholder="Nhập số tài khoản"
+                      value={quickCustBankAccount} onChange={(e) => setQuickCustBankAccount(e.target.value)} />
+                  </div>
                 </div>
+              </div>
+
+              {/* PHẦN 4: CÔNG NỢ */}
+              <div className="space-y-4 p-5 bg-muted/30 rounded-xl border border-border/70">
+                <div className="flex items-center gap-2 text-xs font-bold text-primary uppercase tracking-wider">
+                  <Wallet className="h-4 w-4" /> Thiết lập tài chính
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Dư nợ công nợ đầu kỳ (nếu có)</Label>
+                    <div className="relative mt-1">
+                      <Input className="pl-8 bg-background font-medium text-destructive"
+                        inputMode="numeric" placeholder="0"
+                        value={quickCustDebt}
+                        onChange={(e) => setQuickCustDebt(e.target.value.replace(/[^\d.]/g, ""))} />
+                      <div className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">đ</div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground pt-0 md:pt-6">
+                    Khoản tiền khách đang nợ cửa hàng tính tới thời điểm tạo tài khoản.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end pt-3 border-t">
+                <Button type="button" variant="ghost" onClick={() => setQuickCustOpen(false)}>Hủy bỏ</Button>
+                <Button type="button" className="px-6" onClick={handleQuickCreateCustomer} disabled={savingCust}>
+                  <UserPlus className="h-4 w-4 mr-1" />
+                  {savingCust ? "Đang tạo..." : "Lưu thông tin"}
+                </Button>
               </div>
             </div>
-            <DialogFooter className="flex-col sm:flex-row gap-2">
-              <Button variant="outline" className="w-full sm:w-auto" onClick={() => setQuickCustOpen(false)}>
-                Hủy
-              </Button>
-              <Button className="w-full sm:w-auto" onClick={handleQuickCreateCustomer} disabled={savingCust}>
-                <UserPlus className="h-4 w-4 mr-1" />
-                {savingCust ? "Đang tạo..." : "Tạo khách hàng"}
-              </Button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
 
