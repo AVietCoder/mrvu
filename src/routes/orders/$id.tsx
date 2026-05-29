@@ -1457,6 +1457,12 @@ function OrderDetailPage() {
                     <span className="font-semibold">{moneyFmtLocal(paid)}</span>
                   </div>
                 )}
+                {paid === 0 && khachCan > 0 && (
+                  <div className="flex justify-between text-sm pt-1 border-t text-orange-500">
+                    <span>Chưa thanh toán — tính vào công nợ</span>
+                    <span className="font-semibold">- {moneyFmtLocal(khachCan)}</span>
+                  </div>
+                )}
 
                 <DialogFooter className="flex-col sm:flex-row gap-2 pt-1">
                   <Button variant="outline" className="w-full sm:w-auto" onClick={() => setPayOpen(false)}>
@@ -1465,11 +1471,11 @@ function OrderDetailPage() {
                   <Button
                     className="w-full sm:w-auto font-bold text-base h-11"
                     onClick={confirmPayAndComplete}
-                    disabled={completingOrder || paid === 0}
+                    disabled={completingOrder}
                   >
                     {completingOrder
                       ? <><span className="animate-spin mr-1.5">⏳</span>Đang xử lý...</>
-                      : "THANH TOÁN"}
+                      : "Tạo hóa đơn"}
                   </Button>
                 </DialogFooter>
               </div>

@@ -183,7 +183,7 @@ function Page() {
     ]);
 
   const [transferFrom, setTransferFrom] =
-    useState("");
+    useState(() => activeBranchId ?? "");  // ✅ mặc định = CN đăng nhập
 
   const [transferTo, setTransferTo] =
     useState("");
@@ -297,8 +297,8 @@ function Page() {
       createMovementItem(p0, 1, 0),
     ]);
 
-    setTransferFrom(b0);
-    setTransferTo(b1);
+    setTransferFrom(activeBranchId ?? b0);  // ✅ mặc định = CN đang đăng nhập
+    setTransferTo(b1 !== (activeBranchId ?? b0) ? b1 : "");
 
     setTransferItems([
       createTransferItem(p0, 1),
@@ -461,20 +461,12 @@ function Page() {
         "Vui lòng chọn đủ chi nhánh nguồn và đích"
       );
 
-    if (!isBranchAllowed(transferFrom) || !isBranchAllowed(transferTo))
-      return toast.error(
-        "Chi nhánh chuyển không hợp lệ"
-      );
+    // ✅ Chỉ cần kho nguồn thuộc quyền của user; kho đích có thể là bất kỳ CN
+    if (!isAdmin && !isBranchAllowed(transferFrom))
+      return toast.error("Bạn không có quyền chuyển từ chi nhánh này");
 
     if (transferFrom === transferTo)
-      return toast.error(
-        "Chi nhánh nguồn và đích không được giống nhau"
-      );
-
-    if (allowedBranches.length < 2 && !isAdmin)
-      return toast.error(
-        "Bạn cần ít nhất 2 chi nhánh được phân quyền để chuyển kho"
-      );
+      return toast.error("Chi nhánh nguồn và đích không được giống nhau");
 
     try {
       await createTrf({
@@ -493,6 +485,8 @@ function Page() {
       );
 
       setOpen(false);
+      setTransferFrom(activeBranchId ?? "");  // ✅ giữ CN nguồn mặc định
+      setTransferTo("");
       setTransferItems([createTransferItem()]);
       setVoucherNote("");
 
@@ -1671,10 +1665,11 @@ function Page() {
                     "transfer" && (
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div>
-                        <Label>
-                          Từ CN
+                        <Label className="flex items-center gap-1">
+                          Từ kho
+                          <span className="text-xs text-muted-foreground font-normal">(CN của bạn)</span>
                         </Label>
-
+                        {/* ✅ Chỉ CN được phân quyền */}
                         <SearchableSelect
                           value={transferFrom}
                           onChange={setTransferFrom}
@@ -1684,15 +1679,20 @@ function Page() {
                       </div>
 
                       <div>
-                        <Label>
-                          Đến CN
+                        <Label className="flex items-center gap-1">
+                          Đến kho
+                          <span className="text-xs text-muted-foreground font-normal">(Tất cả)</span>
                         </Label>
-
+                        {/* ✅ Toàn bộ chi nhánh */}
                         <SearchableSelect
                           value={transferTo}
                           onChange={setTransferTo}
                           placeholder="Tìm chi nhánh..."
-                          options={allowedBranches.map((b) => ({ value: b.id, label: b.name }))}
+                          options={branches.map((b: any) => ({
+                            value: b.id,
+                            label: b.name,
+                            disabled: b.id === transferFrom,  // không chuyển về chính nó
+                          }))}
                         />
                       </div>
                     </div>
