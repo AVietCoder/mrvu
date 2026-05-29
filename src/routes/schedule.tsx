@@ -105,7 +105,10 @@ const userBranchIds = useMemo(() => {
   const { data } = useQuery({ queryKey: ["schedules"], queryFn: () => listFn() });
   const { data: diffData } = useQuery({ queryKey: ["work-difficulties"], queryFn: () => listDiff() });
   const { data: wtData } = useQuery({ queryKey: ["work-types"], queryFn: () => listWT() });
-
+  const { data: siteSettings } = useQuery({
+    queryKey: ["site_settings"],
+    queryFn: () => getSettingsFn(),
+  });
   const branchOptions = useMemo(() => {
     const branches = data?.branches ?? [];
     if (isAdmin || userBranchIds.size === 0) return branches;
@@ -461,7 +464,7 @@ const userBranchIds = useMemo(() => {
     return `<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Hóa đơn ${order.code}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;background:#fff;padding:32px}
+body{font-family:"Segoe UI","Tahoma","Arial","DejaVu Sans",sans-serif;font-size:13px;color:#1a1a1a;background:#fff;padding:32px;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 .page{max-width:760px;margin:0 auto}
 .header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #e5e7eb}
 .shop-name{font-size:18px;font-weight:700;color:#1d4ed8}.shop-info{font-size:11px;color:#6b7280;line-height:1.6}
@@ -501,7 +504,7 @@ tbody tr:nth-child(even){background:#f9fafb}td{padding:8px;font-size:12.5px;bord
 <div class="info-grid">
   <div><div class="info-label">Khách hàng</div><div class="info-value">${custObj?.name ?? "Khách lẻ"}${custObj?.phone ? " — " + custObj.phone : ""}</div></div>
   <div><div class="info-label">Chi nhánh</div><div class="info-value">${branchObj?.name ?? "—"}</div></div>
-  <div><div class="info-label">Nhân viên</div><div class="info-value">${empObj?.name ?? "—"}</div></div>
+  <div><div class="info-label">Nhân viên</div><div class="info-value">${empObj?.full_name ?? empObj?.name ?? empObj?.username ?? "—"}</div></div>
   <div><div class="info-label">Thanh toán</div><div class="info-value">${pmLabel}</div></div>
   ${custObj?.address ? `<div style="grid-column:span 2"><div class="info-label">Địa chỉ</div><div class="info-value">${custObj.address}</div></div>` : ""}
 </div>
@@ -539,7 +542,7 @@ ${order.note ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-r
     const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
     const custObj = (data?.customers ?? []).find((c: any) => c.id === linkedOrder.customer_id);
     const branchObj = (data?.branches ?? []).find((b: any) => b.id === linkedOrder.branch_id);
-    const empObj = (data?.employees ?? []).find((e: any) => e.id === linkedOrder.employee_id);
+    const empObj = (data?.users ?? []).find((e: any) => e.id === linkedOrder.created_by);
     const items = (data?.order_items ?? []).filter((oi: any) => oi.order_id === linkedOrder.id);
     const rows = items.map((item: any, i: number) => {
       const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
