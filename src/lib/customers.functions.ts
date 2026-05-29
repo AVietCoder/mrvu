@@ -119,6 +119,7 @@ export const upsertCustomer = createServerFn({ method: "POST" })
       await insertRow("customers", {
         id: uid(),
         ...payload,
+        created_by: data._actor_id || null,
         created_at: now(),
       });
       await logActivity({ action: "create_customer", detail: `Thêm khách hàng mới: ${data.name}`, employee_id: data._actor_id ?? null });
@@ -161,10 +162,24 @@ export const getCustomerById = createServerFn({ method: "GET" })
 
     const branches = await fetchRows("branches", { orderBy: "name" });
 
+    // Lịch sử thu tiền (phiếu thu trong cash_vouchers liên quan đến khách hàng này)
+    const { data: paymentHistory, error: phError } = await supabase
+      .from("cash_vouchers")
+      .select("id, code, amount, fund_type, note, created_at, collector_user_id, status")
+      .eq("payer_customer_id", data.id)
+      .eq("type", "thu")
+      .order("created_at", { ascending: false });
+
+    // Lấy thông tin users để hiện tên người thu
+    const users = await fetchRows("users", { select: "id, full_name", orderBy: "full_name" });
+
     return {
       customer: customer[0] ?? null,
       orders,
       branches,
+      paymentHistory: (paymentHistory ?? []).filter((p: any) => p.status !== "cancelled"),
+      allPaymentHistory: paymentHistory ?? [],
+      users,
     };
   });
 export const collectCustomerPayment = createServerFn({ method: "POST" })

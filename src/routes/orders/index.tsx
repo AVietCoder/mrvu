@@ -240,6 +240,10 @@ function Page() {
   const [quickCustOpen, setQuickCustOpen] = useState(false);
   const [quickCustName, setQuickCustName] = useState("");
   const [quickCustPhone, setQuickCustPhone] = useState("");
+  const [quickCustEmail, setQuickCustEmail] = useState("");
+  const [quickCustGroup, setQuickCustGroup] = useState("le");
+  const [quickCustType, setQuickCustType] = useState<"ca_nhan"|"to_chuc">("ca_nhan");
+  const [quickCustNote, setQuickCustNote] = useState("");
   const [savingCust, setSavingCust] = useState(false);
 
   const [items, setItems] = useState<LineItem[]>([]);
@@ -416,8 +420,12 @@ function Page() {
         data: {
           name: quickCustName.trim(),
           phone: quickCustPhone.trim() || undefined,
-          group_name: "le",
+          email: quickCustEmail.trim() || undefined,
+          group_name: quickCustGroup,
+          customer_type: quickCustType,
+          note: quickCustNote.trim() || undefined,
           debt: 0,
+          _actor_id: user?.id,
         },
       });
       await qc.invalidateQueries({ queryKey: ["orders"] });
@@ -425,6 +433,10 @@ function Page() {
       setQuickCustOpen(false);
       setQuickCustName("");
       setQuickCustPhone("");
+      setQuickCustEmail("");
+      setQuickCustGroup("le");
+      setQuickCustType("ca_nhan");
+      setQuickCustNote("");
       // Auto-select the new customer after data refreshes
       setTimeout(async () => {
         const fresh = await listFn();
@@ -502,6 +514,10 @@ function Page() {
           status,
           payment_method: paymentMethod,
           discount: discountAmt,
+          discount_type: useDiscountPct ? "percent" : "amount",
+          discount_pct: useDiscountPct ? parseFloat(discountPct) || 0 : 0,
+          vat_rate: includeVat ? vatRate : 0,
+          vat_amount: vatAmt,
           deposit,
           paid: 0,
           note: note || undefined,
@@ -1164,32 +1180,61 @@ function Page() {
 
         {/* Quick Create Customer Dialog */}
         <Dialog open={quickCustOpen} onOpenChange={setQuickCustOpen}>
-          <DialogContent className="max-w-sm">
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <UserPlus className="h-5 w-5 text-primary" /> Tạo khách hàng nhanh
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
-              <div>
-                <Label>Tên khách hàng *</Label>
-                <Input
-                  className="mt-1"
-                  autoFocus
-                  value={quickCustName}
-                  onChange={(e) => setQuickCustName(e.target.value)}
-                  placeholder="Nhập tên khách..."
-                  onKeyDown={(e) => { if (e.key === "Enter") handleQuickCreateCustomer(); }}
-                />
+              {/* Loại KH */}
+              <div className="flex gap-4">
+                {(["ca_nhan", "to_chuc"] as const).map((t) => (
+                  <label key={t} className="flex items-center gap-2 cursor-pointer text-sm">
+                    <input type="radio" name="qc_type" value={t}
+                      checked={quickCustType === t}
+                      onChange={() => setQuickCustType(t)}
+                      className="accent-primary" />
+                    {t === "ca_nhan" ? "Cá nhân" : "Tổ chức"}
+                  </label>
+                ))}
               </div>
-              <div>
-                <Label>Số điện thoại</Label>
-                <Input
-                  className="mt-1"
-                  value={quickCustPhone}
-                  onChange={(e) => setQuickCustPhone(e.target.value)}
-                  placeholder="Số điện thoại (tùy chọn)"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <Label>Họ và tên *</Label>
+                  <Input className="mt-1" autoFocus value={quickCustName}
+                    onChange={(e) => setQuickCustName(e.target.value)}
+                    placeholder="Nhập tên khách..."
+                    onKeyDown={(e) => { if (e.key === "Enter") handleQuickCreateCustomer(); }} />
+                </div>
+                <div>
+                  <Label>Số điện thoại</Label>
+                  <Input className="mt-1" value={quickCustPhone}
+                    onChange={(e) => setQuickCustPhone(e.target.value)}
+                    placeholder="0xxx..." />
+                </div>
+                <div>
+                  <Label>Email</Label>
+                  <Input className="mt-1" value={quickCustEmail}
+                    onChange={(e) => setQuickCustEmail(e.target.value)}
+                    placeholder="email@..." />
+                </div>
+                <div>
+                  <Label>Nhóm khách</Label>
+                  <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={quickCustGroup} onChange={(e) => setQuickCustGroup(e.target.value)}>
+                    <option value="le">Khách lẻ</option>
+                    <option value="dai_ly">Đại lý</option>
+                    <option value="vip">VIP</option>
+                    <option value="cong_trinh">Công trình</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Ghi chú</Label>
+                  <Input className="mt-1" value={quickCustNote}
+                    onChange={(e) => setQuickCustNote(e.target.value)}
+                    placeholder="Ghi chú (tuỳ chọn)" />
+                </div>
               </div>
             </div>
             <DialogFooter className="flex-col sm:flex-row gap-2">

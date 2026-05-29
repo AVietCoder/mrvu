@@ -586,7 +586,8 @@ function Page() {
 
           <div className="rounded-xl border bg-card p-3 shadow-sm">
             <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <TrendingUp className="h-3.5 w-3.5 text-green-500" />Tổng thu
+              <TrendingUp className="h-3.5 w-3.5 text-green-500" />
+              Tổng thu{fund !== "all" ? ` (${fund === "tien_mat" ? "Tiền mặt" : "Ngân hàng"})` : ""}
             </div>
             <div className="font-bold text-green-600 text-base sm:text-lg tabular-nums">
               +{moneyFmt(branchStats.thu)}
@@ -594,7 +595,8 @@ function Page() {
           </div>
           <div className="rounded-xl border bg-card p-3 shadow-sm">
             <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <TrendingDown className="h-3.5 w-3.5 text-red-500" />Tổng chi
+              <TrendingDown className="h-3.5 w-3.5 text-red-500" />
+              Tổng chi{fund !== "all" ? ` (${fund === "tien_mat" ? "Tiền mặt" : "Ngân hàng"})` : ""}
             </div>
             <div className="font-bold text-red-600 text-base sm:text-lg tabular-nums">
               -{moneyFmt(branchStats.chi)}
@@ -602,7 +604,8 @@ function Page() {
           </div>
           <div className="rounded-xl border bg-card p-3 shadow-sm">
             <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-              <Wallet className="h-3.5 w-3.5 text-blue-500" />Tồn quỹ
+              <Wallet className="h-3.5 w-3.5 text-blue-500" />
+              Tồn quỹ{fund !== "all" ? ` (${fund === "tien_mat" ? "Tiền mặt" : "Ngân hàng"})` : ""}
             </div>
             <div className={`font-bold text-base sm:text-lg tabular-nums ${branchStats.ton >= 0 ? "text-blue-600" : "text-red-600"}`}>
               {moneyFmt(branchStats.ton)}

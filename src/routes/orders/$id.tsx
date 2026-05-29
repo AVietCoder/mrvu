@@ -192,9 +192,20 @@ function OrderDetailPage() {
     setEditEmployee(order.employee_id ?? "");
     setEditStatus(order.status);
     setEditPaymentMethod(order.payment_method ?? "tien_mat");
-    setEditDiscount(String(order.discount ?? 0));
-    setEditDiscountMode("amount");
-    setEditVat("0");
+    // Khôi phục giảm giá đã lưu
+    if (order.discount_type === "percent" && order.discount_pct > 0) {
+      setEditDiscountMode("percent");
+      setEditDiscount(String(order.discount_pct));
+    } else {
+      setEditDiscountMode("amount");
+      setEditDiscount(String(order.discount ?? 0));
+    }
+    // Khôi phục VAT đã lưu
+    if (order.vat_rate > 0) {
+      setEditVat(String(Math.round(order.vat_rate * 100)));
+    } else {
+      setEditVat("0");
+    }
     setEditDeposit(String(order.deposit ?? 0));
     setEditNote(order.note ?? "");
     setEditScheduleLinks(linkedSchedules.map((s: any) => s.id));
@@ -219,12 +230,13 @@ function OrderDetailPage() {
           status: editStatus,
           payment_method: editPaymentMethod,
           discount: discountAmt,
+          discount_type: editDiscountMode,
+          discount_pct: editDiscountMode === "percent" ? parseFloat(editDiscount) || 0 : 0,
+          vat_rate: parseFloat(editVat) > 0 ? parseFloat(editVat) / 100 : 0,
+          vat_amount: editVatAmt,
           deposit: parseInput(editDeposit),
           paid: 0,
-          note: [
-            editNote,
-            parseFloat(editVat) > 0 ? `VAT ${editVat}%` : "",
-          ].filter(Boolean).join(" | ") || undefined,
+          note: editNote || undefined,
           items: editItems,
         },
       });
@@ -862,7 +874,22 @@ function OrderDetailPage() {
             {!editing ? (
               <div className="space-y-2 text-sm">
                 <Row label="Tạm tính" value={fmt(order.subtotal)} />
-                {order.discount > 0 && <Row label="Giảm giá" value={`- ${fmt(order.discount)}`} cls="text-red-600" />}
+                {order.discount > 0 && (
+                  <Row
+                    label={order.discount_type === "percent" && order.discount_pct > 0
+                      ? `Giảm giá (${order.discount_pct}%)`
+                      : "Giảm giá"}
+                    value={`- ${fmt(order.discount)}`}
+                    cls="text-red-600"
+                  />
+                )}
+                {order.vat_amount > 0 && (
+                  <Row
+                    label={`Thuế VAT${order.vat_rate > 0 ? ` (${Math.round(order.vat_rate * 100)}%)` : ""}`}
+                    value={`+ ${fmt(order.vat_amount)}`}
+                    cls="text-orange-600"
+                  />
+                )}
                 <Row label="Tổng tiền hàng" value={fmt(order.total)} />
                 <Row
                   label="Hình thức thanh toán"

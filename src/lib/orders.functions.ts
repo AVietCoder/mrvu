@@ -447,7 +447,8 @@ export const createOrder = createServerFn({ method: "POST" })
       (s: number, it: any) => s + it.qty * it.unit_price - (it.discount || 0),
       0,
     );
-    const total = Math.max(0, subtotal - (data.discount || 0));
+    const vatAmount = Number(data.vat_amount || 0);
+    const total = Math.max(0, subtotal - (data.discount || 0) + vatAmount);
     const oid = uid();
     const code = await nextOrderCode();
     const createdAt = data.created_at || now();
@@ -488,6 +489,10 @@ export const createOrder = createServerFn({ method: "POST" })
         status,
         subtotal,
         discount: Number(data.discount || 0),
+        discount_type: data.discount_type || "amount",    // 'amount' | 'percent'
+        discount_pct: Number(data.discount_pct || 0),
+        vat_rate: Number(data.vat_rate || 0),             // e.g. 0.08, 0.10
+        vat_amount: vatAmount,
         total,
         deposit,
         paid,
@@ -730,7 +735,8 @@ export const updateOrder = createServerFn({ method: "POST" })
       (s: number, it: any) => s + it.qty * it.unit_price - (it.discount || 0),
       0,
     );
-    const total = Math.max(0, subtotal - (data.discount || 0));
+    const vatAmount = Number(data.vat_amount || 0);
+    const total = Math.max(0, subtotal - (data.discount || 0) + vatAmount);
 
     const paymentMethod: "tien_mat" | "ngan_hang" =
       data.payment_method === "ngan_hang" ? "ngan_hang" : "tien_mat";
@@ -743,6 +749,10 @@ export const updateOrder = createServerFn({ method: "POST" })
       status: data.status,
       subtotal,
       discount: Number(data.discount || 0),
+      discount_type: data.discount_type || "amount",
+      discount_pct: Number(data.discount_pct || 0),
+      vat_rate: Number(data.vat_rate || 0),
+      vat_amount: vatAmount,
       total,
       deposit: Number(data.deposit || 0),
       paid: Number(data.paid || 0),
