@@ -187,6 +187,22 @@ function Page() {
 
   const products = data?.products ?? [];
   const branches = data?.branches ?? [];
+  const allowedBranchIds = useMemo(() => {
+    if (isAdmin) return branches.map((b: any) => b.id);
+    return user?.branch_ids?.length ? [...user.branch_ids] : [];
+  }, [branches, isAdmin, user?.branch_ids]);
+
+  const allowedBranches = useMemo(() => {
+    if (isAdmin) return branches;
+    const allowedSet = new Set(allowedBranchIds);
+    return branches.filter((b: any) => allowedSet.has(b.id));
+  }, [branches, isAdmin, allowedBranchIds]);
+
+  const allowedBranchSet = useMemo(
+    () => new Set(allowedBranchIds),
+    [allowedBranchIds]
+  );
+
   const pendingOrderSummaries = data?.pending_order_summaries ?? [];
 
   const pendingOrderMap = useMemo(() => {
@@ -209,13 +225,28 @@ function Page() {
     return map;
   }, [data?.stock]);
 
-  const pendingTransfers =
-    (data?.transfers ?? []).filter(
-      (t: any) => t.status === "pending"
-    );
+  const pendingTransfers = useMemo(() => {
+    const transfers = (data?.transfers ?? []) as any[];
+    const base = transfers.filter((t: any) => t.status === "pending");
 
-  const historyMovements =
-    data?.movements ?? [];
+    if (isAdmin) return base;
+
+    return base.filter((t: any) =>
+      allowedBranchSet.has(t.from_branch) || allowedBranchSet.has(t.to_branch)
+    );
+  }, [data?.transfers, isAdmin, allowedBranchSet]);
+
+  const historyMovements = useMemo(() => {
+    const movements = (data?.movements ?? []) as any[];
+
+    if (isAdmin) return movements;
+
+    return movements.filter((m: any) => {
+      const fromOk = m.from_branch ? allowedBranchSet.has(m.from_branch) : false;
+      const toOk = m.to_branch ? allowedBranchSet.has(m.to_branch) : false;
+      return fromOk || toOk;
+    });
+  }, [data?.movements, isAdmin, allowedBranchSet]);
 
   function startAction(
     t: "in" | "transfer"
@@ -230,11 +261,21 @@ function Page() {
         "Bạn không có quyền chuyển kho"
       );
 
+    if (!products.length) {
+      return toast.error("Chưa có sản phẩm để thao tác");
+    }
+
+    if (!allowedBranches.length) {
+      return toast.error(
+        "Bạn chưa được phân quyền chi nhánh để thao tác kho"
+      );
+    }
+
     setType(t);
 
     const p0 = products[0]?.id ?? "";
-    const b0 = branches[0]?.id ?? "";
-    const b1 = branches[1]?.id ?? b0;
+    const b0 = allowedBranches[0]?.id ?? "";
+    const b1 = allowedBranches[1]?.id ?? allowedBranches[0]?.id ?? "";
 
     setVoucherNote("");
 
@@ -260,6 +301,10 @@ function Page() {
 
   function buildNote() {
     return voucherNote.trim();
+  }
+
+  function isBranchAllowed(branchId: string) {
+    return isAdmin || allowedBranchSet.has(branchId);
   }
 
   const validInItems = inItems.filter(
@@ -307,6 +352,11 @@ function Page() {
         "Vui lòng chọn sản phẩm"
       );
 
+    if (!inBranch || !isBranchAllowed(inBranch))
+      return toast.error(
+        "Chi nhánh nhập không hợp lệ"
+      );
+
     try {
       await Promise.all(
         validInItems.map((item) =>
@@ -331,6 +381,8 @@ function Page() {
       );
 
       setOpen(false);
+      setInItems([createMovementItem()]);
+      setVoucherNote("");
 
       qc.invalidateQueries({
         queryKey: ["inventory"],
@@ -346,6 +398,11 @@ function Page() {
     if (!validOutItems.length)
       return toast.error(
         "Vui lòng chọn sản phẩm"
+      );
+
+    if (!outBranch || !isBranchAllowed(outBranch))
+      return toast.error(
+        "Chi nhánh xuất không hợp lệ"
       );
 
     try {
@@ -372,6 +429,8 @@ function Page() {
       );
 
       setOpen(false);
+      setOutItems([createMovementItem()]);
+      setVoucherNote("");
 
       qc.invalidateQueries({
         queryKey: ["inventory"],
@@ -389,9 +448,24 @@ function Page() {
         "Vui lòng chọn sản phẩm"
       );
 
+    if (!transferFrom || !transferTo)
+      return toast.error(
+        "Vui lòng chọn đủ chi nhánh nguồn và đích"
+      );
+
+    if (!isBranchAllowed(transferFrom) || !isBranchAllowed(transferTo))
+      return toast.error(
+        "Chi nhánh chuyển không hợp lệ"
+      );
+
     if (transferFrom === transferTo)
       return toast.error(
         "Chi nhánh nguồn và đích không được giống nhau"
+      );
+
+    if (allowedBranches.length < 2 && !isAdmin)
+      return toast.error(
+        "Bạn cần ít nhất 2 chi nhánh được phân quyền để chuyển kho"
       );
 
     try {
@@ -411,6 +485,8 @@ function Page() {
       );
 
       setOpen(false);
+      setTransferItems([createTransferItem()]);
+      setVoucherNote("");
 
       qc.invalidateQueries({
         queryKey: ["inventory"],
@@ -462,12 +538,9 @@ function Page() {
     );
   }
 
-  const visibleBranches = filterBranch
-    ? branches.filter(
-        (b) =>
-          b.id === filterBranch
-      )
-    : branches;
+  const visibleBranches = filterBranch && allowedBranches.some((b) => b.id === filterBranch)
+    ? allowedBranches.filter((b) => b.id === filterBranch)
+    : allowedBranches;
 
   const branchStatsMap = useMemo(() => {
     const map = new Map<
@@ -564,7 +637,7 @@ function Page() {
 
   // Xuất CSV danh sách tồn kho > 0 theo từng chi nhánh
   function exportStockExcel() {
-    const branchesList = data?.branches ?? [];
+    const branchesList = allowedBranches;
     const productsList = data?.products ?? [];
     const stockList = data?.stock ?? [];
 
@@ -798,7 +871,7 @@ function Page() {
                   Tất cả chi nhánh
                 </option>
 
-                {branches.map((b) => (
+                {allowedBranches.map((b) => (
                   <option
                     key={b.id}
                     value={b.id}
@@ -1070,8 +1143,9 @@ function Page() {
           sm:w-[98vw]
           sm:max-w-[1600px]
           sm:rounded-2xl
+          flex flex-col
         ">
-          <div className="border-b bg-white px-4 py-4 shadow-sm sm:px-6">
+          <div className="shrink-0 border-b bg-white px-4 py-4 shadow-sm sm:px-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <DialogHeader>
@@ -1128,20 +1202,22 @@ function Page() {
 
           <div className="
             grid
-            h-full
+            flex-1
             min-h-0
             bg-[#f4f6f8]
             lg:grid-cols-[minmax(0,1fr)_420px]
           ">
             <div className="
+              flex
               min-h-0
+              flex-col
               overflow-hidden
               border-b
               bg-white
               lg:border-b-0
               lg:border-r
             ">
-              <div className="px-4 py-4 sm:px-6">
+              <div className="flex h-full min-h-0 flex-col gap-4 px-4 py-4 sm:px-6">
                 <div className="
                   mb-4
                   flex
@@ -1214,6 +1290,8 @@ function Page() {
                 </div>
 
                 <div className="
+                  min-h-0
+                  flex-1
                   overflow-auto
                   rounded-2xl
                   border
@@ -1566,7 +1644,7 @@ function Page() {
             </div>
 
             <div className="min-h-0 overflow-y-auto bg-muted/20 px-4 py-4 sm:px-6">
-              <div className="space-y-4 pb-10">
+              <div className="space-y-4 pb-10 lg:sticky lg:top-0">
                 <div className="rounded-2xl border bg-white p-5 shadow-sm">
                   <div className="mb-3 font-medium">
                     Thông tin phiếu
@@ -1582,7 +1660,7 @@ function Page() {
                         value={inBranch}
                         onChange={setInBranch}
                         placeholder="Tìm chi nhánh..."
-                        options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                        options={allowedBranches.map((b) => ({ value: b.id, label: b.name }))}
                       />
                     </div>
                   )}
@@ -1597,7 +1675,7 @@ function Page() {
                         value={outBranch}
                         onChange={setOutBranch}
                         placeholder="Tìm chi nhánh..."
-                        options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                        options={allowedBranches.map((b) => ({ value: b.id, label: b.name }))}
                       />
                     </div>
                   )}
@@ -1614,7 +1692,7 @@ function Page() {
                           value={transferFrom}
                           onChange={setTransferFrom}
                           placeholder="Tìm chi nhánh..."
-                          options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                          options={allowedBranches.map((b) => ({ value: b.id, label: b.name }))}
                         />
                       </div>
 
@@ -1627,7 +1705,7 @@ function Page() {
                           value={transferTo}
                           onChange={setTransferTo}
                           placeholder="Tìm chi nhánh..."
-                          options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                          options={allowedBranches.map((b) => ({ value: b.id, label: b.name }))}
                         />
                       </div>
                     </div>

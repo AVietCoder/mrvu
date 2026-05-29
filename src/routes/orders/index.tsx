@@ -298,6 +298,7 @@ function Page() {
   const [vatMode, setVatMode] = useState<"8" | "10" | "custom">("10");
   const [vatCustomPercent, setVatCustomPercent] = useState("5");
   const [depositRaw, setDepositRaw] = useState("0");
+  const [khachThanhToanRaw, setKhachThanhToanRaw] = useState("");  // Số tiền khách trả thực tế
   const [note, setNote] = useState("");
 
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -362,6 +363,11 @@ function Page() {
   const vatAmt = includeVat ? Math.round(afterDiscount * vatRate) : 0;
   const total = afterDiscount + vatAmt;
   const khachCanThanhToan = Math.max(0, total - deposit);
+
+  // Payment panel calculations
+  const khachThanhToan = khachThanhToanRaw === "" ? 0 : parseInput(khachThanhToanRaw);
+  const congNo = Math.max(0, khachCanThanhToan - khachThanhToan);    // phần tính vào công nợ
+  const tienThua = Math.max(0, khachThanhToan - khachCanThanhToan);  // tiền thừa trả lại
 
   const branchMap = useMemo(
     () => new Map((data?.branches ?? []).map((b: any) => [b.id, b])),
@@ -520,6 +526,7 @@ function Page() {
     setVatMode("10");
     setVatCustomPercent("5");
     setDepositRaw("0");
+    setKhachThanhToanRaw("");
     setNote("");
     setCreateScheduleOnOrder(false);
     setScheduleForm({
@@ -556,12 +563,19 @@ function Page() {
 
     setSubmitting(true);
     try {
+      // Nếu khách trả đủ hoặc thừa → completed; ngược lại giữ status đã chọn
+      const finalStatus = khachThanhToan >= khachCanThanhToan && khachCanThanhToan > 0
+        ? "completed"
+        : khachThanhToan > 0 && khachCanThanhToan > 0
+        ? "completed"    // trả 1 phần cũng ghi completed, phần còn lại tính công nợ
+        : status;
+
       const r = await create({
         data: {
           customer_id: customer || undefined,
           branch_id: branch,
           employee_id: employee || undefined,
-          status,
+          status: finalStatus,
           payment_method: paymentMethod,
           discount: discountAmt,
           discount_type: useDiscountPct ? "percent" : "amount",
@@ -569,7 +583,7 @@ function Page() {
           vat_rate: includeVat ? vatRate : 0,
           vat_amount: vatAmt,
           deposit,
-          paid: 0,
+          paid: khachThanhToan,
           note: note || undefined,
           items,
         },
@@ -600,6 +614,8 @@ function Page() {
         total,
         deposit,
         khachCanThanhToan,
+        khachThanhToan,
+        congNo,
         items,
         customer,
         branch,
@@ -806,85 +822,6 @@ function Page() {
                 </div>
 
                 <div>
-                  <Label>Hình thức thanh toán</Label>
-                  <SearchableSelect
-                    value={paymentMethod}
-                    onChange={(v) => {
-                      setPaymentMethod(v as any);
-                      setBankAccountIdx("");
-                      setBankContent("");
-                    }}
-                    placeholder="Chọn hình thức..."
-                    options={[
-                      { value: "tien_mat", label: "Tiền mặt" },
-                      { value: "ngan_hang", label: "Chuyển khoản (Ngân hàng)" },
-                    ]}
-                  />
-                  {paymentMethod === "ngan_hang" && (() => {
-                    const bankList: any[] = (() => {
-                      try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
-                      catch { return []; }
-                    })();
-                    return (
-                      <div className="mt-2 space-y-2">
-                        {bankList.length > 0 && (
-                          <div>
-                            <Label className="text-xs text-muted-foreground">Chọn tài khoản nhận tiền</Label>
-                            <select
-                              className="mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm"
-                              value={bankAccountIdx}
-                              onChange={e => {
-                                const idx = e.target.value;
-                                setBankAccountIdx(idx);
-                                if (idx !== "") {
-                                  const ba = bankList[parseInt(idx)];
-                                  if (ba && !bankContent) {
-                                    setBankContent(`${siteSettings?.site_name ?? "CK"} ${ba.account_number}`);
-                                  }
-                                }
-                              }}
-                            >
-                              <option value="">— Chọn STK —</option>
-                              {bankList.map((ba: any, i: number) => (
-                                <option key={i} value={String(i)}>
-                                  {ba.bank} - {ba.account_number} ({ba.account_name})
-                                </option>
-                              ))}
-                            </select>
-                            {bankAccountIdx !== "" && (() => {
-                              const ba = bankList[parseInt(bankAccountIdx)];
-                              return ba ? (
-                                <div className="mt-1.5 rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
-                                  <div className="font-semibold text-sm">{ba.bank}</div>
-                                  <div>STK: <span className="font-mono font-bold tracking-wide">{ba.account_number}</span></div>
-                                  <div>Chủ TK: {ba.account_name}</div>
-                                  {ba.note && <div className="text-blue-600">{ba.note}</div>}
-                                </div>
-                              ) : null;
-                            })()}
-                          </div>
-                        )}
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Nội dung chuyển khoản</Label>
-                          <div className="mt-1 relative">
-                            <Input
-                              value={bankContent}
-                              onChange={e => setBankContent(e.target.value)}
-                              placeholder="VD: DATHANG0001 NGUYEN VAN A"
-                              className="pr-10 font-mono text-sm"
-                            />
-                            {bankContent && (
-                              <button
-                                type="button"
-                                className="absolute right-2 top-2 text-xs text-primary hover:underline"
-                                onClick={() => { navigator.clipboard.writeText(bankContent); toast.success("Đã copy nội dung CK!"); }}
-                              >Copy</button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
                 </div>
               </div>
 
@@ -1183,7 +1120,7 @@ function Page() {
 
               <div className="rounded-lg border p-4 bg-muted/30">
                 <div className="flex justify-between text-sm">
-                  <span>Tạm tính</span>
+                  <span>Tổng tiền hàng ({items.length})</span>
                   <span>{fmt(subtotal)}</span>
                 </div>
                 {discountAmt > 0 && (
@@ -1198,30 +1135,187 @@ function Page() {
                     <span>+ {fmt(vatAmt)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-sm mt-1 font-medium">
-                  <span>Tổng tiền</span>
-                  <span>{fmt(total)}</span>
-                </div>
                 {deposit > 0 && (
                   <div className="flex justify-between text-sm mt-1 text-yellow-700">
                     <span>Đặt cọc</span>
                     <span>- {fmt(deposit)}</span>
                   </div>
                 )}
-                <div className="flex justify-between font-semibold text-lg mt-2 pt-2 border-t text-primary">
-                  <span>Khách cần thanh toán</span>
-                  <span>{fmt(khachCanThanhToan)}</span>
+                <div className="flex justify-between font-bold text-base mt-2 pt-2 border-t text-primary">
+                  <span>Khách cần trả</span>
+                  <span className="text-blue-600">{fmt(khachCanThanhToan)}</span>
                 </div>
+              </div>
+
+              {/* ── Payment Panel (like screenshot) ── */}
+              <div className="rounded-lg border bg-background p-4 space-y-3">
+                {/* Payment method radio buttons */}
+                <div>
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hình thức thanh toán</Label>
+                  <div className="flex flex-wrap gap-3 mt-2">
+                    {([
+                      { value: "tien_mat", label: "Tiền mặt" },
+                      { value: "ngan_hang", label: "Chuyển khoản" },
+                    ] as const).map((opt) => (
+                      <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer text-sm">
+                        <input
+                          type="radio"
+                          name="order_payment_method"
+                          value={opt.value}
+                          checked={paymentMethod === opt.value}
+                          onChange={() => {
+                            setPaymentMethod(opt.value);
+                            setBankAccountIdx("");
+                            setBankContent("");
+                          }}
+                          className="accent-primary"
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                  {paymentMethod === "ngan_hang" && (() => {
+                    const bankList: any[] = (() => {
+                      try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
+                      catch { return []; }
+                    })();
+                    return (
+                      <div className="mt-2 space-y-2">
+                        {bankList.length > 0 && (
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Chọn tài khoản nhận tiền</Label>
+                            <select
+                              className="mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm"
+                              value={bankAccountIdx}
+                              onChange={e => {
+                                const idx = e.target.value;
+                                setBankAccountIdx(idx);
+                                if (idx !== "") {
+                                  const ba = bankList[parseInt(idx)];
+                                  if (ba && !bankContent) {
+                                    setBankContent(`${siteSettings?.site_name ?? "CK"} ${ba.account_number}`);
+                                  }
+                                }
+                              }}
+                            >
+                              <option value="">— Chọn STK —</option>
+                              {bankList.map((ba: any, i: number) => (
+                                <option key={i} value={String(i)}>
+                                  {ba.bank} - {ba.account_number} ({ba.account_name})
+                                </option>
+                              ))}
+                            </select>
+                            {bankAccountIdx !== "" && (() => {
+                              const ba = bankList[parseInt(bankAccountIdx)];
+                              return ba ? (
+                                <div className="mt-1.5 rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
+                                  <div className="font-semibold text-sm">{ba.bank}</div>
+                                  <div>STK: <span className="font-mono font-bold tracking-wide">{ba.account_number}</span></div>
+                                  <div>Chủ TK: {ba.account_name}</div>
+                                  {ba.note && <div className="text-blue-600">{ba.note}</div>}
+                                </div>
+                              ) : null;
+                            })()}
+                          </div>
+                        )}
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Nội dung chuyển khoản</Label>
+                          <div className="mt-1 relative">
+                            <Input
+                              value={bankContent}
+                              onChange={e => setBankContent(e.target.value)}
+                              placeholder="VD: DATHANG0001 NGUYEN VAN A"
+                              className="pr-10 font-mono text-sm"
+                            />
+                            {bankContent && (
+                              <button
+                                type="button"
+                                className="absolute right-2 top-2 text-xs text-primary hover:underline"
+                                onClick={() => { navigator.clipboard.writeText(bankContent); toast.success("Đã copy nội dung CK!"); }}
+                              >Copy</button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Khách thanh toán input */}
+                <div>
+                  <div className="flex justify-between items-center">
+                    <Label className="text-sm font-semibold">Khách thanh toán</Label>
+                    {tienThua > 0 && (
+                      <span className="text-xs text-green-600 font-medium">Tiền thừa: {fmt(tienThua)}</span>
+                    )}
+                  </div>
+                  <Input
+                    className="mt-1 text-right font-mono text-base h-11 border-2 focus:border-primary"
+                    placeholder={fmt(khachCanThanhToan)}
+                    value={khachThanhToanRaw === "" ? "" : fmt(khachThanhToan)}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, "");
+                      setKhachThanhToanRaw(raw);
+                    }}
+                    onFocus={(e) => e.target.select()}
+                  />
+                </div>
+
+                {/* Quick amount chips */}
+                {khachCanThanhToan > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {(() => {
+                      const base = khachCanThanhToan;
+                      const rounded10 = Math.ceil(base / 10000) * 10000;
+                      const rounded50 = Math.ceil(base / 50000) * 50000;
+                      const rounded100 = Math.ceil(base / 100000) * 100000;
+                      const rounded500 = Math.ceil(base / 500000) * 500000;
+                      const uniqueAmounts = [...new Set([base, rounded10, rounded50, rounded100, rounded500].filter(v => v >= base))].slice(0, 5);
+                      return uniqueAmounts.map((amt) => (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => setKhachThanhToanRaw(String(amt))}
+                          className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                            khachThanhToan === amt
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background hover:bg-muted border-border"
+                          }`}
+                        >
+                          {fmt(amt)}
+                        </button>
+                      ));
+                    })()}
+                  </div>
+                )}
+
+                {/* Tính vào công nợ */}
+                {congNo > 0 && (
+                  <div className="flex justify-between items-center text-sm pt-2 border-t">
+                    <span className="text-muted-foreground">Tính vào công nợ</span>
+                    <span className="font-semibold text-red-600">- {fmt(congNo)}</span>
+                  </div>
+                )}
+                {congNo === 0 && khachThanhToan > 0 && (
+                  <div className="flex justify-between items-center text-sm pt-2 border-t text-green-600">
+                    <span>✓ Thanh toán đủ</span>
+                    <span className="font-semibold">{fmt(khachThanhToan)}</span>
+                  </div>
+                )}
               </div>
 
               <DialogFooter className="flex-col sm:flex-row gap-2">
                 <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
                   Hủy
                 </Button>
-                <Button className="w-full sm:w-auto" onClick={submit} disabled={submitting}>
+                <Button
+                  className={`w-full sm:w-auto font-bold text-base h-12 ${khachThanhToan > 0 ? "bg-primary text-primary-foreground" : ""}`}
+                  onClick={submit}
+                  disabled={submitting}
+                >
                   {submitting ? (
-                    <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang tạo...</>
-                  ) : "Tạo đơn"}
+                    <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang xử lý...</>
+                  ) : khachThanhToan > 0 ? "THANH TOÁN" : "Tạo đơn"}
                 </Button>
               </DialogFooter>
             </div>

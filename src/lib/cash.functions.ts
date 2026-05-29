@@ -78,6 +78,8 @@ export const updateCashVoucher = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: any }) => {
     const updatePayload: Record<string, any> = {
       amount: Number(data.amount),
+      fund_type: data.fund_type,        // ✅ FIX: cập nhật loại quỹ (tiền mặt / ngân hàng)
+      branch_id: data.branch_id,        // ✅ FIX: cập nhật chi nhánh
       voucher_type_id: data.voucher_type_id || null,
       collector_user_id: data.collector_user_id || null,
       payer_customer_id: data.payer_customer_id || null,

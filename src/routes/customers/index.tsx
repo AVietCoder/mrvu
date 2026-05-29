@@ -50,7 +50,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/customers/")({
   head: () => ({
-    meta: [{ title: "Khách hàng — QuatTran POS" }],
+    meta: [{ title: "Khách hàng — Mr.Vũ" }],
   }),
   component: CustomersPage,
 });
@@ -521,7 +521,7 @@ function CustomersPage() {
               {form.id ? "Cập nhật thông tin đối tác" : "Thêm khách hàng mới"}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground mt-1">
-              Điền các thông tin liên hệ và phân nhóm khách hàng để đồng bộ vào hệ thống POS.
+              Điền các thông tin liên hệ và phân nhóm khách hàng để đồng bộ vào hệ thống.
             </DialogDescription>
           </DialogHeader>
 
