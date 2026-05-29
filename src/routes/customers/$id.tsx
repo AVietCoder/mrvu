@@ -183,6 +183,8 @@ function CustomerDetailPage() {
   const cancelledOrders = customerOrders.filter((o: any) => o.status === "cancelled");
   const totalSpent = completedOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0);
   const totalPaid = paymentHistory.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+  // ✅ Công nợ tính từ giao dịch thực tế, không lấy giá trị cũ trong DB
+  const displayDebt = totalSpent - totalPaid;
 
   const creatorName = useMemo(() => {
     if (!customer) return null;
@@ -517,16 +519,16 @@ function CustomerDetailPage() {
                 <div className="flex items-center gap-2">
                   <span
   className={`font-bold ${
-    Number(customer.debt) < 0
+    displayDebt < 0
       ? "text-green-600"
-      : Number(customer.debt) > 0
+      : displayDebt > 0
       ? "text-destructive"
       : "text-muted-foreground"
   }`}
 >
-  {fmt(Number(customer.debt || 0))}
+  {fmt(displayDebt)}
 </span>
-                  {Number(customer.debt) > 0 && (
+                  {displayDebt > 0 && (
                     <button
                       onClick={openPayDialog}
                       className="text-xs text-green-700 border border-green-300 bg-green-50 hover:bg-green-100 rounded px-1.5 py-0.5 font-medium"
