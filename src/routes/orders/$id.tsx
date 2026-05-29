@@ -52,7 +52,7 @@ import { useAuth } from "@/context/AuthContext";
 import { SCHEDULE_TYPES } from "@/lib/types";
 
 export const Route = createFileRoute("/orders/$id")({
-  head: () => ({ meta: [{ title: "Chi tiết đơn hàng — QuatTran POS" }] }),
+  head: () => ({ meta: [{ title: "Chi tiết đơn hàng — Mr.Vũ" }] }),
   component: OrderDetailPage,
 });
 

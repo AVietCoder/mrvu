@@ -265,31 +265,18 @@ async function applyCompletedOrderSideEffects(order: any, lineItems: LineItem[])
       select: "debt, total_buy",
       limit: 1,
     });
+    const currentDebt = customerRows[0]?.debt ?? 0;
     const currentTotalBuy = customerRows[0]?.total_buy ?? 0;
+    const owed = Math.max(0, Number(order.total || 0) - Number(order.deposit || 0) - Number(order.paid || 0));
     const orderTotal = Number(order.total || 0);
 
-    // ✅ Tính lại debt từ transactions thực tế (không dùng currentDebt cũ trong DB)
-    const [completedOrdersRows, allReceiptsData] = await Promise.all([
-      fetchRows<{ total: number; id: string }>("orders", {
-        eq: { customer_id: order.customer_id, status: "completed" },
-        select: "total, id",
-      }),
-      supabase
-        .from("cash_vouchers")
-        .select("amount")
-        .eq("payer_customer_id", order.customer_id)
-        .eq("type", "thu")
-        .neq("status", "cancelled"),
-    ]);
-    // Tổng chi tiêu = tất cả đơn completed (bao gồm đơn hiện tại nếu vừa insert)
-    const totalSpent = completedOrdersRows.reduce((s, o) => s + Number(o.total || 0), 0);
-    const totalPaid = (allReceiptsData.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-    const newDebt = totalSpent - totalPaid;
-
-    await updateWhere("customers", {
+    const updates: Record<string, number> = {
       total_buy: currentTotalBuy + orderTotal,
-      debt: newDebt,
-    }, { id: order.customer_id });
+    };
+    if (owed > 0) {
+      updates.debt = currentDebt + owed;
+    }
+    await updateWhere("customers", updates, { id: order.customer_id });
   }
 }
 
@@ -308,30 +295,18 @@ async function revertCompletedOrderSideEffects(order: any, lineItems: LineItem[]
       select: "debt, total_buy",
       limit: 1,
     });
+    const currentDebt = customerRows[0]?.debt ?? 0;
     const currentTotalBuy = customerRows[0]?.total_buy ?? 0;
+    const owed = Math.max(0, Number(order.total || 0) - Number(order.deposit || 0) - Number(order.paid || 0));
     const orderTotal = Number(order.total || 0);
 
-    // ✅ Tính lại debt từ transactions (sau khi đơn đã bị revert về non-completed)
-    const [completedOrdersRows, allReceiptsData] = await Promise.all([
-      fetchRows<{ total: number }>("orders", {
-        eq: { customer_id: order.customer_id, status: "completed" },
-        select: "total",
-      }),
-      supabase
-        .from("cash_vouchers")
-        .select("amount")
-        .eq("payer_customer_id", order.customer_id)
-        .eq("type", "thu")
-        .neq("status", "cancelled"),
-    ]);
-    const totalSpent = completedOrdersRows.reduce((s, o) => s + Number(o.total || 0), 0);
-    const totalPaid = (allReceiptsData.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-    const newDebt = totalSpent - totalPaid;
-
-    await updateWhere("customers", {
+    const updates: Record<string, number> = {
       total_buy: Math.max(0, currentTotalBuy - orderTotal),
-      debt: newDebt,
-    }, { id: order.customer_id });
+    };
+    if (owed > 0) {
+      updates.debt = Math.max(0, currentDebt - owed);
+    }
+    await updateWhere("customers", updates, { id: order.customer_id });
   }
 }
 
@@ -651,12 +626,8 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
         ? "ngan_hang" : "tien_mat";
 
     if (data.status === "completed" && currentOrder.status !== "completed") {
-      // ✅ FIX: truyền effectivePaid vào để tính đúng owed = total - deposit - effectivePaid
-      // currentOrder.paid là giá trị cũ trong DB (đọc TRƯỚC khi updateWhere), dùng nó sẽ tính sai debt
-      await applyCompletedOrderSideEffects(
-        { ...currentOrder, paid: effectivePaid },
-        currentItems as any
-      );
+      // ✅ Truyền effectivePaid thay vì currentOrder.paid (đọc trước khi updateWhere)
+      await applyCompletedOrderSideEffects({ ...currentOrder, paid: effectivePaid }, currentItems as any);
 
       // Tạo phiếu thu = đúng số tiền khách trả lần này (effectivePaid)
       // Phần còn thiếu (nếu có) sẽ tự động cộng vào công nợ qua applyCompletedOrderSideEffects

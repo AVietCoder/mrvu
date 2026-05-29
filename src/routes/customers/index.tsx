@@ -220,7 +220,7 @@ function CustomersPage() {
         },
       }),
     placeholderData: (prev) => prev,
-    staleTime: 1000 * 30,
+    staleTime: 0,  // ✅ Luôn refetch sau invalidate để debt cập nhật ngay
   });
 
   const customers = data?.customers ?? [];
@@ -470,7 +470,9 @@ function CustomersPage() {
                   <td
   className={"pr-3 text-right font-medium text-destructive"}
 >
-  {fmt(c.debt || 0)}
+  {Number(c.debt) < 0
+    ? <span className="text-green-600">{fmt(Math.abs(Number(c.debt)))} (thừa)</span>
+    : fmt(Number(c.debt) || 0)}
 </td>
                   <td className="text-right" onClick={(e) => e.stopPropagation()}>
                     <Link
@@ -827,7 +829,7 @@ function CustomersPage() {
                 <div className="rounded-xl border bg-muted/20 p-5">
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-lg font-bold">{viewCustomer.name}</div>
-                    <span className={`rounded-full px-2 py-0.5 text-xs ${groupColor[viewCustomer.group_name] ?? "bg-gray-100 text-gray-700"}`}>
+                    <span className={`rounded-full px-2 py-0.5 text-xs bg-gray-100 text-gray-700"`}>
                       {groupLabel[viewCustomer.group_name] ?? viewCustomer.group_name}
                     </span>
                     <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700">
