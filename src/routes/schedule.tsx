@@ -21,7 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CalendarDays, Plus, CheckCircle2, Clock, Trash2,
-  Wrench, ShieldOff, Settings, Pencil, Receipt, ExternalLink, UserCog, Loader2, BarChart3, Tag, Eye, X, Copy, Check,
+  Wrench, ShieldOff, Settings, Pencil, Receipt, ExternalLink, UserCog, Loader2, BarChart3, Tag, Eye, X, Copy, Check, Printer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { hasPermission } from "@/lib/types";
@@ -454,6 +454,105 @@ const userBranchIds = useMemo(() => {
     );
   }
 
+    // ✅ In hóa đơn từ đơn hàng liên kết
+  function buildPrintHtml({ order, custObj, branchObj, empObj, rows, moneyFmt, ss }: any) {
+    const statusLabels: Record<string, string> = { completed: "Hoàn tất", reserved: "Đặt hàng", draft: "Nháp" };
+    const pmLabel = order.payment_method === "ngan_hang" ? "Chuyển khoản" : "Tiền mặt";
+    return `<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Hóa đơn ${order.code}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;background:#fff;padding:32px}
+.page{max-width:760px;margin:0 auto}
+.header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #e5e7eb}
+.shop-name{font-size:18px;font-weight:700;color:#1d4ed8}.shop-info{font-size:11px;color:#6b7280;line-height:1.6}
+.inv-title{font-size:20px;font-weight:800;text-transform:uppercase;color:#111;text-align:right}
+.inv-meta{font-size:11px;color:#6b7280;text-align:right;margin-top:4px;line-height:1.8}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px 16px;font-size:12.5px}
+.info-label{color:#6b7280;font-size:11px;text-transform:uppercase}.info-value{font-weight:600;color:#111;margin-top:1px}
+table{width:100%;border-collapse:collapse;margin-bottom:16px}
+thead tr{background:#1d4ed8;color:#fff}th{padding:9px 8px;font-size:12px;font-weight:600}
+.num{text-align:center}.right{text-align:right}
+tbody tr:nth-child(even){background:#f9fafb}td{padding:8px;font-size:12.5px;border-bottom:1px solid #e5e7eb}
+.total-section{display:flex;justify-content:flex-end;margin-bottom:20px}
+.total-box{min-width:260px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden}
+.total-row{display:flex;justify-content:space-between;padding:7px 12px;font-size:13px;border-bottom:1px solid #f3f4f6}
+.total-row.grand{background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;border-bottom:none}
+.checklist{border:1px solid #e5e7eb;border-radius:6px;padding:12px 14px;margin-bottom:20px;font-size:12px}
+.sign-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center}
+.warranty{margin-top:16px;padding:10px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;line-height:1.7;color:#9a3412}
+.footer{margin-top:16px;text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #f3f4f6;padding-top:12px}
+@media print{body{padding:0}}
+</style></head><body><div class="page">
+<div class="header">
+  <div>
+    ${ss?.logo_url ? `<img src="${ss.logo_url}" alt="Logo" style="height:48px;object-fit:contain;margin-bottom:4px">` : ""}
+    <div class="shop-name">${ss?.site_name ?? "Mr.Vũ"}</div>
+    <div class="shop-info">
+      ${ss?.address ? `📍 ${ss.address}<br>` : ""}
+      ${ss?.phone ? `📞 ${ss.phone}` : ""}${ss?.phone && ss?.email ? " | " : ""}${ss?.email ? `✉ ${ss.email}` : ""}
+      ${ss?.tax_code ? `<br>MST: ${ss.tax_code}` : ""}
+    </div>
+  </div>
+  <div>
+    <div class="inv-title">Phiếu xuất kho<br>kiểm bảo hành</div>
+    <div class="inv-meta"><strong>Mã:</strong> ${order.code}<br><strong>Ngày:</strong> ${new Date(order.created_at).toLocaleDateString("vi-VN")}<br><strong>Trạng thái:</strong> ${statusLabels[order.status] ?? order.status}</div>
+  </div>
+</div>
+<div class="info-grid">
+  <div><div class="info-label">Khách hàng</div><div class="info-value">${custObj?.name ?? "Khách lẻ"}${custObj?.phone ? " — " + custObj.phone : ""}</div></div>
+  <div><div class="info-label">Chi nhánh</div><div class="info-value">${branchObj?.name ?? "—"}</div></div>
+  <div><div class="info-label">Nhân viên</div><div class="info-value">${empObj?.name ?? "—"}</div></div>
+  <div><div class="info-label">Thanh toán</div><div class="info-value">${pmLabel}</div></div>
+  ${custObj?.address ? `<div style="grid-column:span 2"><div class="info-label">Địa chỉ</div><div class="info-value">${custObj.address}</div></div>` : ""}
+</div>
+<table>
+  <thead><tr><th class="num" style="width:42px">STT</th><th>Sản phẩm</th><th class="num" style="width:56px">SL</th><th class="right" style="width:120px">Đơn giá</th><th class="right" style="width:130px">Thành tiền</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="total-section"><div class="total-box">
+  <div class="total-row"><span>Tạm tính</span><span>${moneyFmt(order.subtotal)}</span></div>
+  ${Number(order.discount) > 0 ? `<div class="total-row" style="color:#16a34a"><span>Giảm giá</span><span>- ${moneyFmt(order.discount)}</span></div>` : ""}
+  ${Number(order.vat_amount) > 0 ? `<div class="total-row" style="color:#d97706"><span>Thuế VAT</span><span>+ ${moneyFmt(order.vat_amount)}</span></div>` : ""}
+  <div class="total-row"><span>Tổng cộng</span><span style="font-weight:700">${moneyFmt(order.total)}</span></div>
+  ${Number(order.deposit) > 0 ? `<div class="total-row" style="color:#b45309"><span>Đặt cọc</span><span>- ${moneyFmt(order.deposit)}</span></div>` : ""}
+  <div class="total-row grand"><span>Khách cần trả</span><span>${moneyFmt(Math.max(0, order.total - (order.deposit ?? 0)))}</span></div>
+</div></div>
+${order.note ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:10px 14px;font-size:12.5px;margin-bottom:20px"><strong>Ghi chú:</strong> ${order.note}</div>` : ""}
+<div class="checklist">
+  <div style="font-weight:700;margin-bottom:8px;font-size:12.5px">Xác nhận bàn giao:</div>
+  ${["Đã giao hàng đúng mẫu và đầy đủ phụ kiện","Đã lắp đặt hoàn thiện, quạt chạy ổn định","Đã hướng dẫn sử dụng và bảo quản","Đã thanh toán đúng số tiền trên phiếu"]
+    .map(it => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:13px;height:13px;border:1.5px solid #9ca3af;border-radius:2px;display:inline-block;flex-shrink:0"></span><span>${it}</span></div>`).join("")}
+  <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:#6b7280">
+    <strong>Khách hàng xác nhận</strong><span>Họ và tên: _________________ &nbsp; Chữ ký: ____________</span>
+  </div>
+</div>
+<div class="sign-grid">
+  ${["Kỹ thuật","Nhân viên","Khách hàng","Thủ kho"].map(r => `<div><div style="font-weight:700;font-size:12px">${r}</div><div style="font-size:11px;color:#9ca3af;margin-bottom:40px">(Ký, ghi rõ họ tên)</div><div style="border-top:1px dashed #d1d5db;padding-top:4px;font-size:11px;color:#d1d5db">___________</div></div>`).join("")}
+</div>
+<div class="warranty">⚠ LƯU Ý: ${ss?.site_name ?? "Mr.Vũ"} khuyến cáo kiểm tra quạt định kỳ ít nhất 6 tháng/lần để đảm bảo an toàn.</div>
+<div class="footer">${ss?.site_name ?? "Mr.Vũ"} — Cảm ơn Quý khách đã tin tưởng!</div>
+</div></body></html>`;
+  }
+
+  function printOrderFromSchedule(linkedOrder: any, ss?: any) {
+    if (!linkedOrder) return;
+    const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
+    const custObj = (data?.customers ?? []).find((c: any) => c.id === linkedOrder.customer_id);
+    const branchObj = (data?.branches ?? []).find((b: any) => b.id === linkedOrder.branch_id);
+    const empObj = (data?.employees ?? []).find((e: any) => e.id === linkedOrder.employee_id);
+    const items = (data?.order_items ?? []).filter((oi: any) => oi.order_id === linkedOrder.id);
+    const rows = items.map((item: any, i: number) => {
+      const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
+      const lineTotal = item.qty * item.unit_price - (item.discount ?? 0);
+      return `<tr><td class="num">${i+1}</td><td>${prod?.name ?? item.product_id}</td><td class="num">${item.qty}</td><td class="right">${moneyFmt(item.unit_price)}</td><td class="right" style="font-weight:600">${moneyFmt(lineTotal)}</td></tr>`;
+    }).join("");
+    const pw = window.open("", "_blank");
+    if (!pw) return;
+    pw.document.write(buildPrintHtml({ order: linkedOrder, custObj, branchObj, empObj, rows, moneyFmt, ss }));
+    pw.document.close();
+    setTimeout(() => pw.print(), 300);
+  }
+
   return (
     <AppShell title="Lịch làm việc">
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
@@ -773,6 +872,12 @@ const userBranchIds = useMemo(() => {
 
                         {/* Actions */}
                         <div className="flex gap-1 flex-wrap mt-2">
+                          {/* ✅ Nút In hóa đơn trong list view */}
+                          {linkedOrder && (
+                            <Button size="sm" variant="outline" className="text-primary border-primary/30" onClick={() => printOrderFromSchedule(linkedOrder, siteSettings)}>
+                              <Printer className="h-3 w-3 mr-1" /> In HĐ
+                            </Button>
+                          )}
                           {canApprove && s.status === "pending" && (
                             <Button size="sm" variant="outline" onClick={() => openApprove(s)}>
                               <CheckCircle2 className="h-3 w-3 mr-1" /> Duyệt
@@ -1818,6 +1923,12 @@ const userBranchIds = useMemo(() => {
                   );
                 })()}
                 <DialogFooter className="flex-wrap gap-2">
+                  {/* ✅ Nút In hóa đơn nếu có đơn hàng liên kết */}
+                  {linkedOrder && (
+                    <Button variant="outline" className="text-primary border-primary/30" onClick={() => printOrderFromSchedule(linkedOrder, siteSettings)}>
+                      <Printer className="h-4 w-4 mr-1" /> In hóa đơn
+                    </Button>
+                  )}
                   {canApprove && s.status === "pending" && (
                     <Button variant="outline" onClick={() => { setViewSchedule(null); openApprove(s); }}>
                       <CheckCircle2 className="h-4 w-4 mr-1" /> Duyệt & Phân công

@@ -70,15 +70,18 @@ export const listCustomers = createServerFn({ method: "GET" })
     // Supabase giới hạn 1000 dòng → 15.000 khách sẽ bị mất 14.000.
     // Dùng aggregateColumn (phân trang qua .range()) để tính đúng.
     // ────────────────────────────────────────────────────────────────
-    const [debtAgg, totalAllCustomers, orders] = await Promise.all([
+    const [debtAgg, totalAllCustomers, orders, receipts] = await Promise.all([
       aggregateColumn("customers", "debt"),
       countRows("customers"),
       fetchAllRows("orders", { orderBy: "created_at", ascending: false }),
+      // ✅ Lấy tất cả phiếu thu để tính displayDebt = totalSpent - totalPaid
+      fetchAllRows("cash_vouchers", { orderBy: "created_at", ascending: false }),
     ]);
 
     return {
       customers: customers ?? [],
       orders: orders ?? [],
+      receipts: receipts ?? [],
       meta: {
         totalFiltered: totalFilteredCustomers ?? 0,
         totalAllCustomers,

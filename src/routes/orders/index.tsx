@@ -104,124 +104,159 @@ const STATUS_COLOR: Record<string, string> = {
 // Bên dưới hàm Page() -> Filter Slot (Dòng ~550) thêm tùy chọn lọc:
 
 
-function printOrderSlip({
-  items,
-  customer,
-  branch,
-  employee,
-  status,
-  paymentMethod,
-  discount,
-  discountAmt,
-  vatAmt,
-  deposit,
-  note,
-  subtotal,
-  total,
-  includeVat,
-  data,
-  siteSettings,
-  tpl,
+function buildOrderPrintHtml({
+  order, custName, custPhone, custAddress, branchName, empName,
+  items, products, moneyFmt, siteSettings: ss,
 }: any) {
-  const tplHeader   = tpl?.header   ?? "PHIẾU XUẤT KHO KIỂM BẢO HÀNH";
-  const tplFooter   = tpl?.footer   ?? "Quạt trần chân thành cảm ơn sự tin tưởng của Quý khách hàng!";
-  const tplWarranty = (tpl?.showWarranty !== false && tpl?.showWarranty !== undefined ? tpl?.showWarranty : true)
-    ? (tpl?.warranty ?? "LƯU Ý: KHUYẾN CÁO CẦN KIỂM TRA QUẠT ĐỊNH KỲ ÍT NHẤT 6 THÁNG/LẦN ĐỂ ĐẢM BẢO AN TOÀN TRONG QUÁ TRÌNH SỬ DỤNG.")
-    : "";
-  const siteName = siteSettings?.site_name ?? "";
-  const moneyFmt = (n: number) =>
-    new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
+  const statusLabels: Record<string, string> = { completed: "Hoàn tất", reserved: "Đặt hàng", draft: "Nháp" };
+  const pmLabel = order.payment_method === "ngan_hang" ? "Chuyển khoản" : "Tiền mặt";
+  const rows = items.map((item: any, i: number) => {
+    const prod = products.find((p: any) => p.id === item.product_id);
+    const lineTotal = item.qty * item.unit_price - (item.discount ?? 0);
+    return `<tr>
+      <td style="text-align:center;padding:8px 6px;border-bottom:1px solid #e5e7eb">${i+1}</td>
+      <td style="padding:8px 6px;border-bottom:1px solid #e5e7eb">${prod?.name ?? item.product_id}</td>
+      <td style="text-align:center;padding:8px 6px;border-bottom:1px solid #e5e7eb">${item.qty}</td>
+      <td style="text-align:right;padding:8px 6px;border-bottom:1px solid #e5e7eb">${moneyFmt(item.unit_price)}</td>
+      <td style="text-align:right;padding:8px 6px;border-bottom:1px solid #e5e7eb;font-weight:600">${moneyFmt(lineTotal)}</td>
+    </tr>`;
+  }).join("");
 
-  const custName = customer
-    ? (data?.customers ?? []).find((c: any) => c.id === customer)?.name ??
-      "Khách lẻ"
-    : "Khách lẻ";
+  return `<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Hóa đơn ${order.code ?? ""}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:32px}
+.page{max-width:760px;margin:0 auto}
+.header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #e5e7eb}
+.shop-name{font-size:18px;font-weight:700;color:#1d4ed8}
+.shop-info{font-size:11px;color:#6b7280;line-height:1.7;margin-top:4px}
+.inv-title{font-size:20px;font-weight:800;text-transform:uppercase;color:#111;text-align:right;line-height:1.2}
+.inv-meta{font-size:11px;color:#6b7280;text-align:right;margin-top:6px;line-height:1.8}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px 16px}
+.info-label{color:#6b7280;font-size:10.5px;text-transform:uppercase;letter-spacing:0.4px}
+.info-value{font-weight:600;color:#111;font-size:12.5px;margin-top:1px}
+table{width:100%;border-collapse:collapse;margin-bottom:16px}
+thead tr{background:#1d4ed8;color:#fff}
+th{padding:10px 8px;font-size:12px;font-weight:600}
+.total-section{display:flex;justify-content:flex-end;margin-bottom:20px}
+.total-box{min-width:270px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden}
+.total-row{display:flex;justify-content:space-between;padding:7px 14px;font-size:13px;border-bottom:1px solid #f3f4f6}
+.total-row.grand{background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;border-bottom:none}
+.checklist{border:1px solid #e5e7eb;border-radius:6px;padding:12px 16px;margin-bottom:20px;font-size:12px}
+.sign-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;text-align:center;margin-top:8px}
+.warranty{margin-top:16px;padding:10px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;line-height:1.7;color:#9a3412}
+.footer{margin-top:14px;text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #f3f4f6;padding-top:12px}
+@media print{body{padding:0}}
+</style></head><body><div class="page">
 
-  const branchName = branch
-    ? (data?.branches ?? []).find((b: any) => b.id === branch)?.name ?? "—"
-    : "—";
+<div class="header">
+  <div>
+    ${ss?.logo_url ? `<img src="${ss.logo_url}" alt="Logo" style="height:52px;object-fit:contain;margin-bottom:6px;display:block">` : ""}
+    <div class="shop-name">${ss?.site_name ?? "Mr.Vũ"}</div>
+    <div class="shop-info">
+      ${ss?.address ? `📍 ${ss.address}<br>` : ""}
+      ${ss?.phone ? `📞 ${ss.phone}` : ""}${ss?.phone && ss?.email ? " &nbsp;|&nbsp; " : ""}${ss?.email ? `✉ ${ss.email}` : ""}
+      ${ss?.tax_code ? `<br>MST: ${ss.tax_code}` : ""}
+    </div>
+  </div>
+  <div>
+    <div class="inv-title">Phiếu xuất kho<br>kiểm bảo hành</div>
+    <div class="inv-meta">
+      <strong>Mã phiếu:</strong> ${order.code ?? ("HD" + Date.now().toString().slice(-6))}<br>
+      <strong>Ngày:</strong> ${order.created_at ? new Date(order.created_at).toLocaleDateString("vi-VN") : new Date().toLocaleDateString("vi-VN")}<br>
+      <strong>Trạng thái:</strong> ${statusLabels[order.status] ?? order.status ?? "—"}
+    </div>
+  </div>
+</div>
 
-  const empName = employee
-    ? (data?.employees ?? []).find((e: any) => e.id === employee)?.name ?? "—"
-    : "—";
+<div class="info-grid">
+  <div><div class="info-label">Khách hàng</div><div class="info-value">${custName ?? "Khách lẻ"}${custPhone ? " — " + custPhone : ""}</div></div>
+  <div><div class="info-label">Chi nhánh</div><div class="info-value">${branchName ?? "—"}</div></div>
+  <div><div class="info-label">Nhân viên</div><div class="info-value">${empName ?? "—"}</div></div>
+  <div><div class="info-label">Hình thức TT</div><div class="info-value">${pmLabel}</div></div>
+  ${custAddress ? `<div style="grid-column:span 2"><div class="info-label">Địa chỉ</div><div class="info-value">${custAddress}</div></div>` : ""}
+</div>
 
-  const statusLabels: Record<string, string> = {
-    completed: "Hoàn tất",
-    reserved: "Đặt hàng (chưa giao)",
-    draft: "Nháp",
+<table>
+  <thead><tr>
+    <th style="width:42px;text-align:center">STT</th>
+    <th>Sản phẩm</th>
+    <th style="width:56px;text-align:center">SL</th>
+    <th style="width:120px;text-align:right">Đơn giá</th>
+    <th style="width:130px;text-align:right">Thành tiền</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+
+<div class="total-section"><div class="total-box">
+  <div class="total-row"><span>Tạm tính</span><span>${moneyFmt(order.subtotal ?? 0)}</span></div>
+  ${Number(order.discount) > 0 ? `<div class="total-row" style="color:#16a34a"><span>Giảm giá</span><span>- ${moneyFmt(order.discount)}</span></div>` : ""}
+  ${Number(order.vat_amount) > 0 ? `<div class="total-row" style="color:#d97706"><span>Thuế VAT</span><span>+ ${moneyFmt(order.vat_amount)}</span></div>` : ""}
+  <div class="total-row"><span>Tổng cộng</span><span style="font-weight:700">${moneyFmt(order.total ?? 0)}</span></div>
+  ${Number(order.deposit) > 0 ? `<div class="total-row" style="color:#b45309"><span>Đặt cọc</span><span>- ${moneyFmt(order.deposit)}</span></div>` : ""}
+  ${Number(order.paid) > 0 ? `<div class="total-row" style="color:#059669"><span>Đã thanh toán</span><span>- ${moneyFmt(order.paid)}</span></div>` : ""}
+  <div class="total-row grand"><span>Khách cần trả</span><span>${moneyFmt(Math.max(0, (order.total ?? 0) - (order.deposit ?? 0) - (order.paid ?? 0)))}</span></div>
+</div></div>
+
+${order.note ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:10px 14px;font-size:12.5px;margin-bottom:20px"><strong>Ghi chú:</strong> ${order.note}</div>` : ""}
+
+<div class="checklist">
+  <div style="font-weight:700;margin-bottom:8px;font-size:12.5px">Xác nhận bàn giao:</div>
+  ${["Đã giao hàng đúng mẫu và đầy đủ phụ kiện","Đã lắp đặt hoàn thiện, quạt chạy ổn định","Đã hướng dẫn sử dụng và bảo quản","Đã thanh toán đúng số tiền trên phiếu"]
+    .map(it=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:13px;height:13px;border:1.5px solid #9ca3af;border-radius:2px;display:inline-block;flex-shrink:0"></span><span>${it}</span></div>`).join("")}
+  <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:11px;color:#6b7280">
+    <strong>Khách hàng xác nhận</strong>
+    <span>Họ và tên: _________________ &nbsp;&nbsp; Chữ ký: ______________</span>
+  </div>
+</div>
+
+<div class="sign-grid">
+  ${["Kỹ thuật","Nhân viên","Khách hàng","Thủ kho"].map(r=>`
+    <div>
+      <div style="font-weight:700;font-size:12px;margin-bottom:3px">${r}</div>
+      <div style="font-size:11px;color:#9ca3af;margin-bottom:44px">(Ký, ghi rõ họ tên)</div>
+      <div style="border-top:1px dashed #d1d5db;padding-top:4px;font-size:11px;color:#d1d5db">___________</div>
+    </div>`).join("")}
+</div>
+
+<div class="warranty">⚠ LƯU Ý: ${ss?.site_name ?? "Mr.Vũ"} khuyến cáo cần kiểm tra quạt định kỳ ít nhất 6 tháng/lần để đảm bảo an toàn trong quá trình sử dụng.</div>
+<div class="footer">${ss?.site_name ?? "Mr.Vũ"} — Cảm ơn Quý khách đã tin tưởng sử dụng dịch vụ!</div>
+</div></body></html>`;
+}
+
+function printOrderSlip({
+  items, customer, branch, employee, status, paymentMethod,
+  discount, discountAmt, vatAmt, deposit, note, subtotal, total, includeVat, data, siteSettings, tpl,
+}: any) {
+  const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
+  const custObj  = (data?.customers ?? []).find((c: any) => c.id === customer);
+  const branchObj = (data?.branches ?? []).find((b: any) => b.id === branch);
+  const empObj   = (data?.employees ?? []).find((e: any) => e.id === employee);
+
+  const fakeOrder = {
+    code: undefined, created_at: new Date().toISOString(), status,
+    payment_method: paymentMethod, subtotal, discount: discountAmt,
+    vat_amount: includeVat ? vatAmt : 0, total, deposit, paid: 0, note,
   };
-
-  const rows = items
-    .map((item: any, i: number) => {
-      const prod = (data?.products ?? []).find(
-        (p: any) => p.id === item.product_id,
-      );
-      const lineTotal = item.qty * item.unit_price - (item.discount ?? 0);
-
-      return `<tr>
-        <td style="text-align:center;padding:8px;border:1px solid #ddd">${i + 1}</td>
-        <td style="padding:8px;border:1px solid #ddd">${prod?.name ?? item.product_id}</td>
-        <td style="text-align:center;padding:8px;border:1px solid #ddd">${item.qty}</td>
-        <td style="text-align:right;padding:8px;border:1px solid #ddd">${moneyFmt(item.unit_price)}</td>
-        <td style="text-align:right;padding:8px;border:1px solid #ddd">${moneyFmt(lineTotal)}</td>
-      </tr>`;
-    })
-    .join("");
 
   const pw = window.open("", "_blank");
   if (!pw) return;
-
-  pw.document.write(`<!DOCTYPE html><html><head><title>Phiếu đặt hàng</title>
-  <style>*{box-sizing:border-box;font-family:Arial,sans-serif}body{padding:40px;color:#111}
-  .header{text-align:center;margin-bottom:28px}.title{font-size:26px;font-weight:700;margin-bottom:6px}
-  .sub{color:#666;font-size:13px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:14px;margin-bottom:20px}
-  table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:9px;font-size:14px}
-  th{background:#f5f5f5;text-align:left}.total-box{margin-top:18px;text-align:right;font-size:14px}
-  .total-main{font-size:22px;font-weight:700;margin-top:4px}.sign{margin-top:60px;display:grid;grid-template-columns:1fr 1fr;gap:40px;text-align:center}
-  .sign-box{padding-top:10px}@media print{body{padding:0}}</style></head><body>
-  <div class="header">
-  ${siteSettings?.logo_url ? `<img src="${siteSettings.logo_url}" alt="Logo" style="height:60px;object-fit:contain;margin-bottom:8px" />` : ""}
-  ${siteSettings?.site_name ? `<div style="font-size:15px;font-weight:600;color:#444;margin-bottom:4px">${siteSettings.site_name}</div>` : ""}
-  <div class="title">${tplHeader.replace("{Ten_Cua_Hang}", siteName || "Mr.Vũ").toUpperCase()}</div>
-  <div class="sub">Ngày: ${new Date().toLocaleDateString("vi-VN")} &nbsp;|&nbsp; Trạng thái: ${statusLabels[status] ?? status}${siteSettings?.phone ? ` &nbsp;|&nbsp; ĐT: ${siteSettings.phone}` : ""}</div></div>
-  <div class="info-grid">
-    <div><strong>Khách hàng:</strong> ${custName}</div>
-    <div><strong>Chi nhánh:</strong> ${branchName}</div>
-    <div><strong>Nhân viên:</strong> ${empName}</div>
-    <div><strong>Hình thức thanh toán:</strong> ${paymentMethod === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt"}</div>
-    <div><strong>Mã phiếu:</strong> #${Date.now().toString().slice(-6)}</div>
-  </div>
-  <table><thead><tr>
-    <th style="width:50px;text-align:center">STT</th>
-    <th>Sản phẩm</th>
-    <th style="width:70px;text-align:center">SL</th>
-    <th style="width:130px;text-align:right">Đơn giá</th>
-    <th style="width:140px;text-align:right">Thành tiền</th>
-  </tr></thead><tbody>${rows}</tbody></table>
-  <div class="total-box">
-    <div>Tạm tính: ${moneyFmt(subtotal)}</div>
-    ${discountAmt > 0 ? `<div>Giảm giá: - ${moneyFmt(discountAmt)}</div>` : ""}
-    ${includeVat ? `<div>Thuế VAT (10%): + ${moneyFmt(vatAmt)}</div>` : ""}
-    <div>Tổng tiền: ${moneyFmt(total)}</div>
-    ${deposit > 0 ? `<div style="color:#b45309;margin-top:4px">Đặt cọc: - ${moneyFmt(deposit)}</div>` : ""}
-    <div class="total-main" style="color:#15803d;margin-top:8px">Khách cần thanh toán: ${moneyFmt(Math.max(0, total - deposit))}</div>
-  </div>
-  ${note ? `<div style="margin-top:20px;font-size:14px"><strong>Ghi chú:</strong> ${note}</div>` : ""}
-  <div style="margin-top:32px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:20px;text-align:center;font-size:13px">
-    ${["Kỹ thuật","Nhân viên","Khách hàng","Thủ kho"].map(r=>`<div><div style="font-weight:600">${r}</div><div style="color:#999;font-size:11px">(Ký, ghi rõ họ tên)</div><div style="margin-top:50px;border-top:1px dashed #bbb;padding-top:4px;color:#ccc">__________</div></div>`).join("")}
-  </div>
-  <div style="margin-top:24px;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
-    <div style="font-weight:600;margin-bottom:8px">Vui lòng chọn nội dung dưới đây</div>
-    ${["Đã giao hàng đúng mẫu và đầy đủ phụ kiện","Đã lắp đặt hoàn thiện, Quạt chạy ổn định","Đã hướng dẫn sử dụng","Đã thanh toán tiền mặt theo số tiền trên phiếu"].map(it=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="display:inline-block;width:14px;height:14px;border:1px solid #aaa;border-radius:2px"></span>${it}</div>`).join("")}
-    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px"><span><strong>Khách hàng xác nhận</strong></span><span>Họ tên: ___________________</span></div>
-  </div>
-  ${tplWarranty ? `<div style="margin-top:18px;font-size:12px;font-weight:700;text-transform:uppercase;line-height:1.6;border-top:1px solid #eee;padding-top:12px">${tplWarranty.replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}</div>` : ""}
-  ${tplFooter ? `<div style="margin-top:14px;text-align:center;font-size:13px;color:#555;border-top:1px solid #eee;padding-top:12px">${tplFooter.replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}</div>` : ""}
-  </body></html>`);
-
+  pw.document.write(buildOrderPrintHtml({
+    order: fakeOrder,
+    custName: custObj?.name ?? "Khách lẻ",
+    custPhone: custObj?.phone,
+    custAddress: custObj?.address,
+    branchName: branchObj?.name,
+    empName: empObj?.name,
+    items,
+    products: data?.products ?? [],
+    moneyFmt,
+    siteSettings,
+  }));
   pw.document.close();
   setTimeout(() => pw.print(), 300);
 }
+
 
 function Page() {
   const { user, isAdmin, activeBranchId } = useAuth();

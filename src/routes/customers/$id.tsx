@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { createSchedule } from "@/lib/schedule.functions";
 
 export const Route = createFileRoute("/customers/$id")({
   head: () => ({ meta: [{ title: "Chi tiết khách hàng — QuatTran POS" }] }),
@@ -134,6 +135,13 @@ function CustomerDetailPage() {
   });
 
   const [editOpen, setEditOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState({
+    title: "", type: "install", scheduled_date: new Date().toISOString().slice(0,10),
+    scheduled_time: "", address: "", note: "", order_id: "",
+  });
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const createScheduleFn = useServerFn(createSchedule);
   const [activeTab, setActiveTab] = useState<"orders" | "payments">("orders");
   const [payOpen, setPayOpen] = useState(false);
   const [payAmount, setPayAmount] = useState("");
@@ -282,6 +290,32 @@ function CustomerDetailPage() {
     setPayOpen(true);
   }
 
+  async function handleCreateSchedule() {
+    if (!customer) return;
+    if (!scheduleForm.title.trim()) return toast.error("Nhập tiêu đề lịch");
+    setScheduleSaving(true);
+    try {
+      await createScheduleFn({
+        data: {
+          ...scheduleForm,
+          customer_id: customer.id,
+          branch_id: customer.branch_id || "",
+          address: scheduleForm.address || customer.address || "",
+          created_by: user?.id,
+          order_id: scheduleForm.order_id || undefined,
+        },
+      });
+      toast.success("Đã tạo lịch lắp đặt!");
+      setScheduleOpen(false);
+      setScheduleForm({ title: "", type: "install", scheduled_date: new Date().toISOString().slice(0,10), scheduled_time: "", address: "", note: "", order_id: "" });
+      qc.invalidateQueries({ queryKey: ["customer-detail", id] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi tạo lịch");
+    } finally {
+      setScheduleSaving(false);
+    }
+  }
+
   async function handleCollectPayment() {
     if (!customer) return;
 
@@ -348,6 +382,13 @@ function CustomerDetailPage() {
         <span className="text-foreground font-medium">{customer.name}</span>
         <Button size="sm" variant="outline" className="ml-auto" onClick={startEdit}>
           <Pencil className="h-4 w-4 mr-1" /> Chỉnh sửa
+        </Button>
+        <Button size="sm" variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50"
+          onClick={() => {
+            setScheduleForm(f => ({ ...f, address: customer?.address ?? "" }));
+            setScheduleOpen(true);
+          }}>
+          <CalendarPlus className="h-4 w-4 mr-1" /> Tạo lịch lắp đặt
         </Button>
         {displayDebt > 0 && (
           <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={openPayDialog}>
@@ -894,6 +935,69 @@ function CustomerDetailPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Tạo lịch lắp đặt ────────────────────────────────────── */}
+      <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarPlus className="h-5 w-5 text-blue-600" /> Tạo lịch lắp đặt
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <div>
+              <Label>Tiêu đề *</Label>
+              <Input className="mt-1" value={scheduleForm.title}
+                onChange={e => setScheduleForm(f => ({ ...f, title: e.target.value }))}
+                placeholder="VD: Lắp quạt trần tại nhà..." />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Ngày lắp đặt</Label>
+                <Input type="date" className="mt-1" value={scheduleForm.scheduled_date}
+                  onChange={e => setScheduleForm(f => ({ ...f, scheduled_date: e.target.value }))} />
+              </div>
+              <div>
+                <Label>Giờ</Label>
+                <Input type="time" className="mt-1" value={scheduleForm.scheduled_time}
+                  onChange={e => setScheduleForm(f => ({ ...f, scheduled_time: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <Label>Địa chỉ lắp đặt</Label>
+              <Input className="mt-1" value={scheduleForm.address}
+                onChange={e => setScheduleForm(f => ({ ...f, address: e.target.value }))}
+                placeholder="Địa chỉ lắp đặt..." />
+            </div>
+            <div>
+              <Label>Liên kết đơn hàng (tuỳ chọn)</Label>
+              <SearchableSelect
+                value={scheduleForm.order_id}
+                onChange={v => setScheduleForm(f => ({ ...f, order_id: v }))}
+                emptyLabel="— Không liên kết —"
+                placeholder="Tìm đơn hàng..."
+                options={(data?.orders ?? []).map((o: any) => ({
+                  value: o.id,
+                  label: o.code,
+                  sub: `${fmt(o.total)}`,
+                }))}
+              />
+            </div>
+            <div>
+              <Label>Ghi chú</Label>
+              <Input className="mt-1" value={scheduleForm.note}
+                onChange={e => setScheduleForm(f => ({ ...f, note: e.target.value }))}
+                placeholder="Ghi chú thêm..." />
+            </div>
+          </div>
+          <DialogFooter className="pt-3 gap-2">
+            <Button variant="outline" onClick={() => setScheduleOpen(false)}>Hủy</Button>
+            <Button onClick={handleCreateSchedule} disabled={scheduleSaving}>
+              {scheduleSaving ? "Đang tạo..." : "Tạo lịch"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

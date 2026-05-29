@@ -225,6 +225,17 @@ function CustomersPage() {
 
   const customers = data?.customers ?? [];
   const orders = data?.orders ?? [];
+  const receipts = data?.receipts ?? [];
+
+  // ✅ Tính displayDebt cho từng khách = totalSpent - totalPaid (giống $id.tsx)
+  function getDisplayDebt(customerId: string): number {
+    const completedOrders = orders.filter((o: any) => o.customer_id === customerId && o.status === "completed");
+    const totalSpent = completedOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0);
+    const totalPaid = (receipts as any[])
+      .filter((r: any) => r.payer_customer_id === customerId && r.type === "thu" && r.status !== "cancelled")
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    return totalSpent - totalPaid;
+  }
   const viewCustomer = viewId ? customers.find((x) => x.id === viewId) ?? null : null;
 
   const totalDebtorCount = data?.meta?.totalDebtorCount ?? 0;
@@ -470,9 +481,14 @@ function CustomersPage() {
                   <td
   className={"pr-3 text-right font-medium text-destructive"}
 >
-  {Number(c.debt) < 0
-    ? <span className="text-green-600">{fmt(Math.abs(Number(c.debt)))} (thừa)</span>
-    : fmt(Number(c.debt) || 0)}
+  {(() => {
+    const d = getDisplayDebt(c.id);
+    return d < 0
+      ? <span className="text-green-600">{fmt(Math.abs(d))} (thừa)</span>
+      : d > 0
+      ? <span className="text-destructive font-semibold">{fmt(d)}</span>
+      : <span className="text-muted-foreground">{fmt(0)}</span>;
+  })()}
 </td>
                   <td className="text-right" onClick={(e) => e.stopPropagation()}>
                     <Link
@@ -868,7 +884,7 @@ function CustomersPage() {
                     <div className="space-y-3 text-sm">
                       <div><div className="text-xs uppercase text-muted-foreground">Ngân hàng</div><div className="font-medium">{viewCustomer.bank_name || "—"}</div></div>
                       <div><div className="text-xs uppercase text-muted-foreground">Số tài khoản</div><div className="font-medium font-mono">{viewCustomer.bank_account || "—"}</div></div>
-                      <div><div className="text-xs uppercase text-muted-foreground">Công nợ</div><div className={`font-semibold ${Number(viewCustomer.debt || 0) > 0 ? "text-destructive" : Number(viewCustomer.debt || 0) < 0 ? "text-green-600" : "text-muted-foreground"}`}>{Number(viewCustomer.debt || 0) > 0 ? fmt(viewCustomer.debt) : Number(viewCustomer.debt || 0) < 0 ? `-${fmt(Math.abs(Number(viewCustomer.debt || 0)))}` : fmt(0)}</div></div>
+                      <div><div className="text-xs uppercase text-muted-foreground">Công nợ</div><div className={`font-semibold ${Number(viewCustomer.debt || 0) > 0 ? "text-destructive" : Number(viewCustomer.debt || 0) < 0 ? "text-green-600" : "text-muted-foreground"}`}>{(() => { const d = getDisplayDebt(viewCustomer.id); return d > 0 ? fmt(d) : d < 0 ? `-${fmt(Math.abs(d))}` : fmt(0); })()}</div></div>
                     </div>
                   </div>
                 </div>
