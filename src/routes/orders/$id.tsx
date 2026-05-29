@@ -52,7 +52,7 @@ import { useAuth } from "@/context/AuthContext";
 import { SCHEDULE_TYPES } from "@/lib/types";
 
 export const Route = createFileRoute("/orders/$id")({
-  head: () => ({ meta: [{ title: "Chi tiết đơn hàng — Mr.Vũ" }] }),
+  head: () => ({ meta: [{ title: "Chi tiết đơn hàng — QuatTran POS" }] }),
   component: OrderDetailPage,
 });
 
@@ -129,6 +129,12 @@ function OrderDetailPage() {
 
   const [completingOrder, setCompletingOrder] = useState(false);
   const [cancellingOrder, setCancellingOrder] = useState(false);
+
+  // ── Payment dialog state ──────────────────────────────────────────────────
+  const [payOpen, setPayOpen] = useState(false);
+  const [payMethodTab, setPayMethodTab] = useState<"tien_mat" | "ngan_hang">("tien_mat");
+  const [payAmountRaw, setPayAmountRaw] = useState("");
+  const [payBankIdx, setPayBankIdx] = useState("");
 
   // Return order state
   const [returnOpen, setReturnOpen] = useState(false);
@@ -354,7 +360,8 @@ function OrderDetailPage() {
     }
   }
 
-  async function completeOrder() {
+  // Kiểm tra tồn kho rồi mở dialog thanh toán
+  function completeOrder() {
     const stock = data?.stock ?? [];
     const branchId = order.branch_id;
     const shortages: string[] = [];
@@ -363,9 +370,7 @@ function OrderDetailPage() {
       const available = stock
         .filter((s: any) => s.product_id === item.product_id && s.branch_id === branchId)
         .reduce((sum: number, s: any) => sum + Number(s.qty || 0), 0);
-
       const needed = Number(item.qty || 0);
-
       if (available < needed) {
         const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
         shortages.push(`${prod?.name ?? item.product_id}: cần ${needed}, còn ${available}`);
@@ -377,20 +382,42 @@ function OrderDetailPage() {
       return;
     }
 
+    // Mở dialog thanh toán
+    const khachCan = Math.max(0, (order.total ?? 0) - (order.deposit ?? 0));
+    setPayAmountRaw(String(khachCan));
+    setPayMethodTab(order.payment_method === "ngan_hang" ? "ngan_hang" : "tien_mat");
+    setPayBankIdx("");
+    setPayOpen(true);
+  }
+
+  // Xác nhận thanh toán và hoàn tất đơn
+  async function confirmPayAndComplete() {
+    const khachCan = Math.max(0, (order.total ?? 0) - (order.deposit ?? 0));
+    const paid = parseInput(payAmountRaw);
+
     setCompletingOrder(true);
     try {
-      await updateStatusFn({ data: { id: order.id, status: "completed" } });
+      await updateStatusFn({
+        data: {
+          id: order.id,
+          status: "completed",
+          paid,
+          payment_method: payMethodTab,
+        },
+      });
 
       await qc.invalidateQueries({ queryKey: ["orders"] });
       await router.invalidate();
       await refetch();
 
-      toast.success("Đã hoàn tất đơn " + order.code);
-
-      navigate({
-        to: "/orders",
-        replace: true,
-      });
+      const congNo = Math.max(0, khachCan - paid);
+      if (congNo > 0) {
+        toast.success(`Hoàn tất đơn ${order.code} — Công nợ: ${new Intl.NumberFormat("vi-VN").format(congNo)} ₫`);
+      } else {
+        toast.success("Đã hoàn tất đơn " + order.code);
+      }
+      setPayOpen(false);
+      navigate({ to: "/orders", replace: true });
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi hoàn tất đơn");
     } finally {
@@ -1277,6 +1304,177 @@ function OrderDetailPage() {
               {submittingReturn ? "Đang tạo..." : "Xác nhận trả hàng"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Payment Dialog ─────────────────────────────────────────────────── */}
+      <Dialog open={payOpen} onOpenChange={setPayOpen}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-primary" />
+              Thanh toán đơn {order?.code}
+            </DialogTitle>
+          </DialogHeader>
+
+          {order && (() => {
+            const bankList: any[] = (() => {
+              try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
+              catch { return []; }
+            })();
+            const khachCan = Math.max(0, (order.total ?? 0) - (order.deposit ?? 0));
+            const paid = parseInput(payAmountRaw);
+            const congNo = Math.max(0, khachCan - paid);
+            const tienThua = Math.max(0, paid - khachCan);
+            const quickAmounts = (() => {
+              const base = khachCan;
+              if (base <= 0) return [];
+              const r10  = Math.ceil(base / 10000) * 10000;
+              const r50  = Math.ceil(base / 50000) * 50000;
+              const r100 = Math.ceil(base / 100000) * 100000;
+              const r500 = Math.ceil(base / 500000) * 500000;
+              return [...new Set([base, r10, r50, r100, r500].filter(v => v >= base))].slice(0, 5);
+            })();
+            const moneyFmtLocal = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
+
+            return (
+              <div className="space-y-4 pt-1">
+                {/* Summary */}
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Tổng tiền hàng ({orderItems.length})</span>
+                    <span>{moneyFmtLocal(order.total ?? 0)}</span>
+                  </div>
+                  {(order.discount ?? 0) > 0 && (
+                    <div className="flex justify-between text-green-700">
+                      <span>Giảm giá</span>
+                      <span>- {moneyFmtLocal(order.discount)}</span>
+                    </div>
+                  )}
+                  {(order.deposit ?? 0) > 0 && (
+                    <div className="flex justify-between text-yellow-700">
+                      <span>Đặt cọc</span>
+                      <span>- {moneyFmtLocal(order.deposit)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-base pt-1 border-t text-blue-600">
+                    <span>Khách cần trả</span>
+                    <span>{moneyFmtLocal(khachCan)}</span>
+                  </div>
+                </div>
+
+                {/* Payment method radio */}
+                <div>
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hình thức thanh toán</Label>
+                  <div className="flex gap-4 mt-2">
+                    {([{ value: "tien_mat", label: "Tiền mặt" }, { value: "ngan_hang", label: "Chuyển khoản" }] as const).map((opt) => (
+                      <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer text-sm">
+                        <input
+                          type="radio"
+                          name="pay_method"
+                          value={opt.value}
+                          checked={payMethodTab === opt.value}
+                          onChange={() => { setPayMethodTab(opt.value); setPayBankIdx(""); }}
+                          className="accent-primary"
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                  {payMethodTab === "ngan_hang" && bankList.length > 0 && (
+                    <div className="mt-2">
+                      <select
+                        className="w-full h-9 rounded-md border bg-background px-2 text-sm"
+                        value={payBankIdx}
+                        onChange={(e) => setPayBankIdx(e.target.value)}
+                      >
+                        <option value="">— Chọn tài khoản —</option>
+                        {bankList.map((ba: any, i: number) => (
+                          <option key={i} value={String(i)}>
+                            {ba.bank} - {ba.account_number} ({ba.account_name})
+                          </option>
+                        ))}
+                      </select>
+                      {payBankIdx !== "" && (() => {
+                        const ba = bankList[parseInt(payBankIdx)];
+                        return ba ? (
+                          <div className="mt-1.5 rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
+                            <div className="font-semibold">{ba.bank}</div>
+                            <div>STK: <span className="font-mono font-bold">{ba.account_number}</span></div>
+                            <div>Chủ TK: {ba.account_name}</div>
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                {/* Amount input */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <Label className="text-sm font-semibold">Khách thanh toán</Label>
+                    {tienThua > 0 && <span className="text-xs text-green-600 font-medium">Tiền thừa: {moneyFmtLocal(tienThua)}</span>}
+                  </div>
+                  <Input
+                    className="text-right font-mono text-lg h-12 border-2 focus:border-primary"
+                    value={payAmountRaw === "" ? "" : moneyFmtLocal(paid).replace(" ₫", "")}
+                    onChange={(e) => setPayAmountRaw(e.target.value.replace(/\D/g, ""))}
+                    onFocus={(e) => e.target.select()}
+                    placeholder={moneyFmtLocal(khachCan).replace(" ₫", "")}
+                  />
+                </div>
+
+                {/* Quick chips */}
+                {quickAmounts.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {quickAmounts.map((amt) => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setPayAmountRaw(String(amt))}
+                        className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                          paid === amt
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background hover:bg-muted border-border"
+                        }`}
+                      >
+                        {moneyFmtLocal(amt).replace(" ₫", "")}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Debt / paid full indicator */}
+                {congNo > 0 && (
+                  <div className="flex justify-between text-sm pt-1 border-t">
+                    <span className="text-muted-foreground">Tính vào công nợ</span>
+                    <span className="font-semibold text-red-600">- {moneyFmtLocal(congNo)}</span>
+                  </div>
+                )}
+                {congNo === 0 && paid > 0 && (
+                  <div className="flex justify-between text-sm pt-1 border-t text-green-600">
+                    <span>✓ Thanh toán đủ</span>
+                    <span className="font-semibold">{moneyFmtLocal(paid)}</span>
+                  </div>
+                )}
+
+                <DialogFooter className="flex-col sm:flex-row gap-2 pt-1">
+                  <Button variant="outline" className="w-full sm:w-auto" onClick={() => setPayOpen(false)}>
+                    Hủy
+                  </Button>
+                  <Button
+                    className="w-full sm:w-auto font-bold text-base h-11"
+                    onClick={confirmPayAndComplete}
+                    disabled={completingOrder || paid === 0}
+                  >
+                    {completingOrder
+                      ? <><span className="animate-spin mr-1.5">⏳</span>Đang xử lý...</>
+                      : "THANH TOÁN"}
+                  </Button>
+                </DialogFooter>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </AppShell>

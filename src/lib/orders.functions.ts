@@ -591,7 +591,7 @@ export const createOrder = createServerFn({ method: "POST" })
   });
 
 export const updateOrderStatus = createServerFn({ method: "POST" })
-  .handler(async ({ data }: { data: { id: string; status: string } }) => {
+  .handler(async ({ data }: { data: { id: string; status: string; paid?: number; payment_method?: string } }) => {
     const currentRows = await fetchRows<any>("orders", {
       eq: { id: data.id },
       select: "id, code, customer_id, branch_id, employee_id, subtotal, discount, total, deposit, paid, payment_method, note, status",
@@ -613,21 +613,24 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
       await ensureStockAvailable(currentOrder.branch_id, currentItems as any);
     }
 
-    await updateWhere("orders", { status: data.status }, { id: data.id });
+    // Cập nhật paid + payment_method nếu được truyền từ UI thanh toán
+    const updateFields: Record<string, any> = { status: data.status };
+    if (typeof data.paid === "number") updateFields.paid = data.paid;
+    if (data.payment_method) updateFields.payment_method = data.payment_method;
+    await updateWhere("orders", updateFields, { id: data.id });
+
+    // effectivePaid = paid mới từ UI hoặc giá trị cũ trong DB
+    const effectivePaid = typeof data.paid === "number" ? data.paid : Number(currentOrder.paid || 0);
+    const effectivePaymentMethod: "tien_mat" | "ngan_hang" =
+      (data.payment_method === "ngan_hang" || (!data.payment_method && currentOrder.payment_method === "ngan_hang"))
+        ? "ngan_hang" : "tien_mat";
 
     if (data.status === "completed" && currentOrder.status !== "completed") {
       await applyCompletedOrderSideEffects(currentOrder, currentItems as any);
 
-      // Tạo phiếu thu phần tiền còn lại khi hoàn tất đơn
-      // (đặt hàng đã thu deposit+paid rồi, giờ thu phần còn lại)
-      const remaining = Math.max(
-        0,
-        Number(currentOrder.total || 0)
-          - Number(currentOrder.deposit || 0)
-          - Number(currentOrder.paid || 0),
-      );
-      const paymentMethod: "tien_mat" | "ngan_hang" =
-        currentOrder.payment_method === "ngan_hang" ? "ngan_hang" : "tien_mat";
+      // Tạo phiếu thu = đúng số tiền khách trả lần này (effectivePaid)
+      // Phần còn thiếu (nếu có) sẽ tự động cộng vào công nợ qua applyCompletedOrderSideEffects
+      const paymentMethod = effectivePaymentMethod;
       const paymentMethodLabel =
         paymentMethod === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt";
 
@@ -636,7 +639,7 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
         customerId: currentOrder.customer_id || null,
         branchId: currentOrder.branch_id,
         employeeId: currentOrder.employee_id || null,
-        amount: remaining,
+        amount: effectivePaid,
         fundType: paymentMethod,
         paymentMethodLabel,
         createdAt: now(),

@@ -89,64 +89,43 @@ function BankSection({ f, setF, siteSettings }: { f: any; setF: (v: any) => void
     catch { return []; }
   })();
 
+  if (!bankList.length) return null;
+
   return (
     <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
-      {bankList.length > 0 && (
-        <div>
-          <Label className="text-xs text-muted-foreground">Tài khoản nhận tiền</Label>
-          <select
-            className="mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm"
-            value={f.bankAccountIdx}
-            onChange={(e) => {
-              const idx = e.target.value;
-              const ba = bankList[parseInt(idx)];
-              setF({
-                ...f,
-                bankAccountIdx: idx,
-                bankContent: ba && !f.bankContent
-                  ? `${siteSettings?.site_name ?? "CK"} ${ba.account_number}`
-                  : f.bankContent,
-              });
-            }}
-          >
-            <option value="">— Chọn STK —</option>
-            {bankList.map((ba: any, i: number) => (
-              <option key={i} value={String(i)}>
-                {ba.bank} - {ba.account_number} ({ba.account_name})
-              </option>
-            ))}
-          </select>
-          {f.bankAccountIdx !== "" && (() => {
-            const ba = bankList[parseInt(f.bankAccountIdx)];
-            return ba ? (
-              <div className="mt-1.5 rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
-                <div className="font-semibold">{ba.bank}</div>
-                <div>STK: <span className="font-mono font-bold tracking-wide">{ba.account_number}</span></div>
-                <div>Chủ TK: {ba.account_name}</div>
-                {ba.note && <div className="text-blue-600">{ba.note}</div>}
-              </div>
-            ) : null;
-          })()}
-        </div>
-      )}
-      <div>
-        <Label className="text-xs text-muted-foreground">Nội dung chuyển khoản</Label>
-        <div className="mt-1 relative">
-          <Input
-            value={f.bankContent}
-            onChange={(e) => setF({ ...f, bankContent: e.target.value })}
-            placeholder="VD: DATHANG0001 NGUYEN VAN A"
-            className="pr-12 font-mono text-sm"
-          />
-          {f.bankContent && (
-            <button
-              type="button"
-              className="absolute right-2 top-2 text-xs text-primary hover:underline"
-              onClick={() => { navigator.clipboard.writeText(f.bankContent); toast.success("Đã copy!"); }}
-            >Copy</button>
-          )}
-        </div>
-      </div>
+      <Label className="text-xs text-muted-foreground">Tài khoản ngân hàng</Label>
+      <select
+        className="mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm"
+        value={f.bankAccountIdx}
+        onChange={(e) => {
+          const idx = e.target.value;
+          const ba = bankList[parseInt(idx)];
+          // ✅ Tự động ghi số TK vào bankContent (dùng để filter + note)
+          setF({
+            ...f,
+            bankAccountIdx: idx,
+            bankContent: ba ? ba.account_number : "",
+          });
+        }}
+      >
+        <option value="">— Chọn tài khoản —</option>
+        {bankList.map((ba: any, i: number) => (
+          <option key={i} value={String(i)}>
+            {ba.bank} - {ba.account_number} ({ba.account_name})
+          </option>
+        ))}
+      </select>
+      {f.bankAccountIdx !== "" && (() => {
+        const ba = bankList[parseInt(f.bankAccountIdx)];
+        return ba ? (
+          <div className="mt-1.5 rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
+            <div className="font-semibold">{ba.bank}</div>
+            <div>STK: <span className="font-mono font-bold tracking-wide">{ba.account_number}</span></div>
+            <div>Chủ TK: {ba.account_name}</div>
+            {ba.note && <div className="text-blue-600">{ba.note}</div>}
+          </div>
+        ) : null;
+      })()}
     </div>
   );
 }
@@ -334,6 +313,7 @@ function Page() {
   });
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"" | "thu" | "chi">("");
+  const [filterBank, setFilterBank] = useState<string>("");  // lọc theo STK ngân hàng (note chứa số TK)
   const [selectedVoucher, setSelectedVoucher] = useState<any>(null);
   const [openCreate, setOpenCreate] = useState(false);
   const [createKind, setCreateKind] = useState<"thu" | "chi">("thu");
@@ -391,6 +371,7 @@ function Page() {
       const matchAccess =
         canViewAll || (user?.branch_ids?.length === 0) || user?.branch_ids?.includes(v.branch_id);
       const matchType  = !filterType || v.type === filterType;
+      const matchBank  = !filterBank || (v.note ?? "").includes(filterBank); // lọc theo số TK trong note
       const q = search.toLowerCase();
       const matchSearch =
         !search ||
@@ -400,9 +381,9 @@ function Page() {
         getUserName(v.collector_user_id)?.toLowerCase().includes(q) ||
         getUserName(v.payer_user_id)?.toLowerCase().includes(q) ||
         v.note?.toLowerCase().includes(q);
-      return matchFund && matchBranch && matchAccess && matchType && matchSearch;
+      return matchFund && matchBranch && matchAccess && matchType && matchBank && matchSearch;
     });
-  }, [allVouchers, fund, filterBranch, filterType, search, canViewAll, user]);
+  }, [allVouchers, fund, filterBranch, filterType, filterBank, search, canViewAll, user]);
 
   const getBranchName   = (id: string) => branches.find((b: any) => b.id === id)?.name ?? "—";
   const getUserName     = (id: string) => users.find((u: any) => u.id === id)?.full_name ?? "";
@@ -439,10 +420,11 @@ function Page() {
     setOpenEdit(true);
   }
 
-  // Build note from bank content
+  // Build note — bao gồm số TK ngân hàng để sau có thể filter
   function buildNote(f: any): string | null {
     const parts = [];
-    if (f.fundType === "ngan_hang" && f.bankContent) parts.push(`CK: ${f.bankContent}`);
+    // ✅ Nhúng số TK vào note để filter theo ngân hàng hoạt động
+    if (f.fundType === "ngan_hang" && f.bankContent) parts.push(f.bankContent);
     if (f.note) parts.push(f.note);
     return parts.join(" — ") || null;
   }
@@ -637,6 +619,29 @@ function Page() {
             <option value="thu">Phiếu thu</option>
             <option value="chi">Phiếu chi</option>
           </select>
+
+          {/* Lọc theo tài khoản ngân hàng — chỉ hiện khi tab Ngân hàng */}
+          {fund === "ngan_hang" && (() => {
+            const bankList: any[] = (() => {
+              try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
+              catch { return []; }
+            })();
+            if (!bankList.length) return null;
+            return (
+              <select
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                value={filterBank}
+                onChange={(e) => setFilterBank(e.target.value)}
+              >
+                <option value="">Tất cả tài khoản</option>
+                {bankList.map((ba: any, i: number) => (
+                  <option key={i} value={ba.account_number}>
+                    {ba.bank} - {ba.account_number}
+                  </option>
+                ))}
+              </select>
+            );
+          })()}
         </div>
 
         {/* ── Card list (mobile-first) / Table (desktop) ── */}

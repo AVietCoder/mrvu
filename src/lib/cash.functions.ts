@@ -87,10 +87,8 @@ export const updateCashVoucher = createServerFn({ method: "POST" }).handler(
       receiver_customer_id: data.receiver_customer_id || null,
       note: data.note || null,
       accounting: data.accounting ?? true,
+      created_at: data.created_at || now(),  // ✅ Cập nhật thời gian khi edit
     };
-    if (data.created_at) {
-      updatePayload.created_at = data.created_at;
-    }
     await updateWhere("cash_vouchers", updatePayload, { id: data.id });
     return { ok: true };
   },
