@@ -1507,7 +1507,7 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                 {congNo > 0 && (
                   <div className="flex justify-between text-sm pt-1 border-t">
                     <span className="text-muted-foreground">Tính vào công nợ</span>
-                    <span className="font-semibold text-red-600">- {moneyFmtLocal(congNo)}</span>
+                    <span className="font-semibold text-red-600">+{moneyFmtLocal(congNo)}</span>
                   </div>
                 )}
                 {congNo === 0 && paid > 0 && (
