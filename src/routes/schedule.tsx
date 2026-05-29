@@ -65,7 +65,7 @@ function groupByDate(schedules: any[]) {
 }
 
 function Page() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin , activeBranchId } = useAuth();
   const listFn    = useServerFn(listSchedules);
   const createFn  = useServerFn(createSchedule);
   const approveFn = useServerFn(approveSchedule);

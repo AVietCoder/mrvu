@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { fetchAllRows, fetchRow, fetchRows, insertRow, now, supabase, uid, updateWhere, logActivity } from "./supabase";
+import { fetchAllRows, fetchRow, fetchRows, insertRow, deleteWhere, now, supabase, uid, updateWhere, logActivity } from "./supabase";
 
 type StockItem = { product_id: string; qty: number };
 
@@ -231,6 +231,41 @@ export const createTransfer = createServerFn({ method: "POST" })
 
     await logActivity({ action: "stock_transfer", detail: `Chuyển kho: ${data.from_branch} → ${data.to_branch} (${data.items.length} mặt hàng)${data.note ? ' — ' + data.note : ''}`, employee_id: data.created_by || null });
     return { id: tid };
+  });
+
+// Cập nhật SL sản phẩm trong phiếu chuyển kho (chỉ khi còn pending)
+export const updateTransferItems = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: { transfer_id: string; items: { product_id: string; qty: number }[] } }) => {
+    const transfer = await fetchRow<any>("stock_transfers", { eq: { id: data.transfer_id } });
+    if (!transfer) throw new Error("Không tìm thấy phiếu chuyển kho");
+    if (transfer.status !== "pending") throw new Error("Chỉ có thể chỉnh sửa phiếu đang chờ xác nhận");
+
+    // Lấy items cũ để hoàn tồn kho nguồn
+    const oldItems = await fetchRows<any>("stock_transfer_items", { eq: { transfer_id: data.transfer_id } });
+
+    // Hoàn lại tồn kho nguồn theo items cũ
+    for (const old of oldItems) {
+      await adjustStock(old.product_id, transfer.from_branch, Number(old.qty));
+    }
+
+    // Xóa items cũ
+    for (const old of oldItems) {
+      await deleteWhere("stock_transfer_items", { id: old.id });
+    }
+
+    // Thêm items mới + trừ tồn kho nguồn
+    for (const item of data.items) {
+      if (!item.product_id || item.qty <= 0) continue;
+      await insertRow("stock_transfer_items", {
+        id: uid(),
+        transfer_id: data.transfer_id,
+        product_id: item.product_id,
+        qty: Number(item.qty),
+      });
+      await adjustStock(item.product_id, transfer.from_branch, -Number(item.qty));
+    }
+
+    return { ok: true };
   });
 
 // Chi nhánh nhận bấm xác nhận → kho nhận tăng lên

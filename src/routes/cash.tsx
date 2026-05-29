@@ -277,7 +277,7 @@ function VoucherForm({
 
 // ═══════════════════════════════════════════════════════════════════════
 function Page() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin , activeBranchId } = useAuth();
   const qc = useQueryClient();
   const listFn = useServerFn(listCash);
   const createFn = useServerFn(createCashVoucher);
@@ -309,7 +309,7 @@ function Page() {
   const [fund, setFund] = useState<FundTab>("tien_mat");
   const [filterBranch, setFilterBranch] = useState<string>(() => {
     if (isAdmin || user?.permissions.includes("view_cash_all")) return "";
-    return user?.branch_ids?.[0] ?? "";
+    return activeBranchId ?? user?.branch_ids?.[0] ?? "";
   });
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"" | "thu" | "chi">("");

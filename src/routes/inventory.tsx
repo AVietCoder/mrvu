@@ -10,6 +10,7 @@ import {
   createTransfer,
   confirmTransfer,
   cancelTransfer,
+  updateTransferItems,
 } from "@/lib/inventory.functions";
 
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -102,13 +103,14 @@ function createTransferItem(
 }
 
 function Page() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, activeBranchId } = useAuth();
 
   const list = useServerFn(listInventory);
   const move = useServerFn(createMovement);
   const createTrf = useServerFn(createTransfer);
   const confirmTrf = useServerFn(confirmTransfer);
   const cancelTrf = useServerFn(cancelTransfer);
+  const updateTrfItems = useServerFn(updateTransferItems);
   const getSettingsFn = useServerFn(getSettings);
 
   const qc = useQueryClient();
@@ -145,7 +147,7 @@ function Page() {
   const [page, setPage] = useState(1);
 
   const [filterBranch, setFilterBranch] =
-    useState(user?.branch_ids?.[0] ?? "");
+    useState(() => activeBranchId ?? user?.branch_ids?.[0] ?? "");
 
   const [sortBy, setSortBy] =
     useState("name");
@@ -157,6 +159,12 @@ function Page() {
 
   const [voucherNote, setVoucherNote] =
     useState("");
+
+  // ── KiotViet-style transfer detail dialog ────────────────────────────
+  const [trfDetailOpen, setTrfDetailOpen] = useState(false);
+  const [trfDetailId, setTrfDetailId] = useState<string | null>(null);
+  const [trfEditItems, setTrfEditItems] = useState<TransferItem[]>([]);
+  const [trfSaving, setTrfSaving] = useState(false);
 
   const [inBranch, setInBranch] =
     useState("");
@@ -498,6 +506,52 @@ function Page() {
     }
   }
 
+  // Mở dialog chi tiết phiếu chuyển kho
+  function openTransferDetail(transfer: any) {
+    const items = ((data?.transfer_items ?? []) as any[])
+      .filter((i: any) => i.transfer_id === transfer.id)
+      .map((i: any) => ({ product_id: i.product_id, qty: i.qty }));
+    setTrfDetailId(transfer.id);
+    setTrfEditItems(items.length ? items : [createTransferItem()]);
+    setTrfDetailOpen(true);
+  }
+
+  async function handleTrfConfirm() {
+    if (!trfDetailId) return;
+    setTrfSaving(true);
+    try {
+      const valid = trfEditItems.filter((i) => i.product_id && i.qty > 0);
+      if (!valid.length) return toast.error("Cần ít nhất 1 sản phẩm hợp lệ");
+      // Cập nhật SL trước nếu có thay đổi
+      await updateTrfItems({ data: { transfer_id: trfDetailId, items: valid } });
+      // Xác nhận phiếu
+      await confirmTrf({ data: { transfer_id: trfDetailId } });
+      toast.success("Đã hoàn thành phiếu chuyển kho");
+      setTrfDetailOpen(false);
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Có lỗi xảy ra");
+    } finally {
+      setTrfSaving(false);
+    }
+  }
+
+  async function handleTrfCancel() {
+    if (!trfDetailId) return;
+    if (!confirm("Hủy phiếu chuyển kho này?")) return;
+    setTrfSaving(true);
+    try {
+      await cancelTrf({ data: { transfer_id: trfDetailId } });
+      toast.success("Đã hủy phiếu");
+      setTrfDetailOpen(false);
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Có lỗi xảy ra");
+    } finally {
+      setTrfSaving(false);
+    }
+  }
+
   function exportTransferTxt() {
     const lines = validTransferItems.map(
       (item) => {
@@ -704,108 +758,41 @@ function Page() {
 
       {pendingTransfers.length > 0 && (
         <Card className="mb-4 border-yellow-200 bg-yellow-50/50">
-          <div className="mb-2 font-medium text-yellow-800">
-            Phiếu chuyển kho chờ xác nhận (
-            {pendingTransfers.length})
+          <div className="mb-3 flex items-center gap-2">
+            <span className="font-semibold text-yellow-800">
+              Phiếu chuyển kho chờ xác nhận ({pendingTransfers.length})
+            </span>
+            <span className="text-xs text-yellow-600 bg-yellow-100 rounded-full px-2 py-0.5">Bấm vào phiếu để xem & chỉnh sửa</span>
           </div>
 
-          <div className="space-y-2">
-            {pendingTransfers.map(
-              (t: any) => {
-                const fromName =
-                  branches.find(
-                    (b) =>
-                      b.id ===
-                      t.from_branch
-                  )?.name ??
-                  t.from_branch;
-
-                const toName =
-                  branches.find(
-                    (b) =>
-                      b.id ===
-                      t.to_branch
-                  )?.name ??
-                  t.to_branch;
-
-                return (
-                  <div
-                    key={t.id}
-                    className="flex flex-col gap-3 rounded border bg-white px-3 py-2 text-sm md:flex-row md:items-center"
-                  >
-                    <div className="flex-1">
-                      <span className="font-medium">
-                        {fromName}
-                      </span>{" "}
-                      →{" "}
-                      <span className="font-medium">
-                        {toName}
-                      </span>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-green-300 text-green-700"
-                        onClick={async () => {
-                          await confirmTrf({
-                            data: {
-                              transfer_id:
-                                t.id,
-                            },
-                          });
-
-                          toast.success(
-                            "Đã xác nhận"
-                          );
-
-                          qc.invalidateQueries(
-                            {
-                              queryKey: [
-                                "inventory",
-                              ],
-                            }
-                          );
-                        }}
-                      >
-                        <CheckCircle2 className="mr-1 h-4 w-4" />
-                        Xác nhận
-                      </Button>
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-destructive/30 text-destructive"
-                        onClick={async () => {
-                          await cancelTrf({
-                            data: {
-                              transfer_id:
-                                t.id,
-                            },
-                          });
-
-                          toast.success(
-                            "Đã hủy"
-                          );
-
-                          qc.invalidateQueries(
-                            {
-                              queryKey: [
-                                "inventory",
-                              ],
-                            }
-                          );
-                        }}
-                      >
-                        <XCircle className="mr-1 h-4 w-4" />
-                        Hủy
-                      </Button>
-                    </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {pendingTransfers.map((t: any) => {
+              const fromName = branches.find((b: any) => b.id === t.from_branch)?.name ?? t.from_branch;
+              const toName   = branches.find((b: any) => b.id === t.to_branch)?.name ?? t.to_branch;
+              const itemCount = ((data?.transfer_items ?? []) as any[]).filter((i: any) => i.transfer_id === t.id).length;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => openTransferDetail(t)}
+                  className="text-left rounded-xl border bg-white hover:border-primary/40 hover:bg-primary/5 transition-all px-4 py-3 shadow-sm group"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className="text-xs font-mono text-muted-foreground">#{t.id.slice(-6).toUpperCase()}</span>
+                    <span className="text-xs text-muted-foreground">{new Date(t.created_at).toLocaleDateString("vi-VN")}</span>
                   </div>
-                );
-              }
-            )}
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <span className="text-blue-700 truncate">{fromName}</span>
+                    <span className="text-muted-foreground shrink-0">→</span>
+                    <span className="text-green-700 truncate">{toName}</span>
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">{itemCount} sản phẩm</span>
+                    <span className="text-xs text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">Mở phiếu →</span>
+                  </div>
+                  {t.note && <div className="mt-1 text-xs text-muted-foreground truncate">{t.note}</div>}
+                </button>
+              );
+            })}
           </div>
         </Card>
       )}
@@ -2124,6 +2111,106 @@ function Page() {
                 </div>
               </div>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Transfer Detail Dialog (KiotViet style) ─────────────────────── */}
+      <Dialog open={trfDetailOpen} onOpenChange={setTrfDetailOpen}>
+        <DialogContent className="max-w-lg rounded-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Repeat className="h-4 w-4 text-primary" />
+              Phiếu chuyển kho
+              {trfDetailId && (() => {
+                const t = (data?.transfers ?? []).find((x: any) => x.id === trfDetailId);
+                if (!t) return null;
+                const fromName = branches.find((b: any) => b.id === t.from_branch)?.name ?? t.from_branch;
+                const toName   = branches.find((b: any) => b.id === t.to_branch)?.name ?? t.to_branch;
+                return (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {fromName} → {toName}
+                  </span>
+                );
+              })()}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-auto space-y-3 pr-1">
+            {/* Header row */}
+            <div className="grid grid-cols-[1fr_80px_32px] gap-2 text-xs font-semibold text-muted-foreground px-1">
+              <span>Sản phẩm</span>
+              <span className="text-right">Số lượng</span>
+              <span></span>
+            </div>
+
+            {trfEditItems.map((item, idx) => {
+              const product = products.find((p: any) => p.id === item.product_id);
+              return (
+                <div key={idx} className="grid grid-cols-[1fr_80px_32px] gap-2 items-center">
+                  <SearchableSelect
+                    value={item.product_id}
+                    onChange={(v) => {
+                      const next = [...trfEditItems];
+                      next[idx] = { ...item, product_id: v };
+                      setTrfEditItems(next);
+                    }}
+                    emptyLabel="— Chọn SP —"
+                    placeholder="Tìm sản phẩm..."
+                    options={products.map((p: any) => ({ value: p.id, label: p.name, sub: p.sku ?? undefined }))}
+                  />
+                  <Input
+                    className="text-right h-9 font-mono"
+                    value={item.qty}
+                    onChange={(e) => {
+                      const qty = Number(e.target.value.replace(/\D/g, "")) || 0;
+                      const next = [...trfEditItems];
+                      next[idx] = { ...item, qty };
+                      setTrfEditItems(next);
+                    }}
+                    onFocus={(e) => e.target.select()}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setTrfEditItems(trfEditItems.filter((_, i) => i !== idx))}
+                    className="h-8 w-8 flex items-center justify-center rounded text-destructive hover:bg-destructive/10 transition-colors"
+                    disabled={trfEditItems.length === 1}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              );
+            })}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full border-dashed"
+              onClick={() => setTrfEditItems([...trfEditItems, createTransferItem(products[0]?.id ?? "", 1)])}
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> Thêm sản phẩm
+            </Button>
+          </div>
+
+          {/* Footer actions */}
+          <div className="border-t pt-3 flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/5"
+              onClick={handleTrfCancel}
+              disabled={trfSaving}
+            >
+              <XCircle className="h-4 w-4 mr-1.5" /> Hủy phiếu
+            </Button>
+            <Button
+              className="flex-1 font-bold"
+              onClick={handleTrfConfirm}
+              disabled={trfSaving}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+              {trfSaving ? "Đang xử lý..." : "Hoàn thành"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

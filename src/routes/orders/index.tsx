@@ -224,7 +224,7 @@ function printOrderSlip({
 }
 
 function Page() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, activeBranchId } = useAuth();
   const navigate = useNavigate();
   const listFn = useServerFn(listOrders);
   const create = useServerFn(createOrder);
@@ -316,7 +316,7 @@ function Page() {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("newest");
   const [filterStatus, setFilterStatus] = useState("");
-  const [filterBranch, setFilterBranch] = useState("");
+  const [filterBranch, setFilterBranch] = useState(() => activeBranchId ?? "");
 
   const customerMap = useMemo(
     () => new Map((data?.customers ?? []).map((c: any) => [c.id, c])),
@@ -513,7 +513,7 @@ function Page() {
 
     setItems([]);
     setCustomer("");
-    setBranch(allowedBranches[0]?.id ?? "");
+    setBranch(activeBranchId ?? allowedBranches[0]?.id ?? "");
     setEmployee(user?.id ?? "");
     setStatus("reserved");
     setPaymentMethod("tien_mat");

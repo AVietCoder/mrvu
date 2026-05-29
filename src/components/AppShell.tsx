@@ -10,6 +10,7 @@ import type { Permission } from "@/lib/types";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getSettings } from "@/lib/settings.functions";
+import { getFormOptionsFn } from "@/lib/auth.functions";
 
 type NavItem = {
   to: string;
@@ -38,7 +39,7 @@ import { PageLoader } from "@/components/Spinner";
 
 export function AppShell({ children, title, loading }: { children: ReactNode; title: string; loading?: boolean }) {
   const loc = useLocation();
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, activeBranchId, setActiveBranchId } = useAuth();
   const navigate = useNavigate();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -53,6 +54,18 @@ export function AppShell({ children, title, loading }: { children: ReactNode; ti
     staleTime: 60_000,
   });
   const brandName = settings?.site_name?.trim() || "Mr.Vũ";
+
+  // Branches list for switcher label
+  const getOptionsFn = useServerFn(getFormOptionsFn);
+  const { data: branchesData } = useQuery({
+    queryKey: ["branches_list"],
+    queryFn: () => getOptionsFn(),
+    staleTime: 300_000,
+    enabled: mounted,
+  });
+  const branchesMap = new Map<string, string>(
+    ((branchesData?.branches ?? []) as any[]).map((b: any) => [b.id, b.name])
+  );
   const logoUrl = settings?.logo_url || "";
   const primaryColor = settings?.primary_color || "";
 
@@ -131,7 +144,7 @@ export function AppShell({ children, title, loading }: { children: ReactNode; ti
             <div className="font-semibold leading-tight truncate">{brandName}</div>
             <div className="text-xs text-muted-foreground">
               {mounted && user
-                ? (user.branch_ids.length === 0 ? "Tất cả chi nhánh" : `${user.branch_ids.length} chi nhánh`)
+                ? (isAdmin ? "Quản trị viên" : activeBranchId ? "Chi nhánh đang chọn" : "Hệ thống")
                 : "Hệ thống"}
             </div>
           </div>
@@ -239,10 +252,20 @@ export function AppShell({ children, title, loading }: { children: ReactNode; ti
             </div>
           </button>
           <h1 className="text-lg font-semibold flex-1">{title}</h1>
-          {mounted && user && !isAdmin && user.branch_ids.length > 0 && (
-            <span className="text-xs bg-primary/10 text-primary rounded-full px-2 py-0.5">
-              {user.branch_ids.length} chi nhánh
-            </span>
+          {mounted && user && !isAdmin && user.branch_ids.length > 1 && (
+            <div className="relative">
+              <select
+                className="text-xs bg-primary/10 text-primary rounded-full px-2.5 py-1 border-none outline-none cursor-pointer appearance-none pr-6 font-medium"
+                value={activeBranchId ?? ""}
+                onChange={(e) => setActiveBranchId(e.target.value)}
+                title="Đổi chi nhánh"
+              >
+                {user.branch_ids.map((id: string) => (
+                  <option key={id} value={id}>{branchesMap.get(id) ?? id}</option>
+                ))}
+              </select>
+              <Building2 className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-primary pointer-events-none" />
+            </div>
           )}
         </header>
         <div className="p-4 md:p-6 flex-1">{loading ? <PageLoader /> : children}</div>
