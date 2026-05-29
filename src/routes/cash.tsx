@@ -288,7 +288,7 @@ function Page() {
   const getSettingsFn = useServerFn(getSettings);
 
   const { data, isLoading } = useQuery({ queryKey: ["cash"], queryFn: () => listFn() });
-  const { data: siteSettings } = useQuery({ queryKey: ["settings"], queryFn: () => getSettingsFn() });
+  const { data: siteSettings } = useQuery({ queryKey: ["site_settings"], queryFn: () => getSettingsFn() });
 
   const canViewAll = isAdmin || user?.permissions.includes("view_cash_all");
   const canViewBranch =
@@ -669,6 +669,7 @@ function Page() {
               const staffName = isThu ? getUserName(v.collector_user_id) : getUserName(v.payer_user_id);
               const customerName = isThu ? getCustomerName(v.payer_customer_id) : getCustomerName(v.receiver_customer_id);
               const isSelected = selectedVoucher?.id === v.id;
+              const canEditVoucher = isAdmin || v.created_by === user?.id;
               return (
                 <div
                   key={v.id}
@@ -717,12 +718,19 @@ function Page() {
                       </div>
                       {isActive && (
                         <div className="flex gap-2 pt-1">
-                          <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={(e) => { e.stopPropagation(); openEditDialog(v); }}>
-                            <Pencil className="h-3 w-3 mr-1" />Sửa
-                          </Button>
-                          <Button size="sm" variant="outline" className="flex-1 h-8 text-xs text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setSelectedVoucher(v); setOpenCancel(true); }}>
-                            <X className="h-3 w-3 mr-1" />Hủy phiếu
-                          </Button>
+                          {canEditVoucher && (
+                            <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={(e) => { e.stopPropagation(); openEditDialog(v); }}>
+                              <Pencil className="h-3 w-3 mr-1" />Sửa
+                            </Button>
+                          )}
+                          {canEditVoucher && (
+                            <Button size="sm" variant="outline" className="flex-1 h-8 text-xs text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setSelectedVoucher(v); setOpenCancel(true); }}>
+                              <X className="h-3 w-3 mr-1" />Hủy phiếu
+                            </Button>
+                          )}
+                          {!canEditVoucher && (
+                            <span className="text-xs text-muted-foreground italic">Chỉ người tạo mới được sửa/hủy</span>
+                          )}
                         </div>
                       )}
                       {!isActive && (
@@ -761,6 +769,7 @@ function Page() {
                     const staffName = isThu ? getUserName(v.collector_user_id) : getUserName(v.payer_user_id);
                     const customerName = isThu ? getCustomerName(v.payer_customer_id) : getCustomerName(v.receiver_customer_id);
                     const isSelected = selectedVoucher?.id === v.id;
+                    const canEditVoucher = isAdmin || v.created_by === user?.id;
                     return (
                       <>
                         <tr
@@ -799,14 +808,21 @@ function Page() {
                           <td className="px-4 py-3 text-center">
                             {isActive && (
                               <div className="flex items-center justify-center gap-1">
-                                <button type="button" title="Sửa" onClick={(e) => { e.stopPropagation(); openEditDialog(v); }}
-                                  className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </button>
-                                <button type="button" title="Hủy phiếu" onClick={(e) => { e.stopPropagation(); setSelectedVoucher(v); setOpenCancel(true); }}
-                                  className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
+                                {canEditVoucher && (
+                                  <button type="button" title="Sửa" onClick={(e) => { e.stopPropagation(); openEditDialog(v); }}
+                                    className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                                {canEditVoucher && (
+                                  <button type="button" title="Hủy phiếu" onClick={(e) => { e.stopPropagation(); setSelectedVoucher(v); setOpenCancel(true); }}
+                                    className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                                {!canEditVoucher && (
+                                  <span className="text-xs text-muted-foreground/50 px-1" title="Chỉ người tạo mới được sửa">🔒</span>
+                                )}
                               </div>
                             )}
                             {!isActive && <XCircle className="h-4 w-4 text-red-400 mx-auto" />}

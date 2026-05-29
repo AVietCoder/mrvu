@@ -146,7 +146,7 @@ function AdminPage() {
   async function savePrintTemplates() {
     setTemplateSaving(true);
     try {
-      await updateSettingsFn({ data: { print_templates: JSON.stringify(printTpl) } as any });
+      await updateSettingsFn({ data: { print_templates: JSON.stringify(printTpl) } });
       qc.invalidateQueries({ queryKey: ["site_settings"] });
       setTemplateSaved(true);
       setTimeout(() => setTemplateSaved(false), 2500);
@@ -579,80 +579,120 @@ function AdminPage() {
                   </div>
                 </div>
 
-                {/* RIGHT: live preview */}
+                {/* RIGHT: live preview — matches actual print output */}
                 {previewTpl && (
-                  <div className="rounded-xl border bg-white shadow-sm overflow-auto text-[13px] font-sans text-gray-800" style={{minHeight:380}}>
-                    {/* Preview header */}
-                    <div className="flex items-center gap-3 px-5 pt-5 pb-3 border-b">
-                      {logoUrl && <img src={logoUrl} alt="" className="h-10 object-contain" />}
-                      <div>
-                        {siteName && <div className="font-bold text-base">{siteName.toUpperCase()}</div>}
-                        {address && <div className="text-xs text-gray-500">{address}</div>}
-                        {phone && <div className="text-xs text-gray-500">ĐT: {phone}</div>}
+                  <div className="rounded-xl border bg-white shadow overflow-auto" style={{minHeight:420, fontFamily:"Arial,sans-serif", fontSize:"12px", color:"#1a1a1a"}}>
+                    {key !== "email_order" ? (
+                      <>
+                        {/* Header */}
+                        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",padding:"16px 20px 12px",borderBottom:"2px solid #e5e7eb"}}>
+                          <div>
+                            {logoUrl && <img src={logoUrl} alt="" style={{height:44,objectFit:"contain",marginBottom:4,display:"block"}} />}
+                            <div style={{fontSize:15,fontWeight:700,color:"#1d4ed8"}}>{siteName || "Tên cửa hàng"}</div>
+                            <div style={{fontSize:10,color:"#6b7280",lineHeight:1.7}}>
+                              {address && <div>📍 {address}</div>}
+                              {phone && <span>📞 {phone}</span>}
+                              {phone && email && <span> &nbsp;|&nbsp; </span>}
+                              {email && <span>✉ {email}</span>}
+                              {taxCode && <div>MST: {taxCode}</div>}
+                            </div>
+                          </div>
+                          <div style={{textAlign:"right"}}>
+                            <div style={{fontSize:14,fontWeight:800,textTransform:"uppercase",lineHeight:1.2}}>
+                              {(getTplField(key,"header")||TEMPLATE_DEFAULTS[key].header).replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
+                            </div>
+                            <div style={{fontSize:10,color:"#6b7280",marginTop:5,lineHeight:1.8}}>
+                              <div><strong>Mã phiếu:</strong> HD000001</div>
+                              <div><strong>Ngày:</strong> {new Date().toLocaleDateString("vi-VN")}</div>
+                            </div>
+                          </div>
+                        </div>
+                        {/* Info grid */}
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 20px",padding:"10px 20px",background:"#f9fafb",borderBottom:"1px solid #e5e7eb",fontSize:11}}>
+                          <div><span style={{color:"#6b7280",textTransform:"uppercase",fontSize:9.5,letterSpacing:"0.3px"}}>Khách hàng</span><div style={{fontWeight:600}}>Nguyễn Văn A — 0909 123 456</div></div>
+                          <div><span style={{color:"#6b7280",textTransform:"uppercase",fontSize:9.5}}>Chi nhánh</span><div style={{fontWeight:600}}>Cửa hàng chính</div></div>
+                          <div><span style={{color:"#6b7280",textTransform:"uppercase",fontSize:9.5}}>Nhân viên</span><div style={{fontWeight:600}}>Nhân viên A</div></div>
+                          <div><span style={{color:"#6b7280",textTransform:"uppercase",fontSize:9.5}}>Hình thức TT</span><div style={{fontWeight:600}}>Tiền mặt</div></div>
+                        </div>
+                        {/* Table */}
+                        <div style={{padding:"10px 20px"}}>
+                          <table style={{width:"100%",borderCollapse:"collapse",marginBottom:10}}>
+                            <thead><tr style={{background:"#1d4ed8",color:"#fff"}}>
+                              <th style={{padding:"7px 6px",fontSize:11,width:30,textAlign:"center"}}>STT</th>
+                              <th style={{padding:"7px 6px",fontSize:11}}>Sản phẩm</th>
+                              <th style={{padding:"7px 6px",fontSize:11,width:40,textAlign:"center"}}>SL</th>
+                              <th style={{padding:"7px 6px",fontSize:11,width:100,textAlign:"right"}}>Đơn giá</th>
+                              <th style={{padding:"7px 6px",fontSize:11,width:110,textAlign:"right"}}>Thành tiền</th>
+                            </tr></thead>
+                            <tbody>
+                              <tr><td style={{padding:"6px",borderBottom:"1px solid #e5e7eb",textAlign:"center"}}>1</td><td style={{padding:"6px",borderBottom:"1px solid #e5e7eb"}}>Quạt trần MR.VŨ 120cm</td><td style={{padding:"6px",borderBottom:"1px solid #e5e7eb",textAlign:"center"}}>2</td><td style={{padding:"6px",borderBottom:"1px solid #e5e7eb",textAlign:"right"}}>1.800.000</td><td style={{padding:"6px",borderBottom:"1px solid #e5e7eb",textAlign:"right",fontWeight:600}}>3.600.000</td></tr>
+                              <tr><td style={{padding:"6px",textAlign:"center"}}>2</td><td style={{padding:"6px"}}>Quạt đứng MR.VŨ Pro</td><td style={{padding:"6px",textAlign:"center"}}>1</td><td style={{padding:"6px",textAlign:"right"}}>950.000</td><td style={{padding:"6px",textAlign:"right",fontWeight:600}}>950.000</td></tr>
+                            </tbody>
+                          </table>
+                          {/* Totals */}
+                          <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
+                            <div style={{minWidth:220,border:"1px solid #e5e7eb",borderRadius:5,overflow:"hidden"}}>
+                              <div style={{display:"flex",justifyContent:"space-between",padding:"5px 12px",fontSize:11,borderBottom:"1px solid #f3f4f6"}}><span>Tổng cộng</span><span style={{fontWeight:700}}>4.550.000 ₫</span></div>
+                              <div style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",fontSize:13,fontWeight:700,background:"#1d4ed8",color:"#fff"}}><span>Khách cần trả</span><span>4.550.000 ₫</span></div>
+                            </div>
+                          </div>
+                          {/* Checklist — only for order_invoice */}
+                          {key === "order_invoice" && (
+                            <div style={{border:"1px solid #e5e7eb",borderRadius:5,padding:"8px 12px",marginBottom:10,fontSize:11}}>
+                              <div style={{fontWeight:700,marginBottom:6}}>Xác nhận bàn giao:</div>
+                              {["Đã giao hàng đúng mẫu và đầy đủ phụ kiện","Đã lắp đặt hoàn thiện, quạt chạy ổn định","Đã hướng dẫn sử dụng và bảo quản","Đã thanh toán đúng số tiền trên phiếu"].map(item => (
+                                <div key={item} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                                  <span style={{width:11,height:11,border:"1.5px solid #9ca3af",borderRadius:2,display:"inline-block",flexShrink:0}} />
+                                  <span>{item}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* Signatures */}
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,textAlign:"center",fontSize:10,borderTop:"1px solid #e5e7eb",paddingTop:8,marginBottom:10}}>
+                            {["Kỹ thuật","Nhân viên","Khách hàng","Thủ kho"].map(r => (
+                              <div key={r}>
+                                <div style={{fontWeight:700,marginBottom:2}}>{r}</div>
+                                <div style={{color:"#9ca3af",marginBottom:28}}>(Ký, ghi rõ họ tên)</div>
+                                <div style={{borderTop:"1px dashed #d1d5db",paddingTop:3,color:"#d1d5db"}}>___________</div>
+                              </div>
+                            ))}
+                          </div>
+                          {/* Warranty */}
+                          {getTplField(key,"showWarranty") && (getTplField(key,"warranty")||TEMPLATE_DEFAULTS[key].warranty) && (
+                            <div style={{padding:"8px 12px",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:5,fontSize:10,fontWeight:700,textTransform:"uppercase",lineHeight:1.7,color:"#9a3412",marginBottom:8}}>
+                              ⚠ {(getTplField(key,"warranty")||TEMPLATE_DEFAULTS[key].warranty).replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
+                            </div>
+                          )}
+                          {/* Footer */}
+                          {(getTplField(key,"footer")||TEMPLATE_DEFAULTS[key].footer) && (
+                            <div style={{textAlign:"center",fontSize:11,color:"#9ca3af",borderTop:"1px solid #f3f4f6",paddingTop:8,paddingBottom:8}}>
+                              {(getTplField(key,"footer")||TEMPLATE_DEFAULTS[key].footer).replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      /* Email preview */
+                      <div style={{padding:20}}>
+                        <div style={{background:"#f3f4f6",borderRadius:5,padding:"8px 12px",marginBottom:12,fontSize:11}}>
+                          <strong>Tiêu đề:</strong> {(getTplField(key,"emailSubject")||TEMPLATE_DEFAULTS[key].emailSubject||"").replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ").replace("{Ma_Don_Hang}","HD000001").replace("{Khach_Hang}","Nguyễn Văn A")}
+                        </div>
+                        <div style={{border:"1px solid #e5e7eb",borderRadius:5,padding:16}}>
+                          <div style={{marginBottom:8}}>Kính gửi: <strong>Nguyễn Văn A</strong>,</div>
+                          <div style={{marginBottom:8,lineHeight:1.7}}>Đơn hàng <strong>HD000001</strong> của bạn đã được ghi nhận.</div>
+                          <div style={{background:"#f9fafb",borderRadius:4,padding:"8px 12px",marginBottom:8,fontSize:11}}>
+                            <div>Sản phẩm: Quạt trần MR.VŨ 120cm x2 — 3.600.000 ₫</div>
+                            <div style={{fontWeight:700,marginTop:4}}>Tổng: 4.550.000 ₫</div>
+                          </div>
+                          {(getTplField(key,"footer")||TEMPLATE_DEFAULTS[key].footer) && (
+                            <div style={{borderTop:"1px solid #e5e7eb",paddingTop:8,fontSize:10,color:"#9ca3af"}}>
+                              {(getTplField(key,"footer")||TEMPLATE_DEFAULTS[key].footer).replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div className="px-5 pt-4">
-                      <div className="text-center mb-3">
-                        <div className="font-bold text-base uppercase tracking-wide">
-                          {(getTplField(key,"header") || TEMPLATE_DEFAULTS[key].header).replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">Ngày: 26/05/2026 &nbsp;|&nbsp; Số phiếu: HD000001</div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                        <div><strong>Khách hàng:</strong> Nguyễn Văn A</div>
-                        <div><strong>Điện thoại:</strong> 0909 123 456</div>
-                        <div><strong>Địa chỉ:</strong> 123 Đường ABC, TP.HCM</div>
-                        <div><strong>Chi nhánh:</strong> Cửa hàng chính</div>
-                      </div>
-                      <table className="w-full text-xs border-collapse mb-3" style={{borderTop:"1px solid #ddd"}}>
-                        <thead><tr className="bg-gray-50">
-                          <th className="border border-gray-200 px-2 py-1 text-left">STT</th>
-                          <th className="border border-gray-200 px-2 py-1 text-left">Tên hàng hóa</th>
-                          <th className="border border-gray-200 px-2 py-1 text-center">SL</th>
-                          <th className="border border-gray-200 px-2 py-1 text-right">Đơn giá</th>
-                          <th className="border border-gray-200 px-2 py-1 text-right">Thành tiền</th>
-                        </tr></thead>
-                        <tbody>
-                          <tr><td className="border border-gray-200 px-2 py-1 text-center">1</td><td className="border border-gray-200 px-2 py-1">Quạt trần MR.VŨ 120cm</td><td className="border border-gray-200 px-2 py-1 text-center">2</td><td className="border border-gray-200 px-2 py-1 text-right">1.800.000</td><td className="border border-gray-200 px-2 py-1 text-right">3.600.000</td></tr>
-                          <tr><td className="border border-gray-200 px-2 py-1 text-center">2</td><td className="border border-gray-200 px-2 py-1">Quạt đứng MR.VŨ Pro</td><td className="border border-gray-200 px-2 py-1 text-center">1</td><td className="border border-gray-200 px-2 py-1 text-right">950.000</td><td className="border border-gray-200 px-2 py-1 text-right">950.000</td></tr>
-                        </tbody>
-                      </table>
-                      <div className="text-right text-xs space-y-0.5 mb-3">
-                        <div>Tổng tiền: <strong>4.550.000 ₫</strong></div>
-                        <div>Chiết khấu: 0 ₫</div>
-                        <div className="text-base font-bold text-green-700">Còn lại: 4.550.000 ₫</div>
-                      </div>
-                      {/* Signatures */}
-                      {key !== "email_order" && (
-                        <div className="grid grid-cols-4 gap-2 text-center text-xs border-t pt-3 mb-3">
-                          {["Kỹ thuật","Nhân viên","Khách hàng","Thủ kho"].map(r => (
-                            <div key={r}><div className="font-medium">{r}</div><div className="text-gray-400 text-[10px]">(Ký, ghi rõ họ tên)</div><div className="mt-8 border-t border-dashed border-gray-300 pt-1 text-gray-300">__________</div></div>
-                          ))}
-                        </div>
-                      )}
-                      {/* Checklist for order */}
-                      {key === "order_invoice" && (
-                        <div className="border rounded-lg p-3 mb-3 text-xs">
-                          <div className="font-medium mb-2">Vui lòng chọn nội dung dưới đây</div>
-                          {["Đã giao hàng đúng mẫu và đầy đủ phụ kiện","Đã lắp đặt hoàn thiện, Quạt chạy ổn định","Đã hướng dẫn sử dụng","Đã thanh toán tiền mặt theo số tiền trên phiếu"].map(item => (
-                            <div key={item} className="flex items-center gap-2 mb-1"><span className="w-3.5 h-3.5 border border-gray-400 rounded-sm inline-block" />{item}</div>
-                          ))}
-                          <div className="flex justify-between mt-2"><span>Khách hàng xác nhận</span><span>Ho tên: ___________</span></div>
-                        </div>
-                      )}
-                      {/* Warranty note */}
-                      {getTplField(key, "showWarranty") && getTplField(key, "warranty") && (
-                        <div className="text-xs font-semibold border-t pt-2 mb-2 uppercase leading-relaxed">
-                          {(getTplField(key,"warranty")||"").replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
-                        </div>
-                      )}
-                      {/* Footer */}
-                      {(getTplField(key,"footer")||TEMPLATE_DEFAULTS[key].footer) && (
-                        <div className="text-center text-xs text-gray-500 border-t pt-2 pb-4">
-                          {(getTplField(key,"footer")||TEMPLATE_DEFAULTS[key].footer).replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
                 )}
               </div>

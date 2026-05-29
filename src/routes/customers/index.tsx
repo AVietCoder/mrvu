@@ -477,17 +477,17 @@ function CustomersPage() {
                   <td className="max-w-[200px] truncate pr-3 text-xs text-muted-foreground">
                     {[c.address, c.ward, c.province].filter(Boolean).join(", ") || "—"}
                   </td>
-                  <td className="pr-3 text-right font-medium text-green-600">{fmt(c.total_buy || 0)}</td>
+                  <td className="pr-3 text-right font-medium text-green-600">{fmt(c.total_buy)}</td>
                   <td
   className={"pr-3 text-right font-medium text-destructive"}
 >
   {(() => {
     const d = getDisplayDebt(c.id);
     return d < 0
-      ? <span className="text-green-600">{fmt(Math.abs(d))} (thừa)</span>
+      ? <span className="text-destructive font-semibold">{fmt(d)}</span>
       : d > 0
       ? <span className="text-destructive font-semibold">{fmt(d)}</span>
-      : <span className="text-muted-foreground">{fmt(0)}</span>;
+      : <span className="text-destructive font-semibold">{fmt(0)}</span>;
   })()}
 </td>
                   <td className="text-right" onClick={(e) => e.stopPropagation()}>

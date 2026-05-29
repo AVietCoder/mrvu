@@ -12,6 +12,7 @@ export type SiteSettings = {
   tax_code: string;
   admin_email: string;
   bank_accounts: string; // JSON: [{bank, account_number, account_name, note}]
+  print_templates: string; // JSON: { order_invoice, import_slip, transfer_slip, email_order }
 };
 
 const DEFAULTS: SiteSettings = {
@@ -24,6 +25,7 @@ const DEFAULTS: SiteSettings = {
   tax_code: "",
   admin_email: "",
   bank_accounts: "[]",
+  print_templates: "{}",
 };
 
 export const getSettings = createServerFn({ method: "GET" }).handler(async () => {

@@ -106,10 +106,19 @@ const STATUS_COLOR: Record<string, string> = {
 
 function buildOrderPrintHtml({
   order, custName, custPhone, custAddress, branchName, empName,
-  items, products, moneyFmt, siteSettings: ss,
+  items, products, moneyFmt, siteSettings: ss, tpl,
 }: any) {
   const statusLabels: Record<string, string> = { completed: "Hoàn tất", reserved: "Đặt hàng", draft: "Nháp" };
   const pmLabel = order.payment_method === "ngan_hang" ? "Chuyển khoản" : "Tiền mặt";
+  // Resolve admin print templates
+  const _tplObj = tpl ?? {};
+  const _siteName = ss?.site_name ?? "Mr.Vũ";
+  const _tplHeader = (_tplObj.header ?? "PHIẾU XUẤT KHO KIỂM BẢO HÀNH").replace("{Ten_Cua_Hang}", _siteName);
+  const _tplFooter = (_tplObj.footer ?? `Quạt trần ${_siteName} chân thành cảm ơn sự tin tưởng của Quý khách hàng!`).replace("{Ten_Cua_Hang}", _siteName);
+  const _showWarranty = _tplObj.showWarranty !== false;
+  const _tplWarranty = _showWarranty
+    ? ((_tplObj.warranty ?? `LƯU Ý: ${_siteName} KHUYẾN CÁO CẦN KIỂM TRA QUẠT ĐỊNH KỲ ÍT NHẤT 6 THÁNG/LẦN ĐỂ ĐẢM BẢO AN TOÀN TRONG QUÁ TRÌNH SỬ DỤNG.`).replace("{Ten_Cua_Hang}", _siteName))
+    : "";
   const rows = items.map((item: any, i: number) => {
     const prod = products.find((p: any) => p.id === item.product_id);
     const lineTotal = item.qty * item.unit_price - (item.discount ?? 0);
@@ -160,7 +169,7 @@ th{padding:10px 8px;font-size:12px;font-weight:600}
     </div>
   </div>
   <div>
-    <div class="inv-title">Phiếu xuất kho<br>kiểm bảo hành</div>
+    <div class="inv-title">${_tplHeader}</div>
     <div class="inv-meta">
       <strong>Mã phiếu:</strong> ${order.code ?? ("HD" + Date.now().toString().slice(-6))}<br>
       <strong>Ngày:</strong> ${order.created_at ? new Date(order.created_at).toLocaleDateString("vi-VN") : new Date().toLocaleDateString("vi-VN")}<br>
@@ -219,8 +228,8 @@ ${order.note ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-r
     </div>`).join("")}
 </div>
 
-<div class="warranty">⚠ LƯU Ý: ${ss?.site_name ?? "Mr.Vũ"} khuyến cáo cần kiểm tra quạt định kỳ ít nhất 6 tháng/lần để đảm bảo an toàn trong quá trình sử dụng.</div>
-<div class="footer">${ss?.site_name ?? "Mr.Vũ"} — Cảm ơn Quý khách đã tin tưởng sử dụng dịch vụ!</div>
+${_tplWarranty ? `<div class="warranty">⚠ ${_tplWarranty}</div>` : ""}
+${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
 </div></body></html>`;
 }
 
@@ -252,6 +261,7 @@ function printOrderSlip({
     products: data?.products ?? [],
     moneyFmt,
     siteSettings,
+    tpl: tpl ?? (() => { try { return JSON.parse((siteSettings as any)?.print_templates || "{}").order_invoice ?? {}; } catch { return {}; } })(),
   }));
   pw.document.close();
   setTimeout(() => pw.print(), 300);

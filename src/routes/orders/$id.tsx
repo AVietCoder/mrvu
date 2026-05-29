@@ -456,6 +456,16 @@ function OrderDetailPage() {
     const branchObj = (data?.branches  ?? []).find((b: any) => b.id === order.branch_id);
     const empObj    = (data?.employees ?? []).find((e: any) => e.id === order.employee_id);
     const ss = siteSettings as any;
+    // Load print template from admin settings
+    const _tpls = (() => { try { return JSON.parse(ss?.print_templates || "{}"); } catch { return {}; } })();
+    const _tpl = _tpls["order_invoice"] ?? {};
+    const _siteName = ss?.site_name ?? "Mr.Vũ";
+    const _tplHeader = (_tpl.header ?? "PHIẾU XUẤT KHO KIỂM BẢO HÀNH").replace("{Ten_Cua_Hang}", _siteName);
+    const _tplFooter = (_tpl.footer ?? `Quạt trần ${_siteName} chân thành cảm ơn sự tin tưởng của Quý khách hàng!`).replace("{Ten_Cua_Hang}", _siteName);
+    const _showWarranty = _tpl.showWarranty !== false;
+    const _tplWarranty = _showWarranty
+      ? ((_tpl.warranty ?? `LƯU Ý: ${_siteName} KHUYẾN CÁO CẦN KIỂM TRA QUẠT ĐỊNH KỲ ÍT NHẤT 6 THÁNG/LẦN ĐỂ ĐẢM BẢO AN TOÀN TRONG QUÁ TRÌNH SỬ DỤNG.`).replace("{Ten_Cua_Hang}", _siteName))
+      : "";
 
     const rows = orderItems.map((item: any, i: number) => {
       const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
@@ -508,7 +518,7 @@ thead tr{background:#1d4ed8;color:#fff}th{padding:10px 8px;font-size:12px;font-w
     </div>
   </div>
   <div>
-    <div class="inv-title">Phiếu xuất kho<br>kiểm bảo hành</div>
+    <div class="inv-title">${_tplHeader}</div>
     <div class="inv-meta">
       <strong>Mã phiếu:</strong> ${order.code}<br>
       <strong>Ngày:</strong> ${new Date(order.created_at).toLocaleDateString("vi-VN")}<br>
@@ -558,8 +568,8 @@ ${order.note ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-r
       <div style="border-top:1px dashed #d1d5db;padding-top:4px;font-size:11px;color:#d1d5db">___________</div>
     </div>`).join("")}
 </div>
-<div class="warranty">⚠ LƯU Ý: ${ss?.site_name ?? "Mr.Vũ"} khuyến cáo cần kiểm tra quạt định kỳ ít nhất 6 tháng/lần để đảm bảo an toàn.</div>
-<div class="footer">${ss?.site_name ?? "Mr.Vũ"} — Cảm ơn Quý khách đã tin tưởng sử dụng dịch vụ!</div>
+${_tplWarranty ? `<div class="warranty">⚠ ${_tplWarranty}</div>` : ""}
+${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
 </div></body></html>`;
 
     const pw = window.open("", "_blank");
