@@ -626,7 +626,12 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
         ? "ngan_hang" : "tien_mat";
 
     if (data.status === "completed" && currentOrder.status !== "completed") {
-      await applyCompletedOrderSideEffects(currentOrder, currentItems as any);
+      // ✅ FIX: truyền effectivePaid vào để tính đúng owed = total - deposit - effectivePaid
+      // currentOrder.paid là giá trị cũ trong DB (đọc TRƯỚC khi updateWhere), dùng nó sẽ tính sai debt
+      await applyCompletedOrderSideEffects(
+        { ...currentOrder, paid: effectivePaid },
+        currentItems as any
+      );
 
       // Tạo phiếu thu = đúng số tiền khách trả lần này (effectivePaid)
       // Phần còn thiếu (nếu có) sẽ tự động cộng vào công nợ qua applyCompletedOrderSideEffects
