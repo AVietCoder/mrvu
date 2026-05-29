@@ -265,18 +265,31 @@ async function applyCompletedOrderSideEffects(order: any, lineItems: LineItem[])
       select: "debt, total_buy",
       limit: 1,
     });
-    const currentDebt = customerRows[0]?.debt ?? 0;
     const currentTotalBuy = customerRows[0]?.total_buy ?? 0;
-    const owed = Math.max(0, Number(order.total || 0) - Number(order.deposit || 0) - Number(order.paid || 0));
     const orderTotal = Number(order.total || 0);
 
-    const updates: Record<string, number> = {
+    // ✅ Tính lại debt từ transactions thực tế (không dùng currentDebt cũ trong DB)
+    const [completedOrdersRows, allReceiptsData] = await Promise.all([
+      fetchRows<{ total: number; id: string }>("orders", {
+        eq: { customer_id: order.customer_id, status: "completed" },
+        select: "total, id",
+      }),
+      supabase
+        .from("cash_vouchers")
+        .select("amount")
+        .eq("payer_customer_id", order.customer_id)
+        .eq("type", "thu")
+        .neq("status", "cancelled"),
+    ]);
+    // Tổng chi tiêu = tất cả đơn completed (bao gồm đơn hiện tại nếu vừa insert)
+    const totalSpent = completedOrdersRows.reduce((s, o) => s + Number(o.total || 0), 0);
+    const totalPaid = (allReceiptsData.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+    const newDebt = totalSpent - totalPaid;
+
+    await updateWhere("customers", {
       total_buy: currentTotalBuy + orderTotal,
-    };
-    if (owed > 0) {
-      updates.debt = currentDebt + owed;
-    }
-    await updateWhere("customers", updates, { id: order.customer_id });
+      debt: newDebt,
+    }, { id: order.customer_id });
   }
 }
 
@@ -295,18 +308,30 @@ async function revertCompletedOrderSideEffects(order: any, lineItems: LineItem[]
       select: "debt, total_buy",
       limit: 1,
     });
-    const currentDebt = customerRows[0]?.debt ?? 0;
     const currentTotalBuy = customerRows[0]?.total_buy ?? 0;
-    const owed = Math.max(0, Number(order.total || 0) - Number(order.deposit || 0) - Number(order.paid || 0));
     const orderTotal = Number(order.total || 0);
 
-    const updates: Record<string, number> = {
+    // ✅ Tính lại debt từ transactions (sau khi đơn đã bị revert về non-completed)
+    const [completedOrdersRows, allReceiptsData] = await Promise.all([
+      fetchRows<{ total: number }>("orders", {
+        eq: { customer_id: order.customer_id, status: "completed" },
+        select: "total",
+      }),
+      supabase
+        .from("cash_vouchers")
+        .select("amount")
+        .eq("payer_customer_id", order.customer_id)
+        .eq("type", "thu")
+        .neq("status", "cancelled"),
+    ]);
+    const totalSpent = completedOrdersRows.reduce((s, o) => s + Number(o.total || 0), 0);
+    const totalPaid = (allReceiptsData.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+    const newDebt = totalSpent - totalPaid;
+
+    await updateWhere("customers", {
       total_buy: Math.max(0, currentTotalBuy - orderTotal),
-    };
-    if (owed > 0) {
-      updates.debt = Math.max(0, currentDebt - owed);
-    }
-    await updateWhere("customers", updates, { id: order.customer_id });
+      debt: newDebt,
+    }, { id: order.customer_id });
   }
 }
 

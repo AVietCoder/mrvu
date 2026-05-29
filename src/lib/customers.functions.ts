@@ -229,14 +229,25 @@ export const collectCustomerPayment = createServerFn({ method: "POST" })
       created_at: now(),
     });
 
-    // Cập nhật công nợ khách hàng (cho phép âm nếu thanh toán thừa)
-    const custRows = await fetchRows<{ debt: number }>("customers", {
-      eq: { id: data.customer_id },
-      select: "debt",
-      limit: 1,
-    });
-    const currentDebt = custRows[0]?.debt ?? 0;
-    const newDebt = currentDebt - amount;   // Không clamp về 0 — âm = thanh toán thừa
+    // ✅ Tính công nợ thực tế = totalSpent - totalPaid (dựa trên transactions, không dùng debt cũ trong DB)
+    // Lý do: customer.debt trong DB có thể lệch; tính lại từ đầu luôn chính xác hơn
+    const [completedOrdersRows, allReceiptsRows] = await Promise.all([
+      fetchRows<{ total: number }>("orders", {
+        eq: { customer_id: data.customer_id, status: "completed" },
+        select: "total",
+      }),
+      supabase
+        .from("cash_vouchers")
+        .select("amount")
+        .eq("payer_customer_id", data.customer_id)
+        .eq("type", "thu")
+        .neq("status", "cancelled"),
+    ]);
+    const totalSpent = completedOrdersRows.reduce((s, o) => s + Number(o.total || 0), 0);
+    // Tổng phiếu thu hiện tại (chưa gồm phiếu vừa tạo)
+    const totalPaidSoFar = (allReceiptsRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+    // Sau khi thu thêm `amount` → totalPaid tăng → debt giảm
+    const newDebt = totalSpent - (totalPaidSoFar + amount);
     await updateWhere("customers", { debt: newDebt }, { id: data.customer_id });
 
     await logActivity({ action: "collect_payment", detail: `Thu ${amount.toLocaleString("vi-VN")} ₫ từ khách (${code})`, employee_id: data.employee_id || null });
