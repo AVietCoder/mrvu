@@ -63,6 +63,12 @@ function parseInput(val: string): number {
   return Number(val.replace(/\D/g, "")) || 0;
 }
 
+
+function parseBankAccounts(siteSettings: any): any[] {
+  try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
+  catch { return []; }
+}
+
 const PAGE_SIZE = 20;
 
 const PROVINCES = [
@@ -611,7 +617,6 @@ function Page() {
     queryKey: ["site_settings"],
     queryFn: () => getSettingsFn(),
   });
-
   const { data: workTypes = [] } = useQuery({
     queryKey: ["workTypes"],
     queryFn: () => listWorkTypesFn(),
@@ -668,6 +673,7 @@ function Page() {
   const [vatInputMode, setVatInputMode] = useState<"pct" | "fixed">("pct");
   const [vatFixedAmt, setVatFixedAmt] = useState("0");
   const [depositRaw, setDepositRaw] = useState("0");
+  const [depositFocused, setDepositFocused] = useState(false);
   const [khachThanhToanRaw, setKhachThanhToanRaw] = useState("");  // Số tiền khách trả thực tế
   const [note, setNote] = useState("");
 
@@ -689,7 +695,9 @@ function Page() {
   const [filterBranch, setFilterBranch] = useState(() => activeBranchId ?? "");
   const [depositMethod, setDepositMethod] = useState<"tien_mat" | "ngan_hang">("tien_mat");
   const [depositBankIdx, setDepositBankIdx] = useState("");
-  
+  const depositBankList = useMemo(() => parseBankAccounts(siteSettings), [siteSettings]);
+  const selectedDepositBank = depositBankIdx !== "" ? depositBankList[parseInt(depositBankIdx)] : null;
+
   const customerMap = useMemo(
     () => new Map((data?.customers ?? []).map((c: any) => [c.id, c])),
     [data?.customers],
@@ -914,6 +922,7 @@ function Page() {
     setVatInputMode("pct");
     setVatFixedAmt("0");
     setDepositRaw("0");
+    setDepositFocused(false);
     setKhachThanhToanRaw("");
     setNote("");
     setCreateScheduleOnOrder(false);
@@ -1374,53 +1383,81 @@ function Page() {
 <div>
                   <Label>Đặt cọc (₫)</Label>
                   <Input
-                    className="mt-1"
-                    value={depositRaw}
-                    onChange={(e) => setDepositRaw(fmtInput(e.target.value))}
-                    onFocus={(e) => e.target.select()}
+                    className="mt-1 font-mono tabular-nums"
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={depositFocused ? depositRaw : (depositRaw ? fmtInput(depositRaw) : "")}
+                    onFocus={() => setDepositFocused(true)}
+                    onBlur={() => {
+                      setDepositFocused(false);
+                      setDepositRaw((v) => (v ? String(parseInput(v)) : "0"));
+                    }}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, "");
+                      setDepositRaw(digits);
+                    }}
                   />
                   {deposit > 0 && (
-                    <div className="mt-2 space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Hình thức thu cọc</Label>
-                      <div className="flex gap-3">
-                        {([
-                          { value: "tien_mat", label: "Tiền mặt" },
-                          { value: "ngan_hang", label: "Chuyển khoản" },
-                        ] as const).map((opt) => (
-                          <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer text-sm">
-                            <input
-                              type="radio"
-                              name="deposit_method"
-                              value={opt.value}
-                              checked={depositMethod === opt.value}
-                              onChange={() => setDepositMethod(opt.value)}
-                              className="accent-primary"
-                            />
-                            {opt.label}
-                          </label>
-                        ))}
+                    <div className="mt-2 space-y-2 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+                      <div className="flex items-center gap-2">
+                        <Landmark className="h-4 w-4 text-blue-600" />
+                        <Label className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                          Hình thức thu cọc
+                        </Label>
                       </div>
-                      {depositMethod === "ngan_hang" && (() => {
-                        const bankList: any[] = (() => {
-                          try { return JSON.parse((siteSettings as any)?.bank_accounts || "[]"); }
-                          catch { return []; }
-                        })();
-                        if (!bankList.length) return null;
-                        return (
-                          <select
-                            className="w-full h-9 rounded-md border bg-background px-2 text-sm mt-1"
-                            value={depositBankIdx}
-                            onChange={(e) => setDepositBankIdx(e.target.value)}
-                          >
-                            <option value="">— Chọn tài khoản —</option>
-                            {bankList.map((ba: any, i: number) => (
-                              <option key={i} value={String(i)}>
-                                {ba.bank} — {ba.account_number} ({ba.account_name})
-                              </option>
-                            ))}
-                          </select>
-                        );
-                      })()}
+
+                      <select
+                        className="w-full h-9 rounded-md border bg-background px-3 text-sm"
+                        value={depositMethod}
+                        onChange={(e) => {
+                          const v = e.target.value as "tien_mat" | "ngan_hang";
+                          setDepositMethod(v);
+                          if (v === "tien_mat") setDepositBankIdx("");
+                        }}
+                      >
+                        <option value="tien_mat">Tiền mặt</option>
+                        <option value="ngan_hang">Chuyển khoản (NH)</option>
+                      </select>
+
+                      {depositMethod === "ngan_hang" && (
+                        depositBankList.length ? (
+                          <>
+                            <Label className="text-xs text-muted-foreground">Tài khoản ngân hàng</Label>
+                            <select
+                              className="w-full h-9 rounded-md border bg-background px-2 text-sm"
+                              value={depositBankIdx}
+                              onChange={(e) => setDepositBankIdx(e.target.value)}
+                            >
+                              <option value="">— Chọn tài khoản —</option>
+                              {depositBankList.map((ba: any, i: number) => (
+                                <option key={i} value={String(i)}>
+                                  {ba.bank} - {ba.account_number} ({ba.account_name})
+                                </option>
+                              ))}
+                            </select>
+
+                            {selectedDepositBank && (
+                              <div className="mt-1.5 rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
+                                <div className="font-semibold">{selectedDepositBank.bank}</div>
+                                <div>
+                                  STK:{" "}
+                                  <span className="font-mono font-bold tracking-wide">
+                                    {selectedDepositBank.account_number}
+                                  </span>
+                                </div>
+                                <div>Chủ TK: {selectedDepositBank.account_name}</div>
+                                {selectedDepositBank.note && (
+                                  <div className="text-blue-600">{selectedDepositBank.note}</div>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="rounded-lg border bg-white/60 px-3 py-2 text-xs text-muted-foreground">
+                            Chưa có tài khoản ngân hàng trong cài đặt.
+                          </div>
+                        )
+                      )}
                     </div>
                   )}
                 </div>
