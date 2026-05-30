@@ -717,16 +717,40 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                   )}
                 </div>
 
-                <div className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {new Date(order.created_at).toLocaleString("vi-VN")}
-                </div>
-                {order.completed_at && (
-                  <div className="text-xs text-green-600 flex items-center gap-1 font-medium">
-                    <CheckCircle2 className="h-3 w-3" />
-                    Hoàn tất: {new Date(order.completed_at).toLocaleString("vi-VN")}
+                {/* ── Ngày tạo & Ngày hoàn tất — hiển thị rõ ràng cho người dùng ── */}
+                <div className="flex flex-col gap-1.5 mt-1">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1 bg-muted/50 rounded-md px-2 py-1">
+                      <Clock className="h-3 w-3 shrink-0" />
+                      <span>
+                        <span className="font-semibold text-foreground">Ngày tạo đơn:</span>{" "}
+                        {new Date(order.created_at).toLocaleString("vi-VN", {
+                          day: "2-digit", month: "2-digit", year: "numeric",
+                          hour: "2-digit", minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
                   </div>
-                )}
+                  {order.completed_at ? (
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="flex items-center gap-1 bg-green-50 border border-green-200 rounded-md px-2 py-1 text-green-700">
+                        <CheckCircle2 className="h-3 w-3 shrink-0" />
+                        <span>
+                          <span className="font-semibold">Ngày hoàn tất:</span>{" "}
+                          {new Date(order.completed_at).toLocaleString("vi-VN", {
+                            day: "2-digit", month: "2-digit", year: "numeric",
+                            hour: "2-digit", minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  ) : order.status === "completed" ? (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/40 rounded-md px-2 py-1 w-fit">
+                      <CheckCircle2 className="h-3 w-3 shrink-0" />
+                      <span>Đã hoàn tất</span>
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
             {!editing && (

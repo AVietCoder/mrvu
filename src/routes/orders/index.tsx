@@ -1058,7 +1058,7 @@ function Page() {
                   </td>
                   <td className="font-mono text-xs pr-2 font-medium">{o.code}</td>
                   <td className="text-xs text-muted-foreground pr-2 whitespace-nowrap">
-                    {new Date(o.created_at).toLocaleString("vi-VN", {
+                    {new Date((o.completed_at ? o.completed_at : o.created_at)).toLocaleString("vi-VN", {
                       day: "2-digit",
                       month: "2-digit",
                       year: "2-digit",
