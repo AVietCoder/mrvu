@@ -34,7 +34,7 @@ export const listSchedules = createServerFn({ method: "GET" }).handler(async () 
       ascending: false,
       limit: 200,
     }),
-    fetchRows("order_items", { select: "order_id, product_id, qty" }),
+    fetchRows("order_items", { select: "order_id, product_id, qty, unit_price, discount, total" }),
     fetchRows("user_permissions", { select: "user_id, permission" }),
   ]);
 

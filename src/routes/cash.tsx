@@ -363,6 +363,11 @@ function Page() {
     return { thu, chi, ton: thu - chi };
   }, [allVouchers, fund, filterBranch]);
 
+  const getBranchName   = (id: string) => branches.find((b: any) => b.id === id)?.name ?? "—";
+  const getUserName     = (id: string) => users.find((u: any) => u.id === id)?.full_name ?? "";
+  const getCustomerName = (id: string) => customers.find((c: any) => c.id === id)?.name ?? "";
+  const getTypeName     = (id: string) => voucherTypes.find((t: any) => t.id === id)?.name ?? "—";
+
   const filtered = useMemo(() => {
     const currentFund = fund === "all" ? null : fund;
     return allVouchers.filter((v: any) => {
@@ -385,10 +390,7 @@ function Page() {
     });
   }, [allVouchers, fund, filterBranch, filterType, filterBank, search, canViewAll, user]);
 
-  const getBranchName   = (id: string) => branches.find((b: any) => b.id === id)?.name ?? "—";
-  const getUserName     = (id: string) => users.find((u: any) => u.id === id)?.full_name ?? "";
-  const getCustomerName = (id: string) => customers.find((c: any) => c.id === id)?.name ?? "";
-  const getTypeName     = (id: string) => voucherTypes.find((t: any) => t.id === id)?.name ?? "—";
+
 
   function openCreateDialog(kind: "thu" | "chi") {
     setCreateKind(kind);
@@ -545,7 +547,7 @@ function Page() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setFund(tab.id)}
+                onClick={() => { setFund(tab.id); setFilterBank(""); }}
                 className={[
                   "flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors",
                   fund === tab.id

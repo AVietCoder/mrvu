@@ -499,6 +499,7 @@ export const createOrder = createServerFn({ method: "POST" })
         payment_method: paymentMethod,
         note: data.note || null,
         created_at: createdAt,
+        completed_at: status === "completed" ? now() : null,
       });
 
       for (const it of data.items) {
@@ -617,6 +618,8 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
     const updateFields: Record<string, any> = { status: data.status };
     if (typeof data.paid === "number") updateFields.paid = data.paid;
     if (data.payment_method) updateFields.payment_method = data.payment_method;
+    // ✅ Ghi completed_at = thời điểm nhấn "Tạo hóa đơn"
+    if (data.status === "completed") updateFields.completed_at = now();
     await updateWhere("orders", updateFields, { id: data.id });
 
     // effectivePaid = paid mới từ UI hoặc giá trị cũ trong DB

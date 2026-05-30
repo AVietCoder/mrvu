@@ -195,6 +195,7 @@ function Page() {
 
   const products = data?.products ?? [];
   const branches = data?.branches ?? [];
+  // allowedBranches = CN được phân quyền thao tác (nhập/xuất/chuyển)
   const allowedBranchIds = useMemo(() => {
     if (isAdmin) return branches.map((b: any) => b.id);
     return user?.branch_ids?.length ? [...user.branch_ids] : [];
@@ -210,6 +211,9 @@ function Page() {
     () => new Set(allowedBranchIds),
     [allowedBranchIds]
   );
+
+  // ✅ allBranches = tất cả CN để hiển thị trong filter (nhân viên xem full)
+  const allBranches = branches;
 
   const pendingOrderSummaries = data?.pending_order_summaries ?? [];
 
@@ -586,9 +590,11 @@ function Page() {
     );
   }
 
-  const visibleBranches = filterBranch && allowedBranches.some((b) => b.id === filterBranch)
-    ? allowedBranches.filter((b) => b.id === filterBranch)
-    : allowedBranches;
+  // ✅ visibleBranches = tất cả CN (kể cả nhân viên được xem full tồn kho)
+  // allowedBranches chỉ dùng để kiểm tra quyền THAO TÁC (nhập/xuất/chuyển)
+  const visibleBranches = filterBranch
+    ? branches.filter((b: any) => b.id === filterBranch)
+    : branches;
 
   const branchStatsMap = useMemo(() => {
     const map = new Map<
@@ -852,7 +858,8 @@ function Page() {
                   Tất cả chi nhánh
                 </option>
 
-                {allowedBranches.map((b) => (
+                {/* ✅ Hiện tất cả CN để xem tồn kho */}
+                {allBranches.map((b: any) => (
                   <option
                     key={b.id}
                     value={b.id}

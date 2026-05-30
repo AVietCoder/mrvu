@@ -581,7 +581,7 @@ function AdminPage() {
 
                 {/* RIGHT: live preview — matches actual print output */}
                 {previewTpl && (
-                  <div className="rounded-xl border bg-white shadow overflow-auto" style={{minHeight:420, fontFamily:"Arial,sans-serif", fontSize:"12px", color:"#1a1a1a"}}>
+                  <div className="rounded-xl border bg-white shadow overflow-auto" style={{minHeight:420, fontFamily:"'Segoe UI',Tahoma,Arial,sans-serif", fontSize:"12.5px", color:"#1a1a2e", WebkitFontSmoothing:"antialiased"}}>
                     {key !== "email_order" ? (
                       <>
                         {/* Header */}
