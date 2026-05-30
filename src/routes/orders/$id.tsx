@@ -46,15 +46,13 @@ import {
   Percent,
   Link2,
   Link2Off,
-  AlertTriangle,
-  PackageX,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { SCHEDULE_TYPES } from "@/lib/types";
 
 export const Route = createFileRoute("/orders/$id")({
-  head: () => ({ meta: [{ title: "Chi tiết đơn hàng — Mr.Vũ" }] }),
+  head: () => ({ meta: [{ title: "Chi tiết đơn hàng — QuatTran POS" }] }),
   component: OrderDetailPage,
 });
 
@@ -137,12 +135,6 @@ function OrderDetailPage() {
   const [payMethodTab, setPayMethodTab] = useState<"tien_mat" | "ngan_hang">("tien_mat");
   const [payAmountRaw, setPayAmountRaw] = useState("");
   const [payBankIdx, setPayBankIdx] = useState("");
-  const [shortageOpen, setShortageOpen] = useState(false);
-  const [shortageItems, setShortageItems] = useState<{name: string; needed: number; available: number}[]>([]);
-
-  // Stock detail dialog
-  const [stockDetailOpen, setStockDetailOpen] = useState(false);
-  const [stockDetailProduct, setStockDetailProduct] = useState<any>(null);
 
   // Return order state
   const [returnOpen, setReturnOpen] = useState(false);
@@ -182,12 +174,9 @@ function OrderDetailPage() {
   const [editEmployee, setEditEmployee] = useState("");
   const [editStatus, setEditStatus] = useState("");
   const [editPaymentMethod, setEditPaymentMethod] = useState<"tien_mat" | "ngan_hang">("tien_mat");
-  const [editBankAccountIdx, setEditBankAccountIdx] = useState("");
   const [editDiscount, setEditDiscount] = useState("0");
   const [editDiscountMode, setEditDiscountMode] = useState<"amount" | "percent">("amount");
-  const [editVat, setEditVat] = useState("0");       // VAT % khi dùng mode "pct"
-  const [editVatMode, setEditVatMode] = useState<"pct" | "fixed">("pct"); // % hoặc số tiền
-  const [editVatFixed, setEditVatFixed] = useState("0"); // VAT số tiền khi mode "fixed"
+  const [editVat, setEditVat] = useState("0"); // VAT % (0, 5, 8, 10)
   const [editDeposit, setEditDeposit] = useState("0");
   const [editNote, setEditNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -209,7 +198,6 @@ function OrderDetailPage() {
     setEditEmployee(order.employee_id ?? "");
     setEditStatus(order.status);
     setEditPaymentMethod(order.payment_method ?? "tien_mat");
-    setEditBankAccountIdx("");  // reset STK khi mở edit
     // Khôi phục giảm giá đã lưu
     if (order.discount_type === "percent" && order.discount_pct > 0) {
       setEditDiscountMode("percent");
@@ -221,12 +209,8 @@ function OrderDetailPage() {
     // Khôi phục VAT đã lưu
     if (order.vat_rate > 0) {
       setEditVat(String(Math.round(order.vat_rate * 100)));
-      setEditVatMode("pct");
-      setEditVatFixed("0");
     } else {
       setEditVat("0");
-      setEditVatMode("pct");
-      setEditVatFixed("0");
     }
     setEditDeposit(String(order.deposit ?? 0));
     setEditNote(order.note ?? "");
@@ -236,9 +220,6 @@ function OrderDetailPage() {
 
   async function saveEdit() {
     if (editItems.length === 0) return toast.error("Đơn chưa có sản phẩm");
-    if (editStatus === "completed" && !editCustomer) {
-      return toast.error("Đơn hàng hoàn tất phải có khách hàng. Vui lòng chọn khách hàng trước.");
-    }
     setSaving(true);
     try {
       // Tính lại discount amount để lưu xuống DB
@@ -257,7 +238,7 @@ function OrderDetailPage() {
           discount: discountAmt,
           discount_type: editDiscountMode,
           discount_pct: editDiscountMode === "percent" ? parseFloat(editDiscount) || 0 : 0,
-          vat_rate: editVatMode === "pct" && parseFloat(editVat) > 0 ? parseFloat(editVat) / 100 : 0,
+          vat_rate: parseFloat(editVat) > 0 ? parseFloat(editVat) / 100 : 0,
           vat_amount: editVatAmt,
           deposit: parseInput(editDeposit),
           paid: 0,
@@ -285,7 +266,11 @@ function OrderDetailPage() {
 
       toast.success("Đã cập nhật đơn hàng");
       setEditing(false);
-      // Giữ nguyên trang hiện tại
+
+      navigate({
+        to: "/orders",
+        replace: true,
+      });
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi lưu");
     } finally {
@@ -317,12 +302,9 @@ function OrderDetailPage() {
   const editAfterDiscount = Math.max(0, editSubtotal - editDiscountAmt);
   // VAT tính trên giá sau giảm
   const editVatAmt = useMemo(() => {
-    if (editVatMode === "fixed") {
-      return Math.max(0, parseFloat(editVatFixed.replace(/\D/g, "")) || 0);
-    }
     const pct = Math.min(100, Math.max(0, parseFloat(editVat) || 0));
     return Math.round(editAfterDiscount * pct / 100);
-  }, [editVat, editVatMode, editVatFixed, editAfterDiscount]);
+  }, [editVat, editAfterDiscount]);
   const editTotal = editAfterDiscount + editVatAmt;
   const khachCanThanhToanEdit = Math.max(0, editTotal - parseInput(editDeposit));
 
@@ -380,10 +362,6 @@ function OrderDetailPage() {
 
   // Kiểm tra tồn kho rồi mở dialog thanh toán
   function completeOrder() {
-    if (!order.customer_id) {
-      toast.error("Đơn hàng hoàn tất phải có khách hàng. Vui lòng chỉnh sửa đơn và thêm khách hàng trước.");
-      return;
-    }
     const stock = data?.stock ?? [];
     const branchId = order.branch_id;
     const shortages: string[] = [];
@@ -400,22 +378,7 @@ function OrderDetailPage() {
     }
 
     if (shortages.length > 0) {
-      // ✅ Hiển thị dialog chuyên nghiệp thay vì toast
-      const items = orderItems
-        .map((item: any) => {
-          const available = (data?.stock ?? [])
-            .filter((s: any) => s.product_id === item.product_id && s.branch_id === branchId)
-            .reduce((sum: number, s: any) => sum + Number(s.qty || 0), 0);
-          const needed = Number(item.qty || 0);
-          if (available < needed) {
-            const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
-            return { name: prod?.name ?? item.product_id, needed, available };
-          }
-          return null;
-        })
-        .filter(Boolean) as {name: string; needed: number; available: number}[];
-      setShortageItems(items);
-      setShortageOpen(true);
+      toast.error("Không đủ hàng để hoàn tất:\n" + shortages.join(" | "), { duration: 6000 });
       return;
     }
 
@@ -454,7 +417,7 @@ function OrderDetailPage() {
         toast.success("Đã hoàn tất đơn " + order.code);
       }
       setPayOpen(false);
-      // Giữ nguyên trang orders/$id
+      navigate({ to: "/orders", replace: true });
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi hoàn tất đơn");
     } finally {
@@ -474,7 +437,11 @@ function OrderDetailPage() {
       await refetch();
 
       toast.success("Đã hủy đơn " + order.code);
-      // Giữ nguyên trang hiện tại
+
+      navigate({
+        to: "/orders",
+        replace: true,
+      });
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi hủy đơn");
     } finally {
@@ -484,137 +451,76 @@ function OrderDetailPage() {
 
   function printOrderSlip() {
     if (!order) return;
-    const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " đ";
-    const custObj   = (data?.customers ?? []).find((c: any) => c.id === order.customer_id);
-    const branchObj = (data?.branches  ?? []).find((b: any) => b.id === order.branch_id);
-    const empObj    = (data?.employees ?? []).find((e: any) => e.id === order.employee_id);
-    const ss = siteSettings as any;
-    const _tpls = (() => { try { return JSON.parse(ss?.print_templates || "{}"); } catch { return {}; } })();
-    const _tpl = _tpls["order_invoice"] ?? {};
-    const _siteName = ss?.site_name ?? "Mr.Vũ";
-    const _tplHeader = (_tpl.header ?? "PHIẾU XUẤT KHO KIỂM BẢO HÀNH").replace("{Ten_Cua_Hang}", _siteName);
-    const _tplFooter = (_tpl.footer ?? `Quạt trần ${_siteName} chân thành cảm ơn sự tin tưởng của Quý khách hàng!`).replace("{Ten_Cua_Hang}", _siteName);
-    const _showWarranty = _tpl.showWarranty !== false;
-    const _tplWarranty = _showWarranty
-      ? ((_tpl.warranty ?? `LƯU Ý: ${_siteName} KHUYẾN CÁO CẦN KIỂM TRA QUẠT ĐỊNH KỲ ÍT NHẤT 6 THÁNG/LẦN ĐỂ ĐẢM BẢO AN TOÀN TRONG QUÁ TRÌNH SỬ DỤNG.`).replace("{Ten_Cua_Hang}", _siteName))
-      : "";
+    const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
+    const custObj = (data?.customers ?? []).find((c: any) => c.id === order.customer_id);
+    const branchObj = (data?.branches ?? []).find((b: any) => b.id === order.branch_id);
+    const empObj = (data?.employees ?? []).find((e: any) => e.id === order.employee_id);
+    const statusLabels: Record<string, string> = {
+      completed: "Hoàn tất",
+      reserved: "Đặt hàng (chưa giao)",
+      draft: "Nháp",
+    };
 
-    const rows = orderItems.map((item: any, i: number) => {
-      const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
-      const lineTotal = item.qty * item.unit_price - (item.discount ?? 0);
-      return `<tr>
-        <td style="text-align:center;padding:7px 6px;border-bottom:1px solid #e0e0e0">${i+1}</td>
-        <td style="padding:7px 6px;border-bottom:1px solid #e0e0e0">${prod?.name ?? item.product_id}</td>
-        <td style="text-align:center;padding:7px 6px;border-bottom:1px solid #e0e0e0">${item.qty}</td>
-        <td style="text-align:right;padding:7px 6px;border-bottom:1px solid #e0e0e0">${moneyFmt(item.unit_price)}</td>
-        <td style="text-align:right;padding:7px 6px;border-bottom:1px solid #e0e0e0;font-weight:600">${moneyFmt(lineTotal)}</td>
-      </tr>`;
-    }).join("");
-
-    const statusLabels: Record<string, string> = { completed: "Hoàn tất", reserved: "Đặt hàng", draft: "Nháp" };
-    const pmLabel = order.payment_method === "ngan_hang" ? "Chuyển khoản" : "Tiền mặt";
-
-    const html = `<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Phiếu ${order.code}</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Arial',sans-serif;font-size:13px;color:#111;background:#fff;padding:28px 36px}
-.page{max-width:740px;margin:0 auto}
-.header{display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:14px;border-bottom:2px solid #111;margin-bottom:18px}
-.shop-name{font-size:17px;font-weight:700;letter-spacing:-0.3px}
-.shop-info{font-size:11px;color:#555;line-height:1.8;margin-top:3px}
-.inv-title{font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;text-align:right}
-.inv-meta{font-size:11px;color:#555;text-align:right;margin-top:5px;line-height:1.9}
-.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;margin-bottom:18px;border:1px solid #ddd;border-radius:4px;padding:10px 14px;background:#fafafa}
-.info-label{color:#888;font-size:10px;text-transform:uppercase;letter-spacing:0.5px}
-.info-value{font-weight:600;color:#111;font-size:12px;margin-top:1px}
-table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:12.5px}
-thead tr th{padding:8px 6px;border-top:1px solid #111;border-bottom:1px solid #111;font-weight:700;background:#fff;text-align:left}
-.total-section{display:flex;justify-content:flex-end;margin-bottom:18px}
-.total-box{min-width:260px;border:1px solid #ddd;border-radius:4px;overflow:hidden;font-size:12.5px}
-.total-row{display:flex;justify-content:space-between;padding:6px 12px;border-bottom:1px solid #f0f0f0}
-.total-row.grand{background:#111;color:#fff;font-size:14px;font-weight:700;border-bottom:none;padding:9px 12px}
-.checklist{border:1px solid #ddd;border-radius:4px;padding:10px 14px;margin-bottom:18px;font-size:11.5px}
-.sign-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center}
-.warranty{margin-top:14px;padding:9px 12px;border:1px solid #bbb;border-radius:4px;font-size:10.5px;font-weight:700;text-transform:uppercase;line-height:1.7;color:#333;background:#f5f5f5}
-.footer{margin-top:14px;text-align:center;font-size:11px;color:#888;border-top:1px solid #e5e5e5;padding-top:10px}
-@media print{body{padding:10px}@page{margin:10mm}}
-</style></head><body><div class="page">
-<div class="header">
-  <div>
-    ${ss?.logo_url ? `<img src="${ss.logo_url}" alt="Logo" style="height:44px;object-fit:contain;margin-bottom:5px;display:block">` : ""}
-    <div class="shop-name">${ss?.site_name ?? "Mr.Vũ"}</div>
-    <div class="shop-info">
-      ${ss?.address ? `${ss.address}<br>` : ""}
-      ${ss?.phone ? `ĐT: ${ss.phone}` : ""}${ss?.phone && ss?.email ? " &nbsp;|&nbsp; " : ""}${ss?.email ? `Email: ${ss.email}` : ""}
-      ${ss?.tax_code ? `<br>MST: ${ss.tax_code}` : ""}
-    </div>
-  </div>
-  <div>
-    <div class="inv-title">${_tplHeader}</div>
-    <div class="inv-meta">
-      Mã phiếu: <strong>${order.code}</strong><br>
-      Ngày đặt: ${new Date(order.created_at).toLocaleDateString("vi-VN")}<br>
-      Ngày in: ${new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })}<br>
-      ${order.completed_at ? `Hoàn tất: ${new Date(order.completed_at).toLocaleDateString("vi-VN")}<br>` : ""}
-      Trạng thái: ${statusLabels[order.status] ?? order.status}
-    </div>
-  </div>
-</div>
-<div class="info-grid">
-  <div><div class="info-label">Khách hàng</div><div class="info-value">${custObj?.name ?? "Khách lẻ"}${custObj?.phone ? " — " + custObj.phone : ""}</div></div>
-  <div><div class="info-label">Chi nhánh</div><div class="info-value">${branchObj?.name ?? "—"}</div></div>
-  <div><div class="info-label">Nhân viên</div><div class="info-value">${empObj?.name ?? "—"}</div></div>
-  <div><div class="info-label">Hình thức TT</div><div class="info-value">${pmLabel}</div></div>
-  ${custObj?.address ? `<div style="grid-column:span 2"><div class="info-label">Địa chỉ</div><div class="info-value">${custObj.address}</div></div>` : ""}
-</div>
-<table>
-  <thead><tr>
-    <th style="width:36px;text-align:center">STT</th><th>Sản phẩm</th>
-    <th style="width:48px;text-align:center">SL</th>
-    <th style="width:110px;text-align:right">Đơn giá</th>
-    <th style="width:120px;text-align:right">Thành tiền</th>
-  </tr></thead>
-  <tbody>${rows}</tbody>
-  <tfoot><tr><td colspan="5" style="border-top:1px solid #111;padding:2px"></td></tr></tfoot>
-</table>
-<div class="total-section"><div class="total-box">
-  <div class="total-row"><span>Tạm tính</span><span>${moneyFmt(order.subtotal)}</span></div>
-  ${Number(order.discount) > 0 ? `<div class="total-row"><span>Giảm giá</span><span>- ${moneyFmt(order.discount)}</span></div>` : ""}
-  ${Number(order.vat_amount) > 0 ? `<div class="total-row"><span>Thuế VAT</span><span>+ ${moneyFmt(order.vat_amount)}</span></div>` : ""}
-  <div class="total-row"><span>Tổng cộng</span><span style="font-weight:700">${moneyFmt(order.total)}</span></div>
-  ${Number(order.deposit) > 0 ? `<div class="total-row"><span>Đặt cọc</span><span>- ${moneyFmt(order.deposit)}</span></div>` : ""}
-  ${Number(order.paid) > 0 ? `<div class="total-row"><span>Đã thanh toán</span><span>- ${moneyFmt(order.paid)}</span></div>` : ""}
-  <div class="total-row grand"><span>Khách cần trả</span><span>${moneyFmt(Math.max(0, order.total - (order.deposit ?? 0) - (order.paid ?? 0)))}</span></div>
-</div></div>
-${order.note ? `<div style="border:1px solid #ddd;border-radius:4px;padding:8px 12px;font-size:12px;margin-bottom:18px"><strong>Ghi chú:</strong> ${order.note}</div>` : ""}
-<div class="checklist">
-  <div style="font-weight:700;margin-bottom:7px;font-size:12px">Xác nhận bàn giao:</div>
-  ${["Đã giao hàng đúng mẫu và đầy đủ phụ kiện","Đã lắp đặt hoàn thiện, quạt chạy ổn định","Đã hướng dẫn sử dụng và bảo quản","Đã thanh toán đúng số tiền trên phiếu"]
-    .map(it=>`<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px"><span style="width:12px;height:12px;border:1px solid #999;border-radius:2px;display:inline-block;flex-shrink:0"></span><span>${it}</span></div>`).join("")}
-  <div style="display:flex;justify-content:space-between;margin-top:9px;font-size:11px;color:#555">
-    <strong>Khách hàng xác nhận</strong><span>Họ và tên: _________________ &nbsp;&nbsp; Chữ ký: ______________</span>
-  </div>
-</div>
-<div class="sign-grid">
-  ${["Kỹ thuật","Nhân viên","Khách hàng","Thủ kho"].map(r=>`
-    <div>
-      <div style="font-weight:700;font-size:12px;margin-bottom:3px">${r}</div>
-      <div style="font-size:11px;color:#888;margin-bottom:40px">(Ký, ghi rõ họ tên)</div>
-      <div style="border-top:1px solid #bbb;padding-top:4px;font-size:11px;color:#bbb">___________</div>
-    </div>`).join("")}
-</div>
-${_tplWarranty ? `<div class="warranty">${_tplWarranty}</div>` : ""}
-${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
-</div></body></html>`;
+    const rows = orderItems
+      .map((item: any, i: number) => {
+        const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
+        const lineTotal = item.qty * item.unit_price - (item.discount ?? 0);
+        return `<tr>
+          <td style="text-align:center;padding:8px;border:1px solid #ddd">${i + 1}</td>
+          <td style="padding:8px;border:1px solid #ddd">${prod?.name ?? item.product_id}</td>
+          <td style="text-align:center;padding:8px;border:1px solid #ddd">${item.qty}</td>
+          <td style="text-align:right;padding:8px;border:1px solid #ddd">${moneyFmt(item.unit_price)}</td>
+          <td style="text-align:right;padding:8px;border:1px solid #ddd">${moneyFmt(lineTotal)}</td>
+        </tr>`;
+      })
+      .join("");
 
     const pw = window.open("", "_blank");
     if (!pw) return;
-    pw.document.write(html);
+
+    pw.document.write(`<!DOCTYPE html><html><head><title>Phiếu đặt hàng</title>
+    <style>*{box-sizing:border-box;font-family:Arial,sans-serif}body{padding:40px;color:#111}
+    .header{text-align:center;margin-bottom:28px}.title{font-size:26px;font-weight:700;margin-bottom:6px}
+    .sub{color:#666;font-size:13px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:14px;margin-bottom:20px}
+    table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:9px;font-size:14px}
+    th{background:#f5f5f5;text-align:left}.total-box{margin-top:18px;text-align:right;font-size:14px}
+    .total-main{font-size:22px;font-weight:700;margin-top:4px}.sign{margin-top:60px;display:grid;grid-template-columns:1fr 1fr;gap:40px;text-align:center}
+    .sign-box{padding-top:10px}@media print{body{padding:0}}</style></head><body>
+    <div class="header">
+    ${(siteSettings as any)?.logo_url ? `<img src="${(siteSettings as any).logo_url}" alt="Logo" style="height:60px;object-fit:contain;margin-bottom:8px" />` : ""}
+    ${(siteSettings as any)?.site_name ? `<div style="font-size:15px;font-weight:600;color:#444;margin-bottom:4px">${(siteSettings as any).site_name}</div>` : ""}
+    <div class="title">PHIẾU ĐẶT HÀNG</div>
+    <div class="sub">Ngày: ${new Date(order.created_at).toLocaleDateString("vi-VN")} &nbsp;|&nbsp; Mã phiếu: ${order.code} &nbsp;|&nbsp; Trạng thái: ${statusLabels[order.status] ?? order.status}${(siteSettings as any)?.phone ? ` &nbsp;|&nbsp; ĐT: ${(siteSettings as any).phone}` : ""}</div></div>
+    <div class="info-grid">
+      <div><strong>Khách hàng:</strong> ${custObj?.name ?? "Khách lẻ"}</div>
+      <div><strong>Chi nhánh:</strong> ${branchObj?.name ?? "—"}</div>
+      <div><strong>Nhân viên:</strong> ${empObj?.name ?? "—"}</div>
+      <div><strong>Hình thức thanh toán:</strong> ${order.payment_method === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt"}</div>
+    </div>
+    <table><thead><tr>
+      <th style="width:50px;text-align:center">STT</th>
+      <th>Sản phẩm</th>
+      <th style="width:70px;text-align:center">SL</th>
+      <th style="width:130px;text-align:right">Đơn giá</th>
+      <th style="width:140px;text-align:right">Thành tiền</th>
+    </tr></thead><tbody>${rows}</tbody></table>
+    <div class="total-box">
+      <div>Tạm tính: ${moneyFmt(order.subtotal)}</div>
+      ${order.discount > 0 ? `<div>Giảm giá: - ${moneyFmt(order.discount)}</div>` : ""}
+      <div>Tổng tiền: ${moneyFmt(order.total)}</div>
+      ${order.deposit > 0 ? `<div style="color:#b45309;margin-top:4px">Đặt cọc: - ${moneyFmt(order.deposit)}</div>` : ""}
+      <div class="total-main" style="color:#15803d;margin-top:8px">Khách cần thanh toán: ${moneyFmt(Math.max(0, order.total - order.deposit))}</div>
+    </div>
+    ${order.note ? `<div style="margin-top:20px;font-size:14px"><strong>Ghi chú:</strong> ${order.note}</div>` : ""}
+    <div class="sign">
+      <div class="sign-box"><div>Người lập phiếu</div><div style="margin-top:60px;font-weight:600">....................</div></div>
+      <div class="sign-box"><div>Khách hàng xác nhận</div><div style="margin-top:60px">....................</div></div>
+    </div>
+    </body></html>`);
     pw.document.close();
     setTimeout(() => pw.print(), 300);
   }
 
-  
   if (isLoading) {
     return (
       <AppShell title="Chi tiết đơn hàng">
@@ -711,7 +617,6 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                         className="h-7 rounded-full border bg-background px-3 text-xs"
                         value={editPaymentMethod}
                         onChange={(e) => setEditPaymentMethod(e.target.value as any)}
-                         style={{ display: "none" }}
                       >
                         <option value="tien_mat">Tiền mặt</option>
                         <option value="ngan_hang">Chuyển khoản (Ngân hàng)</option>
@@ -720,39 +625,9 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                   )}
                 </div>
 
-                {/* ── Ngày tạo & Ngày hoàn tất — hiển thị rõ ràng cho người dùng ── */}
-                <div className="flex flex-col gap-1.5 mt-1">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1 bg-muted/50 rounded-md px-2 py-1">
-                      <Clock className="h-3 w-3 shrink-0" />
-                      <span>
-                        <span className="font-semibold text-foreground">Ngày tạo đơn:</span>{" "}
-                        {new Date(order.created_at).toLocaleString("vi-VN", {
-                          day: "2-digit", month: "2-digit", year: "numeric",
-                          hour: "2-digit", minute: "2-digit",
-                        })}
-                      </span>
-                    </div>
-                  </div>
-                  {order.completed_at ? (
-                    <div className="flex items-center gap-2 text-xs">
-                      <div className="flex items-center gap-1 bg-green-50 border border-green-200 rounded-md px-2 py-1 text-green-700">
-                        <CheckCircle2 className="h-3 w-3 shrink-0" />
-                        <span>
-                          <span className="font-semibold">Ngày hoàn tất:</span>{" "}
-                          {new Date(order.completed_at).toLocaleString("vi-VN", {
-                            day: "2-digit", month: "2-digit", year: "numeric",
-                            hour: "2-digit", minute: "2-digit",
-                          })}
-                        </span>
-                      </div>
-                    </div>
-                  ) : order.status === "completed" ? (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground bg-muted/40 rounded-md px-2 py-1 w-fit">
-                      <CheckCircle2 className="h-3 w-3 shrink-0" />
-                      <span>Đã hoàn tất</span>
-                    </div>
-                  ) : null}
+                <div className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {new Date(order.created_at).toLocaleString("vi-VN")}
                 </div>
               </div>
 
@@ -916,39 +791,13 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
             </div>
 
             {!editing ? (
-              <>
-              {/* Mobile: card list */}
-              <div className="block sm:hidden space-y-2">
-                {orderItems.map((item: any, idx: number) => {
-                  const p = (data?.products ?? []).find((x: any) => x.id === item.product_id);
-                  return (
-                    <div key={item.id ?? item.product_id} className="rounded-lg border bg-muted/20 px-3 py-2.5">
-                      <div className="flex justify-between items-start gap-2">
-                        <button
-                          type="button"
-                          className="font-medium text-sm leading-tight hover:text-primary hover:underline text-left"
-                          onClick={() => { const p2 = (data?.products ?? []).find((x: any) => x.id === item.product_id); setStockDetailProduct(p2 ?? { id: item.product_id, name: item.product_id }); setStockDetailOpen(true); }}
-                        >
-                          {p?.name ?? item.product_id}
-                        </button>
-                        <span className="font-semibold text-sm shrink-0">{fmt(item.total)}</span>
-                      </div>
-                      <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                        <span>{fmt(item.unit_price)} × <strong className="text-foreground">{item.qty}</strong></span>
-                        {item.discount > 0 && <span className="text-orange-600">CK -{fmt(item.discount)}</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Desktop: table */}
-              <div className="hidden sm:block overflow-x-auto">
-                <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[400px]">
                   <thead className="text-left text-muted-foreground border-b">
                     <tr>
                       <th className="py-2 pr-2">Sản phẩm</th>
                       <th className="text-right pr-2">Đơn giá</th>
-                      <th className="text-right pr-2 w-10">SL</th>
+                      <th className="text-right pr-2">SL</th>
                       <th className="text-right pr-2">CK</th>
                       <th className="text-right">Thành tiền</th>
                     </tr>
@@ -958,15 +807,7 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                       const p = (data?.products ?? []).find((x: any) => x.id === item.product_id);
                       return (
                         <tr key={item.id ?? item.product_id} className="border-b last:border-0">
-                          <td className="py-2 pr-2 font-medium">
-                            <button
-                              type="button"
-                              className="hover:text-primary hover:underline text-left"
-                              onClick={() => { setStockDetailProduct(p ?? { id: item.product_id, name: item.product_id }); setStockDetailOpen(true); }}
-                            >
-                              {p?.name ?? item.product_id}
-                            </button>
-                          </td>
+                          <td className="py-2 pr-2 font-medium">{p?.name ?? item.product_id}</td>
                           <td className="text-right pr-2 text-muted-foreground">{fmt(item.unit_price)}</td>
                           <td className="text-right pr-2">{item.qty}</td>
                           <td className="text-right pr-2 text-muted-foreground">
@@ -979,7 +820,6 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                   </tbody>
                 </table>
               </div>
-              </>
             ) : (
               <div className="space-y-2">
                 {editItems.length === 0 && (
@@ -989,69 +829,63 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                 {editItems.map((item, idx) => {
                   const lineTotal = item.qty * item.unit_price - item.discount;
                   return (
-                    <div key={idx} className="rounded-lg border bg-muted/10 p-2 space-y-1.5">
-                      {/* Row 1: product select + delete */}
-                      <div className="flex gap-1.5 items-center">
-                        <div className="flex-1">
-                          <SearchableSelect
-                            value={item.product_id}
-                            onChange={(val) => {
-                              const p = (data?.products ?? []).find((x: any) => x.id === val);
-                              const next = [...editItems];
-                              next[idx] = {
-                                ...next[idx],
-                                product_id: val,
-                                unit_price: (p as any)?.sale_price ?? 0,
-                              };
-                              setEditItems(next);
-                            }}
-                            placeholder="Chọn sản phẩm..."
-                            options={(data?.products ?? []).map((p: any) => ({
-                              value: p.id,
-                              label: p.name,
-                              sub: p.sku ?? undefined,
-                            }))}
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          className="flex items-center justify-center rounded-md border hover:text-destructive p-1.5 shrink-0"
-                          onClick={() => setEditItems(editItems.filter((_, i) => i !== idx))}
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
+                    <div key={idx} className="grid grid-cols-12 gap-1.5 items-center">
+                      <div className="col-span-5">
+                        <SearchableSelect
+                          value={item.product_id}
+                          onChange={(val) => {
+                            const p = (data?.products ?? []).find((x: any) => x.id === val);
+                            const next = [...editItems];
+                            next[idx] = {
+                              ...next[idx],
+                              product_id: val,
+                              unit_price: (p as any)?.sale_price ?? 0,
+                            };
+                            setEditItems(next);
+                          }}
+                          placeholder="Chọn sản phẩm..."
+                          options={(data?.products ?? []).map((p: any) => ({
+                            value: p.id,
+                            label: p.name,
+                            sub: p.sku ?? undefined,
+                          }))}
+                        />
                       </div>
-                      {/* Row 2: SL + Đơn giá + Thành tiền */}
-                      <div className="flex gap-1.5 items-center">
-                        <div className="w-16 shrink-0">
-                          <Input
-                            type="number"
-                            className="text-center h-8 text-sm"
-                            placeholder="SL"
-                            value={item.qty}
-                            onChange={(e) => {
-                              const n = [...editItems];
-                              n[idx].qty = Number(e.target.value);
-                              setEditItems(n);
-                            }}
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <Input
-                            className="h-8 text-sm"
-                            placeholder="Đơn giá"
-                            value={item.unit_price === 0 ? "" : new Intl.NumberFormat("vi-VN").format(item.unit_price)}
-                            onChange={(e) => {
-                              const n = [...editItems];
-                              n[idx].unit_price = parseInput(e.target.value);
-                              setEditItems(n);
-                            }}
-                          />
-                        </div>
-                        <div className="text-right text-xs font-semibold min-w-[72px] shrink-0">
-                          {fmt(lineTotal)}
-                        </div>
+
+                      <Input
+                        type="number"
+                        className="col-span-1"
+                        placeholder="SL"
+                        value={item.qty}
+                        onChange={(e) => {
+                          const n = [...editItems];
+                          n[idx].qty = Number(e.target.value);
+                          setEditItems(n);
+                        }}
+                      />
+
+                      <Input
+                        className="col-span-3"
+                        placeholder="Đơn giá"
+                        value={item.unit_price === 0 ? "" : new Intl.NumberFormat("vi-VN").format(item.unit_price)}
+                        onChange={(e) => {
+                          const n = [...editItems];
+                          n[idx].unit_price = parseInput(e.target.value);
+                          setEditItems(n);
+                        }}
+                      />
+
+                      <div className="col-span-2 text-right text-xs font-medium text-muted-foreground">
+                        {fmt(lineTotal)}
                       </div>
+
+                      <button
+                        type="button"
+                        className="col-span-1 flex items-center justify-center rounded-md border hover:text-destructive p-1"
+                        onClick={() => setEditItems(editItems.filter((_, i) => i !== idx))}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
                     </div>
                   );
                 })}
@@ -1137,51 +971,27 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                   )}
                 </div>
 
-                {/* VAT — toggle % / số tiền */}
+                {/* VAT */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <Label>Thuế VAT</Label>
-                    <div className="flex rounded-md border overflow-hidden text-xs">
-                      <button type="button"
-                        onClick={() => setEditVatMode("pct")}
-                        className={`px-2.5 py-1 font-medium transition-colors ${editVatMode === "pct" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}>
-                        %
-                      </button>
-                      <button type="button"
-                        onClick={() => setEditVatMode("fixed")}
-                        className={`px-2.5 py-1 font-medium transition-colors ${editVatMode === "fixed" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}>
-                        ₫
-                      </button>
+                  <Label>Thuế VAT (%)</Label>
+                  <div className="flex gap-2 mt-1">
+                    {["0", "5", "8", "10"].map((v) => (
+                      <button key={v} type="button"
+                        onClick={() => setEditVat(v)}
+                        className={`flex-1 rounded-md border py-1.5 text-xs font-medium transition-colors ${editVat === v ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted"}`}
+                      >{v === "0" ? "Không" : `${v}%`}</button>
+                    ))}
+                    <div className="relative flex-1">
+                      <Input
+                        className="pr-5 text-xs h-8"
+                        placeholder="Khác"
+                        value={!["0","5","8","10"].includes(editVat) ? editVat : ""}
+                        onChange={(e) => setEditVat(e.target.value.replace(/[^0-9.]/g, ""))}
+                        onFocus={() => { if (["0","5","8","10"].includes(editVat)) setEditVat(""); }}
+                      />
+                      <span className="absolute right-2 top-2 text-xs text-muted-foreground">%</span>
                     </div>
                   </div>
-                  {editVatMode === "pct" ? (
-                    <div className="flex gap-1.5 mt-1">
-                      {["0", "5", "8", "10"].map((v) => (
-                        <button key={v} type="button"
-                          onClick={() => setEditVat(v)}
-                          className={`flex-1 rounded-md border py-1.5 text-xs font-medium transition-colors ${editVat === v ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-muted"}`}
-                        >{v === "0" ? "Không" : `${v}%`}</button>
-                      ))}
-                      <div className="relative flex-1">
-                        <Input
-                          className="pr-5 text-xs h-8"
-                          placeholder="Khác"
-                          value={!["0","5","8","10"].includes(editVat) ? editVat : ""}
-                          onChange={(e) => setEditVat(e.target.value.replace(/[^0-9.]/g, ""))}
-                          onFocus={() => { if (["0","5","8","10"].includes(editVat)) setEditVat(""); }}
-                        />
-                        <span className="absolute right-2 top-2 text-xs text-muted-foreground">%</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <Input
-                      className="mt-1"
-                      placeholder="Nhập số tiền thuế..."
-                      value={editVatFixed === "0" ? "" : new Intl.NumberFormat("vi-VN").format(Number(editVatFixed) || 0)}
-                      onChange={(e) => setEditVatFixed(String(e.target.value.replace(/\D/g, "") || "0"))}
-                      onFocus={(e) => { if (editVatFixed === "0") setEditVatFixed(""); e.target.select(); }}
-                    />
-                  )}
                   {editVatAmt > 0 && (
                     <p className="text-xs text-muted-foreground mt-0.5 text-right">+{fmt(editVatAmt)} VAT</p>
                   )}
@@ -1199,48 +1009,11 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                   <select
                     className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                     value={editPaymentMethod}
-                    onChange={(e) => {
-                      setEditPaymentMethod(e.target.value as any);
-                      setEditBankAccountIdx("");
-                    }}
+                    onChange={(e) => setEditPaymentMethod(e.target.value as any)}
                   >
                     <option value="tien_mat">Tiền mặt</option>
                     <option value="ngan_hang">Chuyển khoản (Ngân hàng)</option>
                   </select>
-                  {/* ✅ Chọn STK khi chọn Ngân hàng */}
-                  {editPaymentMethod === "ngan_hang" && (() => {
-                    const bankList: any[] = (() => {
-                      try { return JSON.parse((siteSettings as any)?.bank_accounts || "[]"); }
-                      catch { return []; }
-                    })();
-                    if (!bankList.length) return null;
-                    return (
-                      <div className="mt-2 space-y-1.5">
-                        <select
-                          className="w-full h-9 rounded-md border bg-background px-2 text-sm"
-                          value={editBankAccountIdx}
-                          onChange={(e) => setEditBankAccountIdx(e.target.value)}
-                        >
-                          <option value="">— Chọn tài khoản —</option>
-                          {bankList.map((ba: any, i: number) => (
-                            <option key={i} value={String(i)}>
-                              {ba.bank} — {ba.account_number} ({ba.account_name})
-                            </option>
-                          ))}
-                        </select>
-                        {editBankAccountIdx !== "" && (() => {
-                          const ba = bankList[parseInt(editBankAccountIdx)];
-                          return ba ? (
-                            <div className="rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
-                              <div className="font-semibold">{ba.bank}</div>
-                              <div>STK: <span className="font-mono font-bold">{ba.account_number}</span></div>
-                              <div>Chủ TK: {ba.account_name}</div>
-                            </div>
-                          ) : null;
-                        })()}
-                      </div>
-                    );
-                  })()}
                 </div>
 
                 {/* Đặt cọc */}
@@ -1417,52 +1190,82 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                 {returnItems.map((item, idx) => {
                   const lineTotal = item.qty * item.unit_price - item.discount;
                   return (
-                    <div key={idx} className="grid grid-cols-12 gap-1.5 items-center">
-                      <div className="col-span-5">
-                        <SearchableSelect
-                          value={item.product_id}
-                          onChange={(val) => {
-                            const p = (data?.products ?? []).find((x: any) => x.id === val);
-                            const next = [...returnItems];
-                            next[idx] = { ...next[idx], product_id: val, unit_price: (p as any)?.sale_price ?? 0 };
-                            setReturnItems(next);
-                          }}
-                          placeholder="Chọn sản phẩm..."
-                          options={(data?.products ?? []).map((p: any) => ({ value: p.id, label: p.name, sub: p.sku ?? undefined }))}
-                        />
+                    <div key={idx} className="rounded-lg border bg-muted/10 p-2 space-y-1.5">
+                      {/* Row 1: sản phẩm + nút xóa */}
+                      <div className="flex gap-1.5 items-center">
+                        <div className="flex-1">
+                          <SearchableSelect
+                            value={item.product_id}
+                            onChange={(val) => {
+                              const p = (data?.products ?? []).find((x: any) => x.id === val);
+                              const next = [...returnItems];
+                              next[idx] = { ...next[idx], product_id: val, unit_price: (p as any)?.sale_price ?? 0 };
+                              setReturnItems(next);
+                            }}
+                            placeholder="Chọn sản phẩm trả..."
+                            options={(data?.products ?? []).map((p: any) => ({ value: p.id, label: p.name, sub: p.sku ?? undefined }))}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          className="flex items-center justify-center rounded-md border hover:text-destructive p-1.5 shrink-0"
+                          onClick={() => setReturnItems(returnItems.filter((_, i) => i !== idx))}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
                       </div>
-                      <Input
-                        type="number"
-                        className="col-span-1"
-                        placeholder="SL"
-                        value={item.qty}
-                        min={1}
-                        onChange={(e) => {
-                          const n = [...returnItems];
-                          n[idx].qty = Math.max(1, Number(e.target.value) || 1);
-                          setReturnItems(n);
-                        }}
-                      />
-                      <Input
-                        className="col-span-3"
-                        placeholder="Đơn giá"
-                        value={item.unit_price === 0 ? "" : new Intl.NumberFormat("vi-VN").format(item.unit_price)}
-                        onChange={(e) => {
-                          const n = [...returnItems];
-                          n[idx].unit_price = parseInput(e.target.value);
-                          setReturnItems(n);
-                        }}
-                      />
-                      <div className="col-span-2 text-right text-xs font-medium text-muted-foreground">
-                        {fmt(lineTotal)}
+                      {/* Row 2: SL + đơn giá + thành tiền */}
+                      <div className="flex gap-1.5 items-center">
+                        <div className="shrink-0">
+                          <Label className="text-xs text-muted-foreground block mb-0.5">Số lượng trả</Label>
+                          <div className="flex items-center border rounded-md overflow-hidden w-28">
+                            <button type="button"
+                              className="px-2 py-1.5 hover:bg-muted border-r text-muted-foreground hover:text-foreground"
+                              onClick={() => {
+                                const n = [...returnItems];
+                                n[idx].qty = Math.max(1, n[idx].qty - 1);
+                                setReturnItems(n);
+                              }}
+                            >－</button>
+                            <input
+                              type="number"
+                              className="w-10 text-center text-sm py-1.5 bg-background border-0 outline-none [appearance:textfield] font-semibold"
+                              value={item.qty}
+                              min={1}
+                              onChange={(e) => {
+                                const n = [...returnItems];
+                                n[idx].qty = Math.max(1, Number(e.target.value) || 1);
+                                setReturnItems(n);
+                              }}
+                            />
+                            <button type="button"
+                              className="px-2 py-1.5 hover:bg-muted border-l text-muted-foreground hover:text-foreground"
+                              onClick={() => {
+                                const n = [...returnItems];
+                                n[idx].qty = n[idx].qty + 1;
+                                setReturnItems(n);
+                              }}
+                            >＋</button>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <Label className="text-xs text-muted-foreground block mb-0.5">Đơn giá trả</Label>
+                          <Input
+                            className="h-9"
+                            placeholder="Đơn giá"
+                            value={item.unit_price === 0 ? "" : new Intl.NumberFormat("vi-VN").format(item.unit_price)}
+                            onChange={(e) => {
+                              const n = [...returnItems];
+                              n[idx].unit_price = parseInput(e.target.value);
+                              setReturnItems(n);
+                            }}
+                          />
+                        </div>
+                        <div className="text-right shrink-0 min-w-[80px]">
+                          <Label className="text-xs text-muted-foreground block mb-0.5">Thành tiền</Label>
+                          <div className="text-sm font-semibold text-orange-700">{fmt(lineTotal)}</div>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        className="col-span-1 flex items-center justify-center rounded-md border hover:text-destructive p-1"
-                        onClick={() => setReturnItems(returnItems.filter((_, i) => i !== idx))}
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
                     </div>
                   );
                 })}
@@ -1534,80 +1337,6 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
         </DialogContent>
       </Dialog>
 
-      {/* ── Stock Shortage Dialog ──────────────────────────────────────────── */}
-      <Dialog open={shortageOpen} onOpenChange={setShortageOpen}>
-        <DialogContent className="max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-destructive/10">
-                <AlertTriangle className="h-5 w-5 text-destructive" />
-              </div>
-              Không đủ hàng để hoàn tất
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-3 py-1">
-            <p className="text-sm text-muted-foreground">
-              Một số sản phẩm trong đơn hàng không đủ tồn kho tại chi nhánh này.
-              Vui lòng kiểm tra và bổ sung hàng trước khi hoàn tất.
-            </p>
-
-            <div className="rounded-xl border overflow-hidden">
-              <div className="grid grid-cols-3 gap-2 bg-muted/60 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <span className="col-span-1">Sản phẩm</span>
-                <span className="text-center">Cần</span>
-                <span className="text-center">Còn lại</span>
-              </div>
-              <div className="divide-y">
-                {shortageItems.map((item, i) => (
-                  <div key={i} className="grid grid-cols-3 gap-2 px-4 py-3 items-center">
-                    <div className="col-span-1 flex items-center gap-2">
-                      <PackageX className="h-4 w-4 text-destructive shrink-0" />
-                      <span className="text-sm font-medium leading-tight">{item.name}</span>
-                    </div>
-                    <div className="text-center">
-                      <span className="inline-flex items-center justify-center h-6 min-w-[28px] px-2 rounded-md bg-orange-100 text-orange-700 text-sm font-bold">
-                        {item.needed}
-                      </span>
-                    </div>
-                    <div className="text-center">
-                      <span className={`inline-flex items-center justify-center h-6 min-w-[28px] px-2 rounded-md text-sm font-bold ${
-                        item.available === 0
-                          ? "bg-destructive/10 text-destructive"
-                          : "bg-yellow-100 text-yellow-700"
-                      }`}>
-                        {item.available}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800 flex gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>Bạn có thể chuyển đơn về trạng thái <strong>Đặt hàng</strong> để chờ nhập thêm hàng, hoặc liên hệ thủ kho để bổ sung tồn kho.</span>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShortageOpen(false)} className="flex-1">
-              Đóng
-            </Button>
-            <Button
-              variant="default"
-              className="flex-1"
-              onClick={() => {
-                setShortageOpen(false);
-                navigate({ to: "/inventory" });
-              }}
-            >
-              Đi đến Kho hàng
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* ── Payment Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
         <DialogContent className="max-w-sm rounded-2xl">
@@ -1623,7 +1352,7 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
               try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
               catch { return []; }
             })();
-            const khachCan = Math.max(0, (order.total ?? 0) - (order.deposit ?? 0) - (order.discount ?? 0));
+            const khachCan = Math.max(0, (order.total ?? 0) - (order.deposit ?? 0));
             const paid = parseInput(payAmountRaw);
             const congNo = Math.max(0, khachCan - paid);
             const tienThua = Math.max(0, paid - khachCan);
@@ -1718,7 +1447,7 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                   </div>
                   <Input
                     className="text-right font-mono text-lg h-12 border-2 focus:border-primary"
-                    value={payAmountRaw}
+                    value={payAmountRaw === "" ? "" : moneyFmtLocal(paid).replace(" ₫", "")}
                     onChange={(e) => setPayAmountRaw(e.target.value.replace(/\D/g, ""))}
                     onFocus={(e) => e.target.select()}
                     placeholder={moneyFmtLocal(khachCan).replace(" ₫", "")}
@@ -1749,7 +1478,7 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                 {congNo > 0 && (
                   <div className="flex justify-between text-sm pt-1 border-t">
                     <span className="text-muted-foreground">Tính vào công nợ</span>
-                    <span className="font-semibold text-red-600">+{moneyFmtLocal(congNo)}</span>
+                    <span className="font-semibold text-red-600">- {moneyFmtLocal(congNo)}</span>
                   </div>
                 )}
                 {congNo === 0 && paid > 0 && (
@@ -1766,107 +1495,16 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                   <Button
                     className="w-full sm:w-auto font-bold text-base h-11"
                     onClick={confirmPayAndComplete}
-                    disabled={completingOrder}
+                    disabled={completingOrder || paid === 0}
                   >
                     {completingOrder
                       ? <><span className="animate-spin mr-1.5">⏳</span>Đang xử lý...</>
-                      : "Tạo hóa đơn"}
+                      : "THANH TOÁN"}
                   </Button>
                 </DialogFooter>
               </div>
             );
           })()}
-        </DialogContent>
-      </Dialog>
-      {/* ── Stock Detail Dialog ────────────────────────────────────────────── */}
-      <Dialog open={stockDetailOpen} onOpenChange={setStockDetailOpen}>
-        <DialogContent className="max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5 text-primary" />
-              Tồn kho — {stockDetailProduct?.name}
-            </DialogTitle>
-            <DialogDescription>
-              Số lượng tồn kho theo từng chi nhánh
-            </DialogDescription>
-          </DialogHeader>
-          {stockDetailProduct && (() => {
-            const allStock = (data?.stock ?? []).filter((s: any) => s.product_id === stockDetailProduct.id);
-            const allBranches = data?.branches ?? [];
-            const prod = (data?.products ?? []).find((p: any) => p.id === stockDetailProduct.id);
-            const totalStock = allStock.reduce((sum: number, s: any) => sum + Number(s.qty || 0), 0);
-            const orderQty = orderItems.find((i: any) => i.product_id === stockDetailProduct.id)?.qty ?? 0;
-            const branchStock = allStock.reduce((sum: number, s: any) => s.branch_id === order.branch_id ? sum + Number(s.qty || 0) : sum, 0);
-            return (
-              <div className="space-y-3 py-1">
-                {/* Summary */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-lg border bg-muted/30 p-3 text-center">
-                    <div className="text-xs text-muted-foreground mb-1">Tổng tồn</div>
-                    <div className="text-xl font-bold">{totalStock}</div>
-                  </div>
-                  <div className="rounded-lg border bg-blue-50 p-3 text-center">
-                    <div className="text-xs text-muted-foreground mb-1">Chi nhánh đơn</div>
-                    <div className={`text-xl font-bold ${branchStock < orderQty ? "text-destructive" : "text-blue-700"}`}>{branchStock}</div>
-                  </div>
-                  <div className="rounded-lg border bg-orange-50 p-3 text-center">
-                    <div className="text-xs text-muted-foreground mb-1">Đơn cần</div>
-                    <div className="text-xl font-bold text-orange-700">{orderQty}</div>
-                  </div>
-                </div>
-
-                {branchStock < orderQty && (
-                  <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-                    <AlertTriangle className="h-4 w-4 shrink-0" />
-                    <span>Không đủ hàng tại chi nhánh này — thiếu <strong>{orderQty - branchStock}</strong></span>
-                  </div>
-                )}
-
-                {prod?.min_stock !== undefined && prod.min_stock > 0 && (
-                  <div className="flex justify-between text-sm px-1">
-                    <span className="text-muted-foreground">Tồn kho tối thiểu</span>
-                    <span className="font-medium">{prod.min_stock}</span>
-                  </div>
-                )}
-
-                {/* Per-branch breakdown */}
-                <div className="rounded-xl border overflow-hidden">
-                  <div className="grid grid-cols-3 bg-muted/60 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    <span className="col-span-2">Chi nhánh</span>
-                    <span className="text-right">Tồn</span>
-                  </div>
-                  <div className="divide-y">
-                    {allBranches.map((b: any) => {
-                      const qty = allStock
-                        .filter((s: any) => s.branch_id === b.id)
-                        .reduce((sum: number, s: any) => sum + Number(s.qty || 0), 0);
-                      const isOrderBranch = b.id === order.branch_id;
-                      return (
-                        <div key={b.id} className={`grid grid-cols-3 px-4 py-3 items-center ${isOrderBranch ? "bg-blue-50/50" : ""}`}>
-                          <div className="col-span-2 flex items-center gap-2 text-sm">
-                            <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                            <span className={isOrderBranch ? "font-semibold text-blue-700" : ""}>{b.name}</span>
-                            {isOrderBranch && <span className="text-xs bg-blue-100 text-blue-600 rounded px-1">đơn này</span>}
-                          </div>
-                          <div className="text-right">
-                            <span className={`font-bold text-sm ${qty === 0 ? "text-destructive" : qty < (prod?.min_stock ?? 0) ? "text-orange-600" : "text-green-700"}`}>
-                              {qty}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {allBranches.length === 0 && (
-                      <div className="px-4 py-3 text-sm text-muted-foreground">Không có dữ liệu chi nhánh</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-          <DialogFooter>
-            <Button variant="outline" className="w-full" onClick={() => setStockDetailOpen(false)}>Đóng</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AppShell>

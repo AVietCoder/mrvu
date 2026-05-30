@@ -42,7 +42,7 @@ import { useAuth } from "@/context/AuthContext";
 import { getSettings } from "@/lib/settings.functions";
 
 export const Route = createFileRoute("/orders/")({
-  head: () => ({ meta: [{ title: "Bán hàng — Mr.Vũ" }] }),
+  head: () => ({ meta: [{ title: "Bán hàng — QuatTran POS" }] }),
   component: Page,
 });
 
@@ -61,12 +61,6 @@ function fmtInput(val: string): string {
 
 function parseInput(val: string): number {
   return Number(val.replace(/\D/g, "")) || 0;
-}
-
-
-function parseBankAccounts(siteSettings: any): any[] {
-  try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
-  catch { return []; }
 }
 
 const PAGE_SIZE = 20;
@@ -110,495 +104,127 @@ const STATUS_COLOR: Record<string, string> = {
 // Bên dưới hàm Page() -> Filter Slot (Dòng ~550) thêm tùy chọn lọc:
 
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SHARED INVOICE PRINTER  — dùng chung cho orders/index, orders/$id, schedule
-// ─────────────────────────────────────────────────────────────────────────────
-function buildInvoiceHtml({
-  order,
-  custName, custPhone, custAddress,
-  branchName, empName,
-  items, products,
-  moneyFmt,
-  ss,          // siteSettings
-  tplOverride, // object {header?, footer?, warranty?, showWarranty?} từ admin
-}: any): string {
-  const _site   = ss?.site_name?.trim() || "Mr.Vũ";
-  const _tpl    = tplOverride ?? (() => {
-    try { return JSON.parse(ss?.print_templates || "{}").order_invoice ?? {}; } catch { return {}; }
-  })();
-  const _header  = (_tpl.header   ?? "PHIẾU XUẤT KHO / KIỂM BẢO HÀNH").replace("{Ten_Cua_Hang}", _site);
-  const _footer  = (_tpl.footer   ?? `${_site} — Cảm ơn Quý khách đã tin tưởng sử dụng dịch vụ!`).replace("{Ten_Cua_Hang}", _site);
-  const _showW   = _tpl.showWarranty !== false;
-  const _warranty = _showW
-    ? ((_tpl.warranty ?? `LƯU Ý: ${_site} KHUYẾN CÁO KIỂM TRA THIẾT BỊ ĐỊNH KỲ ÍT NHẤT 6 THÁNG/LẦN ĐỂ ĐẢM BẢO AN TOÀN.`).replace("{Ten_Cua_Hang}", _site))
-    : "";
-
-  const statusMap: Record<string, string> = { completed: "Hoàn tất", reserved: "Đặt hàng", draft: "Nháp" };
-  const pmLabel = order.payment_method === "ngan_hang" ? "Chuyển khoản" : "Tiền mặt";
-  const dateStr = order.created_at
-    ? new Date(order.created_at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })
-    : new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
-
-  const rows = (items ?? []).map((item: any, i: number) => {
-    const prod = (products ?? []).find((p: any) => p.id === item.product_id);
-    const qty = Number(item.qty ?? 0);
-    const price = Number(item.unit_price ?? 0);
-    const disc = Number(item.discount ?? 0);
-    const lineTotal = qty * price - disc;
-    return `
-    <tr>
-      <td class="tc">${i + 1}</td>
-      <td class="pl">${prod?.name ?? item.product_id ?? "—"}</td>
-      <td class="tc">${qty}</td>
-      <td class="tr">${moneyFmt(price)}</td>
-      <td class="tr fw">${moneyFmt(lineTotal)}</td>
-    </tr>`;
-  }).join("");
-
-  const subtotal  = Number(order.subtotal  ?? 0);
-  const discount  = Number(order.discount  ?? 0);
-  const vatAmt    = Number(order.vat_amount ?? 0);
-  const total     = Number(order.total     ?? 0);
-  const deposit   = Number(order.deposit   ?? 0);
-  const paid      = Number(order.paid      ?? 0);
-  const remaining = Math.max(0, total - deposit - paid);
-
-  return `<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${_header} — ${order.code ?? ""}</title>
-<style>
-/* ── Reset ── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-/* ── Base ── */
-body {
-  font-family: 'Segoe UI', 'Arial Unicode MS', Tahoma, 'DejaVu Sans', Arial, sans-serif;
-  font-size: 13.5px;
-  color: #1a1a2e;
-  background: #fff;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-  padding: 36px 40px;
-}
-.page { max-width: 780px; margin: 0 auto; }
-
-/* ── Header ── */
-.hdr {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 28px;
-  padding-bottom: 20px;
-  border-bottom: 2.5px solid #1d4ed8;
-}
-.hdr-left { flex: 1; }
-.logo { height: 56px; object-fit: contain; margin-bottom: 8px; display: block; }
-.shop-name {
-  font-size: 19px; font-weight: 800; color: #1d4ed8;
-  letter-spacing: -0.3px; line-height: 1.2;
-}
-.shop-meta { font-size: 11.5px; color: #64748b; line-height: 1.75; margin-top: 5px; }
-.hdr-right { text-align: right; flex-shrink: 0; }
-.inv-badge {
-  display: inline-block;
-  background: #1d4ed8;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  padding: 4px 10px;
-  border-radius: 4px;
-  margin-bottom: 8px;
-}
-.inv-title {
-  font-size: 16px; font-weight: 800;
-  color: #111; text-transform: uppercase;
-  letter-spacing: 0.5px; line-height: 1.3;
-  margin-bottom: 8px;
-}
-.inv-meta { font-size: 12px; color: #64748b; line-height: 2; }
-.inv-meta strong { color: #374151; }
-
-/* ── Info grid ── */
-.info-wrap {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 14px 18px;
-  margin-bottom: 22px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px 32px;
-}
-.info-cell .lbl {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: #94a3b8;
-  margin-bottom: 2px;
-}
-.info-cell .val {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
-}
-.info-full { grid-column: span 2; }
-
-/* ── Divider ── */
-.divider { border: none; border-top: 1px solid #e2e8f0; margin: 18px 0; }
-
-/* ── Table ── */
-.items-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 20px;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid #e2e8f0;
-}
-.items-table thead tr {
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
-  color: #fff;
-}
-.items-table th {
-  padding: 11px 10px;
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-}
-.items-table tbody tr:nth-child(even) { background: #f8fafc; }
-.items-table tbody tr:hover { background: #eff6ff; }
-.items-table td {
-  padding: 10px;
-  font-size: 13px;
-  border-bottom: 1px solid #f1f5f9;
-  vertical-align: middle;
-}
-.tc { text-align: center; }
-.tr { text-align: right; }
-.pl { padding-left: 14px; }
-.fw { font-weight: 700; }
-
-/* ── Totals ── */
-.totals-wrap { display: flex; justify-content: flex-end; margin-bottom: 24px; }
-.totals-box {
-  min-width: 280px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  overflow: hidden;
-}
-.t-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 16px;
-  font-size: 13px;
-  border-bottom: 1px solid #f1f5f9;
-}
-.t-row:last-child { border-bottom: none; }
-.t-row.discount { color: #16a34a; }
-.t-row.vat      { color: #d97706; }
-.t-row.deposit  { color: #b45309; }
-.t-row.paid-amt { color: #0891b2; }
-.t-row.grand {
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 800;
-  padding: 11px 16px;
-}
-
-/* ── Note ── */
-.note-box {
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-left: 4px solid #f59e0b;
-  border-radius: 6px;
-  padding: 10px 14px;
-  font-size: 13px;
-  margin-bottom: 22px;
-}
-
-/* ── Checklist ── */
-.check-box {
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 14px 18px;
-  margin-bottom: 22px;
-}
-.check-title {
-  font-size: 12.5px;
-  font-weight: 700;
-  margin-bottom: 10px;
-  color: #1e293b;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.check-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-  font-size: 12.5px;
-  color: #374151;
-}
-.checkbox {
-  width: 14px; height: 14px;
-  border: 1.5px solid #cbd5e1;
-  border-radius: 3px;
-  flex-shrink: 0;
-  display: inline-block;
-}
-.customer-confirm {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px dashed #e2e8f0;
-  font-size: 11.5px;
-  color: #64748b;
-}
-
-/* ── Signatures ── */
-.sign-section { margin-top: 12px; }
-.sign-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
-  text-align: center;
-}
-.sign-card {
-  padding: 8px;
-}
-.sign-role {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 3px;
-}
-.sign-hint {
-  font-size: 10.5px;
-  color: #94a3b8;
-  margin-bottom: 44px;
-}
-.sign-line {
-  border-top: 1.5px dashed #cbd5e1;
-  padding-top: 5px;
-  font-size: 10.5px;
-  color: #cbd5e1;
-  letter-spacing: 1px;
-}
-
-/* ── Warranty ── */
-.warranty-box {
-  margin-top: 20px;
-  padding: 12px 16px;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-  border-left: 4px solid #f97316;
-  border-radius: 6px;
-  font-size: 11.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  line-height: 1.8;
-  color: #9a3412;
-}
-
-/* ── Footer ── */
-.footer-text {
-  margin-top: 18px;
-  text-align: center;
-  font-size: 12.5px;
-  color: #64748b;
-  border-top: 1px solid #f1f5f9;
-  padding-top: 14px;
-  line-height: 1.6;
-}
-
-/* ── Print ── */
-@media print {
-  body { padding: 10px 14px; }
-  .items-table tbody tr:hover { background: inherit; }
-}
-</style>
-</head>
-<body>
-<div class="page">
-
-  <!-- HEADER -->
-  <div class="hdr">
-    <div class="hdr-left">
-      ${ss?.logo_url ? `<img class="logo" src="${ss.logo_url}" alt="logo">` : ""}
-      <div class="shop-name">${_site}</div>
-      <div class="shop-meta">
-        ${ss?.address    ? `<span>📍 ${ss.address}</span><br>` : ""}
-        ${ss?.phone      ? `<span>📞 ${ss.phone}</span>` : ""}
-        ${ss?.phone && ss?.email ? "&nbsp;&nbsp;|&nbsp;&nbsp;" : ""}
-        ${ss?.email      ? `<span>✉ ${ss.email}</span>` : ""}
-        ${ss?.tax_code   ? `<br><span>MST: ${ss.tax_code}</span>` : ""}
-      </div>
-    </div>
-    <div class="hdr-right">
-      <div class="inv-badge">Hóa đơn bán hàng</div>
-      <div class="inv-title">${_header}</div>
-      <div class="inv-meta">
-        <strong>Mã phiếu</strong>&ensp;${order.code ?? "—"}<br>
-        <strong>Ngày lập</strong>&ensp;${dateStr}<br>
-        <strong>Trạng thái</strong>&ensp;${statusMap[order.status] ?? order.status ?? "—"}
-      </div>
-    </div>
-  </div>
-
-  <!-- INFO -->
-  <div class="info-wrap">
-    <div class="info-cell">
-      <div class="lbl">Khách hàng</div>
-      <div class="val">${custName ?? "Khách lẻ"}${custPhone ? `&ensp;<span style="color:#64748b;font-weight:400">📞 ${custPhone}</span>` : ""}</div>
-    </div>
-    <div class="info-cell">
-      <div class="lbl">Chi nhánh</div>
-      <div class="val">${branchName ?? "—"}</div>
-    </div>
-    <div class="info-cell">
-      <div class="lbl">Nhân viên</div>
-      <div class="val">${empName ?? "—"}</div>
-    </div>
-    <div class="info-cell">
-      <div class="lbl">Hình thức thanh toán</div>
-      <div class="val">${pmLabel}</div>
-    </div>
-    ${custAddress ? `
-    <div class="info-cell info-full">
-      <div class="lbl">Địa chỉ lắp đặt</div>
-      <div class="val">${custAddress}</div>
-    </div>` : ""}
-  </div>
-
-  <!-- PRODUCTS -->
-  <table class="items-table">
-    <thead>
-      <tr>
-        <th class="tc" style="width:44px">#</th>
-        <th style="text-align:left;padding-left:14px">Tên sản phẩm</th>
-        <th class="tc" style="width:58px">SL</th>
-        <th class="tr" style="width:130px">Đơn giá</th>
-        <th class="tr" style="width:140px">Thành tiền</th>
-      </tr>
-    </thead>
-    <tbody>${rows}</tbody>
-  </table>
-
-  <!-- TOTALS -->
-  <div class="totals-wrap">
-    <div class="totals-box">
-      <div class="t-row"><span>Tạm tính</span><span>${moneyFmt(subtotal)}</span></div>
-      ${discount  > 0 ? `<div class="t-row discount"><span>Giảm giá</span><span>− ${moneyFmt(discount)}</span></div>` : ""}
-      ${vatAmt    > 0 ? `<div class="t-row vat"     ><span>Thuế VAT</span><span>+ ${moneyFmt(vatAmt)}</span></div>` : ""}
-      <div class="t-row" style="font-weight:700"><span>Tổng cộng</span><span>${moneyFmt(total)}</span></div>
-      ${deposit   > 0 ? `<div class="t-row deposit"><span>Đã đặt cọc</span><span>− ${moneyFmt(deposit)}</span></div>` : ""}
-      ${paid      > 0 ? `<div class="t-row paid-amt"><span>Đã thanh toán</span><span>− ${moneyFmt(paid)}</span></div>` : ""}
-      <div class="t-row grand"><span>Khách cần trả</span><span>${moneyFmt(remaining)}</span></div>
-    </div>
-  </div>
-
-  <!-- NOTE -->
-  ${order.note ? `<div class="note-box"><strong>📝 Ghi chú:</strong>&ensp;${order.note}</div>` : ""}
-
-  <!-- CHECKLIST -->
-  <div class="check-box">
-    <div class="check-title">✅&nbsp; Xác nhận bàn giao</div>
-    ${["Đã giao hàng đúng mẫu và đầy đủ phụ kiện",
-       "Đã lắp đặt hoàn thiện, thiết bị hoạt động ổn định",
-       "Đã hướng dẫn sử dụng và bảo quản sản phẩm",
-       "Đã thanh toán đúng số tiền ghi trên phiếu"]
-      .map(t => `<div class="check-item"><span class="checkbox"></span><span>${t}</span></div>`)
-      .join("")}
-    <div class="customer-confirm">
-      <strong>Xác nhận của khách hàng</strong>
-      <span>Họ và tên: &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&ensp; Chữ ký: &emsp;&emsp;&emsp;&emsp;&emsp;</span>
-    </div>
-  </div>
-
-  <!-- SIGNATURES -->
-  <div class="sign-section">
-    <div class="sign-grid">
-      ${["Kỹ thuật lắp đặt","Nhân viên bán hàng","Khách hàng","Thủ kho"]
-        .map(r => `
-        <div class="sign-card">
-          <div class="sign-role">${r}</div>
-          <div class="sign-hint">(Ký và ghi rõ họ tên)</div>
-          <div class="sign-line">. . . . . . . . . .</div>
-        </div>`).join("")}
-    </div>
-  </div>
-
-  <!-- WARRANTY -->
-  ${_warranty ? `<div class="warranty-box">⚠&ensp;${_warranty}</div>` : ""}
-
-  <!-- FOOTER -->
-  ${_footer ? `<div class="footer-text">${_footer}</div>` : ""}
-
-</div>
-</body>
-</html>`;
-}
-
 function printOrderSlip({
-  items, customer, branch, employee, status, paymentMethod,
-  discount, discountAmt, vatAmt, deposit, note, subtotal, total, includeVat, data, siteSettings, tpl,
+  items,
+  customer,
+  branch,
+  employee,
+  status,
+  paymentMethod,
+  discount,
+  discountAmt,
+  vatAmt,
+  deposit,
+  note,
+  subtotal,
+  total,
+  includeVat,
+  data,
+  siteSettings,
+  tpl,
 }: any) {
-  const moneyFmt  = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
-  const custObj   = (data?.customers ?? []).find((c: any) => c.id === customer);
-  const branchObj = (data?.branches  ?? []).find((b: any) => b.id === branch);
-  const empObj    = (data?.employees ?? []).find((e: any) => e.id === employee);
+  const tplHeader   = tpl?.header   ?? "PHIẾU XUẤT KHO KIỂM BẢO HÀNH";
+  const tplFooter   = tpl?.footer   ?? "Quạt trần chân thành cảm ơn sự tin tưởng của Quý khách hàng!";
+  const tplWarranty = (tpl?.showWarranty !== false && tpl?.showWarranty !== undefined ? tpl?.showWarranty : true)
+    ? (tpl?.warranty ?? "LƯU Ý: KHUYẾN CÁO CẦN KIỂM TRA QUẠT ĐỊNH KỲ ÍT NHẤT 6 THÁNG/LẦN ĐỂ ĐẢM BẢO AN TOÀN TRONG QUÁ TRÌNH SỬ DỤNG.")
+    : "";
+  const siteName = siteSettings?.site_name ?? "";
+  const moneyFmt = (n: number) =>
+    new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
 
-  const fakeOrder = {
-    code: undefined,
-    created_at: new Date().toISOString(),
-    status,
-    payment_method: paymentMethod,
-    subtotal,
-    discount: discountAmt,
-    vat_amount: includeVat ? vatAmt : 0,
-    total,
-    deposit,
-    paid: 0,
-    note,
+  const custName = customer
+    ? (data?.customers ?? []).find((c: any) => c.id === customer)?.name ??
+      "Khách lẻ"
+    : "Khách lẻ";
+
+  const branchName = branch
+    ? (data?.branches ?? []).find((b: any) => b.id === branch)?.name ?? "—"
+    : "—";
+
+  const empName = employee
+    ? (data?.employees ?? []).find((e: any) => e.id === employee)?.name ?? "—"
+    : "—";
+
+  const statusLabels: Record<string, string> = {
+    completed: "Hoàn tất",
+    reserved: "Đặt hàng (chưa giao)",
+    draft: "Nháp",
   };
+
+  const rows = items
+    .map((item: any, i: number) => {
+      const prod = (data?.products ?? []).find(
+        (p: any) => p.id === item.product_id,
+      );
+      const lineTotal = item.qty * item.unit_price - (item.discount ?? 0);
+
+      return `<tr>
+        <td style="text-align:center;padding:8px;border:1px solid #ddd">${i + 1}</td>
+        <td style="padding:8px;border:1px solid #ddd">${prod?.name ?? item.product_id}</td>
+        <td style="text-align:center;padding:8px;border:1px solid #ddd">${item.qty}</td>
+        <td style="text-align:right;padding:8px;border:1px solid #ddd">${moneyFmt(item.unit_price)}</td>
+        <td style="text-align:right;padding:8px;border:1px solid #ddd">${moneyFmt(lineTotal)}</td>
+      </tr>`;
+    })
+    .join("");
 
   const pw = window.open("", "_blank");
   if (!pw) return;
-  pw.document.write(buildInvoiceHtml({
-    order:       fakeOrder,
-    custName:    custObj?.name,
-    custPhone:   custObj?.phone,
-    custAddress: custObj?.address,
-    branchName:  branchObj?.name,
-    empName:     empObj?.name,
-    items,
-    products:    data?.products ?? [],
-    moneyFmt,
-    ss:          siteSettings,
-    tplOverride: tpl ?? (() => {
-      try { return JSON.parse((siteSettings as any)?.print_templates || "{}").order_invoice ?? {}; }
-      catch { return {}; }
-    })(),
-  }));
+
+  pw.document.write(`<!DOCTYPE html><html><head><title>Phiếu đặt hàng</title>
+  <style>*{box-sizing:border-box;font-family:Arial,sans-serif}body{padding:40px;color:#111}
+  .header{text-align:center;margin-bottom:28px}.title{font-size:26px;font-weight:700;margin-bottom:6px}
+  .sub{color:#666;font-size:13px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:14px;margin-bottom:20px}
+  table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:9px;font-size:14px}
+  th{background:#f5f5f5;text-align:left}.total-box{margin-top:18px;text-align:right;font-size:14px}
+  .total-main{font-size:22px;font-weight:700;margin-top:4px}.sign{margin-top:60px;display:grid;grid-template-columns:1fr 1fr;gap:40px;text-align:center}
+  .sign-box{padding-top:10px}@media print{body{padding:0}}</style></head><body>
+  <div class="header">
+  ${siteSettings?.logo_url ? `<img src="${siteSettings.logo_url}" alt="Logo" style="height:60px;object-fit:contain;margin-bottom:8px" />` : ""}
+  ${siteSettings?.site_name ? `<div style="font-size:15px;font-weight:600;color:#444;margin-bottom:4px">${siteSettings.site_name}</div>` : ""}
+  <div class="title">${tplHeader.replace("{Ten_Cua_Hang}", siteName || "Mr.Vũ").toUpperCase()}</div>
+  <div class="sub">Ngày: ${new Date().toLocaleDateString("vi-VN")} &nbsp;|&nbsp; Trạng thái: ${statusLabels[status] ?? status}${siteSettings?.phone ? ` &nbsp;|&nbsp; ĐT: ${siteSettings.phone}` : ""}</div></div>
+  <div class="info-grid">
+    <div><strong>Khách hàng:</strong> ${custName}</div>
+    <div><strong>Chi nhánh:</strong> ${branchName}</div>
+    <div><strong>Nhân viên:</strong> ${empName}</div>
+    <div><strong>Hình thức thanh toán:</strong> ${paymentMethod === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt"}</div>
+    <div><strong>Mã phiếu:</strong> #${Date.now().toString().slice(-6)}</div>
+  </div>
+  <table><thead><tr>
+    <th style="width:50px;text-align:center">STT</th>
+    <th>Sản phẩm</th>
+    <th style="width:70px;text-align:center">SL</th>
+    <th style="width:130px;text-align:right">Đơn giá</th>
+    <th style="width:140px;text-align:right">Thành tiền</th>
+  </tr></thead><tbody>${rows}</tbody></table>
+  <div class="total-box">
+    <div>Tạm tính: ${moneyFmt(subtotal)}</div>
+    ${discountAmt > 0 ? `<div>Giảm giá: - ${moneyFmt(discountAmt)}</div>` : ""}
+    ${includeVat ? `<div>Thuế VAT (10%): + ${moneyFmt(vatAmt)}</div>` : ""}
+    <div>Tổng tiền: ${moneyFmt(total)}</div>
+    ${deposit > 0 ? `<div style="color:#b45309;margin-top:4px">Đặt cọc: - ${moneyFmt(deposit)}</div>` : ""}
+    <div class="total-main" style="color:#15803d;margin-top:8px">Khách cần thanh toán: ${moneyFmt(Math.max(0, total - deposit))}</div>
+  </div>
+  ${note ? `<div style="margin-top:20px;font-size:14px"><strong>Ghi chú:</strong> ${note}</div>` : ""}
+  <div style="margin-top:32px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:20px;text-align:center;font-size:13px">
+    ${["Kỹ thuật","Nhân viên","Khách hàng","Thủ kho"].map(r=>`<div><div style="font-weight:600">${r}</div><div style="color:#999;font-size:11px">(Ký, ghi rõ họ tên)</div><div style="margin-top:50px;border-top:1px dashed #bbb;padding-top:4px;color:#ccc">__________</div></div>`).join("")}
+  </div>
+  <div style="margin-top:24px;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
+    <div style="font-weight:600;margin-bottom:8px">Vui lòng chọn nội dung dưới đây</div>
+    ${["Đã giao hàng đúng mẫu và đầy đủ phụ kiện","Đã lắp đặt hoàn thiện, Quạt chạy ổn định","Đã hướng dẫn sử dụng","Đã thanh toán tiền mặt theo số tiền trên phiếu"].map(it=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="display:inline-block;width:14px;height:14px;border:1px solid #aaa;border-radius:2px"></span>${it}</div>`).join("")}
+    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px"><span><strong>Khách hàng xác nhận</strong></span><span>Họ tên: ___________________</span></div>
+  </div>
+  ${tplWarranty ? `<div style="margin-top:18px;font-size:12px;font-weight:700;text-transform:uppercase;line-height:1.6;border-top:1px solid #eee;padding-top:12px">${tplWarranty.replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}</div>` : ""}
+  ${tplFooter ? `<div style="margin-top:14px;text-align:center;font-size:13px;color:#555;border-top:1px solid #eee;padding-top:12px">${tplFooter.replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}</div>` : ""}
+  </body></html>`);
+
   pw.document.close();
   setTimeout(() => pw.print(), 300);
 }
 
 function Page() {
-  const { user, isAdmin, activeBranchId } = useAuth();
+  const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const listFn = useServerFn(listOrders);
   const create = useServerFn(createOrder);
@@ -617,6 +243,7 @@ function Page() {
     queryKey: ["site_settings"],
     queryFn: () => getSettingsFn(),
   });
+
   const { data: workTypes = [] } = useQuery({
     queryKey: ["workTypes"],
     queryFn: () => listWorkTypesFn(),
@@ -670,10 +297,7 @@ function Page() {
   const [includeVat, setIncludeVat] = useState(false);
   const [vatMode, setVatMode] = useState<"8" | "10" | "custom">("10");
   const [vatCustomPercent, setVatCustomPercent] = useState("5");
-  const [vatInputMode, setVatInputMode] = useState<"pct" | "fixed">("pct");
-  const [vatFixedAmt, setVatFixedAmt] = useState("0");
   const [depositRaw, setDepositRaw] = useState("0");
-  const [depositFocused, setDepositFocused] = useState(false);
   const [khachThanhToanRaw, setKhachThanhToanRaw] = useState("");  // Số tiền khách trả thực tế
   const [note, setNote] = useState("");
 
@@ -692,11 +316,7 @@ function Page() {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("newest");
   const [filterStatus, setFilterStatus] = useState("");
-  const [filterBranch, setFilterBranch] = useState(() => activeBranchId ?? "");
-  const [depositMethod, setDepositMethod] = useState<"tien_mat" | "ngan_hang">("tien_mat");
-  const [depositBankIdx, setDepositBankIdx] = useState("");
-  const depositBankList = useMemo(() => parseBankAccounts(siteSettings), [siteSettings]);
-  const selectedDepositBank = depositBankIdx !== "" ? depositBankList[parseInt(depositBankIdx)] : null;
+  const [filterBranch, setFilterBranch] = useState("");
 
   const customerMap = useMemo(
     () => new Map((data?.customers ?? []).map((c: any) => [c.id, c])),
@@ -740,11 +360,7 @@ function Page() {
 
   const customVatRate = Math.min(100, Math.max(0, parseFloat(vatCustomPercent) || 0)) / 100;
   const vatRate = vatMode === "8" ? 0.08 : vatMode === "10" ? 0.1 : customVatRate;
-  const vatAmt = includeVat
-    ? (vatInputMode === "fixed"
-        ? Math.max(0, parseInput(vatFixedAmt))
-        : Math.round(afterDiscount * vatRate))
-    : 0;
+  const vatAmt = includeVat ? Math.round(afterDiscount * vatRate) : 0;
   const total = afterDiscount + vatAmt;
   const khachCanThanhToan = Math.max(0, total - deposit);
 
@@ -801,16 +417,8 @@ function Page() {
       .sort((a, b) => {
         if (sortBy === "total_desc") return b.total - a.total;
         if (sortBy === "total_asc") return a.total - b.total;
-        if (sortBy === "oldest") {
-          // Đơn hoàn tất: sort theo completed_at, còn lại theo created_at
-          const dateA = a.status === "completed" && a.completed_at ? new Date(a.completed_at).getTime() : new Date(a.created_at).getTime();
-          const dateB = b.status === "completed" && b.completed_at ? new Date(b.completed_at).getTime() : new Date(b.created_at).getTime();
-          return dateA - dateB;
-        }
-        // newest (default): đơn hoàn tất sort theo completed_at, còn lại theo created_at
-        const dateA = a.status === "completed" && a.completed_at ? new Date(a.completed_at).getTime() : new Date(a.created_at).getTime();
-        const dateB = b.status === "completed" && b.completed_at ? new Date(b.completed_at).getTime() : new Date(b.created_at).getTime();
-        return dateB - dateA;
+        if (sortBy === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
   }
 
@@ -905,24 +513,19 @@ function Page() {
 
     setItems([]);
     setCustomer("");
-    setBranch(activeBranchId ?? allowedBranches[0]?.id ?? "");
+    setBranch(allowedBranches[0]?.id ?? "");
     setEmployee(user?.id ?? "");
     setStatus("reserved");
     setPaymentMethod("tien_mat");
     setBankAccountIdx("");
     setBankContent("");
-    setDepositMethod("tien_mat");
-    setDepositBankIdx("");
     setDiscountRaw("0");
     setDiscountPct("0");
     setUseDiscountPct(false);
     setIncludeVat(false);
     setVatMode("10");
     setVatCustomPercent("5");
-    setVatInputMode("pct");
-    setVatFixedAmt("0");
     setDepositRaw("0");
-    setDepositFocused(false);
     setKhachThanhToanRaw("");
     setNote("");
     setCreateScheduleOnOrder(false);
@@ -953,12 +556,8 @@ function Page() {
   async function submit() {
     if (items.length === 0) return toast.error("Đơn chưa có sản phẩm");
     if (!branch) return toast.error("Chọn chi nhánh");
-
-    // Nếu trạng thái hoàn tất hoặc đã thanh toán, bắt buộc phải có khách hàng
-    const finalStatus = status === "completed" || khachThanhToan > 0 ? "completed" : status;
-    if (finalStatus === "completed" && !customer) {
-      return toast.error("Đơn hàng hoàn tất phải có khách hàng. Vui lòng chọn hoặc tạo khách hàng trước.");
-    }
+    // ✅ Bắt buộc phải có khách hàng cho mọi đơn
+    if (!customer) return toast.error("Vui lòng chọn khách hàng trước khi tạo đơn.");
 
     if (createScheduleOnOrder && !scheduleForm.title) {
       return toast.error("Vui lòng nhập tiêu đề lịch làm việc");
@@ -966,6 +565,13 @@ function Page() {
 
     setSubmitting(true);
     try {
+      // Nếu khách trả đủ hoặc thừa → completed; ngược lại giữ status đã chọn
+      const finalStatus = khachThanhToan >= khachCanThanhToan && khachCanThanhToan > 0
+        ? "completed"
+        : khachThanhToan > 0 && khachCanThanhToan > 0
+        ? "completed"    // trả 1 phần cũng ghi completed, phần còn lại tính công nợ
+        : status;
+
       const r = await create({
         data: {
           customer_id: customer || undefined,
@@ -979,7 +585,6 @@ function Page() {
           vat_rate: includeVat ? vatRate : 0,
           vat_amount: vatAmt,
           deposit,
-          deposit_method: deposit > 0 ? depositMethod : undefined,
           paid: khachThanhToan,
           note: note || undefined,
           items,
@@ -1070,7 +675,7 @@ function Page() {
                   </td>
                   <td className="font-mono text-xs pr-2 font-medium">{o.code}</td>
                   <td className="text-xs text-muted-foreground pr-2 whitespace-nowrap">
-                    {new Date((o.completed_at ? o.completed_at : o.created_at)).toLocaleString("vi-VN", {
+                    {new Date(o.created_at).toLocaleString("vi-VN", {
                       day: "2-digit",
                       month: "2-digit",
                       year: "2-digit",
@@ -1238,10 +843,8 @@ function Page() {
                   )}
 
                   {items.map((item, idx) => {
-                    // ✅ Tồn kho theo chi nhánh đang chọn, không phải stock tổng
-                    const currentStock = (data?.stock ?? [])
-                      .filter((s: any) => s.product_id === item.product_id && s.branch_id === branch)
-                      .reduce((sum: number, s: any) => sum + Number(s.qty || 0), 0);
+                    const currentProd = (data?.products ?? []).find((x: any) => x.id === item.product_id);
+                    const currentStock = currentProd?.stock ?? 0;
                     const lineTotal = item.qty * item.unit_price - item.discount;
                     
                     return (
@@ -1261,19 +864,11 @@ function Page() {
                               setItems(next);
                             }}
                             placeholder="Chọn sản phẩm..."
-                            options={(data?.products ?? []).map((p: any) => {
-                              // ✅ Tồn kho theo chi nhánh đang chọn
-                              const branchStock = (data?.stock ?? [])
-                                .filter((s: any) => s.product_id === p.id && s.branch_id === branch)
-                                .reduce((sum: number, s: any) => sum + Number(s.qty || 0), 0);
-                              return {
-                                value: p.id,
-                                label: p.name,
-                                sub: p.sku
-                                  ? `SKU: ${p.sku} | Tồn CN: ${branchStock}`
-                                  : `Tồn CN: ${branchStock}`,
-                              };
-                            })}
+                            options={(data?.products ?? []).map((p: any) => ({
+                              value: p.id,
+                              label: p.name,
+                              sub: p.sku ? `SKU: ${p.sku} | Tồn: ${p.stock ?? 0}` : `Tồn: ${p.stock ?? 0}`,
+                            }))}
                           />
                           <button
                             type="button"
@@ -1380,86 +975,14 @@ function Page() {
                   )}
                 </div>
 
-<div>
+                <div>
                   <Label>Đặt cọc (₫)</Label>
                   <Input
-                    className="mt-1 font-mono tabular-nums"
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={depositFocused ? depositRaw : (depositRaw ? fmtInput(depositRaw) : "")}
-                    onFocus={() => setDepositFocused(true)}
-                    onBlur={() => {
-                      setDepositFocused(false);
-                      setDepositRaw((v) => (v ? String(parseInput(v)) : "0"));
-                    }}
-                    onChange={(e) => {
-                      const digits = e.target.value.replace(/\D/g, "");
-                      setDepositRaw(digits);
-                    }}
+                    className="mt-1"
+                    value={depositRaw}
+                    onChange={(e) => setDepositRaw(fmtInput(e.target.value))}
+                    onFocus={(e) => e.target.select()}
                   />
-                  {deposit > 0 && (
-                    <div className="mt-2 space-y-2 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
-                      <div className="flex items-center gap-2">
-                        <Landmark className="h-4 w-4 text-blue-600" />
-                        <Label className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-                          Hình thức thu cọc
-                        </Label>
-                      </div>
-
-                      <select
-                        className="w-full h-9 rounded-md border bg-background px-3 text-sm"
-                        value={depositMethod}
-                        onChange={(e) => {
-                          const v = e.target.value as "tien_mat" | "ngan_hang";
-                          setDepositMethod(v);
-                          if (v === "tien_mat") setDepositBankIdx("");
-                        }}
-                      >
-                        <option value="tien_mat">Tiền mặt</option>
-                        <option value="ngan_hang">Chuyển khoản (NH)</option>
-                      </select>
-
-                      {depositMethod === "ngan_hang" && (
-                        depositBankList.length ? (
-                          <>
-                            <Label className="text-xs text-muted-foreground">Tài khoản ngân hàng</Label>
-                            <select
-                              className="w-full h-9 rounded-md border bg-background px-2 text-sm"
-                              value={depositBankIdx}
-                              onChange={(e) => setDepositBankIdx(e.target.value)}
-                            >
-                              <option value="">— Chọn tài khoản —</option>
-                              {depositBankList.map((ba: any, i: number) => (
-                                <option key={i} value={String(i)}>
-                                  {ba.bank} - {ba.account_number} ({ba.account_name})
-                                </option>
-                              ))}
-                            </select>
-
-                            {selectedDepositBank && (
-                              <div className="mt-1.5 rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
-                                <div className="font-semibold">{selectedDepositBank.bank}</div>
-                                <div>
-                                  STK:{" "}
-                                  <span className="font-mono font-bold tracking-wide">
-                                    {selectedDepositBank.account_number}
-                                  </span>
-                                </div>
-                                <div>Chủ TK: {selectedDepositBank.account_name}</div>
-                                {selectedDepositBank.note && (
-                                  <div className="text-blue-600">{selectedDepositBank.note}</div>
-                                )}
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <div className="rounded-lg border bg-white/60 px-3 py-2 text-xs text-muted-foreground">
-                            Chưa có tài khoản ngân hàng trong cài đặt.
-                          </div>
-                        )
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -1470,83 +993,44 @@ function Page() {
                   {includeVat && <span className="ml-auto text-sm font-semibold text-orange-600">+ {fmt(vatAmt)}</span>}
                 </label>
                 {includeVat && (
-                  <div className="border-t px-3 py-2.5 bg-orange-50/40 space-y-2.5">
-                    {/* Toggle % / ₫ */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground font-medium">Cách nhập thuế:</span>
-                      <div className="flex rounded-md border overflow-hidden text-xs">
-                        <button type="button"
-                          onClick={() => setVatInputMode("pct")}
-                          className={`px-3 py-1 font-semibold transition-colors ${vatInputMode === "pct" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}>
-                          % Phần trăm
-                        </button>
-                        <button type="button"
-                          onClick={() => setVatInputMode("fixed")}
-                          className={`px-3 py-1 font-semibold transition-colors ${vatInputMode === "fixed" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}>
-                          ₫ Số tiền
-                        </button>
-                      </div>
-                    </div>
-
-                    {vatInputMode === "pct" ? (
-                      /* Chế độ % */
-                      <div className="flex flex-wrap items-center gap-3">
-                        <span className="text-xs text-muted-foreground font-medium">Thuế suất:</span>
-                        {(["8", "10"] as const).map(rate => (
-                          <label key={rate} className="flex items-center gap-1.5 cursor-pointer text-sm">
-                            <input
-                              type="radio"
-                              name="vat-rate"
-                              value={rate}
-                              checked={vatMode === rate}
-                              onChange={() => setVatMode(rate)}
-                              className="accent-primary"
-                            />
-                            {rate}%
-                          </label>
-                        ))}
-                        <label className="flex items-center gap-1.5 cursor-pointer text-sm">
-                          <input
-                            type="radio"
-                            name="vat-rate"
-                            value="custom"
-                            checked={vatMode === "custom"}
-                            onChange={() => setVatMode("custom")}
-                            className="accent-primary"
-                          />
-                          Tự nhập
-                        </label>
-                        {vatMode === "custom" && (
-                          <div className="flex items-center gap-1">
-                            <Input
-                              type="number"
-                              min={0}
-                              max={100}
-                              className="w-24 h-7 text-sm"
-                              placeholder="% VAT"
-                              value={vatCustomPercent}
-                              onChange={(e) => setVatCustomPercent(e.target.value)}
-                            />
-                            <span className="text-sm text-muted-foreground">%</span>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      /* Chế độ số tiền cụ thể */
-                      <div className="flex items-center gap-2">
-                        <Input
-                          className="flex-1 h-8 text-sm font-mono"
-                          placeholder="Nhập số tiền thuế..."
-                          value={vatFixedAmt === "0" ? "" : new Intl.NumberFormat("vi-VN").format(Number(vatFixedAmt) || 0)}
-                          onChange={(e) => setVatFixedAmt(e.target.value.replace(/\D/g, "") || "0")}
-                          onFocus={(e) => { if (vatFixedAmt === "0") setVatFixedAmt(""); e.target.select(); }}
+                  <div className="border-t px-3 py-2.5 bg-orange-50/40 flex flex-wrap items-center gap-3">
+                    <span className="text-xs text-muted-foreground font-medium">Thuế suất:</span>
+                    {(["8", "10"] as const).map(rate => (
+                      <label key={rate} className="flex items-center gap-1.5 cursor-pointer text-sm">
+                        <input
+                          type="radio"
+                          name="vat-rate"
+                          value={rate}
+                          checked={vatMode === rate}
+                          onChange={() => setVatMode(rate)}
+                          className="accent-primary"
                         />
-                        <span className="text-sm text-muted-foreground shrink-0">₫</span>
-                        {Number(vatFixedAmt) > 0 && afterDiscount > 0 && (
-                          <span className="text-xs text-muted-foreground shrink-0">
-                            ≈ {((Number(vatFixedAmt) / afterDiscount) * 100).toFixed(1)}%
-                          </span>
-                        )}
+                        {rate}%
+                      </label>
+                    ))}
+                    <label className="flex items-center gap-1.5 cursor-pointer text-sm">
+                      <input
+                        type="radio"
+                        name="vat-rate"
+                        value="custom"
+                        checked={vatMode === "custom"}
+                        onChange={() => setVatMode("custom")}
+                        className="accent-primary"
+                      />
+                      Tự nhập
+                    </label>
+                    {vatMode === "custom" && (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          className="w-24 h-7 text-sm"
+                          placeholder="% VAT"
+                          value={vatCustomPercent}
+                          onChange={(e) => setVatCustomPercent(e.target.value)}
+                        />
+                        <span className="text-sm text-muted-foreground">%</span>
                       </div>
                     )}
                   </div>
@@ -1603,25 +1087,23 @@ function Page() {
                         />
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <Label className="text-xs font-semibold">Giờ thực hiện</Label>
-                        <Input
-                          type="time"
-                          className="mt-1 h-9 text-sm"
-                          value={scheduleForm.scheduled_time}
-                          onChange={(e) => setScheduleForm({ ...scheduleForm, scheduled_time: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs font-semibold">Địa chỉ công việc</Label>
-                        <Input
-                          className="mt-1 h-9 text-sm"
-                          value={scheduleForm.address}
-                          onChange={(e) => setScheduleForm({ ...scheduleForm, address: e.target.value })}
-                          placeholder="Địa chỉ giao hàng / lắp đặt..."
-                        />
-                      </div>
+                    <div>
+                      <Label className="text-xs font-semibold">Giờ thực hiện</Label>
+                      <Input
+                        type="time"
+                        className="mt-1 h-9 text-sm"
+                        value={scheduleForm.scheduled_time}
+                        onChange={(e) => setScheduleForm({ ...scheduleForm, scheduled_time: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-semibold">Địa chỉ lắp đặt</Label>
+                      <Input
+                        className="mt-1 h-9 text-sm"
+                        value={scheduleForm.address}
+                        onChange={(e) => setScheduleForm({ ...scheduleForm, address: e.target.value })}
+                        placeholder="Địa chỉ lắp đặt (tự động lấy từ khách hàng)..."
+                      />
                     </div>
                     <div>
                       <Label className="text-xs font-semibold">Ghi chú công việc</Label>
@@ -1665,19 +1147,175 @@ function Page() {
                 </div>
               </div>
 
+              {/* ── Payment Panel (like screenshot) ── */}
+              <div className="rounded-lg border bg-background p-4 space-y-3">
+                {/* Payment method radio buttons */}
+                <div>
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hình thức thanh toán</Label>
+                  <div className="flex flex-wrap gap-3 mt-2">
+                    {([
+                      { value: "tien_mat", label: "Tiền mặt" },
+                      { value: "ngan_hang", label: "Chuyển khoản" },
+                    ] as const).map((opt) => (
+                      <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer text-sm">
+                        <input
+                          type="radio"
+                          name="order_payment_method"
+                          value={opt.value}
+                          checked={paymentMethod === opt.value}
+                          onChange={() => {
+                            setPaymentMethod(opt.value);
+                            setBankAccountIdx("");
+                            setBankContent("");
+                          }}
+                          className="accent-primary"
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                  {paymentMethod === "ngan_hang" && (() => {
+                    const bankList: any[] = (() => {
+                      try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
+                      catch { return []; }
+                    })();
+                    return (
+                      <div className="mt-2 space-y-2">
+                        {bankList.length > 0 && (
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Chọn tài khoản nhận tiền</Label>
+                            <select
+                              className="mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm"
+                              value={bankAccountIdx}
+                              onChange={e => {
+                                const idx = e.target.value;
+                                setBankAccountIdx(idx);
+                                if (idx !== "") {
+                                  const ba = bankList[parseInt(idx)];
+                                  if (ba && !bankContent) {
+                                    setBankContent(`${siteSettings?.site_name ?? "CK"} ${ba.account_number}`);
+                                  }
+                                }
+                              }}
+                            >
+                              <option value="">— Chọn STK —</option>
+                              {bankList.map((ba: any, i: number) => (
+                                <option key={i} value={String(i)}>
+                                  {ba.bank} - {ba.account_number} ({ba.account_name})
+                                </option>
+                              ))}
+                            </select>
+                            {bankAccountIdx !== "" && (() => {
+                              const ba = bankList[parseInt(bankAccountIdx)];
+                              return ba ? (
+                                <div className="mt-1.5 rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
+                                  <div className="font-semibold text-sm">{ba.bank}</div>
+                                  <div>STK: <span className="font-mono font-bold tracking-wide">{ba.account_number}</span></div>
+                                  <div>Chủ TK: {ba.account_name}</div>
+                                  {ba.note && <div className="text-blue-600">{ba.note}</div>}
+                                </div>
+                              ) : null;
+                            })()}
+                          </div>
+                        )}
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Nội dung chuyển khoản</Label>
+                          <div className="mt-1 relative">
+                            <Input
+                              value={bankContent}
+                              onChange={e => setBankContent(e.target.value)}
+                              placeholder="VD: DATHANG0001 NGUYEN VAN A"
+                              className="pr-10 font-mono text-sm"
+                            />
+                            {bankContent && (
+                              <button
+                                type="button"
+                                className="absolute right-2 top-2 text-xs text-primary hover:underline"
+                                onClick={() => { navigator.clipboard.writeText(bankContent); toast.success("Đã copy nội dung CK!"); }}
+                              >Copy</button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Khách thanh toán input */}
+                <div>
+                  <div className="flex justify-between items-center">
+                    <Label className="text-sm font-semibold">Khách thanh toán</Label>
+                    {tienThua > 0 && (
+                      <span className="text-xs text-green-600 font-medium">Tiền thừa: {fmt(tienThua)}</span>
+                    )}
+                  </div>
+                  <Input
+                    className="mt-1 text-right font-mono text-base h-11 border-2 focus:border-primary"
+                    placeholder={fmt(khachCanThanhToan)}
+                    value={khachThanhToanRaw === "" ? "" : fmt(khachThanhToan)}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, "");
+                      setKhachThanhToanRaw(raw);
+                    }}
+                    onFocus={(e) => e.target.select()}
+                  />
+                </div>
+
+                {/* Quick amount chips */}
+                {khachCanThanhToan > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {(() => {
+                      const base = khachCanThanhToan;
+                      const rounded10 = Math.ceil(base / 10000) * 10000;
+                      const rounded50 = Math.ceil(base / 50000) * 50000;
+                      const rounded100 = Math.ceil(base / 100000) * 100000;
+                      const rounded500 = Math.ceil(base / 500000) * 500000;
+                      const uniqueAmounts = [...new Set([base, rounded10, rounded50, rounded100, rounded500].filter(v => v >= base))].slice(0, 5);
+                      return uniqueAmounts.map((amt) => (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => setKhachThanhToanRaw(String(amt))}
+                          className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                            khachThanhToan === amt
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background hover:bg-muted border-border"
+                          }`}
+                        >
+                          {fmt(amt)}
+                        </button>
+                      ));
+                    })()}
+                  </div>
+                )}
+
+                {/* Tính vào công nợ */}
+                {congNo > 0 && (
+                  <div className="flex justify-between items-center text-sm pt-2 border-t">
+                    <span className="text-muted-foreground">Tính vào công nợ</span>
+                    <span className="font-semibold text-red-600">- {fmt(congNo)}</span>
+                  </div>
+                )}
+                {congNo === 0 && khachThanhToan > 0 && (
+                  <div className="flex justify-between items-center text-sm pt-2 border-t text-green-600">
+                    <span>✓ Thanh toán đủ</span>
+                    <span className="font-semibold">{fmt(khachThanhToan)}</span>
+                  </div>
+                )}
+              </div>
 
               <DialogFooter className="flex-col sm:flex-row gap-2">
                 <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
                   Hủy
                 </Button>
                 <Button
-                  className="w-full sm:w-auto font-bold text-base h-12"
+                  className={`w-full sm:w-auto font-bold text-base h-12 ${khachThanhToan > 0 ? "bg-primary text-primary-foreground" : ""}`}
                   onClick={submit}
                   disabled={submitting}
                 >
                   {submitting ? (
                     <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang xử lý...</>
-                  ) : "Tạo đơn"}
+                  ) : khachThanhToan > 0 ? "THANH TOÁN" : "Tạo đơn"}
                 </Button>
               </DialogFooter>
             </div>
