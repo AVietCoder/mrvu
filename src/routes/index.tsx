@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getReports } from "@/lib/reports.functions";
 import { AppShell, Card, StatCard, fmt } from "@/components/AppShell";
 import { useAuth } from "@/context/AuthContext";
-import { ShieldOff } from "lucide-react";
+import { ShieldOff, ShoppingCart, Users, Package, BarChart2, Warehouse, CalendarDays, Settings, CreditCard, ChevronRight } from "lucide-react";
 
 import {
   ResponsiveContainer,
@@ -82,360 +82,407 @@ function ProgressBarLoader() {
 }
 
 function Dashboard() {
-  const { isAdmin } = useAuth();
-  const fn = useServerFn(getReports);
+  // const { isAdmin } = useAuth();
+  // const fn = useServerFn(getReports);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["reports"],
-    queryFn: () => fn(),
-    enabled: isAdmin,
-  });
+  // const { data, isLoading } = useQuery({
+  //   queryKey: ["reports"],
+  //   queryFn: () => fn(),
+  //   enabled: isAdmin,
+  // });
 
-  if (!isAdmin) {
     return (
       <AppShell title="Tổng quan">
-        <div className="flex flex-col items-center justify-center min-h-[50vh] text-center gap-4">
-          <ShieldOff className="h-16 w-16 text-muted-foreground opacity-40" />
-          <div>
-            <h2 className="text-xl font-semibold mb-1">Không có quyền truy cập</h2>
-            <p className="text-muted-foreground text-sm max-w-sm">Trang tổng quan chỉ dành cho Admin. Sử dụng menu để truy cập các tính năng của bạn.</p>
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {[
+              { to: "/orders/", icon: <ShoppingCart className="h-6 w-6" />, label: "Bán hàng", desc: "Tạo & quản lý đơn hàng", color: "bg-blue-50 text-blue-700 border-blue-200" },
+              { to: "/customers/", icon: <Users className="h-6 w-6" />, label: "Khách hàng", desc: "Danh sách & công nợ", color: "bg-green-50 text-green-700 border-green-200" },
+              { to: "/products", icon: <Package className="h-6 w-6" />, label: "Sản phẩm", desc: "Danh mục sản phẩm", color: "bg-purple-50 text-purple-700 border-purple-200" },
+              { to: "/inventory", icon: <Warehouse className="h-6 w-6" />, label: "Kho hàng", desc: "Tồn kho & nhập xuất", color: "bg-orange-50 text-orange-700 border-orange-200" },
+              { to: "/schedule", icon: <CalendarDays className="h-6 w-6" />, label: "Lịch làm việc", desc: "Lịch lắp đặt", color: "bg-cyan-50 text-cyan-700 border-cyan-200" },
+              { to: "/cash", icon: <CreditCard className="h-6 w-6" />, label: "Sổ quỹ", desc: "Thu chi tiền mặt", color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+            ].map((item) => (
+              <Link key={item.to} to={item.to as any}>
+                <div className={`rounded-xl border p-4 flex items-center gap-3 hover:shadow-md transition-all cursor-pointer group ${item.color}`}>
+                  <div className="shrink-0">{item.icon}</div>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm">{item.label}</div>
+                    <div className="text-xs opacity-70 truncate">{item.desc}</div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 ml-auto opacity-40 group-hover:opacity-80 transition-opacity shrink-0" />
+                </div>
+              </Link>
+            ))}
           </div>
+          <div className="flex flex-col items-center justify-center py-8 text-center gap-3">
+            <ShieldOff className="h-12 w-12 text-muted-foreground opacity-30" />
+<p className="text-xs text-muted-foreground">
+  Author •{" "}
+  <a
+    href="https://codeforces.com/profile/VietVu"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="font-semibold hover:text-primary transition-colors"
+  >
+    trviet
+  </a>
+</p>          </div>
         </div>
       </AppShell>
     );
-  }
+  // }
 
-  return (
-    <AppShell title="Tổng quan">
-      {isLoading || !data ? (
-        <ProgressBarLoader />
-      ) : (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              label="Doanh thu"
-              value={fmt(data.totalRevenue)}
-              sub={`${data.totalOrders} đơn hoàn tất`}
-            />
+  // return (
+  //   <AppShell title="Tổng quan">
+  //     {isLoading || !data ? (
+  //       <ProgressBarLoader />
+  //     ) : (
+  //       <div className="space-y-6">
+  //         {/* Quick navigation */}
+  //         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+  //           {[
+  //             { to: "/orders/", icon: <ShoppingCart className="h-5 w-5" />, label: "Bán hàng", color: "text-blue-600" },
+  //             { to: "/customers/", icon: <Users className="h-5 w-5" />, label: "Khách hàng", color: "text-green-600" },
+  //             { to: "/products", icon: <Package className="h-5 w-5" />, label: "Sản phẩm", color: "text-purple-600" },
+  //             { to: "/inventory", icon: <Warehouse className="h-5 w-5" />, label: "Kho hàng", color: "text-orange-600" },
+  //             { to: "/schedule", icon: <CalendarDays className="h-5 w-5" />, label: "Lịch làm", color: "text-cyan-600" },
+  //             { to: "/cash", icon: <CreditCard className="h-5 w-5" />, label: "Sổ quỹ", color: "text-yellow-600" },
+  //             { to: "/reports", icon: <BarChart2 className="h-5 w-5" />, label: "Báo cáo", color: "text-rose-600" },
+  //           ].map((item) => (
+  //             <Link key={item.to} to={item.to as any}>
+  //               <div className="rounded-lg border bg-card px-3 py-2.5 flex flex-col items-center gap-1.5 hover:bg-muted/50 hover:border-primary/30 transition-all cursor-pointer group text-center">
+  //                 <span className={item.color}>{item.icon}</span>
+  //                 <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">{item.label}</span>
+  //               </div>
+  //             </Link>
+  //           ))}
+  //         </div>
+  //         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  //           <StatCard
+  //             label="Doanh thu"
+  //             value={fmt(data.totalRevenue)}
+  //             sub={`${data.totalOrders} đơn hoàn tất`}
+  //           />
 
-            <StatCard
-              label="Công nợ phải thu"
-              value={fmt(data.totalDebt)}
-              sub={`${data.debtors.length} khách còn nợ`}
-            />
+  //           <StatCard
+  //             label="Công nợ phải thu"
+  //             value={fmt(data.totalDebt)}
+  //             sub={`${data.debtors.length} khách còn nợ`}
+  //           />
 
-            <StatCard
-              label="Sản phẩm"
-              value={String(data.productCount)}
-              sub={`${data.lowStock.length} cảnh báo tồn`}
-            />
+  //           <StatCard
+  //             label="Sản phẩm"
+  //             value={String(data.productCount)}
+  //             sub={`${data.lowStock.length} cảnh báo tồn`}
+  //           />
 
-            <StatCard
-              label="Khách hàng"
-              value={String(data.customerCount)}
-            />
-          </div>
+  //           <StatCard
+  //             label="Khách hàng"
+  //             value={String(data.customerCount)}
+  //           />
+  //         </div>
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-            <Card className="xl:col-span-2 border-primary/10 overflow-hidden">
-              <div className="mb-1 text-lg font-semibold">
-                Doanh thu 14 ngày gần nhất
-              </div>
+  //         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+  //           <Card className="xl:col-span-2 border-primary/10 overflow-hidden">
+  //             <div className="mb-1 text-lg font-semibold">
+  //               Doanh thu 14 ngày gần nhất
+  //             </div>
 
-              <div className="mb-4 text-sm text-muted-foreground">
-                Theo dõi tăng trưởng doanh thu theo ngày
-              </div>
+  //             <div className="mb-4 text-sm text-muted-foreground">
+  //               Theo dõi tăng trưởng doanh thu theo ngày
+  //             </div>
 
-              <div className="h-[320px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={data.days}
-                    margin={{
-                      top: 10,
-                      right: 10,
-                      left: 0,
-                      bottom: 0,
-                    }}
-                  >
-                    <defs>
-                      <linearGradient
-                        id="revenueGradient"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor="hsl(var(--primary))"
-                          stopOpacity={0.45}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="hsl(var(--primary))"
-                          stopOpacity={0.02}
-                        />
-                      </linearGradient>
-                    </defs>
+  //             <div className="h-[320px]">
+  //               <ResponsiveContainer width="100%" height="100%">
+  //                 <AreaChart
+  //                   data={data.days}
+  //                   margin={{
+  //                     top: 10,
+  //                     right: 10,
+  //                     left: 0,
+  //                     bottom: 0,
+  //                   }}
+  //                 >
+  //                   <defs>
+  //                     <linearGradient
+  //                       id="revenueGradient"
+  //                       x1="0"
+  //                       y1="0"
+  //                       x2="0"
+  //                       y2="1"
+  //                     >
+  //                       <stop
+  //                         offset="0%"
+  //                         stopColor="hsl(var(--primary))"
+  //                         stopOpacity={0.45}
+  //                       />
+  //                       <stop
+  //                         offset="100%"
+  //                         stopColor="hsl(var(--primary))"
+  //                         stopOpacity={0.02}
+  //                       />
+  //                     </linearGradient>
+  //                   </defs>
 
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      vertical={false}
-                      stroke="hsl(var(--border))"
-                    />
+  //                   <CartesianGrid
+  //                     strokeDasharray="3 3"
+  //                     vertical={false}
+  //                     stroke="hsl(var(--border))"
+  //                   />
 
-                    <XAxis
-                      dataKey="date"
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={12}
-                      tickMargin={10}
-                    />
+  //                   <XAxis
+  //                     dataKey="date"
+  //                     tickLine={false}
+  //                     axisLine={false}
+  //                     fontSize={12}
+  //                     tickMargin={10}
+  //                   />
 
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={12}
-                      width={60}
-                      tickFormatter={(v) =>
-                        `${(v / 1000000).toFixed(1)}M`
-                      }
-                    />
+  //                   <YAxis
+  //                     tickLine={false}
+  //                     axisLine={false}
+  //                     fontSize={12}
+  //                     width={60}
+  //                     tickFormatter={(v) =>
+  //                       `${(v / 1000000).toFixed(1)}M`
+  //                     }
+  //                   />
 
-                    <Tooltip content={<CustomTooltip />} />
+  //                   <Tooltip content={<CustomTooltip />} />
 
-                    <Area
-                      type="monotone"
-                      dataKey="revenue"
-                      name="Doanh thu"
-                      stroke="hsl(var(--primary))"
-                      strokeWidth={3}
-                      fill="url(#revenueGradient)"
-                      activeDot={{
-                        r: 6,
-                        strokeWidth: 0,
-                      }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
+  //                   <Area
+  //                     type="monotone"
+  //                     dataKey="revenue"
+  //                     name="Doanh thu"
+  //                     stroke="hsl(var(--primary))"
+  //                     strokeWidth={3}
+  //                     fill="url(#revenueGradient)"
+  //                     activeDot={{
+  //                       r: 6,
+  //                       strokeWidth: 0,
+  //                     }}
+  //                   />
+  //                 </AreaChart>
+  //               </ResponsiveContainer>
+  //             </div>
+  //           </Card>
 
-            <Card className="border-primary/10">
-              <div className="mb-1 text-lg font-semibold">
-                Top sản phẩm
-              </div>
+  //           <Card className="border-primary/10">
+  //             <div className="mb-1 text-lg font-semibold">
+  //               Top sản phẩm
+  //             </div>
 
-              <div className="mb-4 text-sm text-muted-foreground">
-                Tỷ trọng bán chạy
-              </div>
+  //             <div className="mb-4 text-sm text-muted-foreground">
+  //               Tỷ trọng bán chạy
+  //             </div>
 
-              <div className="h-[320px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={data.topProducts}
-                      dataKey="qty"
-                      nameKey="name"
-                      innerRadius={70}
-                      outerRadius={105}
-                      paddingAngle={4}
-                      cornerRadius={12}
-                    >
-                      {data.topProducts.map((_: any, index: number) => (
-                        <Cell
-                          key={index}
-                          fill={COLORS[index % COLORS.length]}
-                        />
-                      ))}
-                    </Pie>
+  //             <div className="h-[320px]">
+  //               <ResponsiveContainer width="100%" height="100%">
+  //                 <PieChart>
+  //                   <Pie
+  //                     data={data.topProducts}
+  //                     dataKey="qty"
+  //                     nameKey="name"
+  //                     innerRadius={70}
+  //                     outerRadius={105}
+  //                     paddingAngle={4}
+  //                     cornerRadius={12}
+  //                   >
+  //                     {data.topProducts.map((_: any, index: number) => (
+  //                       <Cell
+  //                         key={index}
+  //                         fill={COLORS[index % COLORS.length]}
+  //                       />
+  //                     ))}
+  //                   </Pie>
 
-                    <Tooltip content={<CustomTooltip />} />
+  //                   <Tooltip content={<CustomTooltip />} />
 
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
-          </div>
+  //                   <Legend />
+  //                 </PieChart>
+  //               </ResponsiveContainer>
+  //             </div>
+  //           </Card>
+  //         </div>
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <Card className="border-primary/10">
-              <div className="mb-1 text-lg font-semibold">
-                Sản phẩm bán chạy
-              </div>
+  //         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+  //           <Card className="border-primary/10">
+  //             <div className="mb-1 text-lg font-semibold">
+  //               Sản phẩm bán chạy
+  //             </div>
 
-              <div className="mb-4 text-sm text-muted-foreground">
-                Biểu đồ cột bo góc hiện đại
-              </div>
+  //             <div className="mb-4 text-sm text-muted-foreground">
+  //               Biểu đồ cột bo góc hiện đại
+  //             </div>
 
-              <div className="h-[340px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={data.topProducts}
-                    margin={{
-                      top: 10,
-                      right: 10,
-                      left: 0,
-                      bottom: 18,
-                    }}
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      vertical={false}
-                      stroke="hsl(var(--border))"
-                    />
+  //             <div className="h-[340px]">
+  //               <ResponsiveContainer width="100%" height="100%">
+  //                 <BarChart
+  //                   data={data.topProducts}
+  //                   margin={{
+  //                     top: 10,
+  //                     right: 10,
+  //                     left: 0,
+  //                     bottom: 18,
+  //                   }}
+  //                 >
+  //                   <CartesianGrid
+  //                     strokeDasharray="3 3"
+  //                     vertical={false}
+  //                     stroke="hsl(var(--border))"
+  //                   />
 
-                    <XAxis
-                      dataKey="name"
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={12}
-                      tickMargin={10}
-                      interval={0}
-                    />
+  //                   <XAxis
+  //                     dataKey="name"
+  //                     tickLine={false}
+  //                     axisLine={false}
+  //                     fontSize={12}
+  //                     tickMargin={10}
+  //                     interval={0}
+  //                   />
 
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      fontSize={12}
-                      width={40}
-                    />
+  //                   <YAxis
+  //                     tickLine={false}
+  //                     axisLine={false}
+  //                     fontSize={12}
+  //                     width={40}
+  //                   />
 
-                    <Tooltip content={<CustomTooltip />} />
+  //                   <Tooltip content={<CustomTooltip />} />
 
-                    <Bar
-                      dataKey="qty"
-                      radius={[14, 14, 0, 0]}
-                      maxBarSize={56}
-                    >
-                      {data.topProducts.map((_: any, index: number) => (
-                        <Cell
-                          key={index}
-                          fill={COLORS[index % COLORS.length]}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
+  //                   <Bar
+  //                     dataKey="qty"
+  //                     radius={[14, 14, 0, 0]}
+  //                     maxBarSize={56}
+  //                   >
+  //                     {data.topProducts.map((_: any, index: number) => (
+  //                       <Cell
+  //                         key={index}
+  //                         fill={COLORS[index % COLORS.length]}
+  //                       />
+  //                     ))}
+  //                   </Bar>
+  //                 </BarChart>
+  //               </ResponsiveContainer>
+  //             </div>
+  //           </Card>
 
-            <Card className="border-primary/10">
-              <div className="mb-1 text-lg font-semibold">
-                Cảnh báo tồn kho thấp
-              </div>
+  //           <Card className="border-primary/10">
+  //             <div className="mb-1 text-lg font-semibold">
+  //               Cảnh báo tồn kho thấp
+  //             </div>
 
-              <div className="mb-4 text-sm text-muted-foreground">
-                Các sản phẩm sắp hết hàng
-              </div>
+  //             <div className="mb-4 text-sm text-muted-foreground">
+  //               Các sản phẩm sắp hết hàng
+  //             </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[600px] text-sm">
-                  <thead className="text-left text-muted-foreground border-b">
-                    <tr>
-                      <th className="py-2">Sản phẩm</th>
-                      <th>SKU</th>
-                      <th className="text-right">Tồn</th>
-                      <th className="text-right">Tối thiểu</th>
-                    </tr>
-                  </thead>
+  //             <div className="overflow-x-auto">
+  //               <table className="w-full min-w-[600px] text-sm">
+  //                 <thead className="text-left text-muted-foreground border-b">
+  //                   <tr>
+  //                     <th className="py-2">Sản phẩm</th>
+  //                     <th>SKU</th>
+  //                     <th className="text-right">Tồn</th>
+  //                     <th className="text-right">Tối thiểu</th>
+  //                   </tr>
+  //                 </thead>
 
-                  <tbody>
-                    {data.lowStock.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          className="py-6 text-center text-muted-foreground"
-                        >
-                          Không có cảnh báo.
-                        </td>
-                      </tr>
-                    )}
+  //                 <tbody>
+  //                   {data.lowStock.length === 0 && (
+  //                     <tr>
+  //                       <td
+  //                         colSpan={4}
+  //                         className="py-6 text-center text-muted-foreground"
+  //                       >
+  //                         Không có cảnh báo.
+  //                       </td>
+  //                     </tr>
+  //                   )}
 
-                    {data.lowStock.map((p: any) => (
-                      <tr
-                        key={p.sku}
-                        className="border-b last:border-0"
-                      >
-                        <td className="py-2">{p.name}</td>
+  //                   {data.lowStock.map((p: any) => (
+  //                     <tr
+  //                       key={p.sku}
+  //                       className="border-b last:border-0"
+  //                     >
+  //                       <td className="py-2">{p.name}</td>
 
-                        <td className="text-muted-foreground">
-                          {p.sku}
-                        </td>
+  //                       <td className="text-muted-foreground">
+  //                         {p.sku}
+  //                       </td>
 
-                        <td className="text-right font-semibold text-destructive">
-                          {p.qty}
-                        </td>
+  //                       <td className="text-right font-semibold text-destructive">
+  //                         {p.qty}
+  //                       </td>
 
-                        <td className="text-right">
-                          {p.min}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          </div>
+  //                       <td className="text-right">
+  //                         {p.min}
+  //                       </td>
+  //                     </tr>
+  //                   ))}
+  //                 </tbody>
+  //               </table>
+  //             </div>
+  //           </Card>
+  //         </div>
 
-          <Card className="border-primary/10">
-            <div className="mb-1 text-lg font-semibold">
-              Khách công nợ cao nhất
-            </div>
+  //         <Card className="border-primary/10">
+  //           <div className="mb-1 text-lg font-semibold">
+  //             Khách công nợ cao nhất
+  //           </div>
 
-            <div className="mb-4 text-sm text-muted-foreground">
-              Danh sách khách hàng còn công nợ
-            </div>
+  //           <div className="mb-4 text-sm text-muted-foreground">
+  //             Danh sách khách hàng còn công nợ
+  //           </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[600px] text-sm">
-                <thead className="text-left text-muted-foreground border-b">
-                  <tr>
-                    <th className="py-2">Khách hàng</th>
-                    <th>SĐT</th>
-                    <th className="text-right">Công nợ</th>
-                  </tr>
-                </thead>
+  //           <div className="overflow-x-auto">
+  //             <table className="w-full min-w-[600px] text-sm">
+  //               <thead className="text-left text-muted-foreground border-b">
+  //                 <tr>
+  //                   <th className="py-2">Khách hàng</th>
+  //                   <th>SĐT</th>
+  //                   <th className="text-right">Công nợ</th>
+  //                 </tr>
+  //               </thead>
 
-                <tbody>
-                  {data.debtors.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={3}
-                        className="py-6 text-center text-muted-foreground"
-                      >
-                        Không có công nợ.
-                      </td>
-                    </tr>
-                  )}
+  //               <tbody>
+  //                 {data.debtors.length === 0 && (
+  //                   <tr>
+  //                     <td
+  //                       colSpan={3}
+  //                       className="py-6 text-center text-muted-foreground"
+  //                     >
+  //                       Không có công nợ.
+  //                     </td>
+  //                   </tr>
+  //                 )}
 
-                  {data.debtors.map((c: any) => (
-                    <tr
-                      key={c.id}
-                      className="border-b last:border-0"
-                    >
-                      <td className="py-2">
-                        <Link to="/customers/$id" params={{ id: c.id }} className="font-medium hover:text-primary hover:underline">
-                          {c.name}
-                        </Link>
-                      </td>
+  //                 {data.debtors.map((c: any) => (
+  //                   <tr
+  //                     key={c.id}
+  //                     className="border-b last:border-0"
+  //                   >
+  //                     <td className="py-2">
+  //                       <Link to="/customers/$id" params={{ id: c.id }} className="font-medium hover:text-primary hover:underline">
+  //                         {c.name}
+  //                       </Link>
+  //                     </td>
 
-                      <td className="text-muted-foreground">
-                        {c.phone}
-                      </td>
+  //                     <td className="text-muted-foreground">
+  //                       {c.phone}
+  //                     </td>
 
-                      <td className="text-right font-semibold text-destructive">
-                        {fmt(c.debt)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
-      )}
-    </AppShell>
-  );
+  //                     <td className="text-right font-semibold text-destructive">
+  //                       {fmt(c.debt)}
+  //                     </td>
+  //                   </tr>
+  //                 ))}
+  //               </tbody>
+  //             </table>
+  //           </div>
+  //         </Card>
+  //       </div>
+  //     )}
+  //   </AppShell>
+  // );
 }

@@ -402,11 +402,9 @@ function CustomerDetailPage() {
         <Button size="sm" variant="outline" className="ml-auto" onClick={startEdit}>
           <Pencil className="h-4 w-4 mr-1" /> Chỉnh sửa
         </Button>
-        {displayDebt > 0 && (
-          <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={openPayDialog}>
-            <Banknote className="h-4 w-4 mr-1" /> Thu tiền
-          </Button>
-        )}
+        <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={openPayDialog}>
+          <Banknote className="h-4 w-4 mr-1" /> Thu tiền
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1039,29 +1037,6 @@ function CustomerDetailPage() {
                       </div>
                     )}
 
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Nội dung chuyển khoản</Label>
-                      <div className="mt-1 relative">
-                        <Input
-                          value={bankContent}
-                          onChange={(e) => setBankContent(e.target.value)}
-                          placeholder="VD: THUTIEN NGUYEN VAN A"
-                          className="pr-12 font-mono text-sm"
-                        />
-                        {bankContent && (
-                          <button
-                            type="button"
-                            className="absolute right-2 top-2 text-xs text-primary hover:underline"
-                            onClick={() => {
-                              navigator.clipboard.writeText(bankContent);
-                              toast.success("Đã copy!");
-                            }}
-                          >
-                            Copy
-                          </button>
-                        )}
-                      </div>
-                    </div>
                   </div>
                 );
               })()}

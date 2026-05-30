@@ -687,7 +687,9 @@ function Page() {
   const [sortBy, setSortBy] = useState("newest");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterBranch, setFilterBranch] = useState(() => activeBranchId ?? "");
-
+  const [depositMethod, setDepositMethod] = useState<"tien_mat" | "ngan_hang">("tien_mat");
+  const [depositBankIdx, setDepositBankIdx] = useState("");
+  
   const customerMap = useMemo(
     () => new Map((data?.customers ?? []).map((c: any) => [c.id, c])),
     [data?.customers],
@@ -901,6 +903,8 @@ function Page() {
     setPaymentMethod("tien_mat");
     setBankAccountIdx("");
     setBankContent("");
+    setDepositMethod("tien_mat");
+    setDepositBankIdx("");
     setDiscountRaw("0");
     setDiscountPct("0");
     setUseDiscountPct(false);
@@ -941,20 +945,18 @@ function Page() {
     if (items.length === 0) return toast.error("Đơn chưa có sản phẩm");
     if (!branch) return toast.error("Chọn chi nhánh");
 
+    // Nếu trạng thái hoàn tất hoặc đã thanh toán, bắt buộc phải có khách hàng
+    const finalStatus = status === "completed" || khachThanhToan > 0 ? "completed" : status;
+    if (finalStatus === "completed" && !customer) {
+      return toast.error("Đơn hàng hoàn tất phải có khách hàng. Vui lòng chọn hoặc tạo khách hàng trước.");
+    }
+
     if (createScheduleOnOrder && !scheduleForm.title) {
       return toast.error("Vui lòng nhập tiêu đề lịch làm việc");
     }
 
     setSubmitting(true);
     try {
-      // finalStatus:
-      // - Nếu user đã chọn "completed" → luôn completed (dù paid=0, debt sẽ được cộng)
-      // - Nếu paid > 0 (bất kể status chọn) → completed
-      // - Còn lại → giữ status user đã chọn (reserved/draft)
-      const finalStatus = status === "completed" || khachThanhToan > 0
-        ? "completed"
-        : status;
-
       const r = await create({
         data: {
           customer_id: customer || undefined,
@@ -968,6 +970,7 @@ function Page() {
           vat_rate: includeVat ? vatRate : 0,
           vat_amount: vatAmt,
           deposit,
+          deposit_method: deposit > 0 ? depositMethod : undefined,
           paid: khachThanhToan,
           note: note || undefined,
           items,
@@ -1368,7 +1371,7 @@ function Page() {
                   )}
                 </div>
 
-                <div>
+<div>
                   <Label>Đặt cọc (₫)</Label>
                   <Input
                     className="mt-1"
@@ -1376,6 +1379,50 @@ function Page() {
                     onChange={(e) => setDepositRaw(fmtInput(e.target.value))}
                     onFocus={(e) => e.target.select()}
                   />
+                  {deposit > 0 && (
+                    <div className="mt-2 space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Hình thức thu cọc</Label>
+                      <div className="flex gap-3">
+                        {([
+                          { value: "tien_mat", label: "Tiền mặt" },
+                          { value: "ngan_hang", label: "Chuyển khoản" },
+                        ] as const).map((opt) => (
+                          <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer text-sm">
+                            <input
+                              type="radio"
+                              name="deposit_method"
+                              value={opt.value}
+                              checked={depositMethod === opt.value}
+                              onChange={() => setDepositMethod(opt.value)}
+                              className="accent-primary"
+                            />
+                            {opt.label}
+                          </label>
+                        ))}
+                      </div>
+                      {depositMethod === "ngan_hang" && (() => {
+                        const bankList: any[] = (() => {
+                          try { return JSON.parse((siteSettings as any)?.bank_accounts || "[]"); }
+                          catch { return []; }
+                        })();
+                        if (!bankList.length) return null;
+                        return (
+                          <select
+                            className="w-full h-9 rounded-md border bg-background px-2 text-sm mt-1"
+                            value={depositBankIdx}
+                            onChange={(e) => setDepositBankIdx(e.target.value)}
+                          >
+                            <option value="">— Chọn tài khoản —</option>
+                            {bankList.map((ba: any, i: number) => (
+                              <option key={i} value={String(i)}>
+                                {ba.bank} — {ba.account_number} ({ba.account_name})
+                              </option>
+                            ))}
+                          </select>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
               </div>
 

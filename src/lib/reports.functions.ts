@@ -120,5 +120,11 @@ export const getReports = createServerFn({ method: "GET" }).handler(async () => 
     debtors,
     byBranch,
     byEmployee,
+    // Raw data for client-side date range filtering
+    _rawOrders: orders,
+    _rawItems: orderItems,
+    _rawProducts: products,
+    _rawBranches: branches,
+    _rawUsers: users,
   };
 });

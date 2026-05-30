@@ -140,6 +140,10 @@ function OrderDetailPage() {
   const [shortageOpen, setShortageOpen] = useState(false);
   const [shortageItems, setShortageItems] = useState<{name: string; needed: number; available: number}[]>([]);
 
+  // Stock detail dialog
+  const [stockDetailOpen, setStockDetailOpen] = useState(false);
+  const [stockDetailProduct, setStockDetailProduct] = useState<any>(null);
+
   // Return order state
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnItems, setReturnItems] = useState<LineItem[]>([]);
@@ -232,6 +236,9 @@ function OrderDetailPage() {
 
   async function saveEdit() {
     if (editItems.length === 0) return toast.error("Đơn chưa có sản phẩm");
+    if (editStatus === "completed" && !editCustomer) {
+      return toast.error("Đơn hàng hoàn tất phải có khách hàng. Vui lòng chọn khách hàng trước.");
+    }
     setSaving(true);
     try {
       // Tính lại discount amount để lưu xuống DB
@@ -278,11 +285,7 @@ function OrderDetailPage() {
 
       toast.success("Đã cập nhật đơn hàng");
       setEditing(false);
-
-      navigate({
-        to: "/orders",
-        replace: true,
-      });
+      // Giữ nguyên trang hiện tại
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi lưu");
     } finally {
@@ -377,6 +380,10 @@ function OrderDetailPage() {
 
   // Kiểm tra tồn kho rồi mở dialog thanh toán
   function completeOrder() {
+    if (!order.customer_id) {
+      toast.error("Đơn hàng hoàn tất phải có khách hàng. Vui lòng chỉnh sửa đơn và thêm khách hàng trước.");
+      return;
+    }
     const stock = data?.stock ?? [];
     const branchId = order.branch_id;
     const shortages: string[] = [];
@@ -447,7 +454,7 @@ function OrderDetailPage() {
         toast.success("Đã hoàn tất đơn " + order.code);
       }
       setPayOpen(false);
-      navigate({ to: "/orders", replace: true });
+      // Giữ nguyên trang orders/$id
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi hoàn tất đơn");
     } finally {
@@ -467,11 +474,7 @@ function OrderDetailPage() {
       await refetch();
 
       toast.success("Đã hủy đơn " + order.code);
-
-      navigate({
-        to: "/orders",
-        replace: true,
-      });
+      // Giữ nguyên trang hiện tại
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi hủy đơn");
     } finally {
@@ -481,12 +484,11 @@ function OrderDetailPage() {
 
   function printOrderSlip() {
     if (!order) return;
-    const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
+    const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " đ";
     const custObj   = (data?.customers ?? []).find((c: any) => c.id === order.customer_id);
     const branchObj = (data?.branches  ?? []).find((b: any) => b.id === order.branch_id);
     const empObj    = (data?.employees ?? []).find((e: any) => e.id === order.employee_id);
     const ss = siteSettings as any;
-    // Load print template from admin settings
     const _tpls = (() => { try { return JSON.parse(ss?.print_templates || "{}"); } catch { return {}; } })();
     const _tpl = _tpls["order_invoice"] ?? {};
     const _siteName = ss?.site_name ?? "Mr.Vũ";
@@ -501,60 +503,60 @@ function OrderDetailPage() {
       const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
       const lineTotal = item.qty * item.unit_price - (item.discount ?? 0);
       return `<tr>
-        <td style="text-align:center;padding:8px 6px;border-bottom:1px solid #e5e7eb">${i+1}</td>
-        <td style="padding:8px 6px;border-bottom:1px solid #e5e7eb">${prod?.name ?? item.product_id}</td>
-        <td style="text-align:center;padding:8px 6px;border-bottom:1px solid #e5e7eb">${item.qty}</td>
-        <td style="text-align:right;padding:8px 6px;border-bottom:1px solid #e5e7eb">${moneyFmt(item.unit_price)}</td>
-        <td style="text-align:right;padding:8px 6px;border-bottom:1px solid #e5e7eb;font-weight:600">${moneyFmt(lineTotal)}</td>
+        <td style="text-align:center;padding:7px 6px;border-bottom:1px solid #e0e0e0">${i+1}</td>
+        <td style="padding:7px 6px;border-bottom:1px solid #e0e0e0">${prod?.name ?? item.product_id}</td>
+        <td style="text-align:center;padding:7px 6px;border-bottom:1px solid #e0e0e0">${item.qty}</td>
+        <td style="text-align:right;padding:7px 6px;border-bottom:1px solid #e0e0e0">${moneyFmt(item.unit_price)}</td>
+        <td style="text-align:right;padding:7px 6px;border-bottom:1px solid #e0e0e0;font-weight:600">${moneyFmt(lineTotal)}</td>
       </tr>`;
     }).join("");
 
     const statusLabels: Record<string, string> = { completed: "Hoàn tất", reserved: "Đặt hàng", draft: "Nháp" };
     const pmLabel = order.payment_method === "ngan_hang" ? "Chuyển khoản" : "Tiền mặt";
 
-    const html = `<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Hóa đơn ${order.code}</title>
+    const html = `<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Phiếu ${order.code}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:32px}
-.page{max-width:760px;margin:0 auto}
-.header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #e5e7eb}
-.shop-name{font-size:18px;font-weight:700;color:#1d4ed8}
-.shop-info{font-size:11px;color:#6b7280;line-height:1.7;margin-top:4px}
-.inv-title{font-size:20px;font-weight:800;text-transform:uppercase;color:#111;text-align:right;line-height:1.2}
-.inv-meta{font-size:11px;color:#6b7280;text-align:right;margin-top:6px;line-height:1.8}
-.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px 16px}
-.info-label{color:#6b7280;font-size:10.5px;text-transform:uppercase;letter-spacing:0.4px}
-.info-value{font-weight:600;color:#111;font-size:12.5px;margin-top:1px}
-table{width:100%;border-collapse:collapse;margin-bottom:16px}
-thead tr{background:#1d4ed8;color:#fff}th{padding:10px 8px;font-size:12px;font-weight:600}
-.total-section{display:flex;justify-content:flex-end;margin-bottom:20px}
-.total-box{min-width:270px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden}
-.total-row{display:flex;justify-content:space-between;padding:7px 14px;font-size:13px;border-bottom:1px solid #f3f4f6}
-.total-row.grand{background:#1d4ed8;color:#fff;font-size:15px;font-weight:700;border-bottom:none}
-.checklist{border:1px solid #e5e7eb;border-radius:6px;padding:12px 16px;margin-bottom:20px;font-size:12px}
-.sign-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;text-align:center;margin-top:8px}
-.warranty{margin-top:16px;padding:10px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;line-height:1.7;color:#9a3412}
-.footer{margin-top:14px;text-align:center;font-size:12px;color:#9ca3af;border-top:1px solid #f3f4f6;padding-top:12px}
-@media print{body{padding:0}}
+body{font-family:'Arial',sans-serif;font-size:13px;color:#111;background:#fff;padding:28px 36px}
+.page{max-width:740px;margin:0 auto}
+.header{display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:14px;border-bottom:2px solid #111;margin-bottom:18px}
+.shop-name{font-size:17px;font-weight:700;letter-spacing:-0.3px}
+.shop-info{font-size:11px;color:#555;line-height:1.8;margin-top:3px}
+.inv-title{font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;text-align:right}
+.inv-meta{font-size:11px;color:#555;text-align:right;margin-top:5px;line-height:1.9}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;margin-bottom:18px;border:1px solid #ddd;border-radius:4px;padding:10px 14px;background:#fafafa}
+.info-label{color:#888;font-size:10px;text-transform:uppercase;letter-spacing:0.5px}
+.info-value{font-weight:600;color:#111;font-size:12px;margin-top:1px}
+table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:12.5px}
+thead tr th{padding:8px 6px;border-top:1px solid #111;border-bottom:1px solid #111;font-weight:700;background:#fff;text-align:left}
+.total-section{display:flex;justify-content:flex-end;margin-bottom:18px}
+.total-box{min-width:260px;border:1px solid #ddd;border-radius:4px;overflow:hidden;font-size:12.5px}
+.total-row{display:flex;justify-content:space-between;padding:6px 12px;border-bottom:1px solid #f0f0f0}
+.total-row.grand{background:#111;color:#fff;font-size:14px;font-weight:700;border-bottom:none;padding:9px 12px}
+.checklist{border:1px solid #ddd;border-radius:4px;padding:10px 14px;margin-bottom:18px;font-size:11.5px}
+.sign-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;text-align:center}
+.warranty{margin-top:14px;padding:9px 12px;border:1px solid #bbb;border-radius:4px;font-size:10.5px;font-weight:700;text-transform:uppercase;line-height:1.7;color:#333;background:#f5f5f5}
+.footer{margin-top:14px;text-align:center;font-size:11px;color:#888;border-top:1px solid #e5e5e5;padding-top:10px}
+@media print{body{padding:10px}@page{margin:10mm}}
 </style></head><body><div class="page">
 <div class="header">
   <div>
-    ${ss?.logo_url ? `<img src="${ss.logo_url}" alt="Logo" style="height:52px;object-fit:contain;margin-bottom:6px;display:block">` : ""}
+    ${ss?.logo_url ? `<img src="${ss.logo_url}" alt="Logo" style="height:44px;object-fit:contain;margin-bottom:5px;display:block">` : ""}
     <div class="shop-name">${ss?.site_name ?? "Mr.Vũ"}</div>
     <div class="shop-info">
-      ${ss?.address ? `📍 ${ss.address}<br>` : ""}
-      ${ss?.phone ? `📞 ${ss.phone}` : ""}${ss?.phone && ss?.email ? " &nbsp;|&nbsp; " : ""}${ss?.email ? `✉ ${ss.email}` : ""}
+      ${ss?.address ? `${ss.address}<br>` : ""}
+      ${ss?.phone ? `ĐT: ${ss.phone}` : ""}${ss?.phone && ss?.email ? " &nbsp;|&nbsp; " : ""}${ss?.email ? `Email: ${ss.email}` : ""}
       ${ss?.tax_code ? `<br>MST: ${ss.tax_code}` : ""}
     </div>
   </div>
   <div>
     <div class="inv-title">${_tplHeader}</div>
     <div class="inv-meta">
-      <strong>Mã phiếu:</strong> ${order.code}<br>
-      <strong>Ngày đặt hàng:</strong> ${new Date(order.created_at).toLocaleDateString("vi-VN")}<br>
-      <strong>Ngày lập phiếu:</strong> ${new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })}<br>
-      ${order.completed_at ? `<strong>Ngày hoàn tất:</strong> ${new Date(order.completed_at).toLocaleDateString("vi-VN")}<br>` : ""}
-      <strong>Trạng thái:</strong> ${statusLabels[order.status] ?? order.status}
+      Mã phiếu: <strong>${order.code}</strong><br>
+      Ngày đặt: ${new Date(order.created_at).toLocaleDateString("vi-VN")}<br>
+      Ngày in: ${new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })}<br>
+      ${order.completed_at ? `Hoàn tất: ${new Date(order.completed_at).toLocaleDateString("vi-VN")}<br>` : ""}
+      Trạng thái: ${statusLabels[order.status] ?? order.status}
     </div>
   </div>
 </div>
@@ -567,28 +569,29 @@ thead tr{background:#1d4ed8;color:#fff}th{padding:10px 8px;font-size:12px;font-w
 </div>
 <table>
   <thead><tr>
-    <th style="width:42px;text-align:center">STT</th><th>Sản phẩm</th>
-    <th style="width:56px;text-align:center">SL</th>
-    <th style="width:120px;text-align:right">Đơn giá</th>
-    <th style="width:130px;text-align:right">Thành tiền</th>
+    <th style="width:36px;text-align:center">STT</th><th>Sản phẩm</th>
+    <th style="width:48px;text-align:center">SL</th>
+    <th style="width:110px;text-align:right">Đơn giá</th>
+    <th style="width:120px;text-align:right">Thành tiền</th>
   </tr></thead>
   <tbody>${rows}</tbody>
+  <tfoot><tr><td colspan="5" style="border-top:1px solid #111;padding:2px"></td></tr></tfoot>
 </table>
 <div class="total-section"><div class="total-box">
   <div class="total-row"><span>Tạm tính</span><span>${moneyFmt(order.subtotal)}</span></div>
-  ${Number(order.discount) > 0 ? `<div class="total-row" style="color:#16a34a"><span>Giảm giá</span><span>- ${moneyFmt(order.discount)}</span></div>` : ""}
-  ${Number(order.vat_amount) > 0 ? `<div class="total-row" style="color:#d97706"><span>Thuế VAT</span><span>+ ${moneyFmt(order.vat_amount)}</span></div>` : ""}
+  ${Number(order.discount) > 0 ? `<div class="total-row"><span>Giảm giá</span><span>- ${moneyFmt(order.discount)}</span></div>` : ""}
+  ${Number(order.vat_amount) > 0 ? `<div class="total-row"><span>Thuế VAT</span><span>+ ${moneyFmt(order.vat_amount)}</span></div>` : ""}
   <div class="total-row"><span>Tổng cộng</span><span style="font-weight:700">${moneyFmt(order.total)}</span></div>
-  ${Number(order.deposit) > 0 ? `<div class="total-row" style="color:#b45309"><span>Đặt cọc</span><span>- ${moneyFmt(order.deposit)}</span></div>` : ""}
-  ${Number(order.paid) > 0 ? `<div class="total-row" style="color:#059669"><span>Đã thanh toán</span><span>- ${moneyFmt(order.paid)}</span></div>` : ""}
+  ${Number(order.deposit) > 0 ? `<div class="total-row"><span>Đặt cọc</span><span>- ${moneyFmt(order.deposit)}</span></div>` : ""}
+  ${Number(order.paid) > 0 ? `<div class="total-row"><span>Đã thanh toán</span><span>- ${moneyFmt(order.paid)}</span></div>` : ""}
   <div class="total-row grand"><span>Khách cần trả</span><span>${moneyFmt(Math.max(0, order.total - (order.deposit ?? 0) - (order.paid ?? 0)))}</span></div>
 </div></div>
-${order.note ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:10px 14px;font-size:12.5px;margin-bottom:20px"><strong>Ghi chú:</strong> ${order.note}</div>` : ""}
+${order.note ? `<div style="border:1px solid #ddd;border-radius:4px;padding:8px 12px;font-size:12px;margin-bottom:18px"><strong>Ghi chú:</strong> ${order.note}</div>` : ""}
 <div class="checklist">
-  <div style="font-weight:700;margin-bottom:8px;font-size:12.5px">Xác nhận bàn giao:</div>
+  <div style="font-weight:700;margin-bottom:7px;font-size:12px">Xác nhận bàn giao:</div>
   ${["Đã giao hàng đúng mẫu và đầy đủ phụ kiện","Đã lắp đặt hoàn thiện, quạt chạy ổn định","Đã hướng dẫn sử dụng và bảo quản","Đã thanh toán đúng số tiền trên phiếu"]
-    .map(it=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:13px;height:13px;border:1.5px solid #9ca3af;border-radius:2px;display:inline-block;flex-shrink:0"></span><span>${it}</span></div>`).join("")}
-  <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:11px;color:#6b7280">
+    .map(it=>`<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px"><span style="width:12px;height:12px;border:1px solid #999;border-radius:2px;display:inline-block;flex-shrink:0"></span><span>${it}</span></div>`).join("")}
+  <div style="display:flex;justify-content:space-between;margin-top:9px;font-size:11px;color:#555">
     <strong>Khách hàng xác nhận</strong><span>Họ và tên: _________________ &nbsp;&nbsp; Chữ ký: ______________</span>
   </div>
 </div>
@@ -596,11 +599,11 @@ ${order.note ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-r
   ${["Kỹ thuật","Nhân viên","Khách hàng","Thủ kho"].map(r=>`
     <div>
       <div style="font-weight:700;font-size:12px;margin-bottom:3px">${r}</div>
-      <div style="font-size:11px;color:#9ca3af;margin-bottom:44px">(Ký, ghi rõ họ tên)</div>
-      <div style="border-top:1px dashed #d1d5db;padding-top:4px;font-size:11px;color:#d1d5db">___________</div>
+      <div style="font-size:11px;color:#888;margin-bottom:40px">(Ký, ghi rõ họ tên)</div>
+      <div style="border-top:1px solid #bbb;padding-top:4px;font-size:11px;color:#bbb">___________</div>
     </div>`).join("")}
 </div>
-${_tplWarranty ? `<div class="warranty">⚠ ${_tplWarranty}</div>` : ""}
+${_tplWarranty ? `<div class="warranty">${_tplWarranty}</div>` : ""}
 ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
 </div></body></html>`;
 
@@ -921,7 +924,13 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                   return (
                     <div key={item.id ?? item.product_id} className="rounded-lg border bg-muted/20 px-3 py-2.5">
                       <div className="flex justify-between items-start gap-2">
-                        <span className="font-medium text-sm leading-tight">{p?.name ?? item.product_id}</span>
+                        <button
+                          type="button"
+                          className="font-medium text-sm leading-tight hover:text-primary hover:underline text-left"
+                          onClick={() => { const p2 = (data?.products ?? []).find((x: any) => x.id === item.product_id); setStockDetailProduct(p2 ?? { id: item.product_id, name: item.product_id }); setStockDetailOpen(true); }}
+                        >
+                          {p?.name ?? item.product_id}
+                        </button>
                         <span className="font-semibold text-sm shrink-0">{fmt(item.total)}</span>
                       </div>
                       <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
@@ -949,7 +958,15 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
                       const p = (data?.products ?? []).find((x: any) => x.id === item.product_id);
                       return (
                         <tr key={item.id ?? item.product_id} className="border-b last:border-0">
-                          <td className="py-2 pr-2 font-medium">{p?.name ?? item.product_id}</td>
+                          <td className="py-2 pr-2 font-medium">
+                            <button
+                              type="button"
+                              className="hover:text-primary hover:underline text-left"
+                              onClick={() => { setStockDetailProduct(p ?? { id: item.product_id, name: item.product_id }); setStockDetailOpen(true); }}
+                            >
+                              {p?.name ?? item.product_id}
+                            </button>
+                          </td>
                           <td className="text-right pr-2 text-muted-foreground">{fmt(item.unit_price)}</td>
                           <td className="text-right pr-2">{item.qty}</td>
                           <td className="text-right pr-2 text-muted-foreground">
@@ -1759,6 +1776,97 @@ ${_tplFooter ? `<div class="footer">${_tplFooter}</div>` : ""}
               </div>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+      {/* ── Stock Detail Dialog ────────────────────────────────────────────── */}
+      <Dialog open={stockDetailOpen} onOpenChange={setStockDetailOpen}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5 text-primary" />
+              Tồn kho — {stockDetailProduct?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Số lượng tồn kho theo từng chi nhánh
+            </DialogDescription>
+          </DialogHeader>
+          {stockDetailProduct && (() => {
+            const allStock = (data?.stock ?? []).filter((s: any) => s.product_id === stockDetailProduct.id);
+            const allBranches = data?.branches ?? [];
+            const prod = (data?.products ?? []).find((p: any) => p.id === stockDetailProduct.id);
+            const totalStock = allStock.reduce((sum: number, s: any) => sum + Number(s.qty || 0), 0);
+            const orderQty = orderItems.find((i: any) => i.product_id === stockDetailProduct.id)?.qty ?? 0;
+            const branchStock = allStock.reduce((sum: number, s: any) => s.branch_id === order.branch_id ? sum + Number(s.qty || 0) : sum, 0);
+            return (
+              <div className="space-y-3 py-1">
+                {/* Summary */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-lg border bg-muted/30 p-3 text-center">
+                    <div className="text-xs text-muted-foreground mb-1">Tổng tồn</div>
+                    <div className="text-xl font-bold">{totalStock}</div>
+                  </div>
+                  <div className="rounded-lg border bg-blue-50 p-3 text-center">
+                    <div className="text-xs text-muted-foreground mb-1">Chi nhánh đơn</div>
+                    <div className={`text-xl font-bold ${branchStock < orderQty ? "text-destructive" : "text-blue-700"}`}>{branchStock}</div>
+                  </div>
+                  <div className="rounded-lg border bg-orange-50 p-3 text-center">
+                    <div className="text-xs text-muted-foreground mb-1">Đơn cần</div>
+                    <div className="text-xl font-bold text-orange-700">{orderQty}</div>
+                  </div>
+                </div>
+
+                {branchStock < orderQty && (
+                  <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>Không đủ hàng tại chi nhánh này — thiếu <strong>{orderQty - branchStock}</strong></span>
+                  </div>
+                )}
+
+                {prod?.min_stock !== undefined && prod.min_stock > 0 && (
+                  <div className="flex justify-between text-sm px-1">
+                    <span className="text-muted-foreground">Tồn kho tối thiểu</span>
+                    <span className="font-medium">{prod.min_stock}</span>
+                  </div>
+                )}
+
+                {/* Per-branch breakdown */}
+                <div className="rounded-xl border overflow-hidden">
+                  <div className="grid grid-cols-3 bg-muted/60 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <span className="col-span-2">Chi nhánh</span>
+                    <span className="text-right">Tồn</span>
+                  </div>
+                  <div className="divide-y">
+                    {allBranches.map((b: any) => {
+                      const qty = allStock
+                        .filter((s: any) => s.branch_id === b.id)
+                        .reduce((sum: number, s: any) => sum + Number(s.qty || 0), 0);
+                      const isOrderBranch = b.id === order.branch_id;
+                      return (
+                        <div key={b.id} className={`grid grid-cols-3 px-4 py-3 items-center ${isOrderBranch ? "bg-blue-50/50" : ""}`}>
+                          <div className="col-span-2 flex items-center gap-2 text-sm">
+                            <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className={isOrderBranch ? "font-semibold text-blue-700" : ""}>{b.name}</span>
+                            {isOrderBranch && <span className="text-xs bg-blue-100 text-blue-600 rounded px-1">đơn này</span>}
+                          </div>
+                          <div className="text-right">
+                            <span className={`font-bold text-sm ${qty === 0 ? "text-destructive" : qty < (prod?.min_stock ?? 0) ? "text-orange-600" : "text-green-700"}`}>
+                              {qty}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {allBranches.length === 0 && (
+                      <div className="px-4 py-3 text-sm text-muted-foreground">Không có dữ liệu chi nhánh</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" className="w-full" onClick={() => setStockDetailOpen(false)}>Đóng</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </AppShell>
