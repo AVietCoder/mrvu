@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { listOrders, updateOrderStatus, updateOrder, createReturnOrder } from "@/lib/orders.functions";
 import { updateScheduleOrderLink } from "@/lib/schedule.functions";
 import { getSettings } from "@/lib/settings.functions";
@@ -40,11 +40,13 @@ import {
   Pencil,
   X,
   Plus,
+  Minus,
   Save,
   Ban,
   Printer,
   RotateCcw,
   Percent,
+  ChevronRight,
   Link2,
   Link2Off,
 } from "lucide-react";
@@ -145,6 +147,16 @@ function OrderDetailPage() {
   const [returnNote, setReturnNote] = useState("");
   const [submittingReturn, setSubmittingReturn] = useState(false);
 
+  // Mở rộng xem tồn kho chi tiết theo chi nhánh cho từng sản phẩm (chế độ xem)
+  const [expandedStock, setExpandedStock] = useState<Set<string>>(new Set());
+  const toggleStockDetail = (pid: string) =>
+    setExpandedStock((prev) => {
+      const next = new Set(prev);
+      if (next.has(pid)) next.delete(pid);
+      else next.add(pid);
+      return next;
+    });
+
   const order = useMemo(
     () => (data?.orders ?? []).find((o: any) => o.id === id),
     [data, id]
@@ -221,6 +233,10 @@ function OrderDetailPage() {
 
   async function saveEdit() {
     if (editItems.length === 0) return toast.error("Đơn chưa có sản phẩm");
+    // ✅ Điều kiện hoàn tất: bắt buộc phải có khách hàng
+    if (editStatus === "completed" && !editCustomer) {
+      return toast.error("Đơn hoàn tất phải có khách hàng. Vui lòng chọn khách hàng, hoặc đổi sang trạng thái Đặt hàng (chưa giao).");
+    }
     setSaving(true);
     try {
       // Tính lại discount amount để lưu xuống DB
@@ -354,6 +370,7 @@ function OrderDetailPage() {
 
       toast.success(`Đã tạo phiếu trả hàng ${result.code}`);
       setReturnOpen(false);
+      navigate({ to: "/orders", replace: true });
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi tạo phiếu trả hàng");
     } finally {
@@ -363,6 +380,11 @@ function OrderDetailPage() {
 
   // Kiểm tra tồn kho rồi mở dialog thanh toán
   function completeOrder() {
+    // ✅ Điều kiện hoàn tất: bắt buộc phải có khách hàng
+    if (!order.customer_id) {
+      toast.error("Đơn hàng phải có khách hàng mới được hoàn tất. Hãy bấm \"Chỉnh sửa đơn\" để chọn khách hàng.");
+      return;
+    }
     const stock = data?.stock ?? [];
     const branchId = order.branch_id;
     const shortages: string[] = [];
@@ -764,12 +786,13 @@ function OrderDetailPage() {
 
             {!editing ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[400px]">
+                <table className="w-full text-sm min-w-[480px]">
                   <thead className="text-left text-muted-foreground border-b">
                     <tr>
                       <th className="py-2 pr-2">Sản phẩm</th>
                       <th className="text-right pr-2">Đơn giá</th>
                       <th className="text-right pr-2">SL</th>
+                      <th className="text-right pr-2">Tồn kho</th>
                       <th className="text-right pr-2">CK</th>
                       <th className="text-right">Thành tiền</th>
                     </tr>
@@ -777,16 +800,74 @@ function OrderDetailPage() {
                   <tbody>
                     {orderItems.map((item: any) => {
                       const p = (data?.products ?? []).find((x: any) => x.id === item.product_id);
+                      const stockRows = data?.stock ?? [];
+                      const branchesAll = (data?.branches ?? []) as any[];
+                      const perBranch = branchesAll.map((b: any) => ({
+                        name: b.name,
+                        id: b.id,
+                        qty: stockRows
+                          .filter((s: any) => s.product_id === item.product_id && s.branch_id === b.id)
+                          .reduce((a: number, s: any) => a + Number(s.qty || 0), 0),
+                      }));
+                      const totalStock = perBranch.reduce((a, x) => a + x.qty, 0);
+                      const branchStock = perBranch.find((x) => x.id === order.branch_id)?.qty ?? 0;
+                      const lowForOrder = branchStock < item.qty;
+                      const expanded = expandedStock.has(item.product_id);
                       return (
-                        <tr key={item.id ?? item.product_id} className="border-b last:border-0">
-                          <td className="py-2 pr-2 font-medium">{p?.name ?? item.product_id}</td>
-                          <td className="text-right pr-2 text-muted-foreground">{fmt(item.unit_price)}</td>
-                          <td className="text-right pr-2">{item.qty}</td>
-                          <td className="text-right pr-2 text-muted-foreground">
-                            {item.discount > 0 ? `- ${fmt(item.discount)}` : "—"}
-                          </td>
-                          <td className="text-right font-medium">{fmt(item.total)}</td>
-                        </tr>
+                        <Fragment key={item.id ?? item.product_id}>
+                          <tr className="border-b last:border-0">
+                            <td className="py-2 pr-2 font-medium">
+                              <button
+                                type="button"
+                                onClick={() => toggleStockDetail(item.product_id)}
+                                className="inline-flex items-center gap-1 text-left hover:text-primary"
+                                title="Xem tồn kho chi tiết theo chi nhánh"
+                              >
+                                <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
+                                {p?.name ?? item.product_id}
+                              </button>
+                            </td>
+                            <td className="text-right pr-2 text-muted-foreground">{fmt(item.unit_price)}</td>
+                            <td className="text-right pr-2">{item.qty}</td>
+                            <td className="text-right pr-2">
+                              <span className={lowForOrder ? "font-semibold text-destructive" : "font-medium"}>{branchStock}</span>
+                              <span className="text-[11px] text-muted-foreground"> / {totalStock}</span>
+                            </td>
+                            <td className="text-right pr-2 text-muted-foreground">
+                              {item.discount > 0 ? `- ${fmt(item.discount)}` : "—"}
+                            </td>
+                            <td className="text-right font-medium">{fmt(item.total)}</td>
+                          </tr>
+                          {expanded && (
+                            <tr className="bg-muted/30">
+                              <td colSpan={6} className="px-3 py-2">
+                                <div className="text-xs text-muted-foreground mb-1.5">
+                                  Tồn kho theo chi nhánh — Tổng: <span className="font-semibold text-foreground">{totalStock}</span>
+                                  {p?.min_stock != null && <span> · Định mức tối thiểu: {p.min_stock}</span>}
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {perBranch.map((b) => {
+                                    const isOrderBranch = b.id === order.branch_id;
+                                    const low = p?.min_stock != null && b.qty <= p.min_stock;
+                                    return (
+                                      <span
+                                        key={b.id}
+                                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs ${
+                                          isOrderBranch ? "border-foreground bg-background font-semibold" : "bg-background"
+                                        }`}
+                                      >
+                                        {isOrderBranch && <Building2 className="h-3 w-3" />}
+                                        {b.name}:
+                                        <span className={low ? "text-destructive font-semibold" : "font-medium"}>{b.qty}</span>
+                                      </span>
+                                    );
+                                  })}
+                                  {perBranch.length === 0 && <span className="text-xs text-muted-foreground">Chưa có dữ liệu tồn kho.</span>}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       );
                     })}
                   </tbody>
@@ -799,11 +880,16 @@ function OrderDetailPage() {
                 )}
 
                 {editItems.map((item, idx) => {
+                  const stockRows = data?.stock ?? [];
+                  const branchStock = stockRows
+                    .filter((s: any) => s.product_id === item.product_id && s.branch_id === editBranch)
+                    .reduce((a: number, s: any) => a + Number(s.qty || 0), 0);
                   const lineTotal = item.qty * item.unit_price - item.discount;
                   return (
-                    <div key={idx} className="grid grid-cols-12 gap-1.5 items-center">
-                      <div className="col-span-5">
+                    <div key={idx} className="flex flex-col gap-1.5 rounded-lg border p-2 bg-muted/20">
+                      <div className="flex items-center gap-2">
                         <SearchableSelect
+                          className="flex-1"
                           value={item.product_id}
                           onChange={(val) => {
                             const p = (data?.products ?? []).find((x: any) => x.id === val);
@@ -819,45 +905,71 @@ function OrderDetailPage() {
                           options={(data?.products ?? []).map((p: any) => ({
                             value: p.id,
                             label: p.name,
-                            sub: p.sku ?? undefined,
+                            sub: p.sku ? `SKU: ${p.sku} | Tồn: ${p.stock ?? 0}` : `Tồn: ${p.stock ?? 0}`,
                           }))}
                         />
+                        <button
+                          type="button"
+                          className="flex items-center justify-center rounded-md border hover:text-destructive p-1.5 shrink-0"
+                          onClick={() => setEditItems(editItems.filter((_, i) => i !== idx))}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
                       </div>
 
-                      <Input
-                        type="number"
-                        className="col-span-1"
-                        placeholder="SL"
-                        value={item.qty}
-                        onChange={(e) => {
-                          const n = [...editItems];
-                          n[idx].qty = Number(e.target.value);
-                          setEditItems(n);
-                        }}
-                      />
-
-                      <Input
-                        className="col-span-3"
-                        placeholder="Đơn giá"
-                        value={item.unit_price === 0 ? "" : new Intl.NumberFormat("vi-VN").format(item.unit_price)}
-                        onChange={(e) => {
-                          const n = [...editItems];
-                          n[idx].unit_price = parseInput(e.target.value);
-                          setEditItems(n);
-                        }}
-                      />
-
-                      <div className="col-span-2 text-right text-xs font-medium text-muted-foreground">
-                        {fmt(lineTotal)}
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center border rounded-md overflow-hidden shrink-0">
+                          <button
+                            type="button"
+                            className="px-2 py-1.5 hover:bg-muted transition-colors border-r text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              const n = [...editItems];
+                              n[idx].qty = Math.max(1, n[idx].qty - 1);
+                              setEditItems(n);
+                            }}
+                          >
+                            <Minus className="h-3.5 w-3.5" />
+                          </button>
+                          <input
+                            type="number"
+                            className="w-12 text-center text-sm py-1.5 bg-background border-0 outline-none [appearance:textfield]"
+                            value={item.qty}
+                            min={1}
+                            onChange={(e) => {
+                              const n = [...editItems];
+                              n[idx].qty = Math.max(1, Number(e.target.value) || 1);
+                              setEditItems(n);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="px-2 py-1.5 hover:bg-muted transition-colors border-l text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              const n = [...editItems];
+                              n[idx].qty = n[idx].qty + 1;
+                              setEditItems(n);
+                            }}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <Input
+                          className="flex-1"
+                          placeholder="Đơn giá"
+                          value={item.unit_price === 0 ? "" : new Intl.NumberFormat("vi-VN").format(item.unit_price)}
+                          onChange={(e) => {
+                            const n = [...editItems];
+                            n[idx].unit_price = parseInput(e.target.value);
+                            setEditItems(n);
+                          }}
+                        />
+                        <div className="flex flex-col justify-center text-right shrink-0 min-w-[100px]">
+                          <span className="text-sm font-semibold text-primary">{fmt(lineTotal)}</span>
+                          <span className={`text-[11px] font-medium ${branchStock < item.qty ? "text-destructive" : "text-muted-foreground"}`}>
+                            Kho: {branchStock}
+                          </span>
+                        </div>
                       </div>
-
-                      <button
-                        type="button"
-                        className="col-span-1 flex items-center justify-center rounded-md border hover:text-destructive p-1"
-                        onClick={() => setEditItems(editItems.filter((_, i) => i !== idx))}
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
                     </div>
                   );
                 })}

@@ -511,22 +511,26 @@ function Page() {
   async function submit() {
     if (items.length === 0) return toast.error("Đơn chưa có sản phẩm");
     if (!branch) return toast.error("Chọn chi nhánh");
-    // ✅ Bắt buộc phải có khách hàng cho mọi đơn
-    if (!customer) return toast.error("Vui lòng chọn khách hàng trước khi tạo đơn.");
 
     if (createScheduleOnOrder && !scheduleForm.title) {
       return toast.error("Vui lòng nhập tiêu đề lịch làm việc");
     }
 
+    // Nếu khách trả đủ hoặc thừa → completed; ngược lại giữ status đã chọn
+    const finalStatus = khachThanhToan >= khachCanThanhToan && khachCanThanhToan > 0
+      ? "completed"
+      : khachThanhToan > 0 && khachCanThanhToan > 0
+      ? "completed"    // trả 1 phần cũng ghi completed, phần còn lại tính công nợ
+      : status;
+
+    // ✅ Điều kiện đơn HOÀN TẤT: bắt buộc phải có khách hàng.
+    //    (Đơn "Đặt hàng (chưa giao)" / "Nháp" vẫn cho phép Khách lẻ — để trống khách.)
+    if (finalStatus === "completed" && !customer) {
+      return toast.error("Đơn hoàn tất phải có khách hàng. Vui lòng chọn khách hàng, hoặc lưu ở trạng thái Đặt hàng (chưa giao).");
+    }
+
     setSubmitting(true);
     try {
-      // Nếu khách trả đủ hoặc thừa → completed; ngược lại giữ status đã chọn
-      const finalStatus = khachThanhToan >= khachCanThanhToan && khachCanThanhToan > 0
-        ? "completed"
-        : khachThanhToan > 0 && khachCanThanhToan > 0
-        ? "completed"    // trả 1 phần cũng ghi completed, phần còn lại tính công nợ
-        : status;
-
       const r = await create({
         data: {
           customer_id: customer || undefined,
