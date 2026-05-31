@@ -226,15 +226,19 @@ function CustomersPage() {
   const customers = data?.customers ?? [];
   const orders = data?.orders ?? [];
   const receipts = data?.receipts ?? [];
+  const payBackHistory = data?.payBackHistory ?? [];
 
-  // ✅ Tính displayDebt cho từng khách = totalSpent - totalPaid (giống $id.tsx)
+  // ✅ Tính displayDebt cho từng khách = totalSpent - totalPaid + totalPaidBack (giống $id.tsx)
   function getDisplayDebt(customerId: string): number {
     const completedOrders = orders.filter((o: any) => o.customer_id === customerId && o.status === "completed");
     const totalSpent = completedOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0);
     const totalPaid = (receipts as any[])
       .filter((r: any) => r.payer_customer_id === customerId && r.type === "thu" && r.status !== "cancelled")
       .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-    return totalSpent - totalPaid;
+    const totalPaidBack = (payBackHistory as any[])
+      .filter((r: any) => r.receiver_customer_id === customerId && r.type === "chi" && r.status !== "cancelled")
+      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    return totalSpent - totalPaid + totalPaidBack;
   }
   const viewCustomer = viewId ? customers.find((x) => x.id === viewId) ?? null : null;
 
@@ -272,7 +276,7 @@ function CustomersPage() {
       bank_name: c.bank_name ?? "",
       bank_account: c.bank_account ?? "",
       note: c.note ?? "",
-      debt: String(c.debt),
+      debt: String(getDisplayDebt(c.id)),
     });
 
     setOpen(true);

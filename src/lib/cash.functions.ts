@@ -10,6 +10,17 @@ import {
   uid,
   now,
 } from "./supabase";
+import { recalculateCustomerDebt } from "./customers.functions";
+
+function extractRelatedCustomerIds(v: any): string[] {
+  return Array.from(
+    new Set(
+      [v?.payer_customer_id, v?.receiver_customer_id]
+        .filter(Boolean)
+        .map(String),
+    ),
+  );
+}
 
 // ─── listCash — trả về toàn bộ dữ liệu cần thiết cho trang Sổ quỹ ──────────
 export const listCash = createServerFn({ method: "GET" }).handler(async () => {
@@ -69,6 +80,11 @@ export const createCashVoucher = createServerFn({ method: "POST" }).handler(
       // ✨ Cho phép chọn thời gian tạo phiếu từ UI, mặc định lấy now().
       created_at: data.created_at || now(),
     });
+
+    for (const customerId of extractRelatedCustomerIds(data)) {
+      await recalculateCustomerDebt(customerId);
+    }
+
     return { ok: true, code };
   },
 );
@@ -76,6 +92,12 @@ export const createCashVoucher = createServerFn({ method: "POST" }).handler(
 // ─── updateCashVoucher ───────────────────────────────────────────────────────
 export const updateCashVoucher = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: any }) => {
+    const { data: existingVoucher } = await supabase
+      .from("cash_vouchers")
+      .select("payer_customer_id, receiver_customer_id")
+      .eq("id", data.id)
+      .maybeSingle();
+
     const updatePayload: Record<string, any> = {
       amount: Number(data.amount),
       fund_type: data.fund_type,        // ✅ FIX: cập nhật loại quỹ (tiền mặt / ngân hàng)
@@ -90,6 +112,15 @@ export const updateCashVoucher = createServerFn({ method: "POST" }).handler(
       created_at: data.created_at || now(),  // ✅ Cập nhật thời gian khi edit
     };
     await updateWhere("cash_vouchers", updatePayload, { id: data.id });
+
+    const affectedCustomerIds = new Set<string>([
+      ...(extractRelatedCustomerIds(existingVoucher) ?? []),
+      ...extractRelatedCustomerIds(updatePayload),
+    ]);
+    for (const customerId of affectedCustomerIds) {
+      await recalculateCustomerDebt(customerId);
+    }
+
     return { ok: true };
   },
 );
@@ -97,7 +128,25 @@ export const updateCashVoucher = createServerFn({ method: "POST" }).handler(
 // ─── cancelCashVoucher ───────────────────────────────────────────────────────
 export const cancelCashVoucher = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: { id: string } }) => {
+    const { data: voucher } = await supabase
+      .from("cash_vouchers")
+      .select("id, type, payer_customer_id, receiver_customer_id, status")
+      .eq("id", data.id)
+      .maybeSingle();
+
     await updateWhere("cash_vouchers", { status: "cancelled" }, { id: data.id });
+
+    const customerId =
+      voucher?.type === "thu"
+        ? voucher?.payer_customer_id
+        : voucher?.type === "chi"
+          ? voucher?.receiver_customer_id
+          : null;
+
+    if (customerId) {
+      await recalculateCustomerDebt(String(customerId));
+    }
+
     return { ok: true };
   },
 );

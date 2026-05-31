@@ -215,6 +215,9 @@ function CustomerDetailPage() {
   const [payBackAmount, setPayBackAmount] = useState("");
   const [payBackNote, setPayBackNote] = useState("");
   const [payBackFundType, setPayBackFundType] = useState<"tien_mat" | "ngan_hang">("tien_mat");
+  const [payBackBranch, setPayBackBranch] = useState("");
+  const [payBackBankAccountIdx, setPayBackBankAccountIdx] = useState("");
+  const [payBackBankContent, setPayBackBankContent] = useState("");
   const [submittingPayBack, setSubmittingPayBack] = useState(false);
 
   const [form, setForm] = useState<EditFormState>({
@@ -391,6 +394,14 @@ function CustomerDetailPage() {
     setPayBackAmount(displayDebt < 0 ? String(Math.abs(displayDebt)) : "");
     setPayBackNote("");
     setPayBackFundType("tien_mat");
+    const defaultBranch =
+      customer?.branch_id ||
+      (branches.length === 1 ? branches[0].id : "") ||
+      user?.branch_ids?.[0] ||
+      "";
+    setPayBackBranch(defaultBranch);
+    setPayBackBankAccountIdx("");
+    setPayBackBankContent("");
     setPayBackOpen(true);
   }
 
@@ -398,21 +409,33 @@ function CustomerDetailPage() {
     if (!customer) return;
     const amount = parseInput(payBackAmount);
     if (amount <= 0) return toast.error("Nhập số tiền cần chi trả");
-    const defaultBranch =
-      customer?.branch_id ||
-      (branches.length === 1 ? branches[0].id : "") ||
-      user?.branch_ids?.[0] ||
-      "";
+
+    const bankList: any[] = (() => {
+      try {
+        return JSON.parse(siteSettings?.bank_accounts || "[]");
+      } catch {
+        return [];
+      }
+    })();
+
+    if (payBackFundType === "ngan_hang" && bankList.length > 0 && payBackBankAccountIdx === "") {
+      return toast.error("Vui lòng chọn tài khoản ngân hàng");
+    }
+
     setSubmittingPayBack(true);
     try {
+      const note =
+        payBackNote ||
+        (payBackFundType === "ngan_hang" && payBackBankContent ? `CK: ${payBackBankContent}` : undefined);
+
       const result = await payBackFn({
         data: {
           customer_id: customer.id,
           amount,
-          branch_id: defaultBranch,
+          branch_id: payBackBranch || customer.branch_id || "",
           fund_type: payBackFundType,
           employee_id: user?.id,
-          note: payBackNote || undefined,
+          note,
         },
       });
       toast.success(`Đã tạo phiếu chi ${result.code} — Còn nợ: ${fmt(result.new_debt)}`);
@@ -464,15 +487,14 @@ function CustomerDetailPage() {
         <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={openPayDialog}>
           <Banknote className="h-4 w-4 mr-1" /> Thu tiền
         </Button>
-        {displayDebt < 0 && (
-          <Button
-            size="sm"
-            className="bg-orange-600 hover:bg-orange-700 text-white"
-            onClick={openPayBackDialog}
-          >
-            <Banknote className="h-4 w-4 mr-1" /> Chi trả
-          </Button>
-        )}
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-orange-300 text-orange-700 hover:bg-orange-50"
+          onClick={openPayBackDialog}
+        >
+          <Banknote className="h-4 w-4 mr-1" /> Chi trả
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1170,28 +1192,102 @@ function CustomerDetailPage() {
 
       {/* ✅ Dialog Chi trả công nợ cho khách (đối xứng với Thu tiền) */}
       <Dialog open={payBackOpen} onOpenChange={setPayBackOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-orange-700">
               <Banknote className="h-5 w-5" /> Chi trả công nợ cho khách
             </DialogTitle>
           </DialogHeader>
+
           <div className="space-y-3">
             <div className="rounded-lg bg-orange-50 border border-orange-200 px-3 py-2 text-sm flex justify-between">
-              <span className="text-muted-foreground">Công ty đang nợ khách</span>
-              <span className="font-bold text-orange-700">{fmt(Math.abs(Math.min(displayDebt, 0)))}</span>
+              <span className="text-muted-foreground">Công nợ hiện tại</span>
+              <span className="font-bold text-orange-700">{fmt(displayDebt)}</span>
             </div>
-            <div>
-              <Label>Hình thức</Label>
-              <select
-                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                value={payBackFundType}
-                onChange={(e) => setPayBackFundType(e.target.value as any)}
-              >
-                <option value="tien_mat">Tiền mặt</option>
-                <option value="ngan_hang">Chuyển khoản (NH)</option>
-              </select>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Hình thức thanh toán</Label>
+                <select
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={payBackFundType}
+                  onChange={(e) => {
+                    setPayBackFundType(e.target.value as any);
+                    setPayBackBankAccountIdx("");
+                    setPayBackBankContent("");
+                  }}
+                >
+                  <option value="tien_mat">Tiền mặt</option>
+                  <option value="ngan_hang">Chuyển khoản (Ngân hàng)</option>
+                </select>
+              </div>
+              <div>
+                <Label>Chi nhánh</Label>
+                <select
+                  className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={payBackBranch}
+                  onChange={(e) => setPayBackBranch(e.target.value)}
+                >
+                  <option value="">-- Mặc định --</option>
+                  {branches.map((b: any) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
+
+            {payBackFundType === "ngan_hang" && (() => {
+              const bankList: any[] = (() => {
+                try {
+                  return JSON.parse(siteSettings?.bank_accounts || "[]");
+                } catch {
+                  return [];
+                }
+              })();
+
+              return (
+                <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50/40 p-3">
+                  {bankList.length > 0 ? (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Tài khoản chi <span className="text-destructive">*</span>
+                      </Label>
+                      <select
+                        className={`mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm ${payBackBankAccountIdx === "" ? "border-destructive" : ""}`}
+                        value={payBackBankAccountIdx}
+                        onChange={(e) => {
+                          const idx = e.target.value;
+                          setPayBackBankAccountIdx(idx);
+                          if (idx !== "") {
+                            const ba = bankList[parseInt(idx)];
+                            if (ba) {
+                              setPayBackBankContent(`${siteSettings?.site_name ?? "CK"} ${ba.account_number}`);
+                            }
+                          } else {
+                            setPayBackBankContent("");
+                          }
+                        }}
+                      >
+                        <option value="">— Chọn tài khoản —</option>
+                        {bankList.map((ba: any, i: number) => (
+                          <option key={i} value={String(i)}>
+                            {ba.bank} - {ba.account_number} ({ba.account_name})
+                          </option>
+                        ))}
+                      </select>
+                      {payBackBankAccountIdx === "" && (
+                        <p className="text-xs text-destructive mt-1">Vui lòng chọn tài khoản ngân hàng</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Chưa cấu hình tài khoản ngân hàng</p>
+                  )}
+                </div>
+              );
+            })()}
+
             <div>
               <Label>Số tiền chi (₫) *</Label>
               <Input
@@ -1200,24 +1296,38 @@ function CustomerDetailPage() {
                 value={payBackAmount}
                 onChange={(e) => setPayBackAmount(fmtInput(e.target.value))}
                 onFocus={(e) => e.target.select()}
+                placeholder="Nhập số tiền..."
               />
             </div>
+
             <div>
               <Label>Ghi chú</Label>
               <Input
                 className="mt-1"
                 value={payBackNote}
                 onChange={(e) => setPayBackNote(e.target.value)}
-                placeholder="Ghi chú thêm..."
+                placeholder="Nội dung chi trả..."
               />
             </div>
+
+            {parseInput(payBackAmount) > 0 && (
+              <div className="rounded-lg bg-orange-50 border border-orange-200 px-3 py-2 text-sm flex justify-between">
+                <span className="text-muted-foreground">Còn lại sau khi chi</span>
+                <span className="font-bold text-orange-700">{fmt(displayDebt + parseInput(payBackAmount))}</span>
+              </div>
+            )}
           </div>
+
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setPayBackOpen(false)} disabled={submittingPayBack}>
               Hủy
             </Button>
-            <Button className="bg-orange-600 hover:bg-orange-700" onClick={handlePayBack} disabled={submittingPayBack}>
-              {submittingPayBack ? "Đang lưu..." : "Lưu phiếu chi"}
+            <Button
+              className="bg-orange-600 hover:bg-orange-700"
+              onClick={handlePayBack}
+              disabled={submittingPayBack}
+            >
+              {submittingPayBack ? "Đang lưu..." : "Xác nhận chi trả"}
             </Button>
           </DialogFooter>
         </DialogContent>

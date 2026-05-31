@@ -11,6 +11,7 @@ import {
   attendanceSummary,
 } from "@/lib/schedule.functions";
 import { buildInvoiceHtml } from "@/lib/print-invoice";
+import { getSettings } from "@/lib/settings.functions";
 import { useAuth } from "@/context/AuthContext";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { AppShell, Card } from "@/components/AppShell";
@@ -67,6 +68,11 @@ function groupByDate(schedules: any[]) {
     ] as [string, any[]]);
 }
 
+function toDateInput(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function Page() {
   const { user, isAdmin } = useAuth();
   const listFn    = useServerFn(listSchedules);
@@ -81,6 +87,7 @@ function Page() {
   const upsertWT  = useServerFn(upsertWorkType);
   const deleteWT  = useServerFn(deleteWorkType);
   const attendanceFn = useServerFn(attendanceSummary);
+  const getSettingsFn = useServerFn(getSettings);
   const qc = useQueryClient();
 
   const canCreate  = isAdmin || (!!user && hasPermission(user, "create_schedule"));
@@ -142,7 +149,9 @@ const userBranchIds = useMemo(() => {
   const [tab, setTab] = useState<"calendar" | "list" | "difficulties" | "work-types" | "attendance">("list");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterType, setFilterType]     = useState("");
-  const [filterDate, setFilterDate]     = useState(new Date().toISOString().slice(0, 10)); // mặc định hôm nay
+  const [filterPreset, setFilterPreset] = useState<"today" | "7d" | "14d" | "30d" | "custom">("today");
+  const [filterFrom, setFilterFrom] = useState(toDateInput(new Date())); // mặc định hôm nay
+  const [filterTo, setFilterTo] = useState(toDateInput(new Date()));
   const [branchFilterIds, setBranchFilterIds] = useState<string[]>([]);
 
   // ✅ Mặc định chọn tất cả chi nhánh khi data load xong lần đầu
@@ -166,6 +175,27 @@ const userBranchIds = useMemo(() => {
 
   const clearBranchFilter = () => setBranchFilterIds([]);
   const selectAllBranchFilter = () => setBranchFilterIds(branchOptions.map((b: any) => String(b.id)));
+
+  const applyDatePreset = (preset: "today" | "7d" | "14d" | "30d" | "custom") => {
+    setFilterPreset(preset);
+    const end = new Date();
+    const start = new Date(end);
+
+    if (preset === "today") {
+      // start/end giữ nguyên hôm nay
+    } else if (preset === "7d") {
+      start.setDate(end.getDate() - 6);
+    } else if (preset === "14d") {
+      start.setDate(end.getDate() - 13);
+    } else if (preset === "30d") {
+      start.setDate(end.getDate() - 29);
+    } else {
+      return;
+    }
+
+    setFilterFrom(toDateInput(start));
+    setFilterTo(toDateInput(end));
+  };
 
   // Search / sort / pagination cho tab Danh sách
   const [search, setSearch] = useState("");
@@ -302,7 +332,21 @@ const userBranchIds = useMemo(() => {
     // canApprove (hoặc admin): thấy tất cả lịch — không lọc thêm
     if (filterStatus) list = list.filter((s: any) => s.status === filterStatus);
     if (filterType) list = list.filter((s: any) => s.type === filterType);
-    if (filterDate) list = list.filter((s: any) => (s.scheduled_date ?? "").slice(0, 10) === filterDate);
+    if (filterFrom || filterTo) {
+      const from = filterFrom && filterTo
+        ? (filterFrom <= filterTo ? filterFrom : filterTo)
+        : (filterFrom || filterTo);
+      const to = filterFrom && filterTo
+        ? (filterFrom <= filterTo ? filterTo : filterFrom)
+        : (filterFrom || filterTo);
+      list = list.filter((s: any) => {
+        const d = (s.scheduled_date ?? "").slice(0, 10);
+        if (!d) return false;
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        return true;
+      });
+    }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter((s: any) => {
@@ -321,7 +365,7 @@ const userBranchIds = useMemo(() => {
       return sortBy === "oldest" ? da.localeCompare(db) : db.localeCompare(da);
     });
     return list;
-  }, [data, isTech, user, filterStatus, filterType, filterDate, search, sortBy, branchFilterIds]);
+  }, [data, isTech, user, filterStatus, filterType, filterFrom, filterTo, search, sortBy, branchFilterIds]);
 
   const pagedSchedules = useMemo(
     () => mySchedules.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
@@ -647,14 +691,49 @@ const userBranchIds = useMemo(() => {
 
     <div>
       <Label className="mb-1 block text-xs font-medium text-muted-foreground">
-        Ngày
+        Từ ngày
       </Label>
       <input
         type="date"
         className="h-10 w-full rounded-lg border bg-background px-3 text-sm"
-        value={filterDate}
-        onChange={(e) => setFilterDate(e.target.value)}
+        value={filterFrom}
+        onChange={(e) => {
+          setFilterPreset("custom");
+          setFilterFrom(e.target.value);
+        }}
       />
+    </div>
+
+    <div>
+      <Label className="mb-1 block text-xs font-medium text-muted-foreground">
+        Tới ngày
+      </Label>
+      <input
+        type="date"
+        className="h-10 w-full rounded-lg border bg-background px-3 text-sm"
+        value={filterTo}
+        onChange={(e) => {
+          setFilterPreset("custom");
+          setFilterTo(e.target.value);
+        }}
+      />
+    </div>
+
+    <div>
+      <Label className="mb-1 block text-xs font-medium text-muted-foreground">
+        Khoảng nhanh
+      </Label>
+      <select
+        className="h-10 w-full rounded-lg border bg-background px-3 text-sm"
+        value={filterPreset}
+        onChange={(e) => applyDatePreset(e.target.value as any)}
+      >
+        <option value="today">Hôm nay</option>
+        <option value="7d">1 tuần</option>
+        <option value="14d">2 tuần</option>
+        <option value="30d">1 tháng</option>
+        <option value="custom">Tùy chỉnh</option>
+      </select>
     </div>
 
     <div>
@@ -1858,6 +1937,9 @@ const userBranchIds = useMemo(() => {
                   );
                 })()}
                 <DialogFooter className="flex-wrap gap-2">
+                  <Button variant="outline" onClick={copyMsg}>
+                    {copied ? <><Check className="h-4 w-4 mr-1 text-green-600" /> Đã copy</> : <><Copy className="h-4 w-4 mr-1" /> Copy nội dung</>}
+                  </Button>
                   {/* ✅ Nút In hóa đơn nếu có đơn hàng liên kết */}
                   {linkedOrder && (
                     <Button variant="outline" className="text-primary border-primary/30" onClick={() => printOrderFromSchedule(linkedOrder, siteSettings)}>

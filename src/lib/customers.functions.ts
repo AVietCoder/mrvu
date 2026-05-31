@@ -70,18 +70,19 @@ export const listCustomers = createServerFn({ method: "GET" })
     // Supabase giới hạn 1000 dòng → 15.000 khách sẽ bị mất 14.000.
     // Dùng aggregateColumn (phân trang qua .range()) để tính đúng.
     // ────────────────────────────────────────────────────────────────
-    const [debtAgg, totalAllCustomers, orders, receipts] = await Promise.all([
+    const [debtAgg, totalAllCustomers, orders, vouchers] = await Promise.all([
       aggregateColumn("customers", "debt"),
       countRows("customers"),
       fetchAllRows("orders", { orderBy: "created_at", ascending: false }),
-      // ✅ Lấy tất cả phiếu thu để tính displayDebt = totalSpent - totalPaid
+      // ✅ Lấy tất cả phiếu thu / phiếu chi để tính displayDebt = totalSpent - totalPaid + totalPaidBack
       fetchAllRows("cash_vouchers", { orderBy: "created_at", ascending: false }),
     ]);
 
     return {
       customers: customers ?? [],
       orders: orders ?? [],
-      receipts: receipts ?? [],
+      receipts: vouchers ?? [],
+      payBackHistory: (vouchers ?? []).filter((v: any) => v.type === "chi" && v.receiver_customer_id),
       meta: {
         totalFiltered: totalFilteredCustomers ?? 0,
         totalAllCustomers,
@@ -199,31 +200,7 @@ export const payCustomerDebt = createServerFn({ method: "POST" })
       created_at: now(),
     });
 
-    // ✅ Tính lại công nợ thực tế: debt = totalSpent - totalPaid + totalPaidBack
-    const [completedOrdersRows, allReceiptsRows, allPayBacksRows] = await Promise.all([
-      fetchRows<{ total: number }>("orders", {
-        eq: { customer_id: data.customer_id, status: "completed" },
-        select: "total",
-      }),
-      supabase
-        .from("cash_vouchers")
-        .select("amount")
-        .eq("payer_customer_id", data.customer_id)
-        .eq("type", "thu")
-        .neq("status", "cancelled"),
-      supabase
-        .from("cash_vouchers")
-        .select("amount")
-        .eq("receiver_customer_id", data.customer_id)
-        .eq("type", "chi")
-        .neq("status", "cancelled"),
-    ]);
-    const totalSpent = completedOrdersRows.reduce((s, o) => s + Number(o.total || 0), 0);
-    const totalPaid = (allReceiptsRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-    // Tổng chi-trả hiện có (chưa gồm phiếu vừa tạo)
-    const totalPaidBackSoFar = (allPayBacksRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-    const newDebt = totalSpent - totalPaid + (totalPaidBackSoFar + amount);
-    await updateWhere("customers", { debt: newDebt }, { id: data.customer_id });
+    const newDebt = await recalculateCustomerDebt(data.customer_id);
 
     await logActivity({ action: "pay_customer_debt", detail: `Chi trả ${amount.toLocaleString("vi-VN")} ₫ cho khách (${code})`, employee_id: data.employee_id || null });
 
@@ -273,6 +250,36 @@ export const getCustomerById = createServerFn({ method: "GET" })
       users,
     };
   });
+
+export async function recalculateCustomerDebt(customerId: string): Promise<number> {
+  const [completedOrdersRows, allReceiptsRows, allPayBacksRows] = await Promise.all([
+    fetchRows<{ total: number }>("orders", {
+      eq: { customer_id: customerId, status: "completed" },
+      select: "total",
+    }),
+    supabase
+      .from("cash_vouchers")
+      .select("amount")
+      .eq("payer_customer_id", customerId)
+      .eq("type", "thu")
+      .neq("status", "cancelled"),
+    supabase
+      .from("cash_vouchers")
+      .select("amount")
+      .eq("receiver_customer_id", customerId)
+      .eq("type", "chi")
+      .neq("status", "cancelled"),
+  ]);
+
+  const totalSpent = completedOrdersRows.reduce((s, o) => s + Number(o.total || 0), 0);
+  const totalPaid = (allReceiptsRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+  const totalPaidBack = (allPayBacksRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+  const newDebt = totalSpent - totalPaid + totalPaidBack;
+
+  await updateWhere("customers", { debt: newDebt }, { id: customerId });
+  return newDebt;
+}
+
 export const collectCustomerPayment = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { customer_id: string; amount: number; branch_id: string; employee_id?: string; note?: string; fund_type?: string } }) => {
     const amount = Number(data.amount || 0);
@@ -319,31 +326,7 @@ export const collectCustomerPayment = createServerFn({ method: "POST" })
       created_at: now(),
     });
 
-    // ✅ Tính công nợ thực tế = totalSpent - totalPaid + totalPaidBack
-    const [completedOrdersRows, allReceiptsRows, allPayBacksRows] = await Promise.all([
-      fetchRows<{ total: number }>("orders", {
-        eq: { customer_id: data.customer_id, status: "completed" },
-        select: "total",
-      }),
-      supabase
-        .from("cash_vouchers")
-        .select("amount")
-        .eq("payer_customer_id", data.customer_id)
-        .eq("type", "thu")
-        .neq("status", "cancelled"),
-      supabase
-        .from("cash_vouchers")
-        .select("amount")
-        .eq("receiver_customer_id", data.customer_id)
-        .eq("type", "chi")
-        .neq("status", "cancelled"),
-    ]);
-    const totalSpent = completedOrdersRows.reduce((s, o) => s + Number(o.total || 0), 0);
-    const totalPaidSoFar = (allReceiptsRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-    const totalPaidBack = (allPayBacksRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-    // Sau khi thu thêm `amount` → totalPaid tăng → debt giảm
-    const newDebt = totalSpent - (totalPaidSoFar + amount) + totalPaidBack;
-    await updateWhere("customers", { debt: newDebt }, { id: data.customer_id });
+    const newDebt = await recalculateCustomerDebt(data.customer_id);
 
     await logActivity({ action: "collect_payment", detail: `Thu ${amount.toLocaleString("vi-VN")} ₫ từ khách (${code})`, employee_id: data.employee_id || null });
 
