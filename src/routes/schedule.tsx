@@ -1969,7 +1969,7 @@ const userBranchIds = useMemo(() => {
                   return (
                     <div className="rounded-lg border bg-muted/30 p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <div className="text-xs font-medium text-muted-foreground">📋 Nội dung tin nhắn</div>
+                        <div className="text-xs font-medium text-muted-foreground"></div>
                         <Button size="sm" variant="outline" onClick={copyMsg} className="h-7 text-xs">
                           {copied ? <><Check className="h-3 w-3 mr-1 text-green-600" /> Đã copy!</> : <><Copy className="h-3 w-3 mr-1" /> Copy</>}
                         </Button>
@@ -1978,28 +1978,25 @@ const userBranchIds = useMemo(() => {
                     </div>
                   );
                 })()}
-                <DialogFooter className="flex-wrap gap-2">
-                  <Button variant="outline" onClick={copyMsg}>
-                    {copied ? <><Check className="h-4 w-4 mr-1 text-green-600" /> Đã copy</> : <><Copy className="h-4 w-4 mr-1" /> Copy nội dung</>}
-                  </Button>
+                <DialogFooter className="grid grid-cols-1">
                   {/* ✅ Nút In hóa đơn nếu có đơn hàng liên kết */}
                   {linkedOrder && (
-                    <Button variant="outline" className="text-primary border-primary/30" onClick={() => printOrderFromSchedule(linkedOrder, siteSettings)}>
+                    <Button variant="outline" className="text-primary border-primary/30 mb-4" onClick={() => printOrderFromSchedule(linkedOrder, siteSettings)}>
                       <Printer className="h-4 w-4 mr-1" /> In hóa đơn
                     </Button>
                   )}
                   {canApprove && s.status === "pending" && (
-                    <Button variant="outline" onClick={() => { setViewSchedule(null); openApprove(s); }}>
+                    <Button className="mb-4" variant="outline" onClick={() => { setViewSchedule(null); openApprove(s); }}>
                       <CheckCircle2 className="h-4 w-4 mr-1" /> Duyệt & Phân công
                     </Button>
                   )}
                   {(isAdmin || canCreate) && !["done","cancelled"].includes(s.status) && (
-                    <Button variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                    <Button variant="outline" className="mb-4 text-destructive border-destructive/30 hover:bg-destructive/10"
                       onClick={() => { setViewSchedule(null); handleDelete(s.id); }}>
                       <Trash2 className="h-4 w-4 mr-1" /> Xóa
                     </Button>
                   )}
-                  <Button onClick={() => setViewSchedule(null)}>Đóng</Button>
+                  <Button className="mb-4" onClick={() => setViewSchedule(null)}>Đóng</Button>
                 </DialogFooter>
               </>
             );
