@@ -410,8 +410,10 @@ function Page() {
       .sort((a, b) => {
         if (sortBy === "total_desc") return b.total - a.total;
         if (sortBy === "total_asc") return a.total - b.total;
-        if (sortBy === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        const dateA = a.status === "completed" ? (a.completed_at ?? a.created_at) : a.created_at;
+        const dateB = b.status === "completed" ? (b.completed_at ?? b.created_at) : b.created_at;
+        if (sortBy === "oldest") return new Date(dateA).getTime() - new Date(dateB).getTime();
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
       });
   }
 
@@ -651,7 +653,7 @@ function Page() {
             <tr>
               <th className="py-2 pr-2 w-8 text-center">STT</th>
               <th className="pr-2">Mã đơn</th>
-              <th className="pr-2">Ngày</th>
+              <th className="pr-2">Ngày tạo / HT</th>
               <th className="pr-2">Khách hàng</th>
               <th className="pr-2">Chi nhánh</th>
               <th className="text-right pr-2">Tổng</th>
@@ -678,7 +680,7 @@ function Page() {
                   </td>
                   <td className="font-mono text-xs pr-2 font-medium">{o.code}</td>
                   <td className="text-xs text-muted-foreground pr-2 whitespace-nowrap">
-                    {new Date(o.created_at).toLocaleString("vi-VN", {
+                    {new Date(o.status === "completed" && o.completed_at ? o.completed_at : o.created_at).toLocaleString("vi-VN", {
                       day: "2-digit",
                       month: "2-digit",
                       year: "2-digit",

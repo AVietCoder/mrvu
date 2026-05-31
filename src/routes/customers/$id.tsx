@@ -1337,24 +1337,37 @@ function CustomerDetailPage() {
 }
 
 function OrderTable({ orders }: { orders: any[] }) {
+  // Sort: completed dùng completed_at, còn lại dùng created_at — giảm dần
+  const sorted = [...orders].sort((a, b) => {
+    const dateA = a.status === "completed" ? (a.completed_at ?? a.created_at) : a.created_at;
+    const dateB = b.status === "completed" ? (b.completed_at ?? b.created_at) : b.created_at;
+    return new Date(dateB).getTime() - new Date(dateA).getTime();
+  });
+
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm min-w-[420px]">
+      <table className="w-full text-sm min-w-[480px]">
         <thead className="text-left text-muted-foreground border-b">
           <tr>
             <th className="py-2 pr-2">Mã đơn</th>
-            <th className="pr-2">Ngày</th>
+            <th className="pr-2">Ngày tạo</th>
+            <th className="pr-2">Ngày hoàn tất</th>
             <th className="pr-2">Trạng thái</th>
             <th className="text-right pr-2">Tổng tiền</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          {orders.map((o: any) => (
+          {sorted.map((o: any) => (
             <tr key={o.id} className="border-b last:border-0 hover:bg-muted/40">
               <td className="py-2 pr-2 font-mono text-xs font-medium">{o.code}</td>
               <td className="pr-2 text-xs text-muted-foreground whitespace-nowrap">
                 {new Date(o.created_at).toLocaleDateString("vi-VN")}
+              </td>
+              <td className="pr-2 text-xs text-muted-foreground whitespace-nowrap">
+                {o.completed_at
+                  ? new Date(o.completed_at).toLocaleDateString("vi-VN")
+                  : "—"}
               </td>
               <td className="pr-2">
                 <span

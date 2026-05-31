@@ -634,8 +634,14 @@ function OrderDetailPage() {
 
                 <div className="text-xs text-muted-foreground flex items-center gap-1">
                   <Clock className="h-3 w-3" />
-                  {new Date(order.created_at).toLocaleString("vi-VN")}
+                  Tạo: {new Date(order.created_at).toLocaleString("vi-VN")}
                 </div>
+                {order.completed_at && (
+                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    Hoàn tất: {new Date(order.completed_at).toLocaleString("vi-VN")}
+                  </div>
+                )}
               </div>
 
             {!editing && (

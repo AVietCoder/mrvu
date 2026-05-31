@@ -213,10 +213,18 @@ export const getCustomerById = createServerFn({ method: "GET" })
       limit: 1,
     });
 
-    const orders = await fetchRows("orders", {
+    const ordersRaw = await fetchRows("orders", {
       eq: { customer_id: data.id },
+      select: "id, code, status, total, created_at, completed_at",
       orderBy: "created_at",
       ascending: false,
+    });
+
+    // Sort: completed dùng completed_at, còn lại dùng created_at — giảm dần
+    const orders = [...ordersRaw].sort((a: any, b: any) => {
+      const dateA = a.status === "completed" ? (a.completed_at ?? a.created_at) : a.created_at;
+      const dateB = b.status === "completed" ? (b.completed_at ?? b.created_at) : b.created_at;
+      return new Date(dateB).getTime() - new Date(dateA).getTime();
     });
 
     const branches = await fetchRows("branches", { orderBy: "name" });
