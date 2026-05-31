@@ -59,17 +59,28 @@ type FundTab = "tien_mat" | "ngan_hang" | "all";
 const blankForm = () => ({
   amount: "",
   voucherTypeId: "",
-  collectorUserId: "",
-  payerCustomerId: "",
-  payerUserId: "",
-  receiverCustomerId: "",
+  // ── Mô hình A → B ──
+  aKind: "branch" as EndpointKind,
+  aId: "",
+  aName: "",
+  bKind: "customer" as EndpointKind,
+  bId: "",
+  bName: "",
   note: "",
   fundType: "tien_mat" as "tien_mat" | "ngan_hang",
-  branchId: "",
+  branchId: "", // giữ để tương thích (không hiển thị trực tiếp)
   createdAt: toLocalInput(new Date()),
   bankAccountIdx: "",
   bankContent: "",
 });
+
+type EndpointKind = "customer" | "user" | "branch" | "other";
+const ENDPOINT_KINDS: { value: EndpointKind; label: string }[] = [
+  { value: "branch", label: "Chi nhánh" },
+  { value: "customer", label: "Khách hàng" },
+  { value: "user", label: "Nhân viên" },
+  { value: "other", label: "Đơn vị khác (tự nhập)" },
+];
 
 function toLocalInput(d: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -129,6 +140,85 @@ function BankSection({ bankAccountIdx, setF, bankList }: {
   );
 }
 
+// ── EndpointPicker — chọn Bên A / Bên B ────────────────────────────────────
+function EndpointPicker({
+  title, fundHint, kindVal, idVal, nameVal,
+  onKind, onId, onName,
+  customerOptions, staffOptions, branchOptions,
+}: {
+  title: string;
+  fundHint: { sign: "+" | "-"; text: string } | null;
+  kindVal: EndpointKind;
+  idVal: string;
+  nameVal: string;
+  onKind: (v: EndpointKind) => void;
+  onId: (v: string) => void;
+  onName: (v: string) => void;
+  customerOptions: any[];
+  staffOptions: any[];
+  branchOptions: any[];
+}) {
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="font-semibold">{title}</Label>
+        {fundHint && (
+          <span className={`text-xs font-semibold ${fundHint.sign === "+" ? "text-green-600" : "text-red-600"}`}>
+            {fundHint.text}
+          </span>
+        )}
+      </div>
+      <select
+        className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+        value={kindVal}
+        onChange={(e) => onKind(e.target.value as EndpointKind)}
+      >
+        {ENDPOINT_KINDS.map((k) => (
+          <option key={k.value} value={k.value}>{k.label}</option>
+        ))}
+      </select>
+
+      {kindVal === "customer" && (
+        <SearchableSelect
+          className="w-full"
+          value={idVal}
+          onChange={onId}
+          emptyLabel="-- Không chọn --"
+          placeholder="Tìm khách hàng..."
+          options={customerOptions}
+        />
+      )}
+      {kindVal === "user" && (
+        <SearchableSelect
+          className="w-full"
+          value={idVal}
+          onChange={onId}
+          emptyLabel="-- Không chọn --"
+          placeholder="Tìm nhân viên..."
+          options={staffOptions}
+        />
+      )}
+      {kindVal === "branch" && (
+        <SearchableSelect
+          className="w-full"
+          value={idVal}
+          onChange={onId}
+          emptyLabel="-- Không chọn --"
+          placeholder="Tìm chi nhánh..."
+          options={branchOptions}
+        />
+      )}
+      {kindVal === "other" && (
+        <Input
+          value={nameVal}
+          onChange={(e) => onName(e.target.value)}
+          placeholder="Nhập tên đơn vị / cá nhân..."
+        />
+      )}
+    </div>
+  );
+}
+
 // ── VoucherForm ────────────────────────────────────────────────────────────
 function VoucherForm({
   kind, f, setF, voucherTypes, staffOptions, customerOptions, isAdmin, siteSettings, visibleBranches,
@@ -161,42 +251,40 @@ function VoucherForm({
   const handleFundType  = useCallback((e: any) =>
     setF((prev: any) => ({ ...prev, fundType: e.target.value, bankAccountIdx: "", bankContent: "" })),
     [setF]);
-  const handleBranch    = useCallback((v: string) => setF((prev: any) => ({ ...prev, branchId: v })), [setF]);
   const handleAmount    = useCallback((e: any) =>
     setF((prev: any) => ({ ...prev, amount: fmtInput(e.target.value) })), [setF]);
   const handleAmountFocus = useCallback((e: any) => e.target.select(), []);
   const handleTypeId    = useCallback((v: string) => setF((prev: any) => ({ ...prev, voucherTypeId: v })), [setF]);
-  const handleCollector = useCallback((v: string) => setF((prev: any) => ({ ...prev, collectorUserId: v })), [setF]);
-  const handlePayer     = useCallback((v: string) => setF((prev: any) => ({ ...prev, payerCustomerId: v })), [setF]);
-  const handlePayerUser = useCallback((v: string) => setF((prev: any) => ({ ...prev, payerUserId: v })), [setF]);
-  const handleReceiver  = useCallback((v: string) => setF((prev: any) => ({ ...prev, receiverCustomerId: v })), [setF]);
   const handleNote      = useCallback((e: any) => setF((prev: any) => ({ ...prev, note: e.target.value })), [setF]);
+  // ── A/B handlers — đổi loại thì xoá id & name của bên đó ──
+  const setAKind = useCallback((v: EndpointKind) => setF((p: any) => ({ ...p, aKind: v, aId: "", aName: "" })), [setF]);
+  const setAId   = useCallback((v: string) => setF((p: any) => ({ ...p, aId: v })), [setF]);
+  const setAName = useCallback((v: string) => setF((p: any) => ({ ...p, aName: v })), [setF]);
+  const setBKind = useCallback((v: EndpointKind) => setF((p: any) => ({ ...p, bKind: v, bId: "", bName: "" })), [setF]);
+  const setBId   = useCallback((v: string) => setF((p: any) => ({ ...p, bId: v })), [setF]);
+  const setBName = useCallback((v: string) => setF((p: any) => ({ ...p, bName: v })), [setF]);
+
+  // Quỹ chi nhánh: thu → A +, B −; chi → A −, B +
+  const aFundHint = f.aKind === "branch"
+    ? (kind === "thu" ? { sign: "+" as const, text: "+ quỹ chi nhánh" } : { sign: "-" as const, text: "− quỹ chi nhánh" })
+    : null;
+  const bFundHint = f.bKind === "branch"
+    ? (kind === "thu" ? { sign: "-" as const, text: "− quỹ chi nhánh" } : { sign: "+" as const, text: "+ quỹ chi nhánh" })
+    : null;
 
   return (
     <div className="space-y-3">
-      {/* Quỹ + Chi nhánh */}
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label>Hình thức <span className="text-destructive">*</span></Label>
-          <select
-            className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-            value={f.fundType}
-            onChange={handleFundType}
-          >
-            <option value="tien_mat">Tiền mặt</option>
-            <option value="ngan_hang">Chuyển khoản (NH)</option>
-          </select>
-        </div>
-        <div>
-          <Label>Chi nhánh</Label>
-          <SearchableSelect
-            className="mt-1"
-            value={f.branchId}
-            onChange={handleBranch}
-            placeholder="Tìm chi nhánh..."
-            options={branchOptions}
-          />
-        </div>
+      {/* Hình thức quỹ */}
+      <div>
+        <Label>Hình thức <span className="text-destructive">*</span></Label>
+        <select
+          className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+          value={f.fundType}
+          onChange={handleFundType}
+        >
+          <option value="tien_mat">Tiền mặt</option>
+          <option value="ngan_hang">Chuyển khoản (NH)</option>
+        </select>
       </div>
 
       {/* Bank section bắt buộc khi chọn ngân hàng */}
@@ -234,61 +322,38 @@ function VoucherForm({
         />
       </div>
 
-      {kind === "thu" ? (
-        <>
-          <div>
-            <Label>Người thu tiền</Label>
-            <SearchableSelect
-              className="mt-1 w-full"
-              value={f.collectorUserId}
-              onChange={handleCollector}
-              emptyLabel="-- Không chọn --"
-              placeholder="Tìm nhân viên..."
-              options={staffOptions}
-              disabled={!isAdmin}
-            />
-            {!isAdmin && <p className="text-xs text-muted-foreground mt-1">Mặc định là bạn đang đăng nhập</p>}
-          </div>
-          <div>
-            <Label>Người nộp tiền</Label>
-            <SearchableSelect
-              className="mt-1 w-full"
-              value={f.payerCustomerId}
-              onChange={handlePayer}
-              emptyLabel="-- Không chọn --"
-              placeholder="Tìm khách hàng..."
-              options={customerOptions}
-            />
-          </div>
-        </>
-      ) : (
-        <>
-          <div>
-            <Label>Người chi tiền</Label>
-            <SearchableSelect
-              className="mt-1 w-full"
-              value={f.payerUserId}
-              onChange={handlePayerUser}
-              emptyLabel="-- Không chọn --"
-              placeholder="Tìm nhân viên..."
-              options={staffOptions}
-              disabled={!isAdmin}
-            />
-            {!isAdmin && <p className="text-xs text-muted-foreground mt-1">Mặc định là bạn đang đăng nhập</p>}
-          </div>
-          <div>
-            <Label>Người nhận tiền</Label>
-            <SearchableSelect
-              className="mt-1 w-full"
-              value={f.receiverCustomerId}
-              onChange={handleReceiver}
-              emptyLabel="-- Không chọn --"
-              placeholder="Tìm khách hàng..."
-              options={customerOptions}
-            />
-          </div>
-        </>
-      )}
+      {/* ── Bên A → Bên B ── */}
+      <div className="space-y-2">
+        <EndpointPicker
+          title="Bên A"
+          fundHint={aFundHint}
+          kindVal={f.aKind}
+          idVal={f.aId}
+          nameVal={f.aName}
+          onKind={setAKind}
+          onId={setAId}
+          onName={setAName}
+          customerOptions={customerOptions}
+          staffOptions={staffOptions}
+          branchOptions={branchOptions}
+        />
+        <div className="flex justify-center text-muted-foreground">
+          <ChevronRight className="h-4 w-4 rotate-90" />
+        </div>
+        <EndpointPicker
+          title="Bên B"
+          fundHint={bFundHint}
+          kindVal={f.bKind}
+          idVal={f.bId}
+          nameVal={f.bName}
+          onKind={setBKind}
+          onId={setBId}
+          onName={setBName}
+          customerOptions={customerOptions}
+          staffOptions={staffOptions}
+          branchOptions={branchOptions}
+        />
+      </div>
 
       {/* Ghi chú */}
       <div>
@@ -350,8 +415,6 @@ function Page() {
   const [openCancel, setOpenCancel] = useState(false);
   const [openTypes, setOpenTypes] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [addingType, setAddingType] = useState(false);
-  const [deletingTypeId, setDeletingTypeId] = useState<string | null>(null);
   const [form, setForm] = useState(blankForm);
   const [editForm, setEditForm] = useState(blankForm);
   const [newTypeName, setNewTypeName] = useState("");
@@ -381,23 +444,61 @@ function Page() {
     [customers],
   );
 
-  const branchStats = useMemo(() => {
-    const currentFund = fund === "all" ? null : fund;
-    const list = allVouchers.filter(
-      (v: any) =>
-        v.status === "active" &&
-        (currentFund ? v.fund_type === currentFund : true) &&
-        (filterBranch ? v.branch_id === filterBranch : true),
-    );
-    const thu = list.filter((v: any) => v.type === "thu").reduce((s: number, v: any) => s + v.amount, 0);
-    const chi = list.filter((v: any) => v.type === "chi").reduce((s: number, v: any) => s + v.amount, 0);
-    return { thu, chi, ton: thu - chi };
-  }, [allVouchers, fund, filterBranch]);
-
   const getBranchName   = (id: string) => branches.find((b: any) => b.id === id)?.name ?? "—";
   const getUserName     = (id: string) => users.find((u: any) => u.id === id)?.full_name ?? "";
   const getCustomerName = (id: string) => customers.find((c: any) => c.id === id)?.name ?? "";
   const getTypeName     = (id: string) => voucherTypes.find((t: any) => t.id === id)?.name ?? "—";
+
+  // Nhãn 1 bên (A hoặc B) theo kind
+  const sideLabel = (kind: string, id: string, name: string): string => {
+    if (kind === "customer") return getCustomerName(id) || "Khách hàng";
+    if (kind === "user") return getUserName(id) || "Nhân viên";
+    if (kind === "branch") return getBranchName(id) || "Chi nhánh";
+    if (kind === "other") return name || "—";
+    return "—";
+  };
+  // Suy ra Bên A / Bên B của 1 phiếu (hỗ trợ cả phiếu cũ lẫn mới)
+  const voucherSides = (v: any): { a: string; b: string } => {
+    if (v.from_kind || v.to_kind) {
+      return {
+        a: sideLabel(v.from_kind, v.from_id, v.from_name),
+        b: sideLabel(v.to_kind, v.to_id, v.to_name),
+      };
+    }
+    // Phiếu cũ: A = chi nhánh (hoặc nhân viên), B = khách
+    const isThu = v.type === "thu";
+    const aLegacy = v.branch_id
+      ? getBranchName(v.branch_id)
+      : (isThu ? getUserName(v.collector_user_id) : getUserName(v.payer_user_id)) || "—";
+    const bLegacy = (isThu ? getCustomerName(v.payer_customer_id) : getCustomerName(v.receiver_customer_id)) || "—";
+    return { a: aLegacy, b: bLegacy };
+  };
+  // Mức cộng/trừ quỹ của 1 phiếu cho 1 chi nhánh (thu: A +, B −; chi: A −, B +)
+  const branchDelta = (v: any, branchId: string): number => {
+    const amt = Number(v.amount) || 0;
+    const isThu = v.type === "thu";
+    if (!v.from_kind && !v.to_kind) {
+      // Phiếu cũ: 1 chi nhánh duy nhất, thu +, chi −
+      if (v.branch_id === branchId) return isThu ? amt : -amt;
+      return 0;
+    }
+    let d = 0;
+    if (v.from_kind === "branch" && v.from_id === branchId) d += isThu ? amt : -amt; // A
+    if (v.to_kind === "branch" && v.to_id === branchId) d += isThu ? -amt : amt;     // B
+    return d;
+  };
+  // Các chi nhánh liên quan tới phiếu
+  const voucherBranchIds = (v: any): string[] => {
+    if (!v.from_kind && !v.to_kind) return v.branch_id ? [v.branch_id] : [];
+    const ids: string[] = [];
+    if (v.from_kind === "branch" && v.from_id) ids.push(v.from_id);
+    if (v.to_kind === "branch" && v.to_id) ids.push(v.to_id);
+    return ids;
+  };
+  const voucherBranchLabel = (v: any): string => {
+    const ids = voucherBranchIds(v);
+    return ids.length ? ids.map(getBranchName).join(", ") : "—";
+  };
 
   // Lấy thông tin tài khoản ngân hàng từ note (số TK được nhúng vào đầu note)
   const getBankAccountInfo = (v: any): { bank: string; account_number: string; account_name: string } | null => {
@@ -408,23 +509,50 @@ function Page() {
     return found ?? null;
   };
 
+  const branchStats = useMemo(() => {
+    const currentFund = fund === "all" ? null : fund;
+    const list = allVouchers.filter(
+      (v: any) =>
+        v.status === "active" &&
+        (currentFund ? v.fund_type === currentFund : true),
+    );
+
+    if (filterBranch) {
+      // Theo 1 chi nhánh: tính cộng/trừ quỹ theo mô hình A → B
+      let thu = 0, chi = 0;
+      for (const v of list) {
+        const d = branchDelta(v, filterBranch);
+        if (d > 0) thu += d;
+        else if (d < 0) chi += -d;
+      }
+      return { thu, chi, ton: thu - chi };
+    }
+
+    // Toàn bộ: tổng thu / tổng chi như cũ
+    const thu = list.filter((v: any) => v.type === "thu").reduce((s: number, v: any) => s + v.amount, 0);
+    const chi = list.filter((v: any) => v.type === "chi").reduce((s: number, v: any) => s + v.amount, 0);
+    return { thu, chi, ton: thu - chi };
+  }, [allVouchers, fund, filterBranch]);
+
   const filtered = useMemo(() => {
     const currentFund = fund === "all" ? null : fund;
     return allVouchers.filter((v: any) => {
       const matchFund   = !currentFund || v.fund_type === currentFund;
-      const matchBranch = !filterBranch || v.branch_id === filterBranch;
+      const bIds = voucherBranchIds(v);
+      const matchBranch = !filterBranch || bIds.includes(filterBranch);
       const matchAccess =
-        canViewAll || (user?.branch_ids?.length === 0) || user?.branch_ids?.includes(v.branch_id);
+        canViewAll ||
+        (user?.branch_ids?.length === 0) ||
+        bIds.some((id) => user?.branch_ids?.includes(id));
       const matchType  = !filterType || v.type === filterType;
       const matchBank  = !filterBank || (v.note ?? "").includes(filterBank); // lọc theo số TK trong note
+      const sides = voucherSides(v);
       const q = search.toLowerCase();
       const matchSearch =
         !search ||
         v.code?.toLowerCase().includes(q) ||
-        getCustomerName(v.payer_customer_id)?.toLowerCase().includes(q) ||
-        getCustomerName(v.receiver_customer_id)?.toLowerCase().includes(q) ||
-        getUserName(v.collector_user_id)?.toLowerCase().includes(q) ||
-        getUserName(v.payer_user_id)?.toLowerCase().includes(q) ||
+        sides.a?.toLowerCase().includes(q) ||
+        sides.b?.toLowerCase().includes(q) ||
         v.note?.toLowerCase().includes(q);
       return matchFund && matchBranch && matchAccess && matchType && matchBank && matchSearch;
     });
@@ -436,26 +564,44 @@ function Page() {
     setCreateKind(kind);
     setForm({
       ...blankForm(),
-      branchId: filterBranch || visibleBranches[0]?.id || "",
       fundType: fund === "all" ? "tien_mat" : (fund as any),
-      collectorUserId: kind === "thu" ? (user?.id ?? "") : "",
-      payerUserId: kind === "chi" ? (user?.id ?? "") : "",
+      // Bên A mặc định = chi nhánh của người tạo (sẽ +/− quỹ)
+      aKind: "branch",
+      aId: filterBranch || activeBranchId || user?.branch_ids?.[0] || visibleBranches[0]?.id || "",
+      aName: "",
+      // Bên B mặc định = khách hàng
+      bKind: "customer",
+      bId: "",
+      bName: "",
     });
     setOpenCreate(true);
   }
 
   function openEditDialog(v: any) {
     setSelectedVoucher(v);
+    // Suy ra A/B từ phiếu (mới: from_/to_; cũ: branch_id + khách)
+    const ab = (() => {
+      if (v.from_kind || v.to_kind) {
+        return {
+          aKind: (v.from_kind || "other") as any, aId: v.from_id ?? "", aName: v.from_name ?? "",
+          bKind: (v.to_kind || "other") as any, bId: v.to_id ?? "", bName: v.to_name ?? "",
+        };
+      }
+      const isThu = v.type === "thu";
+      return {
+        aKind: "branch" as any, aId: v.branch_id ?? "", aName: "",
+        bKind: "customer" as any,
+        bId: isThu ? (v.payer_customer_id ?? "") : (v.receiver_customer_id ?? ""),
+        bName: "",
+      };
+    })();
     setEditForm({
-      amount:             moneyFmt(v.amount),
-      voucherTypeId:      v.voucher_type_id ?? "",
-      collectorUserId:    v.collector_user_id ?? "",
-      payerCustomerId:    v.payer_customer_id ?? "",
-      payerUserId:        v.payer_user_id ?? "",
-      receiverCustomerId: v.receiver_customer_id ?? "",
-      note:               v.note ?? "",
-      fundType:           v.fund_type,
-      branchId:           v.branch_id,
+      amount:        moneyFmt(v.amount),
+      voucherTypeId: v.voucher_type_id ?? "",
+      ...ab,
+      note:          v.note ?? "",
+      fundType:      v.fund_type,
+      branchId:      v.branch_id ?? "",
       // ✅ Khi edit phiếu NH: tìm lại bankAccountIdx từ note (note lưu số TK)
       bankAccountIdx:     (() => {
         if (v.fund_type !== "ngan_hang" || !v.note) return "";
@@ -492,13 +638,15 @@ function Page() {
         data: {
           type:                 createKind,
           fund_type:            form.fundType,
-          branch_id:            form.branchId,
           amount:               parseInput(form.amount),
           voucher_type_id:      form.voucherTypeId || null,
-          collector_user_id:    createKind === "thu" ? (form.collectorUserId || null) : null,
-          payer_customer_id:    createKind === "thu" ? (form.payerCustomerId || null) : null,
-          payer_user_id:        createKind === "chi" ? (form.payerUserId || null) : null,
-          receiver_customer_id: createKind === "chi" ? (form.receiverCustomerId || null) : null,
+          // ── Bên A → Bên B ──
+          from_kind:            form.aKind,
+          from_id:              form.aKind === "other" ? null : (form.aId || null),
+          from_name:            form.aKind === "other" ? (form.aName || null) : null,
+          to_kind:              form.bKind,
+          to_id:                form.bKind === "other" ? null : (form.bId || null),
+          to_name:              form.bKind === "other" ? (form.bName || null) : null,
           note:                 buildNote(form),
           created_by:           user?.id ?? null,
         },
@@ -522,15 +670,18 @@ function Page() {
       await updateFn({
         data: {
           id:                   selectedVoucher.id,
+          type:                 selectedVoucher.type, // server cần để suy cột cũ
           amount:               parseInput(editForm.amount),
           voucher_type_id:      editForm.voucherTypeId || null,
-          collector_user_id:    selectedVoucher.type === "thu" ? (editForm.collectorUserId || null) : null,
-          payer_customer_id:    selectedVoucher.type === "thu" ? (editForm.payerCustomerId || null) : null,
-          payer_user_id:        selectedVoucher.type === "chi" ? (editForm.payerUserId || null) : null,
-          receiver_customer_id: selectedVoucher.type === "chi" ? (editForm.receiverCustomerId || null) : null,
+          // ── Bên A → Bên B ──
+          from_kind:            editForm.aKind,
+          from_id:              editForm.aKind === "other" ? null : (editForm.aId || null),
+          from_name:            editForm.aKind === "other" ? (editForm.aName || null) : null,
+          to_kind:              editForm.bKind,
+          to_id:                editForm.bKind === "other" ? null : (editForm.bId || null),
+          to_name:              editForm.bKind === "other" ? (editForm.bName || null) : null,
           note:                 buildNote(editForm),
           fund_type:            editForm.fundType,
-          branch_id:            editForm.branchId,
         },
       });
       await qc.invalidateQueries({ queryKey: ["cash"] });
@@ -556,26 +707,13 @@ function Page() {
   }
 
   async function handleAddType() {
-    if (addingType) return;
     if (!newTypeName.trim()) return;
-    setAddingType(true);
     try {
       await upsertTypeFn({ data: { name: newTypeName.trim(), kind: newTypeKind } });
       setNewTypeName("");
-      await qc.invalidateQueries({ queryKey: ["cash"] });
+      qc.invalidateQueries({ queryKey: ["cash"] });
       toast.success("Đã thêm loại thu/chi");
     } catch (e: any) { toast.error(e.message); }
-    finally { setAddingType(false); }
-  }
-
-  async function handleDeleteType(typeId: string) {
-    if (deletingTypeId) return;
-    setDeletingTypeId(typeId);
-    try {
-      await deleteTypeFn({ data: { id: typeId } });
-      await qc.invalidateQueries({ queryKey: ["cash"] });
-    } catch (e: any) { toast.error(e.message); }
-    finally { setDeletingTypeId(null); }
   }
 
   // ── render ────────────────────────────────────────────────────────────
@@ -729,8 +867,7 @@ function Page() {
             {filtered.map((v: any) => {
               const isActive = v.status === "active";
               const isThu = v.type === "thu";
-              const staffName = isThu ? getUserName(v.collector_user_id) : getUserName(v.payer_user_id);
-              const customerName = isThu ? getCustomerName(v.payer_customer_id) : getCustomerName(v.receiver_customer_id);
+              const sides = voucherSides(v);
               const isSelected = selectedVoucher?.id === v.id;
               const canEditVoucher = isAdmin || v.created_by === user?.id;
               return (
@@ -759,8 +896,10 @@ function Page() {
                       {v.fund_type === "tien_mat" ? <Wallet className="h-3 w-3" /> : <Landmark className="h-3 w-3" />}
                       {v.fund_type === "tien_mat" ? "Tiền mặt" : "Ngân hàng"}
                     </span>
-                    {customerName && <span className="flex items-center gap-1"><User className="h-3 w-3" />{customerName}</span>}
-                    {staffName && <span className="flex items-center gap-1"><Users className="h-3 w-3" />{staffName}</span>}
+                    <span className="flex items-center gap-1 min-w-0">
+                      <User className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{sides.a} → {sides.b}</span>
+                    </span>
                     <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{fmtDateShort(v.created_at)}</span>
                   </div>
                   {/* Expanded detail */}
@@ -768,7 +907,8 @@ function Page() {
                     <div className="mt-3 pt-3 border-t space-y-2 text-xs">
                       <div className="grid grid-cols-2 gap-1.5">
                         <div><span className="text-muted-foreground">Loại: </span>{getTypeName(v.voucher_type_id) !== "—" ? getTypeName(v.voucher_type_id) : "—"}</div>
-                        <div><span className="text-muted-foreground">Chi nhánh: </span>{getBranchName(v.branch_id)}</div>
+                        <div className="col-span-2"><span className="text-muted-foreground">A → B: </span>{voucherSides(v).a} → {voucherSides(v).b}</div>
+                        <div><span className="text-muted-foreground">Chi nhánh: </span>{voucherBranchLabel(v)}</div>
                         <div><span className="text-muted-foreground">Người tạo: </span>{getUserName(v.created_by) || "—"}</div>
                         <div><span className="text-muted-foreground">Thời gian: </span>{fmtDate(v.created_at)}</div>
                         {v.fund_type === "ngan_hang" && (() => {
@@ -829,8 +969,8 @@ function Page() {
                     <th className="px-4 py-3 text-left font-semibold">Thời gian</th>
                     <th className="px-4 py-3 text-left font-semibold">Loại</th>
                     <th className="px-4 py-3 text-left font-semibold">Hình thức</th>
-                    <th className="px-4 py-3 text-left font-semibold">Người thu/chi</th>
-                    <th className="px-4 py-3 text-left font-semibold">Người nộp/nhận</th>
+                    <th className="px-4 py-3 text-left font-semibold">Bên A</th>
+                    <th className="px-4 py-3 text-left font-semibold">Bên B</th>
                     {canViewAll && <th className="px-4 py-3 text-left font-semibold">Chi nhánh</th>}
                     <th className="px-4 py-3 text-right font-semibold">Giá trị</th>
                     <th className="px-4 py-3 text-center font-semibold w-20">Thao tác</th>
@@ -840,8 +980,7 @@ function Page() {
                   {filtered.map((v: any) => {
                     const isActive = v.status === "active";
                     const isThu = v.type === "thu";
-                    const staffName = isThu ? getUserName(v.collector_user_id) : getUserName(v.payer_user_id);
-                    const customerName = isThu ? getCustomerName(v.payer_customer_id) : getCustomerName(v.receiver_customer_id);
+                    const sides = voucherSides(v);
                     const isSelected = selectedVoucher?.id === v.id;
                     const canEditVoucher = isAdmin || v.created_by === user?.id;
                     return (
@@ -876,9 +1015,9 @@ function Page() {
                               })()}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-xs">{staffName || <span className="text-muted-foreground">—</span>}</td>
-                          <td className="px-4 py-3 text-xs">{customerName || <span className="text-muted-foreground">—</span>}</td>
-                          {canViewAll && <td className="px-4 py-3 text-xs text-muted-foreground">{getBranchName(v.branch_id)}</td>}
+                          <td className="px-4 py-3 text-xs">{sides.a || <span className="text-muted-foreground">—</span>}</td>
+                          <td className="px-4 py-3 text-xs">{sides.b || <span className="text-muted-foreground">—</span>}</td>
+                          {canViewAll && <td className="px-4 py-3 text-xs text-muted-foreground">{voucherBranchLabel(v)}</td>}
                           <td className={`px-4 py-3 text-right font-bold tabular-nums ${isThu ? "text-green-600" : "text-red-600"}`}>
                             {isThu ? "+" : "-"}{moneyFmt(v.amount)}
                           </td>
@@ -910,13 +1049,17 @@ function Page() {
                           <tr key={`${v.id}-detail`} className="bg-muted/10">
                             <td colSpan={canViewAll ? 9 : 8} className="px-6 py-3">
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                                <div className="space-y-0.5 col-span-2 sm:col-span-4">
+                                  <div className="text-muted-foreground font-medium">Bên A → Bên B</div>
+                                  <div className="font-medium">{voucherSides(v).a} <span className="text-muted-foreground">→</span> {voucherSides(v).b}</div>
+                                </div>
                                 <div className="space-y-0.5">
                                   <div className="text-muted-foreground font-medium">Loại thu/chi</div>
                                   <div>{getTypeName(v.voucher_type_id)}</div>
                                 </div>
                                 <div className="space-y-0.5">
                                   <div className="text-muted-foreground font-medium">Chi nhánh</div>
-                                  <div>{getBranchName(v.branch_id)}</div>
+                                  <div>{voucherBranchLabel(v)}</div>
                                 </div>
                                 <div className="space-y-0.5">
                                   <div className="text-muted-foreground font-medium">Người tạo</div>
@@ -1059,9 +1202,7 @@ function Page() {
                 placeholder="Tên loại mới..."
                 onKeyDown={(e) => e.key === "Enter" && handleAddType()}
               />
-              <Button onClick={handleAddType} disabled={addingType || !newTypeName.trim()}>
-                {addingType ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang thêm...</> : "Thêm"}
-              </Button>
+              <Button onClick={handleAddType}>Thêm</Button>
             </div>
             <div className="space-y-1 max-h-72 overflow-y-auto">
               {(["thu", "chi"] as const).map((kind) => (
@@ -1076,12 +1217,9 @@ function Page() {
                     <div key={t.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted/50">
                       <span className="text-sm">{t.name}</span>
                       <button type="button"
-                        disabled={deletingTypeId === t.id}
-                        onClick={() => handleDeleteType(t.id)}
-                        className="text-muted-foreground hover:text-destructive disabled:opacity-50">
-                        {deletingTypeId === t.id
-                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          : <Trash2 className="h-3.5 w-3.5" />}
+                        onClick={() => deleteTypeFn({ data: { id: t.id } }).then(() => qc.invalidateQueries({ queryKey: ["cash"] }))}
+                        className="text-muted-foreground hover:text-destructive">
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   ))}
