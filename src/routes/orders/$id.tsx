@@ -13,6 +13,7 @@ import { updateScheduleOrderLink } from "@/lib/schedule.functions";
 import { getSettings } from "@/lib/settings.functions";
 import { buildInvoiceHtml } from "@/lib/print-invoice";
 import { AppShell, Card, fmt } from "@/components/AppShell";
+import { PageLoader } from "@/components/Spinner";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +50,7 @@ import {
   ChevronRight,
   Link2,
   Link2Off,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -531,7 +533,7 @@ function OrderDetailPage() {
   if (isLoading) {
     return (
       <AppShell title="Chi tiết đơn hàng">
-        <div className="text-muted-foreground py-16 text-center">Đang tải...</div>
+        <PageLoader label="Đang tải đơn hàng…" />
       </AppShell>
     );
   }
@@ -577,7 +579,9 @@ function OrderDetailPage() {
               <X className="h-4 w-4 mr-1" /> Hủy
             </Button>
             <Button size="sm" onClick={saveEdit} disabled={saving}>
-              <Save className="h-4 w-4 mr-1" /> {saving ? "Đang lưu..." : "Lưu thay đổi"}
+              {saving
+                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Đang lưu...</>
+                : <><Save className="h-4 w-4 mr-1" />Lưu thay đổi</>}
             </Button>
           </div>
         )}
@@ -657,8 +661,9 @@ function OrderDetailPage() {
                       onClick={completeOrder}
                       disabled={completingOrder}
                     >
-                      <CheckCircle2 className="h-4 w-4 mr-1" />
-                      {completingOrder ? "Đang xử lý..." : "Tạo hóa đơn"}
+                      {completingOrder
+                        ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Đang xử lý...</>
+                        : <><CheckCircle2 className="h-4 w-4 mr-1" />Tạo hóa đơn</>}
                     </Button>
                   )}
 
@@ -680,8 +685,9 @@ function OrderDetailPage() {
                     onClick={cancelOrder}
                     disabled={cancellingOrder}
                   >
-                    <Ban className="h-4 w-4 mr-1" />
-                    {cancellingOrder ? "Đang hủy..." : "Hủy đơn"}
+                    {cancellingOrder
+                      ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Đang hủy...</>
+                      : <><Ban className="h-4 w-4 mr-1" />Hủy đơn</>}
                   </Button>
                 )}
               </div>
@@ -1486,8 +1492,9 @@ function OrderDetailPage() {
               onClick={submitReturn}
               disabled={submittingReturn}
             >
-              <RotateCcw className="h-4 w-4 mr-1" />
-              {submittingReturn ? "Đang tạo..." : "Xác nhận trả hàng"}
+              {submittingReturn
+                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Đang tạo...</>
+                : <><RotateCcw className="h-4 w-4 mr-1" />Xác nhận trả hàng</>}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1654,7 +1661,7 @@ function OrderDetailPage() {
                     disabled={completingOrder || paid === 0}
                   >
                     {completingOrder
-                      ? <><span className="animate-spin mr-1.5">⏳</span>Đang xử lý...</>
+                      ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang xử lý...</>
                       : "THANH TOÁN"}
                   </Button>
                 </DialogFooter>

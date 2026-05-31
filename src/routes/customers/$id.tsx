@@ -11,6 +11,7 @@ import {
 } from "@/lib/customers.functions";
 import { getSettings } from "@/lib/settings.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
+import { PageLoader } from "@/components/Spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +43,7 @@ import {
   CalendarDays,
   Users,
   Receipt,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -200,6 +202,7 @@ function CustomerDetailPage() {
   });
 
   const [editOpen, setEditOpen] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [activeTab, setActiveTab] = useState<"orders" | "payments">("orders");
   const [payOpen, setPayOpen] = useState(false);
   const [payAmount, setPayAmount] = useState("");
@@ -209,7 +212,6 @@ function CustomerDetailPage() {
   const [bankAccountIdx, setBankAccountIdx] = useState<string>("");
   const [bankContent, setBankContent] = useState("");
   const [submittingPay, setSubmittingPay] = useState(false);
-
   // ✅ Chi trả công nợ (đối xứng phiếu thu)
   const [payBackOpen, setPayBackOpen] = useState(false);
   const [payBackAmount, setPayBackAmount] = useState("");
@@ -322,6 +324,8 @@ function CustomerDetailPage() {
 
   async function handleSave(e: any) {
     e.preventDefault();
+    if (savingEdit) return;
+    setSavingEdit(true);
     try {
       // ✅ Người dùng nhập TỔNG công nợ muốn hiển thị.
       // Tách phần điều chỉnh thủ công = tổng nhập - phần tính tự động từ đơn/phiếu.
@@ -343,6 +347,8 @@ function CustomerDetailPage() {
       qc.invalidateQueries({ queryKey: ["customers"] });
     } catch (err: any) {
       toast.error(err?.message ?? "Lỗi");
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -462,7 +468,7 @@ function CustomerDetailPage() {
   if (isLoading) {
     return (
       <AppShell title="Chi tiết khách hàng">
-        <div className="text-muted-foreground py-16 text-center">Đang tải...</div>
+        <PageLoader label="Đang tải khách hàng…" />
       </AppShell>
     );
   }
@@ -1047,8 +1053,10 @@ function CustomerDetailPage() {
               <Button type="button" variant="ghost" onClick={() => setEditOpen(false)}>
                 Hủy bỏ
               </Button>
-              <Button type="submit" className="px-6">
-                Lưu thông tin
+              <Button type="submit" className="px-6" disabled={savingEdit}>
+                {savingEdit
+                  ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang lưu...</>
+                  : "Lưu thông tin"}
               </Button>
             </DialogFooter>
           </form>
@@ -1204,8 +1212,9 @@ function CustomerDetailPage() {
               onClick={handleCollectPayment}
               disabled={submittingPay}
             >
-              <Banknote className="h-4 w-4 mr-1" />
-              {submittingPay ? "Đang xử lý..." : "Xác nhận thu tiền"}
+              {submittingPay
+                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Đang xử lý...</>
+                : <><Banknote className="h-4 w-4 mr-1" />Xác nhận thu tiền</>}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1348,7 +1357,9 @@ function CustomerDetailPage() {
               onClick={handlePayBack}
               disabled={submittingPayBack}
             >
-              {submittingPayBack ? "Đang lưu..." : "Xác nhận chi trả"}
+              {submittingPayBack
+                ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Đang lưu...</>
+                : "Xác nhận chi trả"}
             </Button>
           </DialogFooter>
         </DialogContent>

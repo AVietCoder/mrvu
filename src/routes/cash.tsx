@@ -350,6 +350,8 @@ function Page() {
   const [openCancel, setOpenCancel] = useState(false);
   const [openTypes, setOpenTypes] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [addingType, setAddingType] = useState(false);
+  const [deletingTypeId, setDeletingTypeId] = useState<string | null>(null);
   const [form, setForm] = useState(blankForm);
   const [editForm, setEditForm] = useState(blankForm);
   const [newTypeName, setNewTypeName] = useState("");
@@ -554,13 +556,26 @@ function Page() {
   }
 
   async function handleAddType() {
+    if (addingType) return;
     if (!newTypeName.trim()) return;
+    setAddingType(true);
     try {
       await upsertTypeFn({ data: { name: newTypeName.trim(), kind: newTypeKind } });
       setNewTypeName("");
-      qc.invalidateQueries({ queryKey: ["cash"] });
+      await qc.invalidateQueries({ queryKey: ["cash"] });
       toast.success("Đã thêm loại thu/chi");
     } catch (e: any) { toast.error(e.message); }
+    finally { setAddingType(false); }
+  }
+
+  async function handleDeleteType(typeId: string) {
+    if (deletingTypeId) return;
+    setDeletingTypeId(typeId);
+    try {
+      await deleteTypeFn({ data: { id: typeId } });
+      await qc.invalidateQueries({ queryKey: ["cash"] });
+    } catch (e: any) { toast.error(e.message); }
+    finally { setDeletingTypeId(null); }
   }
 
   // ── render ────────────────────────────────────────────────────────────
@@ -1044,7 +1059,9 @@ function Page() {
                 placeholder="Tên loại mới..."
                 onKeyDown={(e) => e.key === "Enter" && handleAddType()}
               />
-              <Button onClick={handleAddType}>Thêm</Button>
+              <Button onClick={handleAddType} disabled={addingType || !newTypeName.trim()}>
+                {addingType ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang thêm...</> : "Thêm"}
+              </Button>
             </div>
             <div className="space-y-1 max-h-72 overflow-y-auto">
               {(["thu", "chi"] as const).map((kind) => (
@@ -1059,9 +1076,12 @@ function Page() {
                     <div key={t.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted/50">
                       <span className="text-sm">{t.name}</span>
                       <button type="button"
-                        onClick={() => deleteTypeFn({ data: { id: t.id } }).then(() => qc.invalidateQueries({ queryKey: ["cash"] }))}
-                        className="text-muted-foreground hover:text-destructive">
-                        <Trash2 className="h-3.5 w-3.5" />
+                        disabled={deletingTypeId === t.id}
+                        onClick={() => handleDeleteType(t.id)}
+                        className="text-muted-foreground hover:text-destructive disabled:opacity-50">
+                        {deletingTypeId === t.id
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : <Trash2 className="h-3.5 w-3.5" />}
                       </button>
                     </div>
                   ))}
