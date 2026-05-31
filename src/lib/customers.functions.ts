@@ -14,6 +14,17 @@ import {
   logActivity,
 } from "./supabase";
 
+// ✅ Kiểm tra actor có phải admin không (gác sửa công nợ phía server)
+async function isActorAdmin(actorId?: string | null): Promise<boolean> {
+  if (!actorId) return false;
+  const rows = await fetchRows<{ is_admin: number }>("users", {
+    eq: { id: actorId },
+    select: "is_admin",
+    limit: 1,
+  });
+  return Number(rows[0]?.is_admin) === 1;
+}
+
 interface ListCustomersArgs {
   page?: number;
   pageSize?: number;
@@ -94,7 +105,10 @@ export const listCustomers = createServerFn({ method: "GET" })
 
 export const upsertCustomer = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
-    const payload = {
+    // ✅ Chỉ admin mới được chỉnh sửa công nợ / điều chỉnh công nợ
+    const actorAdmin = await isActorAdmin(data._actor_id);
+
+    const payload: Record<string, any> = {
       name: data.name,
       phone: data.phone || null,
       email: data.email || null,
@@ -113,8 +127,13 @@ export const upsertCustomer = createServerFn({ method: "POST" })
       bank_name: data.bank_name || null,
       bank_account: data.bank_account || null,
       note: data.note || null,
-      debt: Number(data.debt) || 0, // cho phép âm
     };
+
+    // Chỉ ghi debt / debt_adjustment khi actor là admin.
+    if (actorAdmin) {
+      payload.debt = Number(data.debt) || 0; // cho phép âm
+      payload.debt_adjustment = Number(data.debt_adjustment) || 0;
+    }
 
     if (data.id) {
       await updateWhere("customers", payload, { id: data.id });
@@ -123,6 +142,9 @@ export const upsertCustomer = createServerFn({ method: "POST" })
       await insertRow("customers", {
         id: uid(),
         ...payload,
+        // Khách mới: nếu không phải admin thì công nợ khởi tạo = 0
+        debt: actorAdmin ? (Number(data.debt) || 0) : 0,
+        debt_adjustment: actorAdmin ? (Number(data.debt_adjustment) || 0) : 0,
         created_by: data._actor_id || null,
         created_by_name: data.created_by_name || null,
         created_at: now(),
@@ -260,7 +282,7 @@ export const getCustomerById = createServerFn({ method: "GET" })
   });
 
 export async function recalculateCustomerDebt(customerId: string): Promise<number> {
-  const [completedOrdersRows, allReceiptsRows, allPayBacksRows] = await Promise.all([
+  const [completedOrdersRows, allReceiptsRows, allPayBacksRows, customerRows] = await Promise.all([
     fetchRows<{ total: number }>("orders", {
       eq: { customer_id: customerId, status: "completed" },
       select: "total",
@@ -277,12 +299,19 @@ export async function recalculateCustomerDebt(customerId: string): Promise<numbe
       .eq("receiver_customer_id", customerId)
       .eq("type", "chi")
       .neq("status", "cancelled"),
+    fetchRows<{ debt_adjustment: number }>("customers", {
+      eq: { id: customerId },
+      select: "debt_adjustment",
+      limit: 1,
+    }),
   ]);
 
   const totalSpent = completedOrdersRows.reduce((s, o) => s + Number(o.total || 0), 0);
   const totalPaid = (allReceiptsRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
   const totalPaidBack = (allPayBacksRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-  const newDebt = totalSpent - totalPaid + totalPaidBack;
+  // ✅ Giữ phần điều chỉnh thủ công của admin khi tính lại
+  const adjustment = Number(customerRows[0]?.debt_adjustment) || 0;
+  const newDebt = totalSpent - totalPaid + totalPaidBack + adjustment;
 
   await updateWhere("customers", { debt: newDebt }, { id: customerId });
   return newDebt;

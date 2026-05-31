@@ -262,7 +262,11 @@ function CustomerDetailPage() {
   const totalPaid = paymentHistory.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
   const totalPaidBack = payBackHistory.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
   // debt > 0 : khách nợ công ty; debt < 0 : công ty nợ khách
-  const displayDebt = totalSpent - totalPaid + totalPaidBack;
+  // ✅ Phần tính từ đơn/phiếu (không gồm điều chỉnh thủ công)
+  const computedDebt = totalSpent - totalPaid + totalPaidBack;
+  // ✅ Điều chỉnh công nợ thủ công (chỉ admin sửa được) — cộng vào tổng hiển thị
+  const manualAdjustment = Number(customer?.debt_adjustment ?? 0);
+  const displayDebt = computedDebt + manualAdjustment;
 
   const creatorName = useMemo(() => {
     if (!customer) return null;
@@ -319,10 +323,16 @@ function CustomerDetailPage() {
   async function handleSave(e: any) {
     e.preventDefault();
     try {
+      // ✅ Người dùng nhập TỔNG công nợ muốn hiển thị.
+      // Tách phần điều chỉnh thủ công = tổng nhập - phần tính tự động từ đơn/phiếu.
+      const enteredTotal = Number(form.debt) || 0;
+      const newAdjustment = enteredTotal - computedDebt;
+
       await upsert({
         data: {
           ...form,
-          debt: Number(form.debt) || 0,
+          debt: enteredTotal, // tổng công nợ (server giữ đồng bộ qua tính lại)
+          debt_adjustment: newAdjustment, // phần admin chỉnh tay
           _actor_id: user?.id ?? null,
         },
       });
@@ -1002,23 +1012,34 @@ function CustomerDetailPage() {
               </div>
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Dư nợ hiện tại</Label>
-                <div className="relative mt-1">
-                  <Input
-                    className="pl-8 bg-background font-medium text-destructive"
-                    inputMode="numeric"
-                    value={form.debt}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        // ✅ Cho phép nhập âm: giữ duy nhất 1 dấu '-' ở đầu
-                        debt: e.target.value.replace(/[^\d.\-]/g, "").replace(/(?!^)-/g, ""),
-                      })
-                    }
-                  />
-                  <div className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">
-                    đ
+                {isAdmin ? (
+                  <div className="relative mt-1">
+                    <Input
+                      className="pl-8 bg-background font-medium text-destructive"
+                      inputMode="numeric"
+                      value={form.debt}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          // ✅ Cho phép nhập âm: giữ duy nhất 1 dấu '-' ở đầu
+                          debt: e.target.value.replace(/[^\d.\-]/g, "").replace(/(?!^)-/g, ""),
+                        })
+                      }
+                    />
+                    <div className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">
+                      đ
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="mt-1">
+                    <div className="rounded-md border bg-muted/40 px-3 py-2 font-medium text-destructive">
+                      {fmt(displayDebt)}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Chỉ quản trị viên mới được chỉnh sửa công nợ.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 

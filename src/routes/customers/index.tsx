@@ -174,7 +174,7 @@ const empty: FormState = {
 };
 
 function CustomersPage() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const qc = useQueryClient();
 
   const list = useServerFn(listCustomers);
@@ -228,8 +228,8 @@ function CustomersPage() {
   const receipts = data?.receipts ?? [];
   const payBackHistory = data?.payBackHistory ?? [];
 
-  // ✅ Tính displayDebt cho từng khách = totalSpent - totalPaid + totalPaidBack (giống $id.tsx)
-  function getDisplayDebt(customerId: string): number {
+  // ✅ Phần công nợ tính tự động = totalSpent - totalPaid + totalPaidBack (giống $id.tsx)
+  function getComputedDebt(customerId: string): number {
     const completedOrders = orders.filter((o: any) => o.customer_id === customerId && o.status === "completed");
     const totalSpent = completedOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0);
     const totalPaid = (receipts as any[])
@@ -239,6 +239,12 @@ function CustomersPage() {
       .filter((r: any) => r.receiver_customer_id === customerId && r.type === "chi" && r.status !== "cancelled")
       .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
     return totalSpent - totalPaid + totalPaidBack;
+  }
+  // ✅ Tổng công nợ hiển thị = phần tự động + điều chỉnh thủ công (admin)
+  function getDisplayDebt(customerId: string): number {
+    const c = customers.find((x) => x.id === customerId);
+    const adjustment = Number(c?.debt_adjustment ?? 0);
+    return getComputedDebt(customerId) + adjustment;
   }
   const viewCustomer = viewId ? customers.find((x) => x.id === viewId) ?? null : null;
 
@@ -285,10 +291,16 @@ function CustomersPage() {
   async function handleSave(e: FormEvent) {
     e.preventDefault();
     try {
+      // ✅ form.debt = tổng công nợ muốn hiển thị. Tách phần điều chỉnh thủ công.
+      const enteredTotal = Number(form.debt) || 0;
+      const computed = form.id ? getComputedDebt(form.id) : 0;
+      const newAdjustment = enteredTotal - computed;
+
       await upsert({
         data: {
           ...form,
-          debt: Number(form.debt) || 0,
+          debt: enteredTotal,
+          debt_adjustment: newAdjustment,
 
           // lưu người tạo
           _actor_id: user?.id ?? null,
@@ -804,19 +816,27 @@ function CustomersPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Dư nợ công nợ đầu kỳ (nếu có)</Label>
-                  <div className="relative mt-1">
-                    <Input
-                      className="pl-8 bg-background font-medium text-destructive"
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={form.debt}
-                      onChange={(e) => setForm({ ...form, debt: e.target.value.replace(/[^\d.]/g, "") })}
-                    />
-                    <div className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">đ</div>
-                  </div>
+                  {isAdmin ? (
+                    <div className="relative mt-1">
+                      <Input
+                        className="pl-8 bg-background font-medium text-destructive"
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={form.debt}
+                        onChange={(e) => setForm({ ...form, debt: e.target.value.replace(/[^\d.]/g, "") })}
+                      />
+                      <div className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">đ</div>
+                    </div>
+                  ) : (
+                    <div className="mt-1 rounded-md border bg-muted/40 px-3 py-2 font-medium text-destructive">
+                      {form.id ? fmt(getDisplayDebt(form.id)) : fmt(Number(form.debt) || 0)}
+                    </div>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground pt-0 md:pt-6">
-                  Khoản tiền khách đang nợ cửa hàng tính tới thời điểm tạo tài khoản.
+                  {isAdmin
+                    ? "Khoản tiền khách đang nợ cửa hàng tính tới thời điểm tạo tài khoản."
+                    : "Chỉ quản trị viên mới được chỉnh sửa công nợ."}
                 </p>
               </div>
             </div>
