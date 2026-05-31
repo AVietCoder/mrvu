@@ -256,21 +256,26 @@ function VoucherForm({
   const handleAmountFocus = useCallback((e: any) => e.target.select(), []);
   const handleTypeId    = useCallback((v: string) => setF((prev: any) => ({ ...prev, voucherTypeId: v })), [setF]);
   const handleNote      = useCallback((e: any) => setF((prev: any) => ({ ...prev, note: e.target.value })), [setF]);
-  // ── A/B handlers — đổi loại thì xoá id & name của bên đó ──
-  const setAKind = useCallback((v: EndpointKind) => setF((p: any) => ({ ...p, aKind: v, aId: "", aName: "" })), [setF]);
+  
+  // ── A/B handlers ──
   const setAId   = useCallback((v: string) => setF((p: any) => ({ ...p, aId: v })), [setF]);
-  const setAName = useCallback((v: string) => setF((p: any) => ({ ...p, aName: v })), [setF]);
+  
   const setBKind = useCallback((v: EndpointKind) => setF((p: any) => ({ ...p, bKind: v, bId: "", bName: "" })), [setF]);
   const setBId   = useCallback((v: string) => setF((p: any) => ({ ...p, bId: v })), [setF]);
   const setBName = useCallback((v: string) => setF((p: any) => ({ ...p, bName: v })), [setF]);
 
-  // Quỹ chi nhánh: thu → A +, B −; chi → A −, B +
-  const aFundHint = f.aKind === "branch"
-    ? (kind === "thu" ? { sign: "+" as const, text: "+ quỹ chi nhánh" } : { sign: "-" as const, text: "− quỹ chi nhánh" })
-    : null;
+  // Cấu hình Labels và UI Lock cho Bên A / Bên B
+  const aLabel = kind === "thu" ? "Chi nhánh nhận tiền" : "Chi nhánh chi tiền";
+  const bLabel = kind === "thu" ? "Đối tượng chi tiền" : "Đối tượng nhận tiền";
+  
+  // Quỹ chi nhánh: thu → A +, chi → A −
+  const aFundHint = kind === "thu" ? { sign: "+" as const, text: "+ quỹ chi nhánh" } : { sign: "-" as const, text: "− quỹ chi nhánh" };
   const bFundHint = f.bKind === "branch"
     ? (kind === "thu" ? { sign: "-" as const, text: "− quỹ chi nhánh" } : { sign: "+" as const, text: "+ quỹ chi nhánh" })
     : null;
+
+  // Nếu không phải admin và danh sách chi nhánh được phép <= 1 thì khóa phần chọn
+  const disableA = visibleBranches.length <= 1;
 
   return (
     <div className="space-y-3">
@@ -324,24 +329,38 @@ function VoucherForm({
 
       {/* ── Bên A → Bên B ── */}
       <div className="space-y-2">
-        <EndpointPicker
-          title="Bên A"
-          fundHint={aFundHint}
-          kindVal={f.aKind}
-          idVal={f.aId}
-          nameVal={f.aName}
-          onKind={setAKind}
-          onId={setAId}
-          onName={setAName}
-          customerOptions={customerOptions}
-          staffOptions={staffOptions}
-          branchOptions={branchOptions}
-        />
+        {/* Khối Bên A (Bắt buộc là chi nhánh) */}
+        <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <Label className="font-semibold">{aLabel}</Label>
+            <span className={`text-xs font-semibold ${aFundHint.sign === "+" ? "text-green-600" : "text-red-600"}`}>
+              {aFundHint.text}
+            </span>
+          </div>
+          
+          {disableA ? (
+            <div className="h-9 w-full rounded-md border bg-muted/50 px-3 flex items-center text-sm text-muted-foreground cursor-not-allowed">
+              {branchOptions.find((b: any) => b.value === f.aId)?.label || "—"}
+            </div>
+          ) : (
+            <SearchableSelect
+              className="w-full"
+              value={f.aId}
+              onChange={setAId}
+              emptyLabel="-- Chọn chi nhánh --"
+              placeholder="Tìm chi nhánh..."
+              options={branchOptions}
+            />
+          )}
+        </div>
+
         <div className="flex justify-center text-muted-foreground">
           <ChevronRight className="h-4 w-4 rotate-90" />
         </div>
+
+        {/* Khối Bên B (Đối tượng) */}
         <EndpointPicker
-          title="Bên B"
+          title={bLabel}
           fundHint={bFundHint}
           kindVal={f.bKind}
           idVal={f.bId}
@@ -583,7 +602,7 @@ function Page() {
     const ab = (() => {
       if (v.from_kind || v.to_kind) {
         return {
-          aKind: (v.from_kind || "other") as any, aId: v.from_id ?? "", aName: v.from_name ?? "",
+          aKind: (v.from_kind || "branch") as any, aId: v.from_id ?? "", aName: v.from_name ?? "",
           bKind: (v.to_kind || "other") as any, bId: v.to_id ?? "", bName: v.to_name ?? "",
         };
       }
@@ -641,9 +660,9 @@ function Page() {
           amount:               parseInput(form.amount),
           voucher_type_id:      form.voucherTypeId || null,
           // ── Bên A → Bên B ──
-          from_kind:            form.aKind,
-          from_id:              form.aKind === "other" ? null : (form.aId || null),
-          from_name:            form.aKind === "other" ? (form.aName || null) : null,
+          from_kind:            "branch", // Hardcode A là branch
+          from_id:              form.aId || null,
+          from_name:            null,
           to_kind:              form.bKind,
           to_id:                form.bKind === "other" ? null : (form.bId || null),
           to_name:              form.bKind === "other" ? (form.bName || null) : null,
@@ -674,9 +693,9 @@ function Page() {
           amount:               parseInput(editForm.amount),
           voucher_type_id:      editForm.voucherTypeId || null,
           // ── Bên A → Bên B ──
-          from_kind:            editForm.aKind,
-          from_id:              editForm.aKind === "other" ? null : (editForm.aId || null),
-          from_name:            editForm.aKind === "other" ? (editForm.aName || null) : null,
+          from_kind:            "branch", // Hardcode A là branch
+          from_id:              editForm.aId || null,
+          from_name:            null,
           to_kind:              editForm.bKind,
           to_id:                editForm.bKind === "other" ? null : (editForm.bId || null),
           to_name:              editForm.bKind === "other" ? (editForm.bName || null) : null,
@@ -907,8 +926,8 @@ function Page() {
                     <div className="mt-3 pt-3 border-t space-y-2 text-xs">
                       <div className="grid grid-cols-2 gap-1.5">
                         <div><span className="text-muted-foreground">Loại: </span>{getTypeName(v.voucher_type_id) !== "—" ? getTypeName(v.voucher_type_id) : "—"}</div>
-                        <div className="col-span-2"><span className="text-muted-foreground">A → B: </span>{voucherSides(v).a} → {voucherSides(v).b}</div>
-                        <div><span className="text-muted-foreground">Chi nhánh: </span>{voucherBranchLabel(v)}</div>
+                        <div className="col-span-2"><span className="text-muted-foreground">Chi nhánh → Đối tượng: </span>{voucherSides(v).a} → {voucherSides(v).b}</div>
+                        <div><span className="text-muted-foreground">Chi nhánh ghi nhận: </span>{voucherBranchLabel(v)}</div>
                         <div><span className="text-muted-foreground">Người tạo: </span>{getUserName(v.created_by) || "—"}</div>
                         <div><span className="text-muted-foreground">Thời gian: </span>{fmtDate(v.created_at)}</div>
                         {v.fund_type === "ngan_hang" && (() => {
@@ -969,8 +988,8 @@ function Page() {
                     <th className="px-4 py-3 text-left font-semibold">Thời gian</th>
                     <th className="px-4 py-3 text-left font-semibold">Loại</th>
                     <th className="px-4 py-3 text-left font-semibold">Hình thức</th>
-                    <th className="px-4 py-3 text-left font-semibold">Bên A</th>
-                    <th className="px-4 py-3 text-left font-semibold">Bên B</th>
+                    <th className="px-4 py-3 text-left font-semibold">Chi nhánh (A)</th>
+                    <th className="px-4 py-3 text-left font-semibold">Đối tượng (B)</th>
                     {canViewAll && <th className="px-4 py-3 text-left font-semibold">Chi nhánh</th>}
                     <th className="px-4 py-3 text-right font-semibold">Giá trị</th>
                     <th className="px-4 py-3 text-center font-semibold w-20">Thao tác</th>
@@ -1050,7 +1069,7 @@ function Page() {
                             <td colSpan={canViewAll ? 9 : 8} className="px-6 py-3">
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                                 <div className="space-y-0.5 col-span-2 sm:col-span-4">
-                                  <div className="text-muted-foreground font-medium">Bên A → Bên B</div>
+                                  <div className="text-muted-foreground font-medium">Chi nhánh → Đối tượng</div>
                                   <div className="font-medium">{voucherSides(v).a} <span className="text-muted-foreground">→</span> {voucherSides(v).b}</div>
                                 </div>
                                 <div className="space-y-0.5">
@@ -1058,7 +1077,7 @@ function Page() {
                                   <div>{getTypeName(v.voucher_type_id)}</div>
                                 </div>
                                 <div className="space-y-0.5">
-                                  <div className="text-muted-foreground font-medium">Chi nhánh</div>
+                                  <div className="text-muted-foreground font-medium">Chi nhánh ghi nhận</div>
                                   <div>{voucherBranchLabel(v)}</div>
                                 </div>
                                 <div className="space-y-0.5">
