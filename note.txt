@@ -1,0 +1,25 @@
+Cho dãy số nguyên a gồm n phần tử. Bạn cần chia các phần tử thành hai dãy con *, sao cho mỗi phần tử thuộc đúng
+một trong hai dãy con và đều thỏa mãn tính chất "luân phiên".
+
+Một dãy thỏa tính "luân phiên" nếu quan hệ giữa hai phần tử liên tiếp luôn đổi chiều, tức là có dạng:
+a[1] < a[2], a[2] > a[3], a[3] < a[4],....
+hoặc
+a[1] > a[2], a[2] < a[3], a[3] > a[4],....
+
+Hai phần tử liên tiếp bằng nhau không được xem là hợp lệ.
+Dãy có không quá một phần tử được xem là luần phiên.
+* Một dãy con của dãy a là một dãy có thể thu được bằng cách xóa đi một số phần tử (hoặc không phần tử nào)
+của a mà không thay đổi thứ tự của các phần tử còn lại.
+
+Input:
+Dòng đầu tiên chứa số nguyên n
+Dòng thứ hai chứa số nguyên a[1], a[2],..., a[n] (-10^9 <= a[i] <= 10^9)
+
+Output:
+Nếu không thể chia, in ra NO
+Nếu có thể chia, in ra YES ở dòng đầu tiên.
+Dòng tiếp theo in ra n số nguyên c[1], c[2],..., c[n] (1 <= c[i] <= 2)
+Trong đó c[i] = 1 nếu a[i] thuộc dãy con thứ nhất
+Trong đó c[i] = 2 nếu a[i] thuộc dãy con thứ hai
+
+Có nhiều đáp án, in ra bất kì
