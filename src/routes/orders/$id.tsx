@@ -11,6 +11,7 @@ import { useState, useMemo } from "react";
 import { listOrders, updateOrderStatus, updateOrder, createReturnOrder } from "@/lib/orders.functions";
 import { updateScheduleOrderLink } from "@/lib/schedule.functions";
 import { getSettings } from "@/lib/settings.functions";
+import { buildInvoiceHtml } from "@/lib/print-invoice";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -451,72 +452,43 @@ function OrderDetailPage() {
 
   function printOrderSlip() {
     if (!order) return;
-    const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
+    const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " \u20ab";
     const custObj = (data?.customers ?? []).find((c: any) => c.id === order.customer_id);
     const branchObj = (data?.branches ?? []).find((b: any) => b.id === order.branch_id);
     const empObj = (data?.employees ?? []).find((e: any) => e.id === order.employee_id);
-    const statusLabels: Record<string, string> = {
-      completed: "Hoàn tất",
-      reserved: "Đặt hàng (chưa giao)",
-      draft: "Nháp",
-    };
 
-    const rows = orderItems
-      .map((item: any, i: number) => {
-        const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
-        const lineTotal = item.qty * item.unit_price - (item.discount ?? 0);
-        return `<tr>
-          <td style="text-align:center;padding:8px;border:1px solid #ddd">${i + 1}</td>
-          <td style="padding:8px;border:1px solid #ddd">${prod?.name ?? item.product_id}</td>
-          <td style="text-align:center;padding:8px;border:1px solid #ddd">${item.qty}</td>
-          <td style="text-align:right;padding:8px;border:1px solid #ddd">${moneyFmt(item.unit_price)}</td>
-          <td style="text-align:right;padding:8px;border:1px solid #ddd">${moneyFmt(lineTotal)}</td>
-        </tr>`;
-      })
-      .join("");
+    const custAddress = custObj
+      ? [custObj.address, custObj.ward, custObj.district, custObj.province]
+          .filter(Boolean)
+          .join(", ")
+      : "";
+
+    const _tpl = (() => {
+      try {
+        return JSON.parse((siteSettings as any)?.print_templates || "{}").order_invoice ?? {};
+      } catch {
+        return {};
+      }
+    })();
 
     const pw = window.open("", "_blank");
     if (!pw) return;
 
-    pw.document.write(`<!DOCTYPE html><html><head><title>Phiếu đặt hàng</title>
-    <style>*{box-sizing:border-box;font-family:Arial,sans-serif}body{padding:40px;color:#111}
-    .header{text-align:center;margin-bottom:28px}.title{font-size:26px;font-weight:700;margin-bottom:6px}
-    .sub{color:#666;font-size:13px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:14px;margin-bottom:20px}
-    table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:9px;font-size:14px}
-    th{background:#f5f5f5;text-align:left}.total-box{margin-top:18px;text-align:right;font-size:14px}
-    .total-main{font-size:22px;font-weight:700;margin-top:4px}.sign{margin-top:60px;display:grid;grid-template-columns:1fr 1fr;gap:40px;text-align:center}
-    .sign-box{padding-top:10px}@media print{body{padding:0}}</style></head><body>
-    <div class="header">
-    ${(siteSettings as any)?.logo_url ? `<img src="${(siteSettings as any).logo_url}" alt="Logo" style="height:60px;object-fit:contain;margin-bottom:8px" />` : ""}
-    ${(siteSettings as any)?.site_name ? `<div style="font-size:15px;font-weight:600;color:#444;margin-bottom:4px">${(siteSettings as any).site_name}</div>` : ""}
-    <div class="title">PHIẾU ĐẶT HÀNG</div>
-    <div class="sub">Ngày: ${new Date(order.created_at).toLocaleDateString("vi-VN")} &nbsp;|&nbsp; Mã phiếu: ${order.code} &nbsp;|&nbsp; Trạng thái: ${statusLabels[order.status] ?? order.status}${(siteSettings as any)?.phone ? ` &nbsp;|&nbsp; ĐT: ${(siteSettings as any).phone}` : ""}</div></div>
-    <div class="info-grid">
-      <div><strong>Khách hàng:</strong> ${custObj?.name ?? "Khách lẻ"}</div>
-      <div><strong>Chi nhánh:</strong> ${branchObj?.name ?? "—"}</div>
-      <div><strong>Nhân viên:</strong> ${empObj?.name ?? "—"}</div>
-      <div><strong>Hình thức thanh toán:</strong> ${order.payment_method === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt"}</div>
-    </div>
-    <table><thead><tr>
-      <th style="width:50px;text-align:center">STT</th>
-      <th>Sản phẩm</th>
-      <th style="width:70px;text-align:center">SL</th>
-      <th style="width:130px;text-align:right">Đơn giá</th>
-      <th style="width:140px;text-align:right">Thành tiền</th>
-    </tr></thead><tbody>${rows}</tbody></table>
-    <div class="total-box">
-      <div>Tạm tính: ${moneyFmt(order.subtotal)}</div>
-      ${order.discount > 0 ? `<div>Giảm giá: - ${moneyFmt(order.discount)}</div>` : ""}
-      <div>Tổng tiền: ${moneyFmt(order.total)}</div>
-      ${order.deposit > 0 ? `<div style="color:#b45309;margin-top:4px">Đặt cọc: - ${moneyFmt(order.deposit)}</div>` : ""}
-      <div class="total-main" style="color:#15803d;margin-top:8px">Khách cần thanh toán: ${moneyFmt(Math.max(0, order.total - order.deposit))}</div>
-    </div>
-    ${order.note ? `<div style="margin-top:20px;font-size:14px"><strong>Ghi chú:</strong> ${order.note}</div>` : ""}
-    <div class="sign">
-      <div class="sign-box"><div>Người lập phiếu</div><div style="margin-top:60px;font-weight:600">....................</div></div>
-      <div class="sign-box"><div>Khách hàng xác nhận</div><div style="margin-top:60px">....................</div></div>
-    </div>
-    </body></html>`);
+    pw.document.write(
+      buildInvoiceHtml({
+        order,
+        custName: custObj?.name,
+        custPhone: custObj?.phone,
+        custAddress,
+        branchName: branchObj?.name,
+        empName: empObj?.name,
+        items: orderItems,
+        products: data?.products ?? [],
+        moneyFmt,
+        ss: siteSettings,
+        tplOverride: _tpl,
+      }),
+    );
     pw.document.close();
     setTimeout(() => pw.print(), 300);
   }

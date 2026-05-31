@@ -494,7 +494,7 @@ function AdminPage() {
                 onClick={() => setActiveTpl(key)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
                   activeTpl === key
-                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                    ? "border-neutral-900 bg-neutral-900 text-white shadow-sm"
                     : "border-border bg-background hover:bg-muted"
                 }`}>
                 <span>{m.icon}</span>
@@ -573,9 +573,13 @@ function AdminPage() {
                       </div>
                     </>
                   )}
-                  <div className="rounded-lg bg-muted/40 border px-3 py-2 text-xs text-muted-foreground leading-relaxed">
-                    <strong>Biến tự động:</strong>{" "}
-                    {["{Ten_Cua_Hang}","{Ma_Don_Hang}","{Khach_Hang}","{Dia_Chi}","{So_Dien_Thoai}","{Ngay}","{Thang}","{Nam}","{Tong_Tien}","{Nguoi_Lap}"].join(" · ")}
+                  <div className="rounded-lg bg-muted/40 border px-3 py-2.5 text-xs text-muted-foreground leading-relaxed">
+                    <div className="font-semibold text-foreground mb-1.5">Biến tự động (sẽ thay bằng dữ liệu thật khi in):</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["{Ten_Cua_Hang}","{Ma_Don_Hang}","{Khach_Hang}","{Dia_Chi}","{So_Dien_Thoai}","{Ngay}","{Thang}","{Nam}","{Tong_Tien}","{Nguoi_Lap}"].map(v => (
+                        <code key={v} className="rounded bg-background border px-1.5 py-0.5 font-mono text-[11px] text-foreground">{v}</code>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -585,15 +589,15 @@ function AdminPage() {
                     {key !== "email_order" ? (
                       <>
                         {/* Header */}
-                        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",padding:"16px 20px 12px",borderBottom:"2px solid #e5e7eb"}}>
+                        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",padding:"16px 20px 12px",borderBottom:"2px solid #111"}}>
                           <div>
                             {logoUrl && <img src={logoUrl} alt="" style={{height:44,objectFit:"contain",marginBottom:4,display:"block"}} />}
-                            <div style={{fontSize:15,fontWeight:700,color:"#1d4ed8"}}>{siteName || "Tên cửa hàng"}</div>
+                            <div style={{fontSize:15,fontWeight:700,color:"#111"}}>{siteName || "Tên cửa hàng"}</div>
                             <div style={{fontSize:10,color:"#6b7280",lineHeight:1.7}}>
-                              {address && <div>📍 {address}</div>}
-                              {phone && <span>📞 {phone}</span>}
+                              {address && <div>{address}</div>}
+                              {phone && <span>ĐT: {phone}</span>}
                               {phone && email && <span> &nbsp;|&nbsp; </span>}
-                              {email && <span>✉ {email}</span>}
+                              {email && <span>Email: {email}</span>}
                               {taxCode && <div>MST: {taxCode}</div>}
                             </div>
                           </div>
@@ -617,7 +621,7 @@ function AdminPage() {
                         {/* Table */}
                         <div style={{padding:"10px 20px"}}>
                           <table style={{width:"100%",borderCollapse:"collapse",marginBottom:10}}>
-                            <thead><tr style={{background:"#1d4ed8",color:"#fff"}}>
+                            <thead><tr style={{background:"#111",color:"#fff"}}>
                               <th style={{padding:"7px 6px",fontSize:11,width:30,textAlign:"center"}}>STT</th>
                               <th style={{padding:"7px 6px",fontSize:11}}>Sản phẩm</th>
                               <th style={{padding:"7px 6px",fontSize:11,width:40,textAlign:"center"}}>SL</th>
@@ -633,7 +637,7 @@ function AdminPage() {
                           <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
                             <div style={{minWidth:220,border:"1px solid #e5e7eb",borderRadius:5,overflow:"hidden"}}>
                               <div style={{display:"flex",justifyContent:"space-between",padding:"5px 12px",fontSize:11,borderBottom:"1px solid #f3f4f6"}}><span>Tổng cộng</span><span style={{fontWeight:700}}>4.550.000 ₫</span></div>
-                              <div style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",fontSize:13,fontWeight:700,background:"#1d4ed8",color:"#fff"}}><span>Khách cần trả</span><span>4.550.000 ₫</span></div>
+                              <div style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",fontSize:13,fontWeight:700,background:"#111",color:"#fff"}}><span>Khách cần trả</span><span>4.550.000 ₫</span></div>
                             </div>
                           </div>
                           {/* Checklist — only for order_invoice */}
@@ -660,8 +664,8 @@ function AdminPage() {
                           </div>
                           {/* Warranty */}
                           {getTplField(key,"showWarranty") && (getTplField(key,"warranty")||TEMPLATE_DEFAULTS[key].warranty) && (
-                            <div style={{padding:"8px 12px",background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:5,fontSize:10,fontWeight:700,textTransform:"uppercase",lineHeight:1.7,color:"#9a3412",marginBottom:8}}>
-                              ⚠ {(getTplField(key,"warranty")||TEMPLATE_DEFAULTS[key].warranty).replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
+                            <div style={{padding:"8px 12px",background:"#f5f5f5",border:"1px solid #ccc",borderLeft:"4px solid #111",borderRadius:5,fontSize:10,fontWeight:700,textTransform:"uppercase",lineHeight:1.7,color:"#111",marginBottom:8}}>
+                              {(getTplField(key,"warranty")||TEMPLATE_DEFAULTS[key].warranty).replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
                             </div>
                           )}
                           {/* Footer */}

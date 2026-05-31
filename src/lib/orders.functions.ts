@@ -66,7 +66,7 @@ async function sendOrderNotificationEmail(params: {
           <td style="padding:8px 12px;font-weight:500">${it.productName}</td>
           <td style="padding:8px 12px;text-align:center">${it.qty}</td>
           <td style="padding:8px 12px;text-align:right">${moneyFmt(it.unitPrice)}</td>
-          <td style="padding:8px 12px;text-align:right;font-weight:600;color:#15803d">${moneyFmt(it.qty * it.unitPrice)}</td>
+          <td style="padding:8px 12px;text-align:right;font-weight:600;color:#111">${moneyFmt(it.qty * it.unitPrice)}</td>
         </tr>`
     )
     .join("");
@@ -79,7 +79,7 @@ async function sendOrderNotificationEmail(params: {
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
         <!-- Header -->
-        <tr><td style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);padding:24px 32px;color:#fff">
+        <tr><td style="background:#111;padding:24px 32px;color:#fff">
           <div style="font-size:13px;opacity:0.85;margin-bottom:4px">${params.siteName}</div>
           <div style="font-size:22px;font-weight:700">${eventLabel}</div>
           <div style="font-size:13px;opacity:0.85;margin-top:6px">
@@ -107,7 +107,7 @@ async function sendOrderNotificationEmail(params: {
               </td>
               <td style="padding:0 0 0 12px;vertical-align:top">
                 <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Tổng tiền</div>
-                <div style="font-weight:700;font-size:18px;color:#15803d">${moneyFmt(params.total)}</div>
+                <div style="font-weight:700;font-size:18px;color:#111">${moneyFmt(params.total)}</div>
               </td>
             </tr>
           </table>
@@ -128,7 +128,7 @@ async function sendOrderNotificationEmail(params: {
             <tbody>${itemsHtml}</tbody>
           </table>
         </td></tr>
-        ${params.note ? `<tr><td style="padding:0 32px 24px"><div style="background:#fef9c3;border-radius:8px;padding:12px 16px;font-size:14px"><strong>Ghi chú:</strong> ${params.note}</div></td></tr>` : ""}
+        ${params.note ? `<tr><td style="padding:0 32px 24px"><div style="background:#fafafa;border:1px solid #e5e7eb;border-left:4px solid #111;border-radius:8px;padding:12px 16px;font-size:14px"><strong>Ghi chú:</strong> ${params.note}</div></td></tr>` : ""}
         <!-- Footer -->
         <tr><td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb">
           <div style="font-size:12px;color:#9ca3af;text-align:center">

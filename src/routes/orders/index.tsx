@@ -5,6 +5,7 @@ import { useMemo, useState, useEffect } from "react";
 import { listOrders, createOrder } from "@/lib/orders.functions";
 import { createSchedule, listWorkTypes } from "@/lib/schedule.functions";
 import { upsertCustomer } from "@/lib/customers.functions";
+import { buildInvoiceHtml } from "@/lib/print-invoice";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -111,113 +112,67 @@ function printOrderSlip({
   employee,
   status,
   paymentMethod,
-  discount,
   discountAmt,
   vatAmt,
   deposit,
   note,
   subtotal,
   total,
-  includeVat,
   data,
   siteSettings,
   tpl,
+  code,
+  createdAt,
 }: any) {
-  const tplHeader   = tpl?.header   ?? "PHIẾU XUẤT KHO KIỂM BẢO HÀNH";
-  const tplFooter   = tpl?.footer   ?? "Quạt trần chân thành cảm ơn sự tin tưởng của Quý khách hàng!";
-  const tplWarranty = (tpl?.showWarranty !== false && tpl?.showWarranty !== undefined ? tpl?.showWarranty : true)
-    ? (tpl?.warranty ?? "LƯU Ý: KHUYẾN CÁO CẦN KIỂM TRA QUẠT ĐỊNH KỲ ÍT NHẤT 6 THÁNG/LẦN ĐỂ ĐẢM BẢO AN TOÀN TRONG QUÁ TRÌNH SỬ DỤNG.")
-    : "";
-  const siteName = siteSettings?.site_name ?? "";
   const moneyFmt = (n: number) =>
-    new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
+    new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " \u20ab";
 
-  const custName = customer
-    ? (data?.customers ?? []).find((c: any) => c.id === customer)?.name ??
-      "Khách lẻ"
-    : "Khách lẻ";
+  const custObj = customer
+    ? (data?.customers ?? []).find((c: any) => c.id === customer)
+    : null;
+  const branchObj = branch
+    ? (data?.branches ?? []).find((b: any) => b.id === branch)
+    : null;
+  const empObj = employee
+    ? (data?.employees ?? []).find((e: any) => e.id === employee)
+    : null;
 
-  const branchName = branch
-    ? (data?.branches ?? []).find((b: any) => b.id === branch)?.name ?? "—"
-    : "—";
-
-  const empName = employee
-    ? (data?.employees ?? []).find((e: any) => e.id === employee)?.name ?? "—"
-    : "—";
-
-  const statusLabels: Record<string, string> = {
-    completed: "Hoàn tất",
-    reserved: "Đặt hàng (chưa giao)",
-    draft: "Nháp",
-  };
-
-  const rows = items
-    .map((item: any, i: number) => {
-      const prod = (data?.products ?? []).find(
-        (p: any) => p.id === item.product_id,
-      );
-      const lineTotal = item.qty * item.unit_price - (item.discount ?? 0);
-
-      return `<tr>
-        <td style="text-align:center;padding:8px;border:1px solid #ddd">${i + 1}</td>
-        <td style="padding:8px;border:1px solid #ddd">${prod?.name ?? item.product_id}</td>
-        <td style="text-align:center;padding:8px;border:1px solid #ddd">${item.qty}</td>
-        <td style="text-align:right;padding:8px;border:1px solid #ddd">${moneyFmt(item.unit_price)}</td>
-        <td style="text-align:right;padding:8px;border:1px solid #ddd">${moneyFmt(lineTotal)}</td>
-      </tr>`;
-    })
-    .join("");
+  const custAddress = custObj
+    ? [custObj.address, custObj.ward, custObj.district, custObj.province]
+        .filter(Boolean)
+        .join(", ")
+    : "";
 
   const pw = window.open("", "_blank");
   if (!pw) return;
 
-  pw.document.write(`<!DOCTYPE html><html><head><title>Phiếu đặt hàng</title>
-  <style>*{box-sizing:border-box;font-family:Arial,sans-serif}body{padding:40px;color:#111}
-  .header{text-align:center;margin-bottom:28px}.title{font-size:26px;font-weight:700;margin-bottom:6px}
-  .sub{color:#666;font-size:13px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:14px;margin-bottom:20px}
-  table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:9px;font-size:14px}
-  th{background:#f5f5f5;text-align:left}.total-box{margin-top:18px;text-align:right;font-size:14px}
-  .total-main{font-size:22px;font-weight:700;margin-top:4px}.sign{margin-top:60px;display:grid;grid-template-columns:1fr 1fr;gap:40px;text-align:center}
-  .sign-box{padding-top:10px}@media print{body{padding:0}}</style></head><body>
-  <div class="header">
-  ${siteSettings?.logo_url ? `<img src="${siteSettings.logo_url}" alt="Logo" style="height:60px;object-fit:contain;margin-bottom:8px" />` : ""}
-  ${siteSettings?.site_name ? `<div style="font-size:15px;font-weight:600;color:#444;margin-bottom:4px">${siteSettings.site_name}</div>` : ""}
-  <div class="title">${tplHeader.replace("{Ten_Cua_Hang}", siteName || "Mr.Vũ").toUpperCase()}</div>
-  <div class="sub">Ngày: ${new Date().toLocaleDateString("vi-VN")} &nbsp;|&nbsp; Trạng thái: ${statusLabels[status] ?? status}${siteSettings?.phone ? ` &nbsp;|&nbsp; ĐT: ${siteSettings.phone}` : ""}</div></div>
-  <div class="info-grid">
-    <div><strong>Khách hàng:</strong> ${custName}</div>
-    <div><strong>Chi nhánh:</strong> ${branchName}</div>
-    <div><strong>Nhân viên:</strong> ${empName}</div>
-    <div><strong>Hình thức thanh toán:</strong> ${paymentMethod === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt"}</div>
-    <div><strong>Mã phiếu:</strong> #${Date.now().toString().slice(-6)}</div>
-  </div>
-  <table><thead><tr>
-    <th style="width:50px;text-align:center">STT</th>
-    <th>Sản phẩm</th>
-    <th style="width:70px;text-align:center">SL</th>
-    <th style="width:130px;text-align:right">Đơn giá</th>
-    <th style="width:140px;text-align:right">Thành tiền</th>
-  </tr></thead><tbody>${rows}</tbody></table>
-  <div class="total-box">
-    <div>Tạm tính: ${moneyFmt(subtotal)}</div>
-    ${discountAmt > 0 ? `<div>Giảm giá: - ${moneyFmt(discountAmt)}</div>` : ""}
-    ${includeVat ? `<div>Thuế VAT (10%): + ${moneyFmt(vatAmt)}</div>` : ""}
-    <div>Tổng tiền: ${moneyFmt(total)}</div>
-    ${deposit > 0 ? `<div style="color:#b45309;margin-top:4px">Đặt cọc: - ${moneyFmt(deposit)}</div>` : ""}
-    <div class="total-main" style="color:#15803d;margin-top:8px">Khách cần thanh toán: ${moneyFmt(Math.max(0, total - deposit))}</div>
-  </div>
-  ${note ? `<div style="margin-top:20px;font-size:14px"><strong>Ghi chú:</strong> ${note}</div>` : ""}
-  <div style="margin-top:32px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:20px;text-align:center;font-size:13px">
-    ${["Kỹ thuật","Nhân viên","Khách hàng","Thủ kho"].map(r=>`<div><div style="font-weight:600">${r}</div><div style="color:#999;font-size:11px">(Ký, ghi rõ họ tên)</div><div style="margin-top:50px;border-top:1px dashed #bbb;padding-top:4px;color:#ccc">__________</div></div>`).join("")}
-  </div>
-  <div style="margin-top:24px;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px">
-    <div style="font-weight:600;margin-bottom:8px">Vui lòng chọn nội dung dưới đây</div>
-    ${["Đã giao hàng đúng mẫu và đầy đủ phụ kiện","Đã lắp đặt hoàn thiện, Quạt chạy ổn định","Đã hướng dẫn sử dụng","Đã thanh toán tiền mặt theo số tiền trên phiếu"].map(it=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="display:inline-block;width:14px;height:14px;border:1px solid #aaa;border-radius:2px"></span>${it}</div>`).join("")}
-    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px"><span><strong>Khách hàng xác nhận</strong></span><span>Họ tên: ___________________</span></div>
-  </div>
-  ${tplWarranty ? `<div style="margin-top:18px;font-size:12px;font-weight:700;text-transform:uppercase;line-height:1.6;border-top:1px solid #eee;padding-top:12px">${tplWarranty.replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}</div>` : ""}
-  ${tplFooter ? `<div style="margin-top:14px;text-align:center;font-size:13px;color:#555;border-top:1px solid #eee;padding-top:12px">${tplFooter.replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}</div>` : ""}
-  </body></html>`);
+  pw.document.write(
+    buildInvoiceHtml({
+      order: {
+        code: code ?? "",
+        created_at: createdAt ?? new Date().toISOString(),
+        status,
+        payment_method: paymentMethod,
+        subtotal,
+        discount: discountAmt,
+        vat_amount: vatAmt,
+        total,
+        deposit,
+        paid: 0,
+        note,
+      },
+      custName: custObj?.name,
+      custPhone: custObj?.phone,
+      custAddress,
+      branchName: branchObj?.name,
+      empName: empObj?.name,
+      items,
+      products: data?.products ?? [],
+      moneyFmt,
+      ss: siteSettings,
+      tplOverride: tpl,
+    }),
+  );
 
   pw.document.close();
   setTimeout(() => pw.print(), 300);
@@ -296,7 +251,7 @@ function Page() {
   const [useDiscountPct, setUseDiscountPct] = useState(false);
   const [includeVat, setIncludeVat] = useState(false);
   const [vatMode, setVatMode] = useState<"8" | "10" | "custom">("10");
-  const [vatCustomPercent, setVatCustomPercent] = useState("5");
+  const [vatCustomPercent, setVatCustomPercent] = useState("");
   const [depositRaw, setDepositRaw] = useState("0");
   const [khachThanhToanRaw, setKhachThanhToanRaw] = useState("");  // Số tiền khách trả thực tế
   const [note, setNote] = useState("");
@@ -524,7 +479,7 @@ function Page() {
     setUseDiscountPct(false);
     setIncludeVat(false);
     setVatMode("10");
-    setVatCustomPercent("5");
+    setVatCustomPercent("");
     setDepositRaw("0");
     setKhachThanhToanRaw("");
     setNote("");
@@ -986,6 +941,98 @@ function Page() {
                 </div>
               </div>
 
+              {/* ── Hình thức thanh toán (áp dụng cho tiền cọc & tiền khách trả) ── */}
+              <div className="rounded-lg border bg-background p-3 space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hình thức thanh toán</Label>
+                <div className="flex flex-wrap gap-4 mt-1">
+                  {([
+                    { value: "tien_mat", label: "Tiền mặt" },
+                    { value: "ngan_hang", label: "Chuyển khoản" },
+                  ] as const).map((opt) => (
+                    <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer text-sm">
+                      <input
+                        type="radio"
+                        name="order_payment_method"
+                        value={opt.value}
+                        checked={paymentMethod === opt.value}
+                        onChange={() => {
+                          setPaymentMethod(opt.value);
+                          setBankAccountIdx("");
+                          setBankContent("");
+                        }}
+                        className="accent-neutral-900"
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+                {paymentMethod === "ngan_hang" && (() => {
+                  const bankList: any[] = (() => {
+                    try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
+                    catch { return []; }
+                  })();
+                  return (
+                    <div className="mt-1 space-y-2">
+                      {bankList.length > 0 && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Chọn tài khoản nhận tiền</Label>
+                          <select
+                            className="mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm"
+                            value={bankAccountIdx}
+                            onChange={e => {
+                              const idx = e.target.value;
+                              setBankAccountIdx(idx);
+                              if (idx !== "") {
+                                const ba = bankList[parseInt(idx)];
+                                if (ba && !bankContent) {
+                                  setBankContent(`${siteSettings?.site_name ?? "CK"} ${ba.account_number}`);
+                                }
+                              }
+                            }}
+                          >
+                            <option value="">— Chọn STK —</option>
+                            {bankList.map((ba: any, i: number) => (
+                              <option key={i} value={String(i)}>
+                                {ba.bank} - {ba.account_number} ({ba.account_name})
+                              </option>
+                            ))}
+                          </select>
+                          {bankAccountIdx !== "" && (() => {
+                            const ba = bankList[parseInt(bankAccountIdx)];
+                            return ba ? (
+                              <div className="mt-1.5 rounded-lg border bg-muted/50 px-3 py-2 text-xs text-foreground space-y-0.5">
+                                <div className="font-semibold text-sm">{ba.bank}</div>
+                                <div>STK: <span className="font-mono font-bold tracking-wide">{ba.account_number}</span></div>
+                                <div>Chủ TK: {ba.account_name}</div>
+                                {ba.note && <div className="text-muted-foreground">{ba.note}</div>}
+                              </div>
+                            ) : null;
+                          })()}
+                        </div>
+                      )}
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Nội dung chuyển khoản</Label>
+                        <div className="mt-1 relative">
+                          <Input
+                            value={bankContent}
+                            onChange={e => setBankContent(e.target.value)}
+                            placeholder="VD: DATHANG0001 NGUYEN VAN A"
+                            className="pr-10 font-mono text-sm"
+                          />
+                          {bankContent && (
+                            <button
+                              type="button"
+                              className="absolute right-2 top-2 text-xs text-foreground underline hover:no-underline"
+                              onClick={() => { navigator.clipboard.writeText(bankContent); toast.success("Đã copy nội dung CK!"); }}
+                            >Copy</button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
               <div className="rounded-lg border overflow-hidden">
                 <label className="flex items-center gap-2 cursor-pointer select-none px-3 py-2.5 hover:bg-muted/30 transition-colors">
                   <Checkbox checked={includeVat} onCheckedChange={(v) => setIncludeVat(!!v)} id="vat" />
@@ -1029,6 +1076,7 @@ function Page() {
                           placeholder="% VAT"
                           value={vatCustomPercent}
                           onChange={(e) => setVatCustomPercent(e.target.value)}
+                          onFocus={(e) => e.target.select()}
                         />
                         <span className="text-sm text-muted-foreground">%</span>
                       </div>
@@ -1147,100 +1195,10 @@ function Page() {
                 </div>
               </div>
 
-              {/* ── Payment Panel (like screenshot) ── */}
+              {/* ── Tiền khách trả thực tế (ghi nhận thanh toán ngay, không bắt buộc) ──
+                   Khi đã có tiền cọc thì ẩn phần này cho gọn (tránh trùng lặp). */}
+              {deposit === 0 && (
               <div className="rounded-lg border bg-background p-4 space-y-3">
-                {/* Payment method radio buttons */}
-                <div>
-                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hình thức thanh toán</Label>
-                  <div className="flex flex-wrap gap-3 mt-2">
-                    {([
-                      { value: "tien_mat", label: "Tiền mặt" },
-                      { value: "ngan_hang", label: "Chuyển khoản" },
-                    ] as const).map((opt) => (
-                      <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer text-sm">
-                        <input
-                          type="radio"
-                          name="order_payment_method"
-                          value={opt.value}
-                          checked={paymentMethod === opt.value}
-                          onChange={() => {
-                            setPaymentMethod(opt.value);
-                            setBankAccountIdx("");
-                            setBankContent("");
-                          }}
-                          className="accent-primary"
-                        />
-                        {opt.label}
-                      </label>
-                    ))}
-                  </div>
-                  {paymentMethod === "ngan_hang" && (() => {
-                    const bankList: any[] = (() => {
-                      try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
-                      catch { return []; }
-                    })();
-                    return (
-                      <div className="mt-2 space-y-2">
-                        {bankList.length > 0 && (
-                          <div>
-                            <Label className="text-xs text-muted-foreground">Chọn tài khoản nhận tiền</Label>
-                            <select
-                              className="mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm"
-                              value={bankAccountIdx}
-                              onChange={e => {
-                                const idx = e.target.value;
-                                setBankAccountIdx(idx);
-                                if (idx !== "") {
-                                  const ba = bankList[parseInt(idx)];
-                                  if (ba && !bankContent) {
-                                    setBankContent(`${siteSettings?.site_name ?? "CK"} ${ba.account_number}`);
-                                  }
-                                }
-                              }}
-                            >
-                              <option value="">— Chọn STK —</option>
-                              {bankList.map((ba: any, i: number) => (
-                                <option key={i} value={String(i)}>
-                                  {ba.bank} - {ba.account_number} ({ba.account_name})
-                                </option>
-                              ))}
-                            </select>
-                            {bankAccountIdx !== "" && (() => {
-                              const ba = bankList[parseInt(bankAccountIdx)];
-                              return ba ? (
-                                <div className="mt-1.5 rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
-                                  <div className="font-semibold text-sm">{ba.bank}</div>
-                                  <div>STK: <span className="font-mono font-bold tracking-wide">{ba.account_number}</span></div>
-                                  <div>Chủ TK: {ba.account_name}</div>
-                                  {ba.note && <div className="text-blue-600">{ba.note}</div>}
-                                </div>
-                              ) : null;
-                            })()}
-                          </div>
-                        )}
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Nội dung chuyển khoản</Label>
-                          <div className="mt-1 relative">
-                            <Input
-                              value={bankContent}
-                              onChange={e => setBankContent(e.target.value)}
-                              placeholder="VD: DATHANG0001 NGUYEN VAN A"
-                              className="pr-10 font-mono text-sm"
-                            />
-                            {bankContent && (
-                              <button
-                                type="button"
-                                className="absolute right-2 top-2 text-xs text-primary hover:underline"
-                                onClick={() => { navigator.clipboard.writeText(bankContent); toast.success("Đã copy nội dung CK!"); }}
-                              >Copy</button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-
                 {/* Khách thanh toán input */}
                 <div>
                   <div className="flex justify-between items-center">
@@ -1303,6 +1261,7 @@ function Page() {
                   </div>
                 )}
               </div>
+              )}
 
               <DialogFooter className="flex-col sm:flex-row gap-2">
                 <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
@@ -1617,6 +1576,8 @@ function Page() {
                       includeVat: receiptOrder.includeVat,
                       data,
                       siteSettings,
+                      code: receiptOrder.code,
+                      createdAt: receiptOrder.created_at,
                       tpl: (() => { try { return JSON.parse(siteSettings?.print_templates || "{}").order_invoice; } catch { return {}; } })(),
                     });
                   }
