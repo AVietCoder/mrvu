@@ -480,11 +480,16 @@ const userBranchIds = useMemo(() => {
     const moneyFmt  = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
     const custObj   = (data?.customers ?? []).find((c: any) => c.id === linkedOrder.customer_id);
     const branchObj = (data?.branches  ?? []).find((b: any) => b.id === linkedOrder.branch_id);
-    // ✅ FIX: dùng employee_id từ đơn hàng, tra trong data.employees
+    // ✅ Nhân viên: employee_id (hoặc người tạo đơn) đều tra trong bảng users
     const empObj    = linkedOrder.employee_id
-      ? (data?.employees ?? []).find((e: any) => e.id === linkedOrder.employee_id)
-      : (data?.users     ?? []).find((u: any) => u.id === linkedOrder.created_by);
-    const empName   = empObj?.name ?? empObj?.full_name ?? empObj?.username ?? "—";
+      ? (data?.users ?? []).find((u: any) => u.id === linkedOrder.employee_id)
+      : (data?.users ?? []).find((u: any) => u.id === linkedOrder.created_by);
+    const empName   = empObj?.full_name ?? empObj?.name ?? empObj?.username ?? "—";
+
+    // Địa chỉ lắp đặt: ghép đầy đủ từ hồ sơ khách
+    const custAddress = custObj
+      ? [custObj.address, custObj.ward, custObj.district, custObj.province].filter(Boolean).join(", ")
+      : "";
 
     const items = (data?.order_items ?? []).filter((oi: any) => oi.order_id === linkedOrder.id);
     const _tpl  = (() => { try { return JSON.parse((ss as any)?.print_templates || "{}").order_invoice ?? {}; } catch { return {}; } })();
@@ -495,7 +500,7 @@ const userBranchIds = useMemo(() => {
       order:       linkedOrder,
       custName:    custObj?.name,
       custPhone:   custObj?.phone,
-      custAddress: custObj?.address,
+      custAddress,
       branchName:  branchObj?.name,
       empName,
       items,

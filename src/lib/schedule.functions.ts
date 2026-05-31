@@ -29,7 +29,7 @@ export const listSchedules = createServerFn({ method: "GET" }).handler(async () 
     fetchRows("branches", { orderBy: "name" }),
     fetchRows("products", { select: "id, sku, name, tech_fee", orderBy: "name" }),
     fetchRows("orders", {
-      select: "id, code, customer_id, branch_id, status, total, created_at",
+      select: "id, code, customer_id, branch_id, employee_id, status, subtotal, discount, discount_type, discount_pct, vat_rate, vat_amount, total, deposit, paid, payment_method, note, created_at",
       orderBy: "created_at",
       ascending: false,
       limit: 200,

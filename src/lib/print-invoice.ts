@@ -103,6 +103,16 @@ export function buildInvoiceHtml({
   const paid = Number(order.paid ?? 0);
   const remaining = Math.max(0, total - deposit - paid);
 
+  // Nhãn VAT: hiển thị % nếu có vat_rate, ngược lại chỉ ghi "Thuế VAT" (trường hợp nhập theo số tiền)
+  const vatRatePct = Number(order.vat_rate ?? 0) > 0
+    ? Math.round(Number(order.vat_rate) * 100 * 100) / 100
+    : 0;
+  const vatLabel = vatRatePct > 0 ? `Thuế VAT (${vatRatePct}%)` : "Thuế VAT";
+  // Nhãn giảm giá: kèm % nếu giảm theo phần trăm
+  const discountLabel = order.discount_type === "percent" && Number(order.discount_pct ?? 0) > 0
+    ? `Giảm giá (${Number(order.discount_pct)}%)`
+    : "Giảm giá";
+
   return `<!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -437,8 +447,8 @@ body {
   <div class="totals-wrap">
     <div class="totals-box">
       <div class="t-row"><span>Tạm tính</span><span>${moneyFmt(subtotal)}</span></div>
-      ${discount > 0 ? `<div class="t-row"><span>Giảm giá</span><span>− ${moneyFmt(discount)}</span></div>` : ""}
-      ${vatAmt > 0 ? `<div class="t-row"><span>Thuế VAT</span><span>+ ${moneyFmt(vatAmt)}</span></div>` : ""}
+      ${discount > 0 ? `<div class="t-row"><span>${esc(discountLabel)}</span><span>− ${moneyFmt(discount)}</span></div>` : ""}
+      ${vatAmt > 0 ? `<div class="t-row"><span>${esc(vatLabel)}</span><span>+ ${moneyFmt(vatAmt)}</span></div>` : ""}
       <div class="t-row" style="font-weight:700;color:#111"><span>Tổng cộng</span><span>${moneyFmt(total)}</span></div>
       ${deposit > 0 ? `<div class="t-row"><span>Đã đặt cọc</span><span>− ${moneyFmt(deposit)}</span></div>` : ""}
       ${paid > 0 ? `<div class="t-row"><span>Đã thanh toán</span><span>− ${moneyFmt(paid)}</span></div>` : ""}

@@ -64,6 +64,19 @@ function parseInput(val: string): number {
   return Number(val.replace(/\D/g, "")) || 0;
 }
 
+// ── Lưu lại cài đặt VAT người dùng nhập gần nhất (ghi nhớ giữa các đơn) ──
+type VatMode = "8" | "10" | "custom" | "amount";
+const VAT_PREF_KEY = "mrvu_vat_pref";
+function loadVatPref(): { includeVat: boolean; vatMode: VatMode; vatCustomPercent: string; vatAmountRaw: string } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = JSON.parse(localStorage.getItem(VAT_PREF_KEY) || "null");
+    return v && typeof v === "object" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 const PAGE_SIZE = 20;
 
 const PROVINCES = [
@@ -123,6 +136,9 @@ function printOrderSlip({
   tpl,
   code,
   createdAt,
+  vatRate,
+  discountType,
+  discountPct,
 }: any) {
   const moneyFmt = (n: number) =>
     new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " \u20ab";
@@ -155,6 +171,9 @@ function printOrderSlip({
         payment_method: paymentMethod,
         subtotal,
         discount: discountAmt,
+        discount_type: discountType,
+        discount_pct: discountPct,
+        vat_rate: vatRate,
         vat_amount: vatAmt,
         total,
         deposit,
@@ -249,9 +268,20 @@ function Page() {
   const [discountRaw, setDiscountRaw] = useState("0");
   const [discountPct, setDiscountPct] = useState("0");
   const [useDiscountPct, setUseDiscountPct] = useState(false);
-  const [includeVat, setIncludeVat] = useState(false);
-  const [vatMode, setVatMode] = useState<"8" | "10" | "custom">("10");
-  const [vatCustomPercent, setVatCustomPercent] = useState("");
+  const [includeVat, setIncludeVat] = useState<boolean>(() => loadVatPref()?.includeVat ?? false);
+  const [vatMode, setVatMode] = useState<VatMode>(() => loadVatPref()?.vatMode ?? "10");
+  const [vatCustomPercent, setVatCustomPercent] = useState<string>(() => loadVatPref()?.vatCustomPercent ?? "");
+  const [vatAmountRaw, setVatAmountRaw] = useState<string>(() => loadVatPref()?.vatAmountRaw ?? "0");
+  // Ghi nhớ cài đặt VAT người dùng nhập (theo % hay theo số tiền) cho các đơn sau
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(
+        VAT_PREF_KEY,
+        JSON.stringify({ includeVat, vatMode, vatCustomPercent, vatAmountRaw }),
+      );
+    } catch { /* ignore */ }
+  }, [includeVat, vatMode, vatCustomPercent, vatAmountRaw]);
   const [depositRaw, setDepositRaw] = useState("0");
   const [khachThanhToanRaw, setKhachThanhToanRaw] = useState("");  // Số tiền khách trả thực tế
   const [note, setNote] = useState("");
@@ -314,8 +344,16 @@ function Page() {
   const afterDiscount = Math.max(0, subtotal - discountAmt);
 
   const customVatRate = Math.min(100, Math.max(0, parseFloat(vatCustomPercent) || 0)) / 100;
-  const vatRate = vatMode === "8" ? 0.08 : vatMode === "10" ? 0.1 : customVatRate;
-  const vatAmt = includeVat ? Math.round(afterDiscount * vatRate) : 0;
+  const vatRate =
+    vatMode === "8" ? 0.08
+    : vatMode === "10" ? 0.1
+    : vatMode === "custom" ? customVatRate
+    : 0; // mode "amount" → không theo %, nhập số tiền trực tiếp
+  const vatAmt = !includeVat
+    ? 0
+    : vatMode === "amount"
+    ? parseInput(vatAmountRaw)
+    : Math.round(afterDiscount * vatRate);
   const total = afterDiscount + vatAmt;
   const khachCanThanhToan = Math.max(0, total - deposit);
 
@@ -477,9 +515,12 @@ function Page() {
     setDiscountRaw("0");
     setDiscountPct("0");
     setUseDiscountPct(false);
-    setIncludeVat(false);
-    setVatMode("10");
-    setVatCustomPercent("");
+    // Giữ lại cài đặt VAT người dùng đã nhập trước đó (đã lưu)
+    const _vp = loadVatPref();
+    setIncludeVat(_vp?.includeVat ?? false);
+    setVatMode(_vp?.vatMode ?? "10");
+    setVatCustomPercent(_vp?.vatCustomPercent ?? "");
+    setVatAmountRaw(_vp?.vatAmountRaw ?? "0");
     setDepositRaw("0");
     setKhachThanhToanRaw("");
     setNote("");
@@ -584,6 +625,9 @@ function Page() {
         paymentMethod,
         note,
         includeVat,
+        vatRate: includeVat ? vatRate : 0,
+        discountType: useDiscountPct ? "percent" : "amount",
+        discountPct: useDiscountPct ? parseFloat(discountPct) || 0 : 0,
       });
 
       toast.success("Tạo đơn " + r.code);
@@ -1068,7 +1112,18 @@ function Page() {
                         onChange={() => setVatMode("custom")}
                         className="accent-primary"
                       />
-                      Tự nhập
+                      Tự nhập %
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-sm">
+                      <input
+                        type="radio"
+                        name="vat-rate"
+                        value="amount"
+                        checked={vatMode === "amount"}
+                        onChange={() => setVatMode("amount")}
+                        className="accent-primary"
+                      />
+                      Số tiền
                     </label>
                     {vatMode === "custom" && (
                       <div className="flex items-center gap-1">
@@ -1083,6 +1138,18 @@ function Page() {
                           onFocus={(e) => e.target.select()}
                         />
                         <span className="text-sm text-muted-foreground">%</span>
+                      </div>
+                    )}
+                    {vatMode === "amount" && (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          className="w-32 h-7 text-sm"
+                          placeholder="Số tiền VAT"
+                          value={vatAmountRaw === "0" || vatAmountRaw === "" ? "" : fmtInput(vatAmountRaw)}
+                          onChange={(e) => setVatAmountRaw(String(parseInput(e.target.value)))}
+                          onFocus={(e) => e.target.select()}
+                        />
+                        <span className="text-sm text-muted-foreground">₫</span>
                       </div>
                     )}
                   </div>
@@ -1183,7 +1250,7 @@ function Page() {
                 )}
                 {includeVat && (
                   <div className="flex justify-between text-sm mt-1 text-orange-600">
-                    <span>Thuế VAT ({vatMode === "custom" ? `${vatCustomPercent || 0}%` : `${vatMode}%`})</span>
+                    <span>Thuế VAT ({vatMode === "amount" ? "số tiền" : vatMode === "custom" ? `${vatCustomPercent || 0}%` : `${vatMode}%`})</span>
                     <span>+ {fmt(vatAmt)}</span>
                   </div>
                 )}
@@ -1582,6 +1649,9 @@ function Page() {
                       siteSettings,
                       code: receiptOrder.code,
                       createdAt: receiptOrder.created_at,
+                      vatRate: receiptOrder.vatRate,
+                      discountType: receiptOrder.discountType,
+                      discountPct: receiptOrder.discountPct,
                       tpl: (() => { try { return JSON.parse(siteSettings?.print_templates || "{}").order_invoice; } catch { return {}; } })(),
                     });
                   }
