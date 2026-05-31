@@ -1058,24 +1058,6 @@ function Page() {
                           })()}
                         </div>
                       )}
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Nội dung chuyển khoản</Label>
-                        <div className="mt-1 relative">
-                          <Input
-                            value={bankContent}
-                            onChange={e => setBankContent(e.target.value)}
-                            placeholder="VD: DATHANG0001 NGUYEN VAN A"
-                            className="pr-10 font-mono text-sm"
-                          />
-                          {bankContent && (
-                            <button
-                              type="button"
-                              className="absolute right-2 top-2 text-xs text-foreground underline hover:no-underline"
-                              onClick={() => { navigator.clipboard.writeText(bankContent); toast.success("Đã copy nội dung CK!"); }}
-                            >Copy</button>
-                          )}
-                        </div>
-                      </div>
                     </div>
                   );
                 })()}
