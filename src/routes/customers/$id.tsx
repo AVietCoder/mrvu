@@ -7,6 +7,7 @@ import {
   getCustomerById,
   upsertCustomer,
   collectCustomerPayment,
+  payCustomerDebt,
 } from "@/lib/customers.functions";
 import { getSettings } from "@/lib/settings.functions";
 import { AppShell, Card, fmt } from "@/components/AppShell";
@@ -184,6 +185,7 @@ function CustomerDetailPage() {
   const getCustomer = useServerFn(getCustomerById);
   const upsert = useServerFn(upsertCustomer);
   const collectPaymentFn = useServerFn(collectCustomerPayment);
+  const payBackFn = useServerFn(payCustomerDebt);
   const getSettingsFn = useServerFn(getSettings);
 
   const { data, isLoading } = useQuery({
@@ -207,6 +209,13 @@ function CustomerDetailPage() {
   const [bankAccountIdx, setBankAccountIdx] = useState<string>("");
   const [bankContent, setBankContent] = useState("");
   const [submittingPay, setSubmittingPay] = useState(false);
+
+  // ✅ Chi trả công nợ (đối xứng phiếu thu)
+  const [payBackOpen, setPayBackOpen] = useState(false);
+  const [payBackAmount, setPayBackAmount] = useState("");
+  const [payBackNote, setPayBackNote] = useState("");
+  const [payBackFundType, setPayBackFundType] = useState<"tien_mat" | "ngan_hang">("tien_mat");
+  const [submittingPayBack, setSubmittingPayBack] = useState(false);
 
   const [form, setForm] = useState<EditFormState>({
     name: "",
@@ -233,6 +242,7 @@ function CustomerDetailPage() {
   const customerOrders = data?.orders ?? [];
   const allBranches = data?.branches ?? [];
   const paymentHistory = data?.paymentHistory ?? [];
+  const payBackHistory = data?.payBackHistory ?? [];
   const allUsers = data?.users ?? [];
 
   const branches =
@@ -247,7 +257,9 @@ function CustomerDetailPage() {
   const cancelledOrders = customerOrders.filter((o: any) => o.status === "cancelled");
   const totalSpent = completedOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0);
   const totalPaid = paymentHistory.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-  const displayDebt = totalSpent - totalPaid;
+  const totalPaidBack = payBackHistory.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+  // debt > 0 : khách nợ công ty; debt < 0 : công ty nợ khách
+  const displayDebt = totalSpent - totalPaid + totalPaidBack;
 
   const creatorName = useMemo(() => {
     if (!customer) return null;
@@ -295,7 +307,8 @@ function CustomerDetailPage() {
       bank_name: customer.bank_name ?? "",
       bank_account: customer.bank_account ?? "",
       note: customer.note ?? "",
-      debt: String(customer.debt ?? 0),
+      // ✅ Lấy đúng số dư đang hiển thị (đã trừ thu, cộng chi trả) thay vì customer.debt cũ trong DB
+      debt: String(displayDebt),
     });
     setEditOpen(true);
   }
@@ -374,6 +387,45 @@ function CustomerDetailPage() {
     }
   }
 
+  function openPayBackDialog() {
+    setPayBackAmount(displayDebt < 0 ? String(Math.abs(displayDebt)) : "");
+    setPayBackNote("");
+    setPayBackFundType("tien_mat");
+    setPayBackOpen(true);
+  }
+
+  async function handlePayBack() {
+    if (!customer) return;
+    const amount = parseInput(payBackAmount);
+    if (amount <= 0) return toast.error("Nhập số tiền cần chi trả");
+    const defaultBranch =
+      customer?.branch_id ||
+      (branches.length === 1 ? branches[0].id : "") ||
+      user?.branch_ids?.[0] ||
+      "";
+    setSubmittingPayBack(true);
+    try {
+      const result = await payBackFn({
+        data: {
+          customer_id: customer.id,
+          amount,
+          branch_id: defaultBranch,
+          fund_type: payBackFundType,
+          employee_id: user?.id,
+          note: payBackNote || undefined,
+        },
+      });
+      toast.success(`Đã tạo phiếu chi ${result.code} — Còn nợ: ${fmt(result.new_debt)}`);
+      setPayBackOpen(false);
+      qc.invalidateQueries({ queryKey: ["customer-detail", id] });
+      qc.invalidateQueries({ queryKey: ["customers"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi tạo phiếu chi");
+    } finally {
+      setSubmittingPayBack(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <AppShell title="Chi tiết khách hàng">
@@ -412,6 +464,15 @@ function CustomerDetailPage() {
         <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={openPayDialog}>
           <Banknote className="h-4 w-4 mr-1" /> Thu tiền
         </Button>
+        {displayDebt < 0 && (
+          <Button
+            size="sm"
+            className="bg-orange-600 hover:bg-orange-700 text-white"
+            onClick={openPayBackDialog}
+          >
+            <Banknote className="h-4 w-4 mr-1" /> Chi trả
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -925,7 +986,11 @@ function CustomerDetailPage() {
                     inputMode="numeric"
                     value={form.debt}
                     onChange={(e) =>
-                      setForm({ ...form, debt: e.target.value.replace(/[^\d.]/g, "") })
+                      setForm({
+                        ...form,
+                        // ✅ Cho phép nhập âm: giữ duy nhất 1 dấu '-' ở đầu
+                        debt: e.target.value.replace(/[^\d.\-]/g, "").replace(/(?!^)-/g, ""),
+                      })
                     }
                   />
                   <div className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">
@@ -1098,6 +1163,61 @@ function CustomerDetailPage() {
             >
               <Banknote className="h-4 w-4 mr-1" />
               {submittingPay ? "Đang xử lý..." : "Xác nhận thu tiền"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ✅ Dialog Chi trả công nợ cho khách (đối xứng với Thu tiền) */}
+      <Dialog open={payBackOpen} onOpenChange={setPayBackOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-700">
+              <Banknote className="h-5 w-5" /> Chi trả công nợ cho khách
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-lg bg-orange-50 border border-orange-200 px-3 py-2 text-sm flex justify-between">
+              <span className="text-muted-foreground">Công ty đang nợ khách</span>
+              <span className="font-bold text-orange-700">{fmt(Math.abs(Math.min(displayDebt, 0)))}</span>
+            </div>
+            <div>
+              <Label>Hình thức</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={payBackFundType}
+                onChange={(e) => setPayBackFundType(e.target.value as any)}
+              >
+                <option value="tien_mat">Tiền mặt</option>
+                <option value="ngan_hang">Chuyển khoản (NH)</option>
+              </select>
+            </div>
+            <div>
+              <Label>Số tiền chi (₫) *</Label>
+              <Input
+                className="mt-1"
+                autoFocus
+                value={payBackAmount}
+                onChange={(e) => setPayBackAmount(fmtInput(e.target.value))}
+                onFocus={(e) => e.target.select()}
+              />
+            </div>
+            <div>
+              <Label>Ghi chú</Label>
+              <Input
+                className="mt-1"
+                value={payBackNote}
+                onChange={(e) => setPayBackNote(e.target.value)}
+                placeholder="Ghi chú thêm..."
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setPayBackOpen(false)} disabled={submittingPayBack}>
+              Hủy
+            </Button>
+            <Button className="bg-orange-600 hover:bg-orange-700" onClick={handlePayBack} disabled={submittingPayBack}>
+              {submittingPayBack ? "Đang lưu..." : "Lưu phiếu chi"}
             </Button>
           </DialogFooter>
         </DialogContent>

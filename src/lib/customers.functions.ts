@@ -112,7 +112,7 @@ export const upsertCustomer = createServerFn({ method: "POST" })
       bank_name: data.bank_name || null,
       bank_account: data.bank_account || null,
       note: data.note || null,
-      debt: data.debt || 0,
+      debt: Number(data.debt) || 0, // cho phép âm
     };
 
     if (data.id) {
@@ -151,6 +151,84 @@ export const recordPayment = createServerFn({ method: "POST" })
     await logActivity({ action: "customer_payment", detail: `Thu công nợ ${data.amount?.toLocaleString?.() ?? data.amount}đ — KH: ${data.customer_id}` });
     return { ok: true };
   });
+
+// ─── payCustomerDebt — Chi trả tiền cho khách (đối xứng với collectCustomerPayment) ─────
+export const payCustomerDebt = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: { customer_id: string; amount: number; branch_id: string; employee_id?: string; note?: string; fund_type?: string } }) => {
+    const amount = Number(data.amount || 0);
+    if (amount <= 0) throw new Error("Số tiền phải lớn hơn 0");
+
+    // Sinh mã PC duy nhất
+    let code: string = "";
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const { count } = await supabase
+        .from("cash_vouchers")
+        .select("id", { count: "exact", head: true })
+        .eq("type", "chi");
+      const candidate = "PC" + String((count ?? 0) + 1 + attempt).padStart(6, "0");
+      const { data: existing } = await supabase
+        .from("cash_vouchers")
+        .select("id")
+        .eq("code", candidate)
+        .maybeSingle();
+      if (!existing) { code = candidate; break; }
+    }
+    if (!code) {
+      const ts = Date.now().toString().slice(-6);
+      const rand = Math.floor(Math.random() * 100).toString().padStart(2, "0");
+      code = "PC" + ts + rand;
+    }
+    const fundType = data.fund_type === "ngan_hang" ? "ngan_hang" : "tien_mat";
+
+    await insertRow("cash_vouchers", {
+      id: uid(),
+      code,
+      type: "chi",
+      fund_type: fundType,
+      branch_id: data.branch_id,
+      amount,
+      voucher_type_id: null,
+      collector_user_id: null,
+      payer_customer_id: null,
+      payer_user_id: data.employee_id || null,
+      receiver_customer_id: data.customer_id,
+      note: data.note || `Chi trả công nợ cho khách`,
+      accounting: true,
+      status: "active",
+      created_by: data.employee_id || null,
+      created_at: now(),
+    });
+
+    // ✅ Tính lại công nợ thực tế: debt = totalSpent - totalPaid + totalPaidBack
+    const [completedOrdersRows, allReceiptsRows, allPayBacksRows] = await Promise.all([
+      fetchRows<{ total: number }>("orders", {
+        eq: { customer_id: data.customer_id, status: "completed" },
+        select: "total",
+      }),
+      supabase
+        .from("cash_vouchers")
+        .select("amount")
+        .eq("payer_customer_id", data.customer_id)
+        .eq("type", "thu")
+        .neq("status", "cancelled"),
+      supabase
+        .from("cash_vouchers")
+        .select("amount")
+        .eq("receiver_customer_id", data.customer_id)
+        .eq("type", "chi")
+        .neq("status", "cancelled"),
+    ]);
+    const totalSpent = completedOrdersRows.reduce((s, o) => s + Number(o.total || 0), 0);
+    const totalPaid = (allReceiptsRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+    // Tổng chi-trả hiện có (chưa gồm phiếu vừa tạo)
+    const totalPaidBackSoFar = (allPayBacksRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+    const newDebt = totalSpent - totalPaid + (totalPaidBackSoFar + amount);
+    await updateWhere("customers", { debt: newDebt }, { id: data.customer_id });
+
+    await logActivity({ action: "pay_customer_debt", detail: `Chi trả ${amount.toLocaleString("vi-VN")} ₫ cho khách (${code})`, employee_id: data.employee_id || null });
+
+    return { ok: true, code, new_debt: newDebt };
+  });
 export const getCustomerById = createServerFn({ method: "GET" })
   .handler(async ({ data }: { data: { id: string } }) => {
     const customer = await fetchRows("customers", {
@@ -167,11 +245,19 @@ export const getCustomerById = createServerFn({ method: "GET" })
     const branches = await fetchRows("branches", { orderBy: "name" });
 
     // Lịch sử thu tiền (phiếu thu trong cash_vouchers liên quan đến khách hàng này)
-    const { data: paymentHistory, error: phError } = await supabase
+    const { data: paymentHistory } = await supabase
       .from("cash_vouchers")
-      .select("id, code, amount, fund_type, note, created_at, collector_user_id, status")
+      .select("id, code, amount, fund_type, note, created_at, collector_user_id, status, type")
       .eq("payer_customer_id", data.id)
       .eq("type", "thu")
+      .order("created_at", { ascending: false });
+
+    // Lịch sử chi trả (phiếu chi trả lại tiền cho khách)
+    const { data: payBackHistory } = await supabase
+      .from("cash_vouchers")
+      .select("id, code, amount, fund_type, note, created_at, payer_user_id, status, type")
+      .eq("receiver_customer_id", data.id)
+      .eq("type", "chi")
       .order("created_at", { ascending: false });
 
     // Lấy thông tin users để hiện tên người thu
@@ -183,6 +269,7 @@ export const getCustomerById = createServerFn({ method: "GET" })
       branches,
       paymentHistory: (paymentHistory ?? []).filter((p: any) => p.status !== "cancelled"),
       allPaymentHistory: paymentHistory ?? [],
+      payBackHistory: (payBackHistory ?? []).filter((p: any) => p.status !== "cancelled"),
       users,
     };
   });
@@ -232,9 +319,8 @@ export const collectCustomerPayment = createServerFn({ method: "POST" })
       created_at: now(),
     });
 
-    // ✅ Tính công nợ thực tế = totalSpent - totalPaid (dựa trên transactions, không dùng debt cũ trong DB)
-    // Lý do: customer.debt trong DB có thể lệch; tính lại từ đầu luôn chính xác hơn
-    const [completedOrdersRows, allReceiptsRows] = await Promise.all([
+    // ✅ Tính công nợ thực tế = totalSpent - totalPaid + totalPaidBack
+    const [completedOrdersRows, allReceiptsRows, allPayBacksRows] = await Promise.all([
       fetchRows<{ total: number }>("orders", {
         eq: { customer_id: data.customer_id, status: "completed" },
         select: "total",
@@ -245,12 +331,18 @@ export const collectCustomerPayment = createServerFn({ method: "POST" })
         .eq("payer_customer_id", data.customer_id)
         .eq("type", "thu")
         .neq("status", "cancelled"),
+      supabase
+        .from("cash_vouchers")
+        .select("amount")
+        .eq("receiver_customer_id", data.customer_id)
+        .eq("type", "chi")
+        .neq("status", "cancelled"),
     ]);
     const totalSpent = completedOrdersRows.reduce((s, o) => s + Number(o.total || 0), 0);
-    // Tổng phiếu thu hiện tại (chưa gồm phiếu vừa tạo)
     const totalPaidSoFar = (allReceiptsRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+    const totalPaidBack = (allPayBacksRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
     // Sau khi thu thêm `amount` → totalPaid tăng → debt giảm
-    const newDebt = totalSpent - (totalPaidSoFar + amount);
+    const newDebt = totalSpent - (totalPaidSoFar + amount) + totalPaidBack;
     await updateWhere("customers", { debt: newDebt }, { id: data.customer_id });
 
     await logActivity({ action: "collect_payment", detail: `Thu ${amount.toLocaleString("vi-VN")} ₫ từ khách (${code})`, employee_id: data.employee_id || null });
