@@ -710,7 +710,7 @@ function CustomerDetailPage() {
                 ].join(" ")}
               >
                 <Receipt className="h-4 w-4" />
-                Lịch sử thu tiền ({paymentHistory.length})
+                Lịch sử thu chi ({paymentHistory.length + payBackHistory.length})
               </button>
             </div>
 
@@ -722,12 +722,12 @@ function CustomerDetailPage() {
               ) : (
                 <OrderTable orders={completedOrders} />
               )
-            ) : paymentHistory.length === 0 ? (
+            ) : paymentHistory.length === 0 && payBackHistory.length === 0 ? (
               <div className="text-sm text-muted-foreground text-center py-6">
-                Chưa có lịch sử thu tiền
+                Chưa có lịch sử thu chi
               </div>
             ) : (
-              <PaymentHistoryTable payments={paymentHistory} users={allUsers} />
+              <CombinedPaymentHistoryTable payments={paymentHistory} paybacks={payBackHistory} users={allUsers} />
             )}
           </Card>
 
@@ -1379,6 +1379,77 @@ function OrderTable({ orders }: { orders: any[] }) {
               </td>
             </tr>
           ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CombinedPaymentHistoryTable({ payments, paybacks, users }: { payments: any[]; paybacks: any[]; users: any[] }) {
+  const getUserName = (id: string) =>
+    users.find((u: any) => u.id === id)?.full_name ??
+    users.find((u: any) => u.id === id)?.name ??
+    users.find((u: any) => u.id === id)?.username ??
+    "—";
+
+  const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n));
+
+  // Merge and sort by date descending
+  const allEntries = [
+    ...payments.map((p: any) => ({ ...p, _kind: "thu" as const })),
+    ...paybacks.map((p: any) => ({ ...p, _kind: "chi" as const })),
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm min-w-[420px]">
+        <thead className="text-left text-muted-foreground border-b">
+          <tr>
+            <th className="py-2 pr-2">Loại</th>
+            <th className="pr-2">Mã phiếu</th>
+            <th className="pr-2">Ngày</th>
+            <th className="pr-2">Hình thức</th>
+            <th className="pr-2">Người thu/chi</th>
+            <th className="pr-2">Ghi chú</th>
+            <th className="text-right pr-2">Số tiền</th>
+          </tr>
+        </thead>
+        <tbody>
+          {allEntries.map((p: any) => {
+            const isThu = p._kind === "thu";
+            const staffId = isThu ? p.collector_user_id : p.payer_user_id;
+            return (
+              <tr key={p.id} className="border-b last:border-0 hover:bg-muted/40">
+                <td className="py-2 pr-2">
+                  <span className={`inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full ${isThu ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                    {isThu ? "Thu" : "Chi"}
+                  </span>
+                </td>
+                <td className="pr-2 font-mono text-xs font-medium">{p.code}</td>
+                <td className="pr-2 text-xs text-muted-foreground whitespace-nowrap">
+                  {new Date(p.created_at).toLocaleDateString("vi-VN")}
+                </td>
+                <td className="pr-2">
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    {p.fund_type === "ngan_hang" ? (
+                      <><Landmark className="h-3 w-3" />Ngân hàng</>
+                    ) : (
+                      <><Wallet className="h-3 w-3" />Tiền mặt</>
+                    )}
+                  </span>
+                </td>
+                <td className="pr-2 text-xs text-muted-foreground">
+                  {getUserName(staffId)}
+                </td>
+                <td className="pr-2 text-xs text-muted-foreground max-w-[150px] truncate">
+                  {p.note ?? "—"}
+                </td>
+                <td className={`text-right pr-2 font-bold ${isThu ? "text-green-600" : "text-red-600"}`}>
+                  {isThu ? "+" : "-"}{moneyFmt(p.amount)} ₫
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

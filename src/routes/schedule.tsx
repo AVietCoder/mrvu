@@ -979,8 +979,42 @@ const userBranchIds = useMemo(() => {
               const assigner = s.assigned_by ? data?.users.find((u: any) => u.id === s.assigned_by) : null;
               const creator = s.created_by ? data?.users.find((u: any) => u.id === s.created_by) : null;
               const branchNames = getScheduleBranchNames(s);
+              const linkedOrder: any = s.order_id ? (data?.orders ?? []).find((o: any) => o.id === s.order_id) : null;
+              // Build copy message content for this schedule
+              function buildMsgContent(s: any) {
+                const workType = s.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === s.work_type_id) : null;
+                const assigneeLines = assignees.length > 0
+                  ? assignees.map((a: any) => { const u = data?.users.find((u: any) => u.id === a.user_id); return `  - ${u?.full_name ?? a.user_id}`; })
+                  : [];
+                const orderItemLines: string[] = [];
+                if (linkedOrder) {
+                  const items = (data?.order_items ?? []).filter((oi: any) => oi.order_id === linkedOrder.id);
+                  orderItemLines.push(`• Đơn hàng: ${linkedOrder.code} — ${fmtMoney(linkedOrder.total)}`);
+                  for (const oi of items) {
+                    const prod = (data?.products ?? []).find((p: any) => p.id === oi.product_id);
+                    orderItemLines.push(`  - ${prod?.name ?? oi.product_id} × ${oi.qty}`);
+                  }
+                }
+                return [
+                  "📋 Nội dung đơn hàng:",
+                  "",
+                  `• Tiêu đề: ${s.title}`,
+                  `• Công việc: ${SCHEDULE_TYPES.find((t) => t.value === s.type)?.label ?? s.type}`,
+                  workType ? `• Loại hình công việc: ${workType.name}` : null,
+                  `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`,
+                  customer ? `• Khách hàng: ${customer.name}${customer.phone ? " — " + customer.phone : ""}` : null,
+                  s.address ? `• Địa chỉ: ${s.address}` : null,
+                  ...orderItemLines,
+                  assigner ? `• Người giao việc: ${assigner.full_name}` : null,
+                  creator ? `• Người tạo lịch: ${creator.full_name}` : null,
+                  assignees.length > 0 ? `• Người thực hiện:` : null,
+                  ...assigneeLines,
+                  s.note ? `• Ghi chú: ${s.note}` : null,
+                  `• Trạng thái: ${STATUS_LABELS[s.status]?.label ?? s.status}`,
+                ].filter((v) => v !== null).join("\n");
+              }
               return (
-                <Card key={s.id} className="cursor-pointer" onClick={() => setViewSchedule(s)}>
+                <Card key={s.id}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="font-medium leading-snug break-words">{s.title}</div>
@@ -1023,6 +1057,9 @@ const userBranchIds = useMemo(() => {
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(buildMsgContent(s)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}>
+                      {copied ? <><Check className="h-3 w-3 mr-1 text-green-600" /> Đã copy!</> : <><Copy className="h-3 w-3 mr-1" /> Copy tin nhắn</>}
+                    </Button>
                     {canApprove && s.status === "pending" && (
                       <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openApprove(s); }}>Duyệt</Button>
                     )}
@@ -1037,6 +1074,11 @@ const userBranchIds = useMemo(() => {
                     {canApprove && s.status === "approved" && (
                       <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openApprove(s); }}>
                         <Pencil className="h-3 w-3 mr-1" /> Sửa
+                      </Button>
+                    )}
+                    {linkedOrder && (
+                      <Button size="sm" variant="outline" className="text-primary border-primary/30" onClick={(e) => { e.stopPropagation(); printOrderFromSchedule(linkedOrder, siteSettings); }}>
+                        <Printer className="h-3 w-3 mr-1" /> In hóa đơn
                       </Button>
                     )}
                     {(isAdmin || canCreate) && !["done","cancelled"].includes(s.status) && (

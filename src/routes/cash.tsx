@@ -397,6 +397,15 @@ function Page() {
   const getCustomerName = (id: string) => customers.find((c: any) => c.id === id)?.name ?? "";
   const getTypeName     = (id: string) => voucherTypes.find((t: any) => t.id === id)?.name ?? "—";
 
+  // Lấy thông tin tài khoản ngân hàng từ note (số TK được nhúng vào đầu note)
+  const getBankAccountInfo = (v: any): { bank: string; account_number: string; account_name: string } | null => {
+    if (v.fund_type !== "ngan_hang" || !v.note) return null;
+    const bankList: any[] = (() => { try { return JSON.parse(siteSettings?.bank_accounts || "[]"); } catch { return []; } })();
+    const accountNumber = v.note.split(" — ")[0];
+    const found = bankList.find((ba: any) => ba.account_number === accountNumber);
+    return found ?? null;
+  };
+
   const filtered = useMemo(() => {
     const currentFund = fund === "all" ? null : fund;
     return allVouchers.filter((v: any) => {
@@ -747,13 +756,24 @@ function Page() {
                         <div><span className="text-muted-foreground">Chi nhánh: </span>{getBranchName(v.branch_id)}</div>
                         <div><span className="text-muted-foreground">Người tạo: </span>{getUserName(v.created_by) || "—"}</div>
                         <div><span className="text-muted-foreground">Thời gian: </span>{fmtDate(v.created_at)}</div>
-                        {v.fund_type === "ngan_hang" && (
-                          <div className="col-span-2 flex items-center gap-1 text-blue-700">
-                            <Landmark className="h-3 w-3" />
-                            Chuyển khoản ngân hàng
-                          </div>
-                        )}
-                        {v.note && <div className="col-span-2"><span className="text-muted-foreground">Ghi chú: </span>{v.note}</div>}
+                        {v.fund_type === "ngan_hang" && (() => {
+                          const ba = getBankAccountInfo(v);
+                          return ba ? (
+                            <div className="col-span-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 space-y-0.5">
+                              <div className="flex items-center gap-1 text-blue-700 font-semibold"><Landmark className="h-3 w-3" />{ba.bank}</div>
+                              <div className="text-blue-800">STK: <span className="font-mono font-bold tracking-wide">{ba.account_number}</span></div>
+                              <div className="text-blue-700">Chủ TK: {ba.account_name}</div>
+                            </div>
+                          ) : (
+                            <div className="col-span-2 flex items-center gap-1 text-blue-700">
+                              <Landmark className="h-3 w-3" />Chuyển khoản ngân hàng
+                            </div>
+                          );
+                        })()}
+                        {v.note && (() => {
+                          const displayNote = v.fund_type === "ngan_hang" ? v.note.split(" — ").slice(1).join(" — ") : v.note;
+                          return displayNote ? <div className="col-span-2"><span className="text-muted-foreground">Ghi chú: </span>{displayNote}</div> : null;
+                        })()}
                       </div>
                       {isActive && (
                         <div className="flex gap-2 pt-1">
@@ -835,7 +855,10 @@ function Page() {
                           <td className="px-4 py-3">
                             <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
                               {v.fund_type === "tien_mat" ? <Wallet className="h-3.5 w-3.5" /> : <Landmark className="h-3.5 w-3.5 text-blue-500" />}
-                              {v.fund_type === "tien_mat" ? "Tiền mặt" : "Ngân hàng"}
+                              {v.fund_type === "tien_mat" ? "Tiền mặt" : (() => {
+                                const ba = getBankAccountInfo(v);
+                                return ba ? `${ba.bank} ••${ba.account_number.slice(-4)}` : "Ngân hàng";
+                              })()}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-xs">{staffName || <span className="text-muted-foreground">—</span>}</td>
@@ -884,20 +907,32 @@ function Page() {
                                   <div className="text-muted-foreground font-medium">Người tạo</div>
                                   <div>{getUserName(v.created_by) || "—"}</div>
                                 </div>
-                                {v.fund_type === "ngan_hang" && (
-                                  <div className="space-y-0.5">
-                                    <div className="text-muted-foreground font-medium">Hình thức</div>
-                                    <div className="flex items-center gap-1 text-blue-700">
-                                      <Landmark className="h-3 w-3" />Chuyển khoản NH
+                                {v.fund_type === "ngan_hang" && (() => {
+                                  const ba = getBankAccountInfo(v);
+                                  return ba ? (
+                                    <div className="col-span-2 sm:col-span-4 space-y-0.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                                      <div className="flex items-center gap-1 text-blue-700 font-semibold"><Landmark className="h-3 w-3" />{ba.bank}</div>
+                                      <div className="text-blue-800">STK: <span className="font-mono font-bold tracking-wide">{ba.account_number}</span></div>
+                                      <div className="text-blue-700">Chủ TK: {ba.account_name}</div>
                                     </div>
-                                  </div>
-                                )}
-                                {v.note && (
-                                  <div className="col-span-2 sm:col-span-4 space-y-0.5">
-                                    <div className="text-muted-foreground font-medium">Ghi chú</div>
-                                    <div className="text-foreground">{v.note}</div>
-                                  </div>
-                                )}
+                                  ) : (
+                                    <div className="space-y-0.5">
+                                      <div className="text-muted-foreground font-medium">Hình thức</div>
+                                      <div className="flex items-center gap-1 text-blue-700">
+                                        <Landmark className="h-3 w-3" />Chuyển khoản NH
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                                {v.note && (() => {
+                                  const displayNote = v.fund_type === "ngan_hang" ? v.note.split(" — ").slice(1).join(" — ") : v.note;
+                                  return displayNote ? (
+                                    <div className="col-span-2 sm:col-span-4 space-y-0.5">
+                                      <div className="text-muted-foreground font-medium">Ghi chú</div>
+                                      <div className="text-foreground">{displayNote}</div>
+                                    </div>
+                                  ) : null;
+                                })()}
                               </div>
                             </td>
                           </tr>
