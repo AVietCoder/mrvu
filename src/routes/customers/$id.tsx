@@ -166,6 +166,16 @@ type EditFormState = {
   debt: string;
 };
 
+function fmtInput(val: string): string {
+  const num = val.replace(/\D/g, "");
+  if (!num) return "";
+  return new Intl.NumberFormat("vi-VN").format(Number(num));
+}
+
+function parseInput(val: string): number {
+  return Number(val.replace(/\D/g, "")) || 0;
+}
+
 function CustomerDetailPage() {
   const { id } = useParams({ from: "/customers/$id" });
   const qc = useQueryClient();
@@ -264,16 +274,6 @@ function CustomerDetailPage() {
     return "Admin";
   }, [customer, allUsers]);
 
-  function fmtInput(val: string): string {
-    const num = val.replace(/\D/g, "");
-    if (!num) return "";
-    return new Intl.NumberFormat("vi-VN").format(Number(num));
-  }
-
-  function parseInput(val: string): number {
-    return Number(val.replace(/\D/g, "")) || 0;
-  }
-
   function startEdit() {
     if (!customer) return;
     setForm({
@@ -341,6 +341,12 @@ function CustomerDetailPage() {
     const amount = parseInput(payAmount);
     if (amount <= 0) return toast.error("Nhập số tiền cần thu");
 
+    // ✅ Bắt buộc chọn TK ngân hàng
+    const bankListCheck: any[] = (() => { try { return JSON.parse(siteSettings?.bank_accounts || "[]"); } catch { return []; } })();
+    if (payFundType === "ngan_hang" && bankListCheck.length > 0 && bankAccountIdx === "") {
+      return toast.error("Vui lòng chọn tài khoản ngân hàng");
+    }
+
     setSubmittingPay(true);
     try {
       const result = await collectPaymentFn({
@@ -349,6 +355,7 @@ function CustomerDetailPage() {
           amount,
           branch_id: payBranch || customer.branch_id || "",
           fund_type: payFundType,
+          bank_account_idx: payFundType === "ngan_hang" && bankAccountIdx !== "" ? parseInt(bankAccountIdx) : null,
           employee_id: user?.id,
           note:
             payNote ||
@@ -1012,31 +1019,50 @@ function CustomerDetailPage() {
                   <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50/40 p-3">
                     {bankList.length > 0 && (
                       <div>
-                        <Label className="text-xs text-muted-foreground">Tài khoản nhận tiền</Label>
+                        <Label className="text-xs text-muted-foreground">
+                          Tài khoản nhận tiền <span className="text-destructive">*</span>
+                        </Label>
                         <select
-                          className="mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm"
+                          className={`mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm ${bankAccountIdx === "" ? "border-destructive" : ""}`}
                           value={bankAccountIdx}
                           onChange={(e) => {
                             const idx = e.target.value;
                             setBankAccountIdx(idx);
                             if (idx !== "") {
                               const ba = bankList[parseInt(idx)];
-                              if (ba && !bankContent) {
+                              if (ba) {
                                 setBankContent(`${siteSettings?.site_name ?? "CK"} ${ba.account_number}`);
                               }
+                            } else {
+                              setBankContent("");
                             }
                           }}
                         >
-                          <option value="">— Chọn STK —</option>
+                          <option value="">— Chọn tài khoản —</option>
                           {bankList.map((ba: any, i: number) => (
                             <option key={i} value={String(i)}>
                               {ba.bank} - {ba.account_number} ({ba.account_name})
                             </option>
                           ))}
                         </select>
+                        {bankAccountIdx === "" && (
+                          <p className="text-xs text-destructive mt-1">Vui lòng chọn tài khoản ngân hàng</p>
+                        )}
+                        {bankAccountIdx !== "" && (() => {
+                          const ba = bankList[parseInt(bankAccountIdx)];
+                          return ba ? (
+                            <div className="mt-1.5 rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
+                              <div className="font-semibold">{ba.bank}</div>
+                              <div>STK: <span className="font-mono font-bold">{ba.account_number}</span></div>
+                              <div>Chủ TK: {ba.account_name}</div>
+                            </div>
+                          ) : null;
+                        })()}
                       </div>
                     )}
-
+                    {bankList.length === 0 && (
+                      <p className="text-xs text-muted-foreground">Chưa cấu hình tài khoản ngân hàng</p>
+                    )}
                   </div>
                 );
               })()}
@@ -1055,7 +1081,7 @@ function CustomerDetailPage() {
               <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm flex justify-between">
                 <span className="text-muted-foreground">Còn lại sau khi thu</span>
                 <span className="font-bold text-green-700">
-                  {fmt(Math.max(0, displayDebt - parseInput(payAmount)))}
+                  {fmt(displayDebt - parseInput(payAmount))}
                 </span>
               </div>
             )}

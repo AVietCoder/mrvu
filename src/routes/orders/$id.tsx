@@ -187,6 +187,7 @@ function OrderDetailPage() {
   const [editEmployee, setEditEmployee] = useState("");
   const [editStatus, setEditStatus] = useState("");
   const [editPaymentMethod, setEditPaymentMethod] = useState<"tien_mat" | "ngan_hang">("tien_mat");
+  const [editBankIdx, setEditBankIdx] = useState(""); // TK ngân hàng trong edit mode
   const [editDiscount, setEditDiscount] = useState("0");
   const [editDiscountMode, setEditDiscountMode] = useState<"amount" | "percent">("amount");
   const [editVat, setEditVat] = useState("0"); // VAT % (0, 5, 8, 10)
@@ -227,6 +228,12 @@ function OrderDetailPage() {
     }
     setEditDeposit(String(order.deposit ?? 0));
     setEditNote(order.note ?? "");
+    // ✅ Khôi phục TK ngân hàng khi chỉnh sửa
+    if ((order.payment_method ?? "tien_mat") === "ngan_hang" && order.bank_account_idx != null) {
+      setEditBankIdx(String(order.bank_account_idx));
+    } else {
+      setEditBankIdx("");
+    }
     setEditScheduleLinks(linkedSchedules.map((s: any) => s.id));
     setEditing(true);
   }
@@ -236,6 +243,11 @@ function OrderDetailPage() {
     // ✅ Điều kiện hoàn tất: bắt buộc phải có khách hàng
     if (editStatus === "completed" && !editCustomer) {
       return toast.error("Đơn hoàn tất phải có khách hàng. Vui lòng chọn khách hàng, hoặc đổi sang trạng thái Đặt hàng (chưa giao).");
+    }
+    // ✅ Bắt buộc chọn TK ngân hàng
+    const bankListSave: any[] = (() => { try { return JSON.parse(siteSettings?.bank_accounts || "[]"); } catch { return []; } })();
+    if (editPaymentMethod === "ngan_hang" && bankListSave.length > 0 && editBankIdx === "") {
+      return toast.error("Vui lòng chọn tài khoản ngân hàng");
     }
     setSaving(true);
     try {
@@ -252,6 +264,7 @@ function OrderDetailPage() {
           employee_id: editEmployee || undefined,
           status: editStatus,
           payment_method: editPaymentMethod,
+          bank_account_idx: editPaymentMethod === "ngan_hang" && editBankIdx !== "" ? parseInt(editBankIdx) : null,
           discount: discountAmt,
           discount_type: editDiscountMode,
           discount_pct: editDiscountMode === "percent" ? parseFloat(editDiscount) || 0 : 0,
@@ -1006,6 +1019,17 @@ function OrderDetailPage() {
                   label="Hình thức thanh toán"
                   value={order.payment_method === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt"}
                 />
+                {order.payment_method === "ngan_hang" && order.bank_account_idx != null && (() => {
+                  const bankList: any[] = (() => { try { return JSON.parse(siteSettings?.bank_accounts || "[]"); } catch { return []; } })();
+                  const ba = bankList[order.bank_account_idx];
+                  return ba ? (
+                    <div className="rounded-lg border border-blue-200 bg-blue-50/60 px-3 py-2 text-xs text-blue-800 space-y-0.5">
+                      <div className="font-semibold">{ba.bank}</div>
+                      <div>STK: <span className="font-mono font-bold">{ba.account_number}</span></div>
+                      <div>Chủ TK: {ba.account_name}</div>
+                    </div>
+                  ) : null;
+                })()}
                 {order.deposit > 0 && <Row label="Đặt cọc" value={`- ${fmt(order.deposit)}`} cls="text-yellow-700" />}
                 <div className="border-t pt-2 flex justify-between font-bold text-base text-primary">
                   <span>Khách cần thanh toán</span>
@@ -1093,12 +1117,54 @@ function OrderDetailPage() {
                   <select
                     className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
                     value={editPaymentMethod}
-                    onChange={(e) => setEditPaymentMethod(e.target.value as any)}
+                    onChange={(e) => {
+                      setEditPaymentMethod(e.target.value as any);
+                      setEditBankIdx("");
+                    }}
                   >
                     <option value="tien_mat">Tiền mặt</option>
                     <option value="ngan_hang">Chuyển khoản (Ngân hàng)</option>
                   </select>
                 </div>
+
+                {/* ✅ Chọn TK ngân hàng khi hình thức là chuyển khoản */}
+                {editPaymentMethod === "ngan_hang" && (() => {
+                  const bankList: any[] = (() => {
+                    try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
+                    catch { return []; }
+                  })();
+                  if (!bankList.length) return null;
+                  return (
+                    <div className="space-y-1.5 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
+                      <Label className="text-xs text-muted-foreground">Tài khoản ngân hàng <span className="text-destructive">*</span></Label>
+                      <select
+                        className="w-full h-9 rounded-md border bg-background px-2 text-sm"
+                        value={editBankIdx}
+                        onChange={(e) => setEditBankIdx(e.target.value)}
+                      >
+                        <option value="">— Chọn tài khoản —</option>
+                        {bankList.map((ba: any, i: number) => (
+                          <option key={i} value={String(i)}>
+                            {ba.bank} - {ba.account_number} ({ba.account_name})
+                          </option>
+                        ))}
+                      </select>
+                      {editBankIdx === "" && (
+                        <p className="text-xs text-destructive">Vui lòng chọn tài khoản ngân hàng</p>
+                      )}
+                      {editBankIdx !== "" && (() => {
+                        const ba = bankList[parseInt(editBankIdx)];
+                        return ba ? (
+                          <div className="rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
+                            <div className="font-semibold">{ba.bank}</div>
+                            <div>STK: <span className="font-mono font-bold">{ba.account_number}</span></div>
+                            <div>Chủ TK: {ba.account_name}</div>
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+                  );
+                })()}
 
                 {/* Đặt cọc */}
                 <div>

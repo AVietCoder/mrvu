@@ -2,7 +2,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import {
   listCash, createCashVoucher, updateCashVoucher,
   cancelCashVoucher, upsertCashVoucherType, deleteCashVoucherType,
@@ -83,30 +83,32 @@ function fromLocalInput(v: string): string {
 }
 
 // ── BankSection ────────────────────────────────────────────────────────────
-function BankSection({ f, setF, siteSettings }: { f: any; setF: (v: any) => void; siteSettings: any }) {
-  const bankList: any[] = (() => {
-    try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
-    catch { return []; }
-  })();
-
+function BankSection({ bankAccountIdx, setF, bankList }: {
+  bankAccountIdx: string;
+  setF: (v: any) => void;
+  bankList: any[];
+}) {
   if (!bankList.length) return null;
+
+  const handleChange = useCallback((e: any) => {
+    const idx = e.target.value;
+    const ba = bankList[parseInt(idx)];
+    setF((prev: any) => ({
+      ...prev,
+      bankAccountIdx: idx,
+      bankContent: ba ? ba.account_number : "",
+    }));
+  }, [setF, bankList]);
+
+  const selectedBa = bankAccountIdx !== "" ? bankList[parseInt(bankAccountIdx)] : null;
 
   return (
     <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50/50 p-3">
       <Label className="text-xs text-muted-foreground">Tài khoản ngân hàng</Label>
       <select
         className="mt-1 w-full h-9 rounded-md border bg-background px-2 text-sm"
-        value={f.bankAccountIdx}
-        onChange={(e) => {
-          const idx = e.target.value;
-          const ba = bankList[parseInt(idx)];
-          // ✅ Tự động ghi số TK vào bankContent (dùng để filter + note)
-          setF({
-            ...f,
-            bankAccountIdx: idx,
-            bankContent: ba ? ba.account_number : "",
-          });
-        }}
+        value={bankAccountIdx}
+        onChange={handleChange}
       >
         <option value="">— Chọn tài khoản —</option>
         {bankList.map((ba: any, i: number) => (
@@ -115,17 +117,14 @@ function BankSection({ f, setF, siteSettings }: { f: any; setF: (v: any) => void
           </option>
         ))}
       </select>
-      {f.bankAccountIdx !== "" && (() => {
-        const ba = bankList[parseInt(f.bankAccountIdx)];
-        return ba ? (
-          <div className="mt-1.5 rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
-            <div className="font-semibold">{ba.bank}</div>
-            <div>STK: <span className="font-mono font-bold tracking-wide">{ba.account_number}</span></div>
-            <div>Chủ TK: {ba.account_name}</div>
-            {ba.note && <div className="text-blue-600">{ba.note}</div>}
-          </div>
-        ) : null;
-      })()}
+      {selectedBa && (
+        <div className="mt-1.5 rounded-lg border bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-0.5">
+          <div className="font-semibold">{selectedBa.bank}</div>
+          <div>STK: <span className="font-mono font-bold tracking-wide">{selectedBa.account_number}</span></div>
+          <div>Chủ TK: {selectedBa.account_name}</div>
+          {selectedBa.note && <div className="text-blue-600">{selectedBa.note}</div>}
+        </div>
+      )}
     </div>
   );
 }
@@ -144,9 +143,34 @@ function VoucherForm({
   siteSettings: any;
   visibleBranches: any[];
 }) {
-  const typeOpts = voucherTypes
-    .filter((t: any) => t.kind === kind)
-    .map((t: any) => ({ value: t.id, label: t.name }));
+  // ── Tính toán ổn định, không tạo lại khi gõ phím ────────────────────────
+  const typeOpts = useMemo(
+    () => voucherTypes.filter((t: any) => t.kind === kind).map((t: any) => ({ value: t.id, label: t.name })),
+    [voucherTypes, kind]
+  );
+  const bankList: any[] = useMemo(() => {
+    try { return JSON.parse(siteSettings?.bank_accounts || "[]"); }
+    catch { return []; }
+  }, [siteSettings?.bank_accounts]);
+  const branchOptions = useMemo(
+    () => visibleBranches.map((b: any) => ({ value: b.id, label: b.name })),
+    [visibleBranches]
+  );
+
+  // ── Handlers ổn định — không tạo mới khi re-render ────────────────────────
+  const handleFundType  = useCallback((e: any) =>
+    setF((prev: any) => ({ ...prev, fundType: e.target.value, bankAccountIdx: "", bankContent: "" })),
+    [setF]);
+  const handleBranch    = useCallback((v: string) => setF((prev: any) => ({ ...prev, branchId: v })), [setF]);
+  const handleAmount    = useCallback((e: any) =>
+    setF((prev: any) => ({ ...prev, amount: fmtInput(e.target.value) })), [setF]);
+  const handleAmountFocus = useCallback((e: any) => e.target.select(), []);
+  const handleTypeId    = useCallback((v: string) => setF((prev: any) => ({ ...prev, voucherTypeId: v })), [setF]);
+  const handleCollector = useCallback((v: string) => setF((prev: any) => ({ ...prev, collectorUserId: v })), [setF]);
+  const handlePayer     = useCallback((v: string) => setF((prev: any) => ({ ...prev, payerCustomerId: v })), [setF]);
+  const handlePayerUser = useCallback((v: string) => setF((prev: any) => ({ ...prev, payerUserId: v })), [setF]);
+  const handleReceiver  = useCallback((v: string) => setF((prev: any) => ({ ...prev, receiverCustomerId: v })), [setF]);
+  const handleNote      = useCallback((e: any) => setF((prev: any) => ({ ...prev, note: e.target.value })), [setF]);
 
   return (
     <div className="space-y-3">
@@ -157,7 +181,7 @@ function VoucherForm({
           <select
             className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
             value={f.fundType}
-            onChange={(e) => setF({ ...f, fundType: e.target.value, bankAccountIdx: "", bankContent: "" })}
+            onChange={handleFundType}
           >
             <option value="tien_mat">Tiền mặt</option>
             <option value="ngan_hang">Chuyển khoản (NH)</option>
@@ -168,16 +192,21 @@ function VoucherForm({
           <SearchableSelect
             className="mt-1"
             value={f.branchId}
-            onChange={(v) => setF({ ...f, branchId: v })}
+            onChange={handleBranch}
             placeholder="Tìm chi nhánh..."
-            options={visibleBranches.map((b: any) => ({ value: b.id, label: b.name }))}
+            options={branchOptions}
           />
         </div>
       </div>
 
-      {/* Bank section khi chọn ngân hàng */}
+      {/* Bank section bắt buộc khi chọn ngân hàng */}
       {f.fundType === "ngan_hang" && (
-        <BankSection f={f} setF={setF} siteSettings={siteSettings} />
+        <div>
+          <BankSection bankAccountIdx={f.bankAccountIdx} setF={setF} bankList={bankList} />
+          {bankList.length > 0 && f.bankAccountIdx === "" && (
+            <p className="text-xs text-destructive mt-1">Vui lòng chọn tài khoản ngân hàng</p>
+          )}
+        </div>
       )}
 
       {/* Số tiền */}
@@ -186,8 +215,8 @@ function VoucherForm({
         <Input
           className="mt-1"
           value={f.amount}
-          onChange={(e) => setF({ ...f, amount: fmtInput(e.target.value) })}
-          onFocus={(e) => e.target.select()}
+          onChange={handleAmount}
+          onFocus={handleAmountFocus}
           placeholder="0"
         />
       </div>
@@ -198,7 +227,7 @@ function VoucherForm({
         <SearchableSelect
           className="mt-1 w-full"
           value={f.voucherTypeId}
-          onChange={(v) => setF({ ...f, voucherTypeId: v })}
+          onChange={handleTypeId}
           emptyLabel="-- Không chọn --"
           placeholder="Tìm loại..."
           options={typeOpts}
@@ -212,7 +241,7 @@ function VoucherForm({
             <SearchableSelect
               className="mt-1 w-full"
               value={f.collectorUserId}
-              onChange={(v) => setF({ ...f, collectorUserId: v })}
+              onChange={handleCollector}
               emptyLabel="-- Không chọn --"
               placeholder="Tìm nhân viên..."
               options={staffOptions}
@@ -225,7 +254,7 @@ function VoucherForm({
             <SearchableSelect
               className="mt-1 w-full"
               value={f.payerCustomerId}
-              onChange={(v) => setF({ ...f, payerCustomerId: v })}
+              onChange={handlePayer}
               emptyLabel="-- Không chọn --"
               placeholder="Tìm khách hàng..."
               options={customerOptions}
@@ -239,7 +268,7 @@ function VoucherForm({
             <SearchableSelect
               className="mt-1 w-full"
               value={f.payerUserId}
-              onChange={(v) => setF({ ...f, payerUserId: v })}
+              onChange={handlePayerUser}
               emptyLabel="-- Không chọn --"
               placeholder="Tìm nhân viên..."
               options={staffOptions}
@@ -252,7 +281,7 @@ function VoucherForm({
             <SearchableSelect
               className="mt-1 w-full"
               value={f.receiverCustomerId}
-              onChange={(v) => setF({ ...f, receiverCustomerId: v })}
+              onChange={handleReceiver}
               emptyLabel="-- Không chọn --"
               placeholder="Tìm khách hàng..."
               options={customerOptions}
@@ -267,7 +296,7 @@ function VoucherForm({
         <Input
           className="mt-1"
           value={f.note}
-          onChange={(e) => setF({ ...f, note: e.target.value })}
+          onChange={handleNote}
           placeholder="Ghi chú thêm..."
         />
       </div>
@@ -442,6 +471,10 @@ function Page() {
   async function handleCreate() {
     if (saving) return;
     if (!parseInput(form.amount)) return toast.error("Nhập số tiền");
+    const bankListCreate: any[] = (() => { try { return JSON.parse(siteSettings?.bank_accounts || "[]"); } catch { return []; } })();
+    if (form.fundType === "ngan_hang" && bankListCreate.length > 0 && form.bankAccountIdx === "") {
+      return toast.error("Vui lòng chọn tài khoản ngân hàng");
+    }
     setSaving(true);
     try {
       await createFn({
@@ -469,6 +502,10 @@ function Page() {
   async function handleEdit() {
     if (saving) return;
     if (!parseInput(editForm.amount)) return toast.error("Nhập số tiền");
+    const bankListEdit: any[] = (() => { try { return JSON.parse(siteSettings?.bank_accounts || "[]"); } catch { return []; } })();
+    if (editForm.fundType === "ngan_hang" && bankListEdit.length > 0 && editForm.bankAccountIdx === "") {
+      return toast.error("Vui lòng chọn tài khoản ngân hàng");
+    }
     setSaving(true);
     try {
       await updateFn({
