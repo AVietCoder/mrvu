@@ -677,10 +677,10 @@ function CustomerDetailPage() {
                   <span
                     className={`font-bold ${
                       displayDebt < 0
-                        ? "text-destructive"
+                        ? "text-blue-600"
                         : displayDebt > 0
                         ? "text-destructive"
-                        : "text-destructive"
+                        : "text-muted-foreground"
                     }`}
                   >
                     {fmt(displayDebt)}
