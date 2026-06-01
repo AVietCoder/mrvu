@@ -674,11 +674,13 @@ function Page() {
         },
       });
       toast.success(`Tạo phiếu ${createKind === "thu" ? "thu" : "chi"} thành công`);
-      qc.invalidateQueries({ queryKey: ["cash"] });
+      await qc.invalidateQueries({ queryKey: ["cash"] });
+      await qc.refetchQueries({ queryKey: ["cash"] });
       setOpenCreate(false);
     } catch (e: any) { toast.error(e.message); }
     finally { setSaving(false); }
   }
+
 
   async function handleEdit() {
     if (saving) return;
@@ -721,12 +723,14 @@ function Page() {
     try {
       await cancelFn({ data: { id: selectedVoucher.id } });
       toast.success("Đã hủy phiếu");
-      qc.invalidateQueries({ queryKey: ["cash"] });
+      await qc.invalidateQueries({ queryKey: ["cash"] });
+      await qc.refetchQueries({ queryKey: ["cash"] });
       setOpenCancel(false);
       setSelectedVoucher(null);
     } catch (e: any) { toast.error(e.message); }
     finally { setSaving(false); }
   }
+
 
   async function handleAddType() {
     if (!newTypeName.trim()) return;

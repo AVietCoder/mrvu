@@ -9,11 +9,15 @@ import {
   listWorkDifficulties, upsertWorkDifficulty, deleteWorkDifficulty,
   listWorkTypes, upsertWorkType, deleteWorkType,
   attendanceSummary,
+  searchOrdersForSchedule, searchCustomersForSchedule,
+  updateSchedule,
 } from "@/lib/schedule.functions";
 import { buildInvoiceHtml } from "@/lib/print-invoice";
 import { getSettings } from "@/lib/settings.functions";
 import { useAuth } from "@/context/AuthContext";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import { AsyncSearchableSelect } from "@/components/AsyncSearchableSelect";
+
 import { AppShell, Card } from "@/components/AppShell";
 import { fmtMoney, SCHEDULE_TYPES, ALL_PERMISSIONS, type Permission } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -88,7 +92,11 @@ function Page() {
   const deleteWT  = useServerFn(deleteWorkType);
   const attendanceFn = useServerFn(attendanceSummary);
   const getSettingsFn = useServerFn(getSettings);
+  const searchOrdersFn = useServerFn(searchOrdersForSchedule);
+  const searchCustomersFn = useServerFn(searchCustomersForSchedule);
+  const updateFn = useServerFn(updateSchedule);
   const qc = useQueryClient();
+
 
   const canCreate  = isAdmin || (!!user && hasPermission(user, "create_schedule"));
   const canApprove = isAdmin || (!!user && hasPermission(user, "approve_schedule"));
@@ -278,6 +286,27 @@ const userBranchIds = useMemo(() => {
   const [techFees, setTechFees] = useState<{ product_id: string; qty: number; unit_fee: number }[]>([]);
   const [approveDate, setApproveDate] = useState<string>("");
 
+  // ── Dialog sửa thông tin lịch ─────────────────────────────
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<any>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editForm, setEditForm] = useState<{
+    title: string;
+    scheduled_date: string;
+    scheduled_time: string;
+    branch_id: string;
+    order_id: string;
+    customer_id: string;
+    address: string;
+    note: string;
+    assigned_user_ids: string[];
+    created_by: string;
+  }>({
+    title: "", scheduled_date: "", scheduled_time: "", branch_id: "",
+    order_id: "", customer_id: "", address: "", note: "",
+    assigned_user_ids: [], created_by: "",
+  });
+
   // ── Dialog tính chất CV ────────────────────────────────────
   const [diffOpen, setDiffOpen] = useState(false);
   const [diffForm, setDiffForm] = useState<{ id?: string; name: string; description: string; bonus: string }>({
@@ -313,11 +342,13 @@ const userBranchIds = useMemo(() => {
       );
       list = list.filter((s: any) => myIds.has(s.id));
     } else if (!canApprove && canCreate && user) {
-      // Chỉ có quyền tạo lịch: chỉ thấy lịch mình tạo (không phân công được)
-      list = list.filter((s: any) => s.created_by === user.id);
+      // Có quyền tạo lịch (nhưng không phải approver/admin):
+      // → Thấy TẤT CẢ lịch trong các chi nhánh mình thuộc về (lọc bằng userBranchIds bên dưới).
+      // → Lịch của người khác chỉ xem, không sửa/xóa (chặn ở UI và backend).
     }
     // Người dùng thường: chỉ thấy lịch thuộc các chi nhánh của họ
     if (!isAdmin && userBranchIds.size > 0) {
+
       list = list.filter((s: any) => {
         const scheduleBranchIds = getScheduleBranchIds(s);
         if (scheduleBranchIds.length === 0) return false;
@@ -471,6 +502,59 @@ const userBranchIds = useMemo(() => {
     qc.invalidateQueries({ queryKey: ["schedules"] });
     qc.invalidateQueries({ queryKey: ["attendance"] });
     toast.success("Đã xóa");
+  }
+
+  function openEdit(s: any) {
+    setEditTarget(s);
+    const existing = (data?.assignments ?? [])
+      .filter((a: any) => a.schedule_id === s.id)
+      .map((a: any) => a.user_id);
+    setEditForm({
+      title: s.title ?? "",
+      scheduled_date: (s.scheduled_date ?? "").slice(0, 10),
+      scheduled_time: s.scheduled_time ?? "",
+      branch_id: s.branch_id ?? "",
+      order_id: s.order_id ?? "",
+      customer_id: s.customer_id ?? "",
+      address: s.address ?? "",
+      note: s.note ?? "",
+      assigned_user_ids: existing,
+      created_by: s.created_by ?? "",
+    });
+    setEditOpen(true);
+  }
+
+  async function handleEdit() {
+    if (!editTarget || !user) return;
+    if (!editForm.title.trim() || !editForm.scheduled_date) {
+      return toast.error("Vui lòng điền tiêu đề và ngày");
+    }
+    setEditSaving(true);
+    try {
+      await updateFn({ data: {
+        id: editTarget.id,
+        title: editForm.title.trim(),
+        scheduled_date: editForm.scheduled_date,
+        scheduled_time: editForm.scheduled_time || null,
+        branch_id: editForm.branch_id || null,
+        order_id: editForm.order_id || null,
+        customer_id: editForm.customer_id || null,
+        address: editForm.address || null,
+        note: editForm.note || null,
+        assigned_user_ids: editForm.assigned_user_ids,
+        created_by: editForm.created_by || undefined,
+        actor_id: user.id,
+        actor_is_admin: !!isAdmin,
+      }});
+      toast.success("Đã cập nhật lịch");
+      setEditOpen(false);
+      await qc.invalidateQueries({ queryKey: ["schedules"] });
+      await qc.invalidateQueries({ queryKey: ["attendance"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi");
+    } finally {
+      setEditSaving(false);
+    }
   }
 
   async function handleSaveDiff() {
@@ -937,7 +1021,12 @@ const userBranchIds = useMemo(() => {
                               <Pencil className="h-3 w-3 mr-1" /> Sửa
                             </Button>
                           )}
-                          {(isAdmin || canCreate) && !["done","cancelled"].includes(s.status) && (
+                          {(isAdmin || (canCreate && s.created_by === user?.id)) && !["done","cancelled"].includes(s.status) && (
+                            <Button size="sm" variant="outline" onClick={() => openEdit(s)}>
+                              <Pencil className="h-3 w-3 mr-1" /> Sửa TT
+                            </Button>
+                          )}
+                          {(isAdmin || (canCreate && s.created_by === user?.id)) && !["done","cancelled"].includes(s.status) && (
                             <Button size="sm" variant="ghost" onClick={() => handleDelete(s.id)}>
                               <Trash2 className="h-3 w-3 text-destructive" />
                             </Button>
@@ -999,6 +1088,7 @@ const userBranchIds = useMemo(() => {
                   "📋 Nội dung đơn hàng:",
                   "",
                   `• Tiêu đề: ${s.title}`,
+                  `• Công việc: ${SCHEDULE_TYPES.find((t) => t.value === s.type)?.label ?? s.type}`,
                   workType ? `• Loại hình công việc: ${workType.name}` : null,
                   `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`,
                   customer ? `• Khách hàng: ${customer.name}${customer.phone ? " — " + customer.phone : ""}` : null,
@@ -1080,7 +1170,12 @@ const userBranchIds = useMemo(() => {
                         <Printer className="h-3 w-3 mr-1" /> In hóa đơn
                       </Button>
                     )}
-                    {(isAdmin || canCreate) && !["done","cancelled"].includes(s.status) && (
+                    {(isAdmin || (canCreate && s.created_by === user?.id)) && !["done","cancelled"].includes(s.status) && (
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openEdit(s); }}>
+                        <Pencil className="h-3 w-3 mr-1" /> Sửa TT
+                      </Button>
+                    )}
+                    {(isAdmin || (canCreate && s.created_by === user?.id)) && !["done","cancelled"].includes(s.status) && (
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}>
                         <Trash2 className="h-3 w-3 text-destructive" />
                       </Button>
@@ -1389,16 +1484,32 @@ const userBranchIds = useMemo(() => {
             <Label className="flex items-center gap-1 text-blue-900">
               <Receipt className="h-4 w-4" /> Liên kết với đơn hàng (tuỳ chọn)
             </Label>
-            <SearchableSelect
+            <AsyncSearchableSelect
               value={createForm.order_id}
               onChange={(v) => pickOrder(v)}
               emptyLabel="— Không liên kết —"
-              placeholder="Tìm mã đơn, khách hàng..."
-              options={(data?.orders ?? []).map((o: any) => {
-                const c: any = (data?.customers ?? []).find((x: any) => x.id === o.customer_id);
-                return { value: o.id, label: o.code, sub: `${c?.name ?? "Khách lẻ"} · ${fmtMoney(o.total)}` };
-              })}
+              placeholder="Tìm mã đơn, tên khách, số điện thoại..."
+              fetchOptions={async (q) => {
+                const r = await searchOrdersFn({ data: { q, limit: 30 } });
+                const custMap = new Map((r.customers ?? []).map((c: any) => [c.id, c]));
+                return (r.orders ?? []).map((o: any) => {
+                  const c: any = custMap.get(o.customer_id) ?? (data?.customers ?? []).find((x: any) => x.id === o.customer_id);
+                  return { value: o.id, label: o.code, sub: `${c?.name ?? "Khách lẻ"}${c?.phone ? ` · ${c.phone}` : ""} · ${fmtMoney(o.total)}` };
+                });
+              }}
+              resolveSelected={async (id) => {
+                const o = (data?.orders ?? []).find((x: any) => x.id === id);
+                if (o) {
+                  const c: any = (data?.customers ?? []).find((x: any) => x.id === o.customer_id);
+                  return { value: o.id, label: o.code, sub: `${c?.name ?? "Khách lẻ"} · ${fmtMoney(o.total)}` };
+                }
+                const r = await searchOrdersFn({ data: { ids: [id] } });
+                const ord: any = r.orders?.[0];
+                if (!ord) return null;
+                return { value: ord.id, label: ord.code, sub: fmtMoney(ord.total) };
+              }}
             />
+
             <div className="text-xs text-muted-foreground mt-1">
               Khi chọn đơn, khách hàng / chi nhánh / địa chỉ sẽ tự điền.
             </div>
@@ -1442,13 +1553,24 @@ const userBranchIds = useMemo(() => {
               </div>
             </div>
             <div><Label>Khách hàng</Label>
-              <SearchableSelect
+              <AsyncSearchableSelect
                 value={createForm.customer_id}
                 onChange={(v) => pickCustomer(v)}
                 emptyLabel="-- Chọn --"
-                placeholder="Tìm khách hàng..."
-                options={(data?.customers ?? []).map((c: any) => ({ value: c.id, label: c.name, sub: c.phone ?? undefined }))}
+                placeholder="Tìm theo tên, số điện thoại..."
+                fetchOptions={async (q) => {
+                  const r = await searchCustomersFn({ data: { q, limit: 30 } });
+                  return (r.customers ?? []).map((c: any) => ({ value: c.id, label: c.name, sub: c.phone ?? undefined }));
+                }}
+                resolveSelected={async (id) => {
+                  const c = (data?.customers ?? []).find((x: any) => x.id === id);
+                  if (c) return { value: c.id, label: c.name, sub: c.phone ?? undefined };
+                  const r = await searchCustomersFn({ data: { ids: [id] } });
+                  const x: any = r.customers?.[0];
+                  return x ? { value: x.id, label: x.name, sub: x.phone ?? undefined } : null;
+                }}
               /></div>
+
             <div><Label>Địa chỉ lắp đặt</Label>
               <Input className="mt-1" value={createForm.address}
                 onChange={(e) => setCreateForm({...createForm, address: e.target.value})} /></div>
@@ -1602,6 +1724,150 @@ const userBranchIds = useMemo(() => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Dialog sửa thông tin lịch ───────────────────────── */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Sửa thông tin lịch</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Tiêu đề *</Label>
+              <Input className="mt-1" value={editForm.title}
+                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Ngày *</Label>
+                <Input className="mt-1" type="date" value={editForm.scheduled_date}
+                  onChange={(e) => setEditForm({ ...editForm, scheduled_date: e.target.value })} />
+              </div>
+              <div>
+                <Label>Giờ</Label>
+                <Input className="mt-1" type="time" value={editForm.scheduled_time}
+                  onChange={(e) => setEditForm({ ...editForm, scheduled_time: e.target.value })} />
+              </div>
+            </div>
+
+            <div>
+              <Label>Chi nhánh</Label>
+              <div className="mt-2 rounded-md border bg-background p-2">
+                <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+                  {(data?.branches ?? []).map((b: any) => (
+                    <label key={b.id} className="flex items-center gap-2 text-sm cursor-pointer rounded-md px-2 py-1 hover:bg-muted/40">
+                      <input
+                        type="radio"
+                        name="edit-branch"
+                        className="accent-neutral-900"
+                        checked={editForm.branch_id === String(b.id)}
+                        onChange={() => setEditForm({ ...editForm, branch_id: String(b.id) })}
+                      />
+                      <span>{b.name}</span>
+                    </label>
+                  ))}
+                </div>
+                {editForm.branch_id && (
+                  <button type="button"
+                    className="mt-1 text-xs text-muted-foreground hover:text-foreground underline"
+                    onClick={() => setEditForm({ ...editForm, branch_id: "" })}>
+                    Bỏ chọn chi nhánh
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Label className="flex items-center gap-1">
+                <Receipt className="h-4 w-4" /> Đơn hàng liên kết
+              </Label>
+              <AsyncSearchableSelect
+                value={editForm.order_id}
+                onChange={(v) => setEditForm({ ...editForm, order_id: v })}
+                emptyLabel="— Không liên kết —"
+                placeholder="Tìm mã đơn, tên khách, số điện thoại..."
+                fetchOptions={async (q) => {
+                  const r = await searchOrdersFn({ data: { q, limit: 30 } });
+                  const custMap = new Map((r.customers ?? []).map((c: any) => [c.id, c]));
+                  return (r.orders ?? []).map((o: any) => {
+                    const c: any = custMap.get(o.customer_id) ?? (data?.customers ?? []).find((x: any) => x.id === o.customer_id);
+                    return { value: o.id, label: o.code, sub: `${c?.name ?? "Khách lẻ"}${c?.phone ? ` · ${c.phone}` : ""} · ${fmtMoney(o.total)}` };
+                  });
+                }}
+                resolveSelected={async (id) => {
+                  const o = (data?.orders ?? []).find((x: any) => x.id === id);
+                  if (o) {
+                    const c: any = (data?.customers ?? []).find((x: any) => x.id === o.customer_id);
+                    return { value: o.id, label: o.code, sub: `${c?.name ?? "Khách lẻ"} · ${fmtMoney(o.total)}` };
+                  }
+                  const r = await searchOrdersFn({ data: { ids: [id] } });
+                  const ord: any = r.orders?.[0];
+                  if (!ord) return null;
+                  return { value: ord.id, label: ord.code, sub: fmtMoney(ord.total) };
+                }}
+              />
+            </div>
+
+            <div>
+              <Label>Người phụ trách (kỹ thuật)</Label>
+              <div className="mt-2 border rounded-md p-2 space-y-1 max-h-40 overflow-y-auto">
+                {(data?.users ?? []).filter((u: any) => u.is_admin || (u.permissions ?? []).includes("technician")).map((u: any) => (
+                  <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editForm.assigned_user_ids.includes(u.id)}
+                      onChange={() => setEditForm((f) => ({
+                        ...f,
+                        assigned_user_ids: f.assigned_user_ids.includes(u.id)
+                          ? f.assigned_user_ids.filter((x) => x !== u.id)
+                          : [...f.assigned_user_ids, u.id],
+                      }))}
+                    />
+                    {u.full_name}{u.is_admin ? <span className="ml-1 text-xs text-blue-600">(Admin)</span> : null}
+                  </label>
+                ))}
+                {(data?.users ?? []).filter((u: any) => u.is_admin || (u.permissions ?? []).includes("technician")).length === 0 && (
+                  <div className="text-xs text-muted-foreground italic">Chưa có nhân viên kỹ thuật.</div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Label>Người tạo {isAdmin ? "" : <span className="text-xs text-muted-foreground">(chỉ admin được đổi)</span>}</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm disabled:opacity-50"
+                disabled={!isAdmin}
+                value={editForm.created_by}
+                onChange={(e) => setEditForm({ ...editForm, created_by: e.target.value })}
+              >
+                <option value="">— Chọn —</option>
+                {(data?.users ?? []).map((u: any) => (
+                  <option key={u.id} value={u.id}>{u.full_name}{u.is_admin ? " (Admin)" : ""}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <Label>Địa chỉ</Label>
+              <Input className="mt-1" value={editForm.address}
+                onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} />
+            </div>
+
+            <div>
+              <Label>Ghi chú</Label>
+              <Input className="mt-1" value={editForm.note}
+                onChange={(e) => setEditForm({ ...editForm, note: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={editSaving}>Hủy</Button>
+            <Button onClick={handleEdit} disabled={editSaving}>
+              {editSaving ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang lưu...</> : "Lưu thay đổi"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
 
       <Dialog open={diffOpen} onOpenChange={setDiffOpen}>
         <DialogContent className="w-full max-w-sm max-h-[90vh] overflow-y-auto">
@@ -1989,7 +2255,13 @@ const userBranchIds = useMemo(() => {
                       <CheckCircle2 className="h-4 w-4 mr-1" /> Duyệt & Phân công
                     </Button>
                   )}
-                  {(isAdmin || canCreate) && !["done","cancelled"].includes(s.status) && (
+                  {(isAdmin || (canCreate && s.created_by === user?.id)) && !["done","cancelled"].includes(s.status) && (
+                    <Button variant="outline" className="mb-4"
+                      onClick={() => { setViewSchedule(null); openEdit(s); }}>
+                      <Pencil className="h-4 w-4 mr-1" /> Sửa thông tin
+                    </Button>
+                  )}
+                  {(isAdmin || (canCreate && s.created_by === user?.id)) && !["done","cancelled"].includes(s.status) && (
                     <Button variant="outline" className="mb-4 text-destructive border-destructive/30 hover:bg-destructive/10"
                       onClick={() => { setViewSchedule(null); handleDelete(s.id); }}>
                       <Trash2 className="h-4 w-4 mr-1" /> Xóa

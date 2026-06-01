@@ -43,7 +43,7 @@ import { useAuth } from "@/context/AuthContext";
 import { getSettings } from "@/lib/settings.functions";
 
 export const Route = createFileRoute("/orders/")({
-  head: () => ({ meta: [{ title: "Bán hàng — Mr.Vũ" }] }),
+  head: () => ({ meta: [{ title: "Bán hàng — QuatTran POS" }] }),
   component: Page,
 });
 
@@ -835,6 +835,7 @@ function Page() {
                     placeholder="Chọn trạng thái..."
                     options={[
                       { value: "reserved", label: "Đặt hàng (chưa giao)" },
+                      { value: "draft", label: "Nháp" },
                     ]}
                   />
                 </div>

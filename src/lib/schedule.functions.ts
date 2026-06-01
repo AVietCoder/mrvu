@@ -32,7 +32,6 @@ export const listSchedules = createServerFn({ method: "GET" }).handler(async () 
       select: "id, code, customer_id, branch_id, employee_id, status, subtotal, discount, discount_type, discount_pct, vat_rate, vat_amount, total, deposit, paid, payment_method, note, created_at",
       orderBy: "created_at",
       ascending: false,
-      limit: 200,
     }),
     fetchRows("order_items", { select: "order_id, product_id, qty, unit_price, discount, total" }),
     fetchRows("user_permissions", { select: "user_id, permission" }),
@@ -424,6 +423,153 @@ export const updateScheduleOrderLink = createServerFn({ method: "POST" })
     await logActivity({
       action: "update_schedule_link",
       detail: `Cập nhật liên kết đơn hàng cho lịch ${data.schedule_id}`,
+      employee_id: data.actor_id || null,
+    });
+    return { ok: true };
+  });
+
+// ── Server-side search for schedule form (no 100-row limit) ────
+export const searchOrdersForSchedule = createServerFn({ method: "GET" })
+  .handler(async ({ data }: { data?: { q?: string; limit?: number; ids?: string[] } }) => {
+    const q = (data?.q ?? "").trim();
+    const limit = Math.min(Math.max(Number(data?.limit ?? 30), 1), 100);
+
+    let orderRows: any[] = [];
+    if (data?.ids && data.ids.length) {
+      const { data: rows, error } = await supabase
+        .from("orders")
+        .select("id, code, customer_id, branch_id, total, created_at")
+        .in("id", data.ids);
+      if (error) throw new Error(error.message);
+      orderRows = rows ?? [];
+    } else {
+      // If query looks like a phone or name, search customers first
+      let customerIds: string[] = [];
+      if (q) {
+        const { data: custs } = await supabase
+          .from("customers")
+          .select("id")
+          .or(`name.ilike.%${q}%,phone.ilike.%${q}%`)
+          .limit(50);
+        customerIds = (custs ?? []).map((c: any) => c.id);
+      }
+
+      let query = supabase
+        .from("orders")
+        .select("id, code, customer_id, branch_id, total, created_at")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (q) {
+        const orClauses = [`code.ilike.%${q}%`];
+        if (customerIds.length) orClauses.push(`customer_id.in.(${customerIds.join(",")})`);
+        query = query.or(orClauses.join(","));
+      }
+
+      const { data: rows, error } = await query;
+      if (error) throw new Error(error.message);
+      orderRows = rows ?? [];
+    }
+
+    const custIds = Array.from(new Set(orderRows.map((o) => o.customer_id).filter(Boolean)));
+    let customers: any[] = [];
+    if (custIds.length) {
+      const { data: rows } = await supabase
+        .from("customers")
+        .select("id, name, phone, address, ward, district, province")
+        .in("id", custIds);
+      customers = rows ?? [];
+    }
+    return { orders: orderRows, customers };
+  });
+
+export const searchCustomersForSchedule = createServerFn({ method: "GET" })
+  .handler(async ({ data }: { data?: { q?: string; limit?: number; ids?: string[] } }) => {
+    const q = (data?.q ?? "").trim();
+    const limit = Math.min(Math.max(Number(data?.limit ?? 30), 1), 100);
+
+    if (data?.ids && data.ids.length) {
+      const { data: rows, error } = await supabase
+        .from("customers")
+        .select("id, name, phone, address, ward, district, province")
+        .in("id", data.ids);
+      if (error) throw new Error(error.message);
+      return { customers: rows ?? [] };
+    }
+
+    let query = supabase
+      .from("customers")
+      .select("id, name, phone, address, ward, district, province")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (q) query = query.or(`name.ilike.%${q}%,phone.ilike.%${q}%`);
+
+    const { data: rows, error } = await query;
+    if (error) throw new Error(error.message);
+    return { customers: rows ?? [] };
+  });
+
+// ── Cập nhật thông tin lịch (cho chủ lịch hoặc admin) ─────────
+export const updateSchedule = createServerFn({ method: "POST" })
+  .handler(async ({ data }: {
+    data: {
+      id: string;
+      title?: string;
+      scheduled_date?: string;
+      scheduled_time?: string | null;
+      branch_id?: string | null;
+      order_id?: string | null;
+      customer_id?: string | null;
+      address?: string | null;
+      note?: string | null;
+      assigned_user_ids?: string[];
+      created_by?: string;
+      actor_id?: string;
+      actor_is_admin?: boolean;
+    };
+  }) => {
+    // Server-side permission check
+    if (!data.actor_is_admin) {
+      const existing = await fetchRows("schedules", { select: "id, created_by", eq: { id: data.id } });
+      const row = (existing as any[])[0];
+      if (!row) throw new Error("Không tìm thấy lịch");
+      if (row.created_by !== data.actor_id) {
+        throw new Error("Bạn không có quyền sửa lịch này");
+      }
+      // Non-admin cannot reassign creator
+      if (data.created_by && data.created_by !== row.created_by) {
+        throw new Error("Chỉ admin mới được đổi người tạo");
+      }
+    }
+
+    const fields: Record<string, any> = {};
+    if (data.title !== undefined) fields.title = data.title;
+    if (data.scheduled_date !== undefined) fields.scheduled_date = data.scheduled_date;
+    if (data.scheduled_time !== undefined) fields.scheduled_time = data.scheduled_time || null;
+    if (data.branch_id !== undefined) fields.branch_id = data.branch_id || null;
+    if (data.order_id !== undefined) fields.order_id = data.order_id || null;
+    if (data.customer_id !== undefined) fields.customer_id = data.customer_id || null;
+    if (data.address !== undefined) fields.address = data.address || null;
+    if (data.note !== undefined) fields.note = data.note || null;
+    if (data.actor_is_admin && data.created_by) fields.created_by = data.created_by;
+
+    if (Object.keys(fields).length) {
+      await updateWhere("schedules", fields, { id: data.id });
+    }
+
+    if (data.assigned_user_ids) {
+      await deleteWhere("schedule_assignments", { schedule_id: data.id });
+      if (data.assigned_user_ids.length) {
+        await supabase.from("schedule_assignments").insert(
+          data.assigned_user_ids.map((user_id) => ({ schedule_id: data.id, user_id })),
+        );
+      }
+    }
+
+    await logActivity({
+      action: "update_schedule",
+      detail: `Sửa thông tin lịch ${data.id}`,
       employee_id: data.actor_id || null,
     });
     return { ok: true };

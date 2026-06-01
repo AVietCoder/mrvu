@@ -592,14 +592,38 @@ export const createOrder = createServerFn({ method: "POST" })
   });
 
 export const updateOrderStatus = createServerFn({ method: "POST" })
-  .handler(async ({ data }: { data: { id: string; status: string; paid?: number; payment_method?: string } }) => {
+  .handler(async ({ data }: { data: { id: string; status: string; paid?: number; payment_method?: string; actor_id?: string } }) => {
     const currentRows = await fetchRows<any>("orders", {
       eq: { id: data.id },
-      select: "id, code, customer_id, branch_id, employee_id, subtotal, discount, total, deposit, paid, payment_method, note, status",
+      select: "id, code, customer_id, branch_id, employee_id, subtotal, discount, total, deposit, paid, payment_method, note, status, created_by",
       limit: 1,
     });
     const currentOrder = currentRows[0];
     if (!currentOrder) return { ok: true };
+
+    // ── Server-side permission check khi hủy đơn ──
+    if (data.status === "cancelled" && data.actor_id) {
+      const actorRows = await fetchRows<any>("users", {
+        eq: { id: data.actor_id },
+        select: "id, is_admin",
+        limit: 1,
+      });
+      const actor = actorRows[0];
+      if (!actor) throw new Error("Người dùng không tồn tại");
+      if (!actor.is_admin) {
+        // Phải là người tạo đơn VÀ có quyền create_order
+        if (currentOrder.created_by !== data.actor_id) {
+          throw new Error("Bạn không có quyền hủy đơn của người khác");
+        }
+        const perms = await fetchRows<any>("user_permissions", {
+          eq: { user_id: data.actor_id },
+          select: "permission",
+        });
+        const hasCreate = perms.some((p: any) => p.permission === "create_order");
+        if (!hasCreate) throw new Error("Bạn không có quyền hủy đơn");
+      }
+    }
+
 
     const currentItems = await fetchRows<any>("order_items", {
       eq: { order_id: data.id },
