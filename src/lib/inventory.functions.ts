@@ -115,12 +115,14 @@ function buildPendingOrderSummaries(
 
 export const listInventory = createServerFn({ method: "GET" }).handler(async () => {
   const [products, branches, stock, movements, transfers, transfer_items, orders, order_items] = await Promise.all([
-    fetchRows("products", { orderBy: "name" }),
+    // products & stock có thể > 1000 dòng (products × branches) -> phải dùng fetchAllRows,
+    // nếu không stock bị cắt ở 1000 dòng và nhiều sản phẩm hiển thị Tồn 0.
+    fetchAllRows("products", { orderBy: "name" }),
     fetchRows("branches", { orderBy: "name" }),
-    fetchRows("stock"),
+    fetchAllRows("stock"),
     fetchRows("stock_movements", { orderBy: "created_at", ascending: false, limit: 100 }),
     fetchRows("stock_transfers", { orderBy: "created_at", ascending: false }),
-    fetchRows("stock_transfer_items"),
+    fetchAllRows("stock_transfer_items"),
     fetchAllRows("orders", { select: "id, branch_id, status", orderBy: "created_at", ascending: false }),
     fetchAllRows("order_items", { select: "order_id, product_id, qty" }),
   ]);

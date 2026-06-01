@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { deleteWhere, fetchRows, insertRow, now, uid, updateWhere, logActivity } from "./supabase";
+import { deleteWhere, fetchAllRows, fetchRows, insertRow, now, uid, updateWhere, logActivity } from "./supabase";
 
 export const listEmployees = createServerFn({ method: "GET" }).handler(async () => {
   const [employees, branches, logs] = await Promise.all([
@@ -41,8 +41,8 @@ export const deleteEmployee = createServerFn({ method: "POST" })
 export const listBranches = createServerFn({ method: "GET" }).handler(async () => {
   const [branches, stock, orders] = await Promise.all([
     fetchRows("branches", { orderBy: "name" }),
-    fetchRows("stock"),
-    fetchRows("orders", { orderBy: "created_at", ascending: false }),
+    fetchAllRows("stock"),
+    fetchAllRows("orders", { orderBy: "created_at", ascending: false }),
   ]);
 
   return { branches, stock, orders };

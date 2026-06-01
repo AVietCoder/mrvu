@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { countRows, deleteWhere, fetchRows, insertRow, now, uid, updateWhere, logActivity } from "./supabase";
+import { countRows, deleteWhere, fetchAllRows, fetchRows, insertRow, now, uid, updateWhere, logActivity } from "./supabase";
 
 async function nextSku(): Promise<string> {
   const count = await countRows("products");
@@ -9,10 +9,10 @@ async function nextSku(): Promise<string> {
 
 export const listProducts = createServerFn({ method: "GET" }).handler(async () => {
   const [products, categories, brands, stock] = await Promise.all([
-    fetchRows("products", { orderBy: "name" }),
+    fetchAllRows("products", { orderBy: "name" }),
     fetchRows("categories", { orderBy: "name" }),
     fetchRows("brands", { orderBy: "name" }),
-    fetchRows("stock"),
+    fetchAllRows("stock"),
   ]);
 
   return { products, categories, brands, stock };
