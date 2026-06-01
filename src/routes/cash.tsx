@@ -454,8 +454,7 @@ function Page() {
 
   const staffOptions = useMemo(() => {
     const list = users.map((u: any) => ({ value: u.id, label: u.full_name }));
-    if (isAdmin) return list;
-    return list.filter((u: any) => u.value === user?.id);
+    return list;
   }, [users, isAdmin, user]);
 
   const customerOptions = useMemo(
