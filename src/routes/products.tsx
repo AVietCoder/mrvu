@@ -81,6 +81,10 @@ function ProductsPage() {
   const [editingBrandName, setEditingBrandName] = useState("");
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [editingCatName, setEditingCatName] = useState("");
+  const [savingBrand, setSavingBrand] = useState<string | null>(null); // id đang lưu, "new" khi thêm mới
+  const [savingCat, setSavingCat] = useState<string | null>(null);
+  const [deletingBrand, setDeletingBrand] = useState<string | null>(null);
+  const [deletingCat, setDeletingCat] = useState<string | null>(null);
 
   const filtered = useMemo(
     () => (data?.products ?? []).filter((p) => {
@@ -149,47 +153,72 @@ function ProductsPage() {
 
   async function addBrand() {
     if (!newBrandName.trim()) return;
-    await upsertBr({ data: { name: newBrandName.trim() } });
-    setNewBrandName("");
-    qc.invalidateQueries({ queryKey: ["products"] });
-    toast.success("Đã thêm thương hiệu");
+    setSavingBrand("new");
+    try {
+      await upsertBr({ data: { name: newBrandName.trim() } });
+      setNewBrandName("");
+      await qc.invalidateQueries({ queryKey: ["products"] });
+      toast.success("Đã thêm thương hiệu");
+    } catch (e: any) { toast.error(e?.message ?? "Lỗi thêm thương hiệu"); }
+    finally { setSavingBrand(null); }
   }
 
   async function addCat() {
     if (!newCatName.trim()) return;
-    await upsertCat({ data: { name: newCatName.trim() } });
-    setNewCatName("");
-    qc.invalidateQueries({ queryKey: ["products"] });
-    toast.success("Đã thêm danh mục");
+    setSavingCat("new");
+    try {
+      await upsertCat({ data: { name: newCatName.trim() } });
+      setNewCatName("");
+      await qc.invalidateQueries({ queryKey: ["products"] });
+      toast.success("Đã thêm danh mục");
+    } catch (e: any) { toast.error(e?.message ?? "Lỗi thêm danh mục"); }
+    finally { setSavingCat(null); }
   }
 
   async function removeBrand(id: string) {
     if (!confirm("Xóa thương hiệu này?")) return;
-    await delBr({ data: { id } });
-    qc.invalidateQueries({ queryKey: ["products"] });
+    setDeletingBrand(id);
+    try {
+      await delBr({ data: { id } });
+      await qc.invalidateQueries({ queryKey: ["products"] });
+      toast.success("Đã xóa thương hiệu");
+    } catch (e: any) { toast.error(e?.message ?? "Lỗi xóa"); }
+    finally { setDeletingBrand(null); }
   }
 
   async function saveBrand(id: string) {
     if (!editingBrandName.trim()) return;
-    await upsertBr({ data: { id, name: editingBrandName.trim() } });
-    setEditingBrandId(null);
-    qc.invalidateQueries({ queryKey: ["products"] });
-    toast.success("Đã cập nhật thương hiệu");
+    setSavingBrand(id);
+    try {
+      await upsertBr({ data: { id, name: editingBrandName.trim() } });
+      setEditingBrandId(null);
+      await qc.invalidateQueries({ queryKey: ["products"] });
+      toast.success("Đã cập nhật thương hiệu");
+    } catch (e: any) { toast.error(e?.message ?? "Lỗi lưu"); }
+    finally { setSavingBrand(null); }
   }
 
   async function removeCategory(id: string) {
     if (!confirm("Xóa danh mục này?")) return;
-    await delCat({ data: { id } });
-    qc.invalidateQueries({ queryKey: ["products"] });
-    toast.success("Đã xóa danh mục");
+    setDeletingCat(id);
+    try {
+      await delCat({ data: { id } });
+      await qc.invalidateQueries({ queryKey: ["products"] });
+      toast.success("Đã xóa danh mục");
+    } catch (e: any) { toast.error(e?.message ?? "Lỗi xóa"); }
+    finally { setDeletingCat(null); }
   }
 
   async function saveCategory(id: string) {
     if (!editingCatName.trim()) return;
-    await upsertCat({ data: { id, name: editingCatName.trim() } });
-    setEditingCatId(null);
-    qc.invalidateQueries({ queryKey: ["products"] });
-    toast.success("Đã cập nhật danh mục");
+    setSavingCat(id);
+    try {
+      await upsertCat({ data: { id, name: editingCatName.trim() } });
+      setEditingCatId(null);
+      await qc.invalidateQueries({ queryKey: ["products"] });
+      toast.success("Đã cập nhật danh mục");
+    } catch (e: any) { toast.error(e?.message ?? "Lỗi lưu"); }
+    finally { setSavingCat(null); }
   }
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -600,9 +629,10 @@ function ProductsPage() {
                     value={newBrandName}
                     onChange={(e) => setNewBrandName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") addBrand(); }}
+                    disabled={savingBrand === "new"}
                   />
-                  <Button size="sm" className="h-9 px-3 rounded-xl shrink-0" onClick={addBrand}>
-                    <Plus className="h-4 w-4" />
+                  <Button size="sm" className="h-9 px-3 rounded-xl shrink-0" onClick={addBrand} disabled={savingBrand === "new"}>
+                    {savingBrand === "new" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   </Button>
                 </div>
               )}
@@ -617,9 +647,12 @@ function ProductsPage() {
                           onChange={(e) => setEditingBrandName(e.target.value)}
                           onKeyDown={(e) => { if (e.key === "Enter") saveBrand(b.id); if (e.key === "Escape") setEditingBrandId(null); }}
                           autoFocus
+                          disabled={savingBrand === b.id}
                         />
-                        <button className="text-xs text-primary font-semibold hover:underline px-1" onClick={() => saveBrand(b.id)}>Lưu</button>
-                        <button className="text-xs text-muted-foreground hover:underline px-1" onClick={() => setEditingBrandId(null)}>Huỷ</button>
+                        <button className="text-xs text-primary font-semibold hover:underline px-1 flex items-center gap-1 disabled:opacity-50" onClick={() => saveBrand(b.id)} disabled={savingBrand === b.id}>
+                          {savingBrand === b.id ? <Loader2 className="h-3 w-3 animate-spin" /> : null}Lưu
+                        </button>
+                        <button className="text-xs text-muted-foreground hover:underline px-1" onClick={() => setEditingBrandId(null)} disabled={savingBrand === b.id}>Huỷ</button>
                       </>
                     ) : (
                       <>
@@ -628,8 +661,8 @@ function ProductsPage() {
                           <button className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground" onClick={() => { setEditingBrandId(b.id); setEditingBrandName(b.name); }}>
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
-                          <button className="p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive" onClick={() => removeBrand(b.id)}>
-                            <Trash2 className="h-3.5 w-3.5" />
+                          <button className="p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40" onClick={() => removeBrand(b.id)} disabled={deletingBrand === b.id}>
+                            {deletingBrand === b.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                           </button>
                         </div>
                       </>
@@ -658,9 +691,10 @@ function ProductsPage() {
                     value={newCatName}
                     onChange={(e) => setNewCatName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") addCat(); }}
+                    disabled={savingCat === "new"}
                   />
-                  <Button size="sm" className="h-9 px-3 rounded-xl shrink-0" onClick={addCat}>
-                    <Plus className="h-4 w-4" />
+                  <Button size="sm" className="h-9 px-3 rounded-xl shrink-0" onClick={addCat} disabled={savingCat === "new"}>
+                    {savingCat === "new" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   </Button>
                 </div>
               )}
@@ -675,9 +709,12 @@ function ProductsPage() {
                           onChange={(e) => setEditingCatName(e.target.value)}
                           onKeyDown={(e) => { if (e.key === "Enter") saveCategory(c.id); if (e.key === "Escape") setEditingCatId(null); }}
                           autoFocus
+                          disabled={savingCat === c.id}
                         />
-                        <button className="text-xs text-primary font-semibold hover:underline px-1" onClick={() => saveCategory(c.id)}>Lưu</button>
-                        <button className="text-xs text-muted-foreground hover:underline px-1" onClick={() => setEditingCatId(null)}>Huỷ</button>
+                        <button className="text-xs text-primary font-semibold hover:underline px-1 flex items-center gap-1 disabled:opacity-50" onClick={() => saveCategory(c.id)} disabled={savingCat === c.id}>
+                          {savingCat === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : null}Lưu
+                        </button>
+                        <button className="text-xs text-muted-foreground hover:underline px-1" onClick={() => setEditingCatId(null)} disabled={savingCat === c.id}>Huỷ</button>
                       </>
                     ) : (
                       <>
@@ -686,8 +723,8 @@ function ProductsPage() {
                           <button className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground" onClick={() => { setEditingCatId(c.id); setEditingCatName(c.name); }}>
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
-                          <button className="p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive" onClick={() => removeCategory(c.id)}>
-                            <Trash2 className="h-3.5 w-3.5" />
+                          <button className="p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40" onClick={() => removeCategory(c.id)} disabled={deletingCat === c.id}>
+                            {deletingCat === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                           </button>
                         </div>
                       </>

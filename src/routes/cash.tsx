@@ -438,6 +438,10 @@ function Page() {
   const [editForm, setEditForm] = useState(blankForm);
   const [newTypeName, setNewTypeName] = useState("");
   const [newTypeKind, setNewTypeKind] = useState<"thu" | "chi">("thu");
+  const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
+  const [editingTypeName, setEditingTypeName] = useState("");
+  const [savingType, setSavingType] = useState<string | null>(null);
+  const [deletingType, setDeletingType] = useState<string | null>(null);
 
   const allVouchers  = data?.vouchers     ?? [];
   const branches     = data?.branches     ?? [];
@@ -726,12 +730,38 @@ function Page() {
 
   async function handleAddType() {
     if (!newTypeName.trim()) return;
+    setSavingType("new");
     try {
       await upsertTypeFn({ data: { name: newTypeName.trim(), kind: newTypeKind } });
       setNewTypeName("");
-      qc.invalidateQueries({ queryKey: ["cash"] });
+      await qc.invalidateQueries({ queryKey: ["cash"] });
       toast.success("Đã thêm loại thu/chi");
     } catch (e: any) { toast.error(e.message); }
+    finally { setSavingType(null); }
+  }
+
+  async function handleSaveType(id: string) {
+    if (!editingTypeName.trim()) return;
+    setSavingType(id);
+    try {
+      const t = voucherTypes.find((x: any) => x.id === id);
+      await upsertTypeFn({ data: { id, name: editingTypeName.trim(), kind: t?.kind } });
+      setEditingTypeId(null);
+      await qc.invalidateQueries({ queryKey: ["cash"] });
+      toast.success("Đã cập nhật loại thu/chi");
+    } catch (e: any) { toast.error(e.message); }
+    finally { setSavingType(null); }
+  }
+
+  async function handleDeleteType(id: string) {
+    if (!confirm("Xóa loại thu/chi này?")) return;
+    setDeletingType(id);
+    try {
+      await deleteTypeFn({ data: { id } });
+      await qc.invalidateQueries({ queryKey: ["cash"] });
+      toast.success("Đã xóa");
+    } catch (e: any) { toast.error(e.message); }
+    finally { setDeletingType(null); }
   }
 
   // ── render ────────────────────────────────────────────────────────────
@@ -1198,56 +1228,122 @@ function Page() {
       </Dialog>
 
       {/* ════ Voucher type manager ════ */}
-      <Dialog open={openTypes} onOpenChange={setOpenTypes}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Quản lý loại thu/chi</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
+      <Dialog open={openTypes} onOpenChange={(v) => { setOpenTypes(v); setEditingTypeId(null); }}>
+        <DialogContent className="max-w-md p-0 overflow-hidden rounded-2xl flex flex-col max-h-[85vh]">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-muted/60 to-muted/20 border-b px-5 py-4 shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-full bg-primary/15 flex items-center justify-center">
+                <Settings2 className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <div className="font-bold text-base">Quản lý loại thu/chi</div>
+                <div className="text-xs text-muted-foreground">{voucherTypes.length} loại đã tạo</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Add new */}
+          <div className="px-5 pt-4 pb-3 border-b bg-muted/10 shrink-0">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Thêm loại mới</div>
             <div className="flex gap-2">
               <select
-                className="h-9 rounded-md border bg-background px-3 text-sm shrink-0"
+                className="h-9 rounded-xl border bg-background px-3 text-sm shrink-0 font-medium"
                 value={newTypeKind}
                 onChange={(e) => setNewTypeKind(e.target.value as any)}
+                disabled={savingType === "new"}
               >
-                <option value="thu">Thu</option>
-                <option value="chi">Chi</option>
+                <option value="thu">🟢 Thu</option>
+                <option value="chi">🔴 Chi</option>
               </select>
               <Input
-                className="flex-1"
+                className="flex-1 h-9 rounded-xl"
                 value={newTypeName}
                 onChange={(e) => setNewTypeName(e.target.value)}
                 placeholder="Tên loại mới..."
                 onKeyDown={(e) => e.key === "Enter" && handleAddType()}
+                disabled={savingType === "new"}
               />
-              <Button onClick={handleAddType}>Thêm</Button>
-            </div>
-            <div className="space-y-1 max-h-72 overflow-y-auto">
-              {(["thu", "chi"] as const).map((kind) => (
-                <div key={kind}>
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide py-1.5 px-1">
-                    {kind === "thu" ? "Loại thu" : "Loại chi"}
-                  </div>
-                  {voucherTypes.filter((t: any) => t.kind === kind).length === 0 && (
-                    <div className="text-xs text-muted-foreground px-1 pb-1 italic">Chưa có loại nào</div>
-                  )}
-                  {voucherTypes.filter((t: any) => t.kind === kind).map((t: any) => (
-                    <div key={t.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted/50">
-                      <span className="text-sm">{t.name}</span>
-                      <button type="button"
-                        onClick={() => deleteTypeFn({ data: { id: t.id } }).then(() => qc.invalidateQueries({ queryKey: ["cash"] }))}
-                        className="text-muted-foreground hover:text-destructive">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ))}
+              <Button className="h-9 px-3 rounded-xl shrink-0" onClick={handleAddType} disabled={savingType === "new"}>
+                {savingType === "new" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              </Button>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenTypes(false)}>Đóng</Button>
-          </DialogFooter>
+
+          {/* List */}
+          <div className="flex-1 overflow-y-auto px-5 py-3 space-y-4">
+            {(["thu", "chi"] as const).map((kind) => {
+              const list = voucherTypes.filter((t: any) => t.kind === kind);
+              return (
+                <div key={kind}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className={`h-2 w-2 rounded-full ${kind === "thu" ? "bg-green-500" : "bg-red-500"}`} />
+                    <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                      {kind === "thu" ? "Loại thu" : "Loại chi"}
+                    </span>
+                    <span className="ml-auto text-xs text-muted-foreground">{list.length} mục</span>
+                  </div>
+                  {list.length === 0 && (
+                    <div className="text-xs text-muted-foreground px-3 py-2 italic bg-muted/20 rounded-xl">Chưa có loại nào</div>
+                  )}
+                  <div className="space-y-1.5">
+                    {list.map((t: any) => (
+                      <div key={t.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm group transition-colors ${
+                        kind === "thu" ? "bg-green-50/50 border-green-100 hover:bg-green-50" : "bg-red-50/30 border-red-100 hover:bg-red-50/50"
+                      }`}>
+                        {editingTypeId === t.id ? (
+                          <>
+                            <Input
+                              className="h-7 flex-1 text-sm rounded-lg"
+                              value={editingTypeName}
+                              onChange={(e) => setEditingTypeName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleSaveType(t.id);
+                                if (e.key === "Escape") setEditingTypeId(null);
+                              }}
+                              autoFocus
+                              disabled={savingType === t.id}
+                            />
+                            <button
+                              className="text-xs text-primary font-semibold hover:underline px-1 flex items-center gap-1 disabled:opacity-50"
+                              onClick={() => handleSaveType(t.id)}
+                              disabled={savingType === t.id}
+                            >
+                              {savingType === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : null}Lưu
+                            </button>
+                            <button className="text-xs text-muted-foreground hover:underline px-1" onClick={() => setEditingTypeId(null)}>Huỷ</button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="flex-1 font-medium">{t.name}</span>
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                className="p-1 rounded-md hover:bg-white text-muted-foreground hover:text-foreground"
+                                onClick={() => { setEditingTypeId(t.id); setEditingTypeName(t.name); }}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                className="p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-40"
+                                onClick={() => handleDeleteType(t.id)}
+                                disabled={deletingType === t.id}
+                              >
+                                {deletingType === t.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="px-5 py-3 border-t bg-muted/10 shrink-0 flex justify-end">
+            <Button variant="outline" className="rounded-xl" onClick={() => setOpenTypes(false)}>Đóng</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </AppShell>
