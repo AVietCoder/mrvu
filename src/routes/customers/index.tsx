@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState, type FormEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   listCustomers,
   upsertCustomer,
   deleteCustomer,
+  getCustomerStats,
 } from "@/lib/customers.functions";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
@@ -180,6 +182,7 @@ function CustomersPage() {
   const list = useServerFn(listCustomers);
   const upsert = useServerFn(upsertCustomer);
   const del = useServerFn(deleteCustomer);
+  const statsFn = useServerFn(getCustomerStats);
 
   const [form, setForm] = useState<FormState>(empty);
   const [open, setOpen] = useState(false);
@@ -193,6 +196,11 @@ function CustomersPage() {
   const [filterDebt, setFilterDebt] = useState("all");
   const [filterTotalBuy, setFilterTotalBuy] = useState("all");
 
+  // ✅ Debounce ô tìm kiếm: chỉ bắn request sau khi user ngừng gõ 300ms.
+  const debouncedSearch = useDebouncedValue(search, 300);
+  // Reset page khi đổi search/filter/sort
+  useEffect(() => { setPage(1); }, [debouncedSearch, filterGroup, filterDebt, filterTotalBuy, sortBy]);
+
   const {
     data,
     isLoading,
@@ -201,7 +209,7 @@ function CustomersPage() {
     queryKey: [
       "customers",
       page,
-      search,
+      debouncedSearch,
       sortBy,
       filterGroup,
       filterDebt,
@@ -212,76 +220,54 @@ function CustomersPage() {
         data: {
           page,
           pageSize: DEFAULT_PAGE_SIZE,
-          search,
+          search: debouncedSearch,
           group: filterGroup,
           debtFilter: filterDebt,
           totalBuyFilter: filterTotalBuy,
           sortBy,
         },
       }),
+    // keepPreviousData: giữ UI trang cũ trong khi tải trang mới → không nháy.
     placeholderData: (prev) => prev,
-    staleTime: 0,  // ✅ Luôn refetch sau invalidate để debt cập nhật ngay
+    // 30s: trong cùng phiên làm việc không refetch liên tục;
+    // mutate (thêm/sửa/xoá KH) gọi invalidateQueries để cập nhật ngay.
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
   });
 
+  // ✅ Stats (tổng KH / tổng nợ / số người nợ / tổng bán) — query riêng,
+  // cache lâu, không phụ thuộc page/search → không tính lại mỗi lần đổi trang.
+  const { data: stats } = useQuery({
+    queryKey: ["customers", "stats"],
+    queryFn: () => statsFn(),
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+  });
+
+  // ✅ Server đã trả về sẵn computed_debt / display_debt / total_buy cho từng
+  // khách trong trang hiện tại → KHÔNG cần đụng tới orders/cash_vouchers ở client.
+  // Logic công nợ vẫn IDENTICAL: total_buy - total_paid + total_paid_back + debt_adjustment.
   const customers = data?.customers ?? [];
-  const orders = data?.orders ?? [];
-  const receipts = data?.receipts ?? [];
-  const payBackHistory = data?.payBackHistory ?? [];
+  const sortedCustomers = customers; // sort đã thực hiện ở RPC
+  const viewCustomer = viewId ? customers.find((x: any) => x.id === viewId) ?? null : null;
 
-  // ✅ Phần công nợ tính tự động = totalSpent - totalPaid + totalPaidBack (giống $id.tsx)
-  function getComputedDebt(customerId: string): number {
-    const completedOrders = orders.filter((o: any) => o.customer_id === customerId && o.status === "completed");
-    const totalSpent = completedOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0);
-    const totalPaid = (receipts as any[])
-      .filter((r: any) => r.payer_customer_id === customerId && r.type === "thu" && r.status !== "cancelled")
-      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-    const totalPaidBack = (payBackHistory as any[])
-      .filter((r: any) => r.receiver_customer_id === customerId && r.type === "chi" && r.status !== "cancelled")
-      .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-    return totalSpent - totalPaid + totalPaidBack;
-  }
-  // ✅ Tổng công nợ hiển thị = phần tự động + điều chỉnh thủ công (admin)
-  function getDisplayDebt(customerId: string): number {
-    const c = customers.find((x) => x.id === customerId);
-    const adjustment = Number(c?.debt_adjustment ?? 0);
-    return getComputedDebt(customerId) + adjustment;
-  }
+  const getDisplayDebt = useCallback(
+    (id: string) => Number(customers.find((c: any) => c.id === id)?.display_debt ?? 0),
+    [customers],
+  );
+  const getComputedDebt = useCallback(
+    (id: string) => Number(customers.find((c: any) => c.id === id)?.computed_debt ?? 0),
+    [customers],
+  );
+  const getTotalBuy = useCallback(
+    (id: string) => Number(customers.find((c: any) => c.id === id)?.total_buy ?? 0),
+    [customers],
+  );
 
-  // ✅ Tổng bán tính client-side từ orders (đúng hơn c.total_buy từ DB)
-  function getTotalBuy(customerId: string): number {
-    return orders
-      .filter((o: any) => o.customer_id === customerId && o.status === "completed")
-      .reduce((s: number, o: any) => s + Number(o.total || 0), 0);
-  }
-
-  // ✅ Sort client-side theo giá trị đang hiển thị thực tế
-  const sortedCustomers = useMemo(() => {
-    const arr = [...customers];
-    if (sortBy === "total_buy_desc") {
-      arr.sort((a, b) => getTotalBuy(b.id) - getTotalBuy(a.id));
-    } else if (sortBy === "total_buy_asc") {
-      arr.sort((a, b) => getTotalBuy(a.id) - getTotalBuy(b.id));
-    } else if (sortBy === "debt_desc") {
-      arr.sort((a, b) => getDisplayDebt(b.id) - getDisplayDebt(a.id));
-    } else if (sortBy === "debt_asc") {
-      arr.sort((a, b) => getDisplayDebt(a.id) - getDisplayDebt(b.id));
-    }
-    // name và date đã được server sort, giữ nguyên thứ tự
-    return arr;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customers, orders, receipts, payBackHistory, sortBy]);
-
-  const viewCustomer = viewId ? customers.find((x) => x.id === viewId) ?? null : null;
-
-  const totalDebtorCount = data?.meta?.totalDebtorCount ?? 0;
-  const totalAllDebt = data?.meta?.totalAllDebt ?? 0;
   const totalFilteredCount = data?.meta?.totalFiltered ?? 0;
-
-  const totalSales = useMemo(() => {
-    return orders
-      .filter((o) => o.status === "completed")
-      .reduce((s, o) => s + o.total, 0);
-  }, [orders]);
+  const totalDebtorCount = stats?.totalDebtorCount ?? 0;
+  const totalAllDebt = stats?.totalAllDebt ?? 0;
+  const totalSales = stats?.totalSales ?? 0;
 
   function startEdit(id: string) {
     const c = customers.find((x) => x.id === id);
@@ -346,7 +332,7 @@ function CustomersPage() {
       );
       setOpen(false);
       setForm(empty);
-      qc.invalidateQueries({ queryKey: ["customers"] });
+      qc.invalidateQueries({ queryKey: ["customers"] }); // bao gồm cả ["customers","stats"]
     } catch (err: any) {
       toast.error(err?.message ?? "Lỗi");
     }

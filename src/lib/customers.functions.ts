@@ -34,72 +34,68 @@ interface ListCustomersArgs {
   sortBy?: string;
 }
 
+/**
+ * listCustomers — OPTIMIZED
+ *
+ * Cũ: SELECT * + fetchAllRows("orders") + fetchAllRows("cash_vouchers")
+ *     → mỗi lần mở trang phải tải TOÀN BỘ orders + vouchers về client
+ *       để tính lại công nợ. Với 10k đơn + 10k phiếu → vài MB payload,
+ *       3–10s lag. Đồng thời mọi sort/filter công nợ phải làm ở client.
+ *
+ * Mới: gọi RPC `search_customers_page` (xem migration SQL kèm theo).
+ *      - Tìm kiếm server-side trên name / phone / email (mở rộng từ name+phone).
+ *      - Sort / filter công nợ / total_buy thực hiện ở Postgres → đúng và nhanh.
+ *      - Trả về CHỈ các cột cần hiển thị (id, name, phone, email, địa chỉ,
+ *        group_name, customer_type, company_name, debt, debt_adjustment,
+ *        total_buy, total_paid, total_paid_back, computed_debt, display_debt).
+ *      - Mỗi page payload ~ pageSize dòng, không phải toàn bộ DB.
+ *
+ * Số liệu thống kê (tổng KH / tổng nợ / số người nợ / tổng bán) tách ra
+ * `getCustomerStats()` — query 1 lần, cache riêng.
+ * Logic nghiệp vụ (cách tính displayDebt) giữ NGUYÊN: total_buy - total_paid
+ *  + total_paid_back + debt_adjustment.
+ */
 export const listCustomers = createServerFn({ method: "GET" })
   .handler(async ({ data }: { data: ListCustomersArgs | undefined }) => {
-    const page = data?.page ?? 1;
-    const pageSize = data?.pageSize ?? 100;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
+    const page = Math.max(1, data?.page ?? 1);
+    const pageSize = Math.max(1, data?.pageSize ?? 20);
+    const offset = (page - 1) * pageSize;
 
-    let query = supabase
-      .from("customers")
-      .select("*", { count: "exact" });
+    const { data: rows, error } = await supabase.rpc("search_customers_page", {
+      p_search: data?.search ?? null,
+      p_group: data?.group || null,
+      p_debt_filter: data?.debtFilter || "all",
+      p_sort: data?.sortBy || "date",
+      p_limit: pageSize,
+      p_offset: offset,
+    });
+    if (error) throw new Error(error.message);
 
-    if (data?.search) {
-      const q = `%${data.search}%`;
-      query = query.or(`name.ilike.${q},phone.ilike.${q}`);
-    }
-    if (data?.group) {
-      query = query.eq("group_name", data.group);
-    }
-    if (data?.debtFilter === "debt") {
-      query = query.gt("debt", 0);
-    } else if (data?.debtFilter === "no_debt") {
-      query = query.eq("debt", 0);
-    }
-
-    if (data?.sortBy === "name") {
-      query = query.order("name", { ascending: true });
-    } else if (data?.sortBy === "debt_desc") {
-      query = query.order("debt", { ascending: false });
-    } else if (data?.sortBy === "debt_asc") {
-      query = query.order("debt", { ascending: true });
-    } else if (data?.sortBy === "total_buy_desc") {
-      query = query.order("total_buy", { ascending: false });
-    } else if (data?.sortBy === "total_buy_asc") {
-      query = query.order("total_buy", { ascending: true });
-    } else {
-      query = query.order("created_at", { ascending: false });
-    }
-
-    const { data: customers, count: totalFilteredCustomers, error: custError } =
-      await query.range(from, to);
-    if (custError) throw new Error(custError.message);
-
-    // ────────────────────────────────────────────────────────────────
-    // Thống kê toàn cục: KHÔNG dùng .select("debt") thường vì
-    // Supabase giới hạn 1000 dòng → 15.000 khách sẽ bị mất 14.000.
-    // Dùng aggregateColumn (phân trang qua .range()) để tính đúng.
-    // ────────────────────────────────────────────────────────────────
-    const [debtAgg, totalAllCustomers, orders, vouchers] = await Promise.all([
-      aggregateColumn("customers", "debt"),
-      countRows("customers"),
-      fetchAllRows("orders", { orderBy: "created_at", ascending: false }),
-      // ✅ Lấy tất cả phiếu thu / phiếu chi để tính displayDebt = totalSpent - totalPaid + totalPaidBack
-      fetchAllRows("cash_vouchers", { orderBy: "created_at", ascending: false }),
-    ]);
+    const customers = (rows ?? []) as any[];
+    const totalFiltered = customers[0]?.filtered_count
+      ? Number(customers[0].filtered_count)
+      : 0;
 
     return {
-      customers: customers ?? [],
-      orders: orders ?? [],
-      receipts: vouchers ?? [],
-      payBackHistory: (vouchers ?? []).filter((v: any) => v.type === "chi" && v.receiver_customer_id),
-      meta: {
-        totalFiltered: totalFilteredCustomers ?? 0,
-        totalAllCustomers,
-        totalAllDebt: debtAgg.sum,
-        totalDebtorCount: debtAgg.positiveCount,
-      },
+      customers,
+      meta: { totalFiltered },
+    };
+  });
+
+/**
+ * getCustomerStats — số liệu tổng cho 4 thẻ thống kê ở đầu trang.
+ * Cache riêng (staleTime dài) để không phải tính lại sau mỗi lần đổi page/search.
+ */
+export const getCustomerStats = createServerFn({ method: "GET" })
+  .handler(async () => {
+    const { data, error } = await supabase.rpc("customer_stats");
+    if (error) throw new Error(error.message);
+    const row = (Array.isArray(data) ? data[0] : data) ?? {};
+    return {
+      totalAllCustomers: Number(row.total_all_customers ?? 0),
+      totalAllDebt: Number(row.total_all_debt ?? 0),
+      totalDebtorCount: Number(row.total_debtor_count ?? 0),
+      totalSales: Number(row.total_sales ?? 0),
     };
   });
 
