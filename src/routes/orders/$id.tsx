@@ -57,7 +57,7 @@ import { useAuth } from "@/context/AuthContext";
 import { SCHEDULE_TYPES } from "@/lib/types";
 
 export const Route = createFileRoute("/orders/$id")({
-  head: () => ({ meta: [{ title: "Chi tiết đơn hàng — Mr.Vũ" }] }),
+  head: () => ({ meta: [{ title: "Chi tiết đơn hàng — QuatTran POS" }] }),
   component: OrderDetailPage,
 });
 
@@ -480,7 +480,7 @@ function OrderDetailPage() {
 
     setCancellingOrder(true);
     try {
-      await updateStatusFn({ data: { id: order.id, status: "cancelled" } });
+      await updateStatusFn({ data: { id: order.id, status: "cancelled", actor_id: user?.id } });
 
       await qc.invalidateQueries({ queryKey: ["orders"] });
       await router.invalidate();
@@ -690,18 +690,31 @@ function OrderDetailPage() {
                   </Button>
                 )}
 
-                {isAdmin && order.status !== "cancelled" && (
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={cancelOrder}
-                    disabled={cancellingOrder}
-                  >
-                    {cancellingOrder
-                      ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Đang hủy...</>
-                      : <><Ban className="h-4 w-4 mr-1" />Hủy đơn</>}
-                  </Button>
-                )}
+                {(() => {
+                  // Hủy đơn: admin được hủy tất cả; nhân viên có quyền tạo đơn
+                  // chỉ được hủy đơn do chính mình tạo.
+                  const isCreator =
+                    !!user &&
+                    !!order &&
+                    (order.created_by === user.id || (order as any).employee_id === user.id);
+                  const canCancel =
+                    order.status !== "cancelled" &&
+                    (isAdmin ||
+                      (isCreator && (user?.permissions?.includes("create_order") || false)));
+                  if (!canCancel) return null;
+                  return (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={cancelOrder}
+                      disabled={cancellingOrder}
+                    >
+                      {cancellingOrder
+                        ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Đang hủy...</>
+                        : <><Ban className="h-4 w-4 mr-1" />Hủy đơn</>}
+                    </Button>
+                  );
+                })()}
               </div>
             )}
             </div>
