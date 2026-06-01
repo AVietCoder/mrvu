@@ -999,7 +999,6 @@ const userBranchIds = useMemo(() => {
                   "📋 Nội dung đơn hàng:",
                   "",
                   `• Tiêu đề: ${s.title}`,
-                  `• Công việc: ${SCHEDULE_TYPES.find((t) => t.value === s.type)?.label ?? s.type}`,
                   workType ? `• Loại hình công việc: ${workType.name}` : null,
                   `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`,
                   customer ? `• Khách hàng: ${customer.name}${customer.phone ? " — " + customer.phone : ""}` : null,
