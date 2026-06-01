@@ -323,6 +323,18 @@ function OrderDetailPage() {
     () => editItems.reduce((s, i) => s + i.qty * i.unit_price - i.discount, 0),
     [editItems]
   );
+
+  // Tồn kho theo sản phẩm cho chi nhánh đang chọn trong form sửa đơn (lấy từ data.stock).
+  // Sản phẩm không có cột stock -> phải tra từ data.stock, nếu không dropdown luôn hiện Tồn 0.
+  const stockByProductEdit = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of (data?.stock ?? []) as any[]) {
+      if (editBranch && row.branch_id !== editBranch) continue;
+      map.set(row.product_id, (map.get(row.product_id) ?? 0) + Number(row.qty || 0));
+    }
+    return map;
+  }, [data?.stock, editBranch]);
+
   // Tính giảm giá: nếu mode = percent thì tính % trên subtotal, nếu amount thì dùng trực tiếp
   const editDiscountAmt = useMemo(() => {
     if (editDiscountMode === "percent") {
@@ -927,11 +939,14 @@ function OrderDetailPage() {
                             setEditItems(next);
                           }}
                           placeholder="Chọn sản phẩm..."
-                          options={(data?.products ?? []).map((p: any) => ({
-                            value: p.id,
-                            label: p.name,
-                            sub: p.sku ? `SKU: ${p.sku} | Tồn: ${p.stock ?? 0}` : `Tồn: ${p.stock ?? 0}`,
-                          }))}
+                          options={(data?.products ?? []).map((p: any) => {
+                            const st = stockByProductEdit.get(p.id) ?? 0;
+                            return {
+                              value: p.id,
+                              label: p.name,
+                              sub: p.sku ? `SKU: ${p.sku} | Tồn: ${st}` : `Tồn: ${st}`,
+                            };
+                          })}
                         />
                         <button
                           type="button"

@@ -367,6 +367,18 @@ function Page() {
     [data?.branches],
   );
 
+  // Tồn kho theo sản phẩm cho CHI NHÁNH đang chọn (lấy từ bảng stock).
+  // Sản phẩm KHÔNG có cột stock, nên phải tra từ data.stock, nếu không form luôn hiện Kho 0.
+  // Chưa chọn chi nhánh -> cộng tổng tất cả chi nhánh để không hiển thị nhầm 0.
+  const stockByProduct = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of (data?.stock ?? []) as any[]) {
+      if (branch && row.branch_id !== branch) continue;
+      map.set(row.product_id, (map.get(row.product_id) ?? 0) + Number(row.qty || 0));
+    }
+    return map;
+  }, [data?.stock, branch]);
+
   const scheduleMap = useMemo(() => {
     const map = new Map<string, any[]>();
     (data?.schedules ?? []).forEach((s: any) => {
@@ -849,7 +861,7 @@ function Page() {
 
                   {items.map((item, idx) => {
                     const currentProd = (data?.products ?? []).find((x: any) => x.id === item.product_id);
-                    const currentStock = currentProd?.stock ?? 0;
+                    const currentStock = stockByProduct.get(item.product_id) ?? 0;
                     const lineTotal = item.qty * item.unit_price - item.discount;
                     
                     return (
@@ -869,11 +881,14 @@ function Page() {
                               setItems(next);
                             }}
                             placeholder="Chọn sản phẩm..."
-                            options={(data?.products ?? []).map((p: any) => ({
-                              value: p.id,
-                              label: p.name,
-                              sub: p.sku ? `SKU: ${p.sku} | Tồn: ${p.stock ?? 0}` : `Tồn: ${p.stock ?? 0}`,
-                            }))}
+                            options={(data?.products ?? []).map((p: any) => {
+                              const st = stockByProduct.get(p.id) ?? 0;
+                              return {
+                                value: p.id,
+                                label: p.name,
+                                sub: p.sku ? `SKU: ${p.sku} | Tồn: ${st}` : `Tồn: ${st}`,
+                              };
+                            })}
                           />
                           <button
                             type="button"
