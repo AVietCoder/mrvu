@@ -246,6 +246,31 @@ function CustomersPage() {
     const adjustment = Number(c?.debt_adjustment ?? 0);
     return getComputedDebt(customerId) + adjustment;
   }
+
+  // ✅ Tổng bán tính client-side từ orders (đúng hơn c.total_buy từ DB)
+  function getTotalBuy(customerId: string): number {
+    return orders
+      .filter((o: any) => o.customer_id === customerId && o.status === "completed")
+      .reduce((s: number, o: any) => s + Number(o.total || 0), 0);
+  }
+
+  // ✅ Sort client-side theo giá trị đang hiển thị thực tế
+  const sortedCustomers = useMemo(() => {
+    const arr = [...customers];
+    if (sortBy === "total_buy_desc") {
+      arr.sort((a, b) => getTotalBuy(b.id) - getTotalBuy(a.id));
+    } else if (sortBy === "total_buy_asc") {
+      arr.sort((a, b) => getTotalBuy(a.id) - getTotalBuy(b.id));
+    } else if (sortBy === "debt_desc") {
+      arr.sort((a, b) => getDisplayDebt(b.id) - getDisplayDebt(a.id));
+    } else if (sortBy === "debt_asc") {
+      arr.sort((a, b) => getDisplayDebt(a.id) - getDisplayDebt(b.id));
+    }
+    // name và date đã được server sort, giữ nguyên thứ tự
+    return arr;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers, orders, receipts, payBackHistory, sortBy]);
+
   const viewCustomer = viewId ? customers.find((x) => x.id === viewId) ?? null : null;
 
   const totalDebtorCount = data?.meta?.totalDebtorCount ?? 0;
@@ -456,14 +481,14 @@ function CustomersPage() {
                 <th className="pr-3">Địa chỉ</th>
                 <th
                   className="pr-3 text-right cursor-pointer select-none hover:text-foreground transition-colors"
-                  onClick={() => { setSortBy(s => s === "total_buy_desc" ? "total_buy_asc" : "total_buy_desc"); setPage(1); }}
+                  onClick={() => { setSortBy(sortBy === "total_buy_desc" ? "total_buy_asc" : "total_buy_desc"); setPage(1); }}
                   title="Click để sắp xếp theo Tổng bán"
                 >
                   Tổng bán {sortBy === "total_buy_desc" ? " ↓" : sortBy === "total_buy_asc" ? " ↑" : " ↕"}
                 </th>
                 <th
                   className="pr-3 text-right cursor-pointer select-none hover:text-foreground transition-colors"
-                  onClick={() => { setSortBy(s => s === "debt_desc" ? "debt_asc" : "debt_desc"); setPage(1); }}
+                  onClick={() => { setSortBy(sortBy === "debt_desc" ? "debt_asc" : "debt_desc"); setPage(1); }}
                   title="Click để sắp xếp theo Công nợ"
                 >
                   Công nợ {sortBy === "debt_desc" ? " ↓" : sortBy === "debt_asc" ? " ↑" : " ↕"}
@@ -473,7 +498,7 @@ function CustomersPage() {
             </thead>
 
             <tbody>
-              {customers.map((c) => (
+              {sortedCustomers.map((c) => (
                 <tr
                   key={c.id}
                   className="cursor-pointer border-b last:border-0 hover:bg-muted/30"
@@ -493,7 +518,7 @@ function CustomersPage() {
                   <td className="max-w-[200px] truncate pr-3 text-xs text-muted-foreground">
                     {[c.address, c.ward, c.province].filter(Boolean).join(", ") || "—"}
                   </td>
-                  <td className="pr-3 text-right font-medium text-green-600">{fmt(c.total_buy)}</td>
+                  <td className="pr-3 text-right font-medium text-green-600">{fmt(getTotalBuy(c.id))}</td>
                   <td className="pr-3 text-right font-medium">
   {(() => {
     const d = getDisplayDebt(c.id);
@@ -817,11 +842,10 @@ function CustomersPage() {
                   {isAdmin ? (
                     <div className="relative mt-1">
                       <Input
-                        className="pl-8 bg-background font-medium text-destructive"
-                        inputMode="numeric"
+                        className={`pl-8 bg-background font-medium ${Number(form.debt) < 0 ? "text-blue-600" : "text-destructive"}`}
                         placeholder="0"
                         value={form.debt}
-                        onChange={(e) => setForm({ ...form, debt: e.target.value.replace(/[^\d.\-]/g, "").replace(/(?!^)-/g, "") })}
+                        onChange={(e) => setForm({ ...form, debt: e.target.value.replace(/[^\d\-]/g, "").replace(/(?!^)-/g, "") })}
                       />
                       <div className="absolute left-3 top-2.5 text-xs text-muted-foreground font-semibold">đ</div>
                     </div>
