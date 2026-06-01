@@ -1265,86 +1265,21 @@ function Page() {
                 </div>
               </div>
 
-              {/* ── Tiền khách trả thực tế (ghi nhận thanh toán ngay, không bắt buộc) ──
-                   Khi đã có tiền cọc thì ẩn phần này cho gọn (tránh trùng lặp). */}
-              {deposit === 0 && (
-              <div className="rounded-lg border bg-background p-4 space-y-3">
-                {/* Khách thanh toán input */}
-                <div>
-                  <div className="flex justify-between items-center">
-                    <Label className="text-sm font-semibold">Khách thanh toán</Label>
-                    {tienThua > 0 && (
-                      <span className="text-xs text-green-600 font-medium">Tiền thừa: {fmt(tienThua)}</span>
-                    )}
-                  </div>
-                  <Input
-                    className="mt-1 text-right font-mono text-base h-11 border-2 focus:border-primary"
-                    placeholder={fmt(khachCanThanhToan)}
-                    value={khachThanhToanRaw === "" ? "" : fmt(khachThanhToan)}
-                    onChange={(e) => {
-                      const raw = e.target.value.replace(/\D/g, "");
-                      setKhachThanhToanRaw(raw);
-                    }}
-                    onFocus={(e) => e.target.select()}
-                  />
-                </div>
-
-                {/* Quick amount chips */}
-                {khachCanThanhToan > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {(() => {
-                      const base = khachCanThanhToan;
-                      const rounded10 = Math.ceil(base / 10000) * 10000;
-                      const rounded50 = Math.ceil(base / 50000) * 50000;
-                      const rounded100 = Math.ceil(base / 100000) * 100000;
-                      const rounded500 = Math.ceil(base / 500000) * 500000;
-                      const uniqueAmounts = [...new Set([base, rounded10, rounded50, rounded100, rounded500].filter(v => v >= base))].slice(0, 5);
-                      return uniqueAmounts.map((amt) => (
-                        <button
-                          key={amt}
-                          type="button"
-                          onClick={() => setKhachThanhToanRaw(String(amt))}
-                          className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                            khachThanhToan === amt
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-background hover:bg-muted border-border"
-                          }`}
-                        >
-                          {fmt(amt)}
-                        </button>
-                      ));
-                    })()}
-                  </div>
-                )}
-
-                {/* Tính vào công nợ */}
-                {congNo > 0 && (
-                  <div className="flex justify-between items-center text-sm pt-2 border-t">
-                    <span className="text-muted-foreground">Tính vào công nợ</span>
-                    <span className="font-semibold text-red-600">- {fmt(congNo)}</span>
-                  </div>
-                )}
-                {congNo === 0 && khachThanhToan > 0 && (
-                  <div className="flex justify-between items-center text-sm pt-2 border-t text-green-600">
-                    <span>✓ Thanh toán đủ</span>
-                    <span className="font-semibold">{fmt(khachThanhToan)}</span>
-                  </div>
-                )}
-              </div>
-              )}
+              {/* Đã bỏ khối "Khách thanh toán" ở form tạo đơn theo yêu cầu.
+                  Tạo đơn xong, việc thanh toán được thực hiện ở trang chi tiết đơn. */}
 
               <DialogFooter className="flex-col sm:flex-row gap-2">
                 <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
                   Hủy
                 </Button>
                 <Button
-                  className={`w-full sm:w-auto font-bold text-base h-12 ${khachThanhToan > 0 ? "bg-primary text-primary-foreground" : ""}`}
+                  className="w-full sm:w-auto font-bold text-base h-12 bg-primary text-primary-foreground"
                   onClick={submit}
                   disabled={submitting}
                 >
                   {submitting ? (
                     <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang xử lý...</>
-                  ) : khachThanhToan > 0 ? "THANH TOÁN" : "Tạo đơn"}
+                  ) : "Tạo đơn"}
                 </Button>
               </DialogFooter>
             </div>

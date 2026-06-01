@@ -1673,7 +1673,7 @@ function OrderDetailPage() {
                   <Button
                     className="w-full sm:w-auto font-bold text-base h-11"
                     onClick={confirmPayAndComplete}
-                    disabled={completingOrder || paid === 0}
+                    disabled={completingOrder}
                   >
                     {completingOrder
                       ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang xử lý...</>
