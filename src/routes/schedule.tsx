@@ -32,7 +32,7 @@ import { SearchFilter } from "@/components/SearchFilter";
 import { Pagination } from "@/components/Pagination";
 
 export const Route = createFileRoute("/schedule")({
-  head: () => ({ meta: [{ title: "Lịch làm việc — QuatTran POS" }] }),
+  head: () => ({ meta: [{ title: "Lịch làm việc — Mr.Vũ" }] }),
   component: Page,
 });
 
