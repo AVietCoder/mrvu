@@ -285,7 +285,7 @@ const userBranchIds = useMemo(() => {
   const [approveOpen, setApproveOpen] = useState(false);
   const [approveTarget, setApproveTarget] = useState<any>(null);
   const [assignedUsers, setAssignedUsers] = useState<string[]>([]);
-  const [assignedDiffs, setAssignedDiffs] = useState<{ id: string; qty: number }[]>([]);
+  const [assignedDiffs, setAssignedDiffs] = useState<string[]>([]);
   const [techFees, setTechFees] = useState<{ product_id: string; qty: number; unit_fee: number }[]>([]);
   const [approveDate, setApproveDate] = useState<string>("");
 
@@ -412,28 +412,23 @@ const userBranchIds = useMemo(() => {
   function calcTechPay(scheduleId: string): number {
     const schedule = (data?.schedules ?? []).find((s: any) => s.id === scheduleId);
     const fees = (data?.tech_fees ?? []).filter((f: any) => f.schedule_id === scheduleId);
-    const diffs = (data?.difficulties ?? []).filter((d: any) => d.schedule_id === scheduleId);
+    const diffIds = (data?.difficulties ?? []).filter((d: any) => d.schedule_id === scheduleId).map((d: any) => d.difficulty_id);
     const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === scheduleId);
     const numPeople = Math.max(1, assignees.length);
 
+    // thu nhập (bonus từ tech_fees)
+    const bonusTotal = fees.reduce((sum: number, f: any) => sum + f.qty * f.unit_fee, 0);
+    // Tính chất CV nhân số người
+    const diffBonusPerTask = diffIds.reduce((sum: number, did: string) => {
+      const wdiff = (data?.work_difficulties ?? []).find((w: any) => w.id === did);
+      return sum + (wdiff?.bonus ?? 0);
+    }, 0);
+    const diffBonus = diffBonusPerTask * numPeople;
     const workType = schedule?.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === schedule.work_type_id) : null;
     const workTypePrice = Number(workType?.price || 0);
-
-    // Tính chất CV: (bonus × qty) × numPeople → chia đều → mỗi người nhận bonus × qty
-    const diffBonus = diffs.reduce((sum: number, d: any) => {
-      const wdiff = (data?.work_difficulties ?? []).find((w: any) => w.id === d.difficulty_id);
-      const qty = d.qty ?? 1;
-      return sum + (wdiff?.bonus ?? 0) * qty;
-    }, 0);
-
-    // Pool chia đều (loại hình + tính chất CV)
-    const sharedPool = workTypePrice + diffBonus * numPeople;
-    const perPersonShared = sharedPool / numPeople;
-
-    // Thu nhập khác: cộng thẳng cho mỗi người, KHÔNG chia
-    const extraBonus = fees.reduce((sum: number, f: any) => sum + f.qty * f.unit_fee, 0);
-
-    return perPersonShared + extraBonus;
+    // Cộng tổng tất cả khoản hợp lệ rồi chia đều theo số người
+    const totalPool = bonusTotal + diffBonus + workTypePrice;
+    return totalPool / numPeople;
   }
 
   async function handleCreate() {
@@ -469,7 +464,7 @@ const userBranchIds = useMemo(() => {
   function openApprove(s: any) {
     setApproveTarget(s);
     const existing = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id).map((a: any) => a.user_id);
-    const existingDiffs = (data?.difficulties ?? []).filter((d: any) => d.schedule_id === s.id).map((d: any) => ({ id: d.difficulty_id, qty: d.qty ?? 1 }));
+    const existingDiffs = (data?.difficulties ?? []).filter((d: any) => d.schedule_id === s.id).map((d: any) => d.difficulty_id);
     const existingFees = (data?.tech_fees ?? []).filter((f: any) => f.schedule_id === s.id);
     setAssignedUsers(existing);
     setAssignedDiffs(existingDiffs);
@@ -486,8 +481,7 @@ const userBranchIds = useMemo(() => {
       await approveFn({ data: {
         schedule_id: approveTarget.id,
         user_ids: assignedUsers,
-        difficulty_ids: assignedDiffs.map((d) => d.id),
-        difficulty_qtys: assignedDiffs.map((d) => ({ id: d.id, qty: d.qty })),
+        difficulty_ids: assignedDiffs,
         tech_fees: techFees,
         work_type_id: workTypeId || null,
         scheduled_date: approveDate || null,
@@ -1644,132 +1638,86 @@ const userBranchIds = useMemo(() => {
               </select>
             </div>
 
-            {/* Tính chất công việc (gộp thu nhập khác) */}
+            {/* Tính chất công việc */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <div>
-                  <Label className="font-medium">Tính chất công việc (chấm công)</Label>
-                  <div className="text-xs text-muted-foreground">Tick chọn, nhập số lượng. Tiền = bonus × SL × số NV. Có thể thêm khoản tự do bên dưới.</div>
-                </div>
-              </div>
-              <div className="mt-1 border rounded-md p-2 space-y-2">
-                {(data?.work_difficulties ?? []).map((d: any) => {
-                  const entry = assignedDiffs.find((x) => x.id === d.id);
-                  const checked = !!entry;
-                  const qty = entry?.qty ?? 1;
-                  const lineTotal = d.bonus * qty;
-                  return (
-                    <div key={d.id} className="flex items-center gap-2 text-sm">
+              <Label className="font-medium">Tính chất công việc (chấm công)</Label>
+              <div className="text-xs text-muted-foreground mb-1">Có thể tick nhiều. Mỗi tính chất = 1 điểm chia đều theo số NV.</div>
+              <div className="mt-1 border rounded-md p-2 space-y-1">
+                {(data?.work_difficulties ?? []).map((d: any) => (
+                  <label key={d.id} className="flex items-center justify-between text-sm cursor-pointer">
+                    <div className="flex items-center gap-2">
                       <input type="checkbox"
-                        className="mt-0.5 shrink-0"
-                        checked={checked}
-                        onChange={() => {
-                          if (checked) {
-                            setAssignedDiffs((p) => p.filter((x) => x.id !== d.id));
-                          } else {
-                            setAssignedDiffs((p) => [...p, { id: d.id, qty: 1 }]);
-                          }
-                        }}
-                      />
-                      <span className="flex-1">{d.name}</span>
-                      {checked && (
-                        <>
-                          <input
-                            type="number"
-                            min={1}
-                            className="w-14 h-7 rounded border px-2 text-sm text-center bg-background"
-                            value={qty}
-                            onChange={(e) => {
-                              const val = Math.max(1, Number(e.target.value) || 1);
-                              setAssignedDiffs((p) => p.map((x) => x.id === d.id ? { ...x, qty: val } : x));
-                            }}
-                          />
-                          <span className="text-green-600 font-medium w-24 text-right">+{fmtMoney(lineTotal)}</span>
-                        </>
-                      )}
-                      {!checked && (
-                        <span className="text-muted-foreground w-[calc(3.5rem+6rem+0.5rem)] text-right text-xs">{fmtMoney(d.bonus)}/lần</span>
-                      )}
+                        checked={assignedDiffs.includes(d.id)}
+                        onChange={() => setAssignedDiffs((p) => p.includes(d.id) ? p.filter((x) => x !== d.id) : [...p, d.id])}
+                      /> {d.name}
                     </div>
-                  );
-                })}
+                    <span className="text-green-600 font-medium">+{fmtMoney(d.bonus)}</span>
+                  </label>
+                ))}
                 {(data?.work_difficulties ?? []).length === 0 && (
                   <div className="text-xs text-muted-foreground italic">Chưa có tính chất CV — admin cần tạo trước.</div>
                 )}
               </div>
+            </div>
 
-              {/* Thu nhập tự do (bonus thêm) */}
-              <div className="mt-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-muted-foreground">Khoản thu nhập thêm</span>
-                  <Button size="sm" variant="outline"
-                    onClick={() => setTechFees([...techFees, { product_id: "", qty: 1, unit_fee: 0 }])}>
-                    <Plus className="h-3 w-3 mr-1" /> Thêm khoản
-                  </Button>
-                </div>
-                {techFees.map((tf, idx) => (
-                  <div key={idx} className="grid grid-cols-12 gap-2 mb-2">
-                    <Input className="col-span-6" placeholder="Tên / mô tả"
-                      value={tf.product_id}
-                      onChange={(e) => {
-                        const next = [...techFees];
-                        next[idx] = { ...tf, product_id: e.target.value };
-                        setTechFees(next);
-                      }} />
-                    <Input type="number" className="col-span-2" placeholder="SL" value={tf.qty}
-                      onChange={(e) => { const next = [...techFees]; next[idx].qty = Number(e.target.value); setTechFees(next); }} />
-                    <Input type="number" className="col-span-3" placeholder="Đơn giá" value={tf.unit_fee}
-                      onChange={(e) => { const next = [...techFees]; next[idx].unit_fee = Number(e.target.value); setTechFees(next); }} />
-                    <button className="col-span-1 hover:text-destructive"
-                      onClick={() => setTechFees(techFees.filter((_, i) => i !== idx))}>
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
+
+            {/* thu nhập (bonus) */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <Label className="font-medium">Thu nhập khác</Label>
+                <Button size="sm" variant="outline"
+                  onClick={() => setTechFees([...techFees, { product_id: "", qty: 1, unit_fee: 0 }])}>
+                  <Plus className="h-3 w-3 mr-1" /> Thêm thu nhập
+                </Button>
               </div>
-
-              {/* Tổng kết */}
+              {techFees.map((tf, idx) => (
+                <div key={idx} className="grid grid-cols-12 gap-2 mb-2">
+                  <Input className="col-span-6" placeholder="Tên thu nhập / mô tả"
+                    value={tf.product_id}
+                    onChange={(e) => {
+                      const next = [...techFees];
+                      next[idx] = { ...tf, product_id: e.target.value };
+                      setTechFees(next);
+                    }} />
+                  <Input type="number" className="col-span-2" placeholder="SL" value={tf.qty}
+                    onChange={(e) => { const next = [...techFees]; next[idx].qty = Number(e.target.value); setTechFees(next); }} />
+                  <Input type="number" className="col-span-3" placeholder="Tiền thu nhập" value={tf.unit_fee}
+                    onChange={(e) => { const next = [...techFees]; next[idx].unit_fee = Number(e.target.value); setTechFees(next); }} />
+                  <button className="col-span-1 hover:text-destructive"
+                    onClick={() => setTechFees(techFees.filter((_, i) => i !== idx))}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
               {(() => {
                 const numPeople = Math.max(1, assignedUsers.length);
-                const workType = workTypeId ? (data?.work_types ?? []).find((w: any) => w.id === workTypeId) : null;
+                const workType = approveTarget?.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === approveTarget.work_type_id) : null;
                 const workTypePrice = Number(workType?.price || 0);
-
-                // Tính chất CV: mỗi tính chất = bonus × qty, chia đều theo numPeople
-                const diffBonusPerPerson = assignedDiffs.reduce((s, entry) => {
-                  const d = (data?.work_difficulties ?? []).find((x: any) => x.id === entry.id);
-                  return s + (d?.bonus ?? 0) * entry.qty;
-                }, 0);
-
-                // Pool chia đều (loại hình + tính chất)
-                const sharedPool = workTypePrice + diffBonusPerPerson * numPeople;
-                const perPersonShared = sharedPool / numPeople;
-
-                // Thu nhập khác: cộng thẳng cho mỗi người, KHÔNG chia
-                const extraBonus = techFees.reduce((s, tf) => s + tf.qty * tf.unit_fee, 0);
-
-                const perPersonTotal = perPersonShared + extraBonus;
+                // Tiền thu nhập tổng
+                const bonusTotal = techFees.reduce((s, tf) => s + tf.qty * tf.unit_fee, 0);
+                // Tính chất công việc: tự động nhân theo số người
+                const diffBonus = assignedDiffs.reduce((s, did) => {
+                  const d = (data?.work_difficulties ?? []).find((x: any) => x.id === did);
+                  return s + (d?.bonus ?? 0);
+                }, 0) * numPeople;
+                // Cộng tổng tất cả khoản hợp lệ rồi chia đều theo số người
+                const totalPool = bonusTotal + diffBonus + workTypePrice;
+                const perPerson = totalPool / numPeople;
                 return (
-                  <div className="mt-2 rounded-md bg-muted/50 p-2 text-sm space-y-1">
-                    {workType && (
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Loại hình: {workType.name}</span><span>{fmtMoney(workTypePrice / numPeople)}/người</span>
-                      </div>
-                    )}
-                    {assignedDiffs.length > 0 && (
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Tính chất CV (chia đều {numPeople} NV)</span>
-                        <span>{fmtMoney(diffBonusPerPerson)}/người</span>
-                      </div>
-                    )}
-                    {extraBonus > 0 && (
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Thu nhập thêm (cộng trực tiếp, không chia)</span>
-                        <span className="text-blue-600">+{fmtMoney(extraBonus)}</span>
-                      </div>
-                    )}
+                  <div className="rounded-md bg-muted/50 p-2 text-sm space-y-1">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Loại hình công việc: {workType?.name ?? "—"}</span><span>{fmtMoney(workTypePrice)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Thu nhập</span><span>{fmtMoney(bonusTotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Tính chất CV × {numPeople} người</span><span>{fmtMoney(diffBonus)}</span>
+                    </div>
+                    {/* Tiền đơn hàng không tính vào lương kỹ thuật */}
                     <div className="flex justify-between font-semibold border-t pt-1">
                       <span>Tiền công / người ({numPeople} người)</span>
-                      <span className="text-green-600">{fmtMoney(perPersonTotal)}</span>
+                      <span className="text-green-600">{fmtMoney(perPerson)}</span>
                     </div>
                   </div>
                 );

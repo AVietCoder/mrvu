@@ -20,7 +20,7 @@ export const listSchedules = createServerFn({ method: "GET" }).handler(async () 
   ] = await Promise.all([
     fetchRows("schedules", { orderBy: "scheduled_date", ascending: false }),
     fetchRows("schedule_assignments"),
-    fetchRows("schedule_difficulties", { select: "schedule_id, difficulty_id, qty" }),
+    fetchRows("schedule_difficulties"),
     fetchRows("tech_fees"),
     fetchRows("work_difficulties", { orderBy: "bonus", ascending: false }),
     fetchRows("work_types", { orderBy: "name" }),
@@ -108,7 +108,6 @@ export const approveSchedule = createServerFn({ method: "POST" })
       schedule_id: string;
       user_ids: string[];
       difficulty_ids: string[];
-      difficulty_qtys?: { id: string; qty: number }[];
       tech_fees: { product_id: string; qty: number; unit_fee: number }[];
       work_type_id?: string | null;
       scheduled_date?: string | null;
@@ -135,12 +134,10 @@ export const approveSchedule = createServerFn({ method: "POST" })
 
     await deleteWhere("schedule_difficulties", { schedule_id: data.schedule_id });
     if (data.difficulty_ids.length) {
-      const qtyMap = new Map((data.difficulty_qtys ?? []).map((dq) => [dq.id, dq.qty]));
       await supabase.from("schedule_difficulties").insert(
         data.difficulty_ids.map((difficulty_id) => ({
           schedule_id: data.schedule_id,
           difficulty_id,
-          qty: qtyMap.get(difficulty_id) ?? 1,
         })),
       );
     }
@@ -323,7 +320,7 @@ export const attendanceSummary = createServerFn({ method: "GET" })
         ? supabase.from("schedule_assignments").select("schedule_id, user_id").in("schedule_id", ids).then((r) => r.data ?? [])
         : Promise.resolve([]),
       ids.length
-        ? supabase.from("schedule_difficulties").select("schedule_id, difficulty_id, qty").in("schedule_id", ids).then((r) => r.data ?? [])
+        ? supabase.from("schedule_difficulties").select("schedule_id, difficulty_id").in("schedule_id", ids).then((r) => r.data ?? [])
         : Promise.resolve([]),
       ids.length
         ? supabase.from("tech_fees").select("schedule_id, product_id, qty, unit_fee").in("schedule_id", ids).then((r) => r.data ?? [])
@@ -346,6 +343,10 @@ export const attendanceSummary = createServerFn({ method: "GET" })
     const assignBySchedule: Record<string, string[]> = {};
     for (const a of assigns as any[]) {
       (assignBySchedule[a.schedule_id] ||= []).push(a.user_id);
+    }
+    const diffsBySchedule: Record<string, string[]> = {};
+    for (const d of diffs as any[]) {
+      (diffsBySchedule[d.schedule_id] ||= []).push(d.difficulty_id);
     }
     // Thu nhập khác (tech_fees) gom theo lịch — tổng 1 lịch = Σ(qty × unit_fee)
     const feesBySchedule: Record<string, { items: any[]; total: number }> = {};
@@ -379,16 +380,12 @@ export const attendanceSummary = createServerFn({ method: "GET" })
       if (!people.length) continue;
       const n = people.length;
       const wt = s.work_type_id ? wtMap[s.work_type_id] : null;
-      const diffs_of_s = (diffs as any[]).filter((d: any) => d.schedule_id === s.id);
-      const diffSumPrice = diffs_of_s.reduce((sum, d) => {
-        const qty = d.qty ?? 1;
-        return sum + Number(wdMap[d.difficulty_id]?.bonus || 0) * qty;
-      }, 0);
-      const dIds = diffs_of_s.map((d: any) => d.difficulty_id);
+      const dIds = diffsBySchedule[s.id] || [];
+      const diffSumPrice = dIds.reduce((sum, did) => sum + Number(wdMap[did]?.bonus || 0), 0);
       const typePrice = Number(wt?.price || 0);
-      // Thu nhập khác: cộng thẳng cho mỗi người, KHÔNG chia
+      // Thu nhập khác của lịch: cộng vào tổng rồi chia theo số người
       const feeBucket = feesBySchedule[s.id] || { items: [], total: 0 };
-      const extraIncomePerPerson = feeBucket.total;
+      const extraIncomeTotal = feeBucket.total;
 
       for (const uid_ of people) {
         const u = userMap[uid_] || { id: uid_, full_name: uid_, username: "" };
@@ -405,13 +402,12 @@ export const attendanceSummary = createServerFn({ method: "GET" })
         });
         const typePt = wt ? 1 / n : 0;
         const diffPt = dIds.length / n;
-        // Tiền chia đều (loại hình + tính chất) / số người, rồi cộng thu nhập thêm thẳng
-        const moneyShared = (typePrice + diffSumPrice * n) / n;
-        const money = moneyShared + extraIncomePerPerson;
+        // Tiền công/người = (loại hình + tính chất + thu nhập khác) / số người
+        const money = (typePrice + diffSumPrice + extraIncomeTotal) / n;
         row.type_points += typePt;
         row.diff_points += diffPt;
         row.total_money += money;
-        row.extra_income += extraIncomePerPerson;
+        row.extra_income += extraIncomeTotal / n;
         row.schedule_count += 1;
         row.lines.push({
           schedule_id: s.id,
@@ -423,11 +419,10 @@ export const attendanceSummary = createServerFn({ method: "GET" })
           order_id: s.order_id,
           address: s.address,
           work_type: wt ? { id: wt.id, name: wt.name, price: Number(wt.price || 0) } : null,
-          difficulties: diffs_of_s.map((d: any) => ({
-            id: d.difficulty_id,
-            name: wdMap[d.difficulty_id]?.name || d.difficulty_id,
-            bonus: Number(wdMap[d.difficulty_id]?.bonus || 0),
-            qty: d.qty ?? 1,
+          difficulties: dIds.map((id) => ({
+            id,
+            name: wdMap[id]?.name || id,
+            bonus: Number(wdMap[id]?.bonus || 0),
           })),
           extra_income: feeBucket.items,
           extra_income_total: extraIncomeTotal,
