@@ -184,19 +184,22 @@ const userBranchIds = useMemo(() => {
   const clearBranchFilter = () => setBranchFilterIds([]);
   const selectAllBranchFilter = () => setBranchFilterIds(branchOptions.map((b: any) => String(b.id)));
 
-  const applyDatePreset = (preset: "today" | "7d" | "14d" | "30d" | "custom") => {
+  const applyDatePreset = (
+    preset: "today" | "7d" | "14d" | "30d" | "custom"
+  ) => {
     setFilterPreset(preset);
-    const end = new Date();
-    const start = new Date(end);
+
+    const start = new Date(); // hôm nay
+    const end = new Date(start);
 
     if (preset === "today") {
-      // start/end giữ nguyên hôm nay
+      // chỉ hôm nay
     } else if (preset === "7d") {
-      start.setDate(end.getDate() - 6);
+      end.setDate(start.getDate() + 6);
     } else if (preset === "14d") {
-      start.setDate(end.getDate() - 13);
+      end.setDate(start.getDate() + 13);
     } else if (preset === "30d") {
-      start.setDate(end.getDate() - 29);
+      end.setDate(start.getDate() + 29);
     } else {
       return;
     }
