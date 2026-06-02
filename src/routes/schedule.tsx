@@ -588,7 +588,6 @@ function Page() {
                             {s.scheduled_time && <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1"><Clock className="h-3 w-3" /> {s.scheduled_time}</div>}
                           </div>
                           <div className="flex flex-wrap gap-1 sm:flex-col sm:items-end shrink-0">
-                            <span className={`text-xs rounded-full px-2 py-0.5 ${typeInfo?.color}`}>{typeInfo?.label}</span>
                             <span className={`text-xs rounded-full px-2 py-0.5 ${status?.color}`}>{status?.label}</span>
                           </div>
                         </div>
@@ -898,7 +897,7 @@ function Page() {
           <div className="space-y-3">
             <div><Label>Tiêu đề *</Label><Input className="mt-1" value={createForm.title} onChange={(e) => setCreateForm({...createForm, title: e.target.value})} /></div>
             <div><Label>Ngày *</Label><Input className="mt-1" type="date" value={createForm.scheduled_date} onChange={(e) => setCreateForm({...createForm, scheduled_date: e.target.value})} /></div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-1 gap-3">
               <div><Label>Giờ</Label><Input className="mt-1" type="time" value={createForm.scheduled_time} onChange={(e) => setCreateForm({...createForm, scheduled_time: e.target.value})} /></div>
               <div className="sm:col-span-2">
                 <Label>Chi nhánh <span className="text-xs font-normal text-muted-foreground">(chỉ chọn 1)</span></Label>
