@@ -983,31 +983,6 @@ function Page() {
               </div>
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <Label className="font-medium">Thu nhập khác</Label>
-                <Button size="sm" variant="outline" onClick={() => setTechFees([...techFees, { product_id: "", qty: 1, unit_fee: 0, user_id: "" }])}><Plus className="h-3 w-3 mr-1" /> Thêm thu nhập</Button>
-              </div>
-              {techFees.length > 0 && <div className="text-xs text-muted-foreground mb-2">Chọn nhân viên để cộng tiền trực tiếp vào lương của họ. Để trống = chia đều cho tất cả.</div>}
-              {techFees.map((tf, idx) => (
-                <div key={idx} className="border rounded-md p-2 mb-2 space-y-2">
-                  <div className="grid grid-cols-12 gap-2">
-                    <Input className="col-span-11" placeholder="Tên thu nhập / mô tả" value={tf.product_id} onChange={(e) => { const next = [...techFees]; next[idx] = { ...tf, product_id: e.target.value }; setTechFees(next); }} />
-                    <button className="col-span-1 hover:text-destructive flex items-center justify-center" onClick={() => setTechFees(techFees.filter((_, i) => i !== idx))}><Trash2 className="h-4 w-4" /></button>
-                  </div>
-                  <div className="grid grid-cols-12 gap-2">
-                    <div className="col-span-4"><div className="text-xs text-muted-foreground mb-1">Số lượng</div><Input type="number" placeholder="SL" value={tf.qty} onChange={(e) => { const next = [...techFees]; next[idx] = { ...next[idx], qty: Number(e.target.value) }; setTechFees(next); }} /></div>
-                    <div className="col-span-4"><div className="text-xs text-muted-foreground mb-1">Đơn giá (đ)</div><Input type="number" placeholder="Tiền" value={tf.unit_fee} onChange={(e) => { const next = [...techFees]; next[idx] = { ...next[idx], unit_fee: Number(e.target.value) }; setTechFees(next); }} /></div>
-                    <div className="col-span-4">
-                      <div className="text-xs text-muted-foreground mb-1">Cho nhân viên</div>
-                      <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={tf.user_id ?? ""} onChange={(e) => { const next = [...techFees]; next[idx] = { ...next[idx], user_id: e.target.value }; setTechFees(next); }}>
-                        <option value="">— Chia đều —</option>
-                        {(data?.users ?? []).filter((u: any) => assignedUsers.includes(u.id)).map((u: any) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  {tf.unit_fee > 0 && <div className="text-xs text-right text-green-600 font-medium">= {fmtMoney(tf.qty * tf.unit_fee)}{tf.user_id ? ` → ${(data?.users ?? []).find((u: any) => u.id === tf.user_id)?.full_name ?? "?"}` : assignedUsers.length > 1 ? ` ÷ ${assignedUsers.length} người = ${fmtMoney(tf.qty * tf.unit_fee / Math.max(1, assignedUsers.length))}/người` : ""}</div>}
-                </div>
-              ))}
               {(() => {
                 const numPeople = Math.max(1, assignedUsers.length);
                 const workType = approveTarget?.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === approveTarget.work_type_id) : null;
