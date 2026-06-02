@@ -152,6 +152,11 @@ export const upsertCustomer = createServerFn({ method: "POST" })
 
 export const deleteCustomer = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
+    await deleteWhere("cash_vouchers", { payer_customer_id: data.id });
+    await deleteWhere("cash_vouchers", { receiver_customer_id: data.id });
+    
+    await deleteWhere("orders", { customer_id: data.id });
+    await deleteWhere("schedules", { customer_id: data.id });
     await deleteWhere("customers", { id: data.id });
     await logActivity({ action: "delete_customer", detail: `Xóa khách hàng ID: ${data.id}` });
     return { ok: true };
