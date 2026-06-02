@@ -41,7 +41,7 @@ function Page() {
   }
 
   return (
-    <AppShell title="Quản lý chi nhánh">
+    <AppShell title="Quản lý chi nhánh" loading={!data}>
       <Card className="mb-6">
         <div className="flex items-center justify-between mb-4">
           <div className="text-sm text-muted-foreground">{data?.branches.length ?? 0} chi nhánh / kho</div>

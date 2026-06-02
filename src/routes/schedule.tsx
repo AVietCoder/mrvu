@@ -493,7 +493,7 @@ function Page() {
   }
 
   return (
-    <AppShell title="Lịch làm việc">
+    <AppShell title="Lịch làm việc" loading={!data}>
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
         <div className="mb-4 rounded-2xl border bg-card p-3 sm:p-4 shadow-sm">
          <div className="space-y-4">

@@ -283,7 +283,7 @@ function Page() {
   const allBranchesCount = opts?.branches?.length || 0;
 
   return (
-    <AppShell title="Quản lý nhân viên">
+    <AppShell title="Quản lý nhân viên" loading={!users}>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-4">
         <Card>
           <div className="flex items-center gap-2 mb-1">
