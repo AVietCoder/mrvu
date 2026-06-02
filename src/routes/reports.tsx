@@ -42,7 +42,6 @@ function ProgressBarLoader() {
   );
 }
 
-// Get YYYY-MM-DD string for today / 30 days ago in VN timezone
 function todayStr() {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
 }
@@ -93,7 +92,6 @@ function Page() {
     enabled: !!canView,
   });
 
-  // Date range state
   const [fromDate, setFromDate] = useState(daysAgoStr(29));
   const [toDate, setToDate] = useState(todayStr());
   const [mode, setMode] = useState<"day" | "month">("day");
@@ -118,78 +116,117 @@ function Page() {
     }
   }
 
-  // Filter orders by date range (client-side since we have all data)
-  const { filteredOrders, filteredItems, dailySeries, monthlySeries, byBranchFiltered, byEmployeeFiltered, topProductsFiltered, ordersByStatus, avgOrderValue, newCustomers } = useMemo(() => {
+  const {
+    filteredOrders,
+    filteredItems,
+    dailySeries,
+    monthlySeries,
+    byBranchFiltered,
+    byEmployeeFiltered,
+    topProductsFiltered,
+    ordersByStatus,
+    avgOrderValue,
+    newCustomers,
+    totalRevenue,
+    totalCompletedOrders
+  } = useMemo(() => {
     if (!data) return {
       filteredOrders: [], filteredItems: [], dailySeries: [], monthlySeries: [],
       byBranchFiltered: [], byEmployeeFiltered: [], topProductsFiltered: [],
-      ordersByStatus: {}, avgOrderValue: 0, newCustomers: 0,
+      ordersByStatus: {}, avgOrderValue: 0, newCustomers: 0, totalRevenue: 0, totalCompletedOrders: 0
     };
 
     const TZ = "Asia/Ho_Chi_Minh";
-    const fmtDate = (v: any) => new Intl.DateTimeFormat("sv-SE", { timeZone: TZ }).format(new Date(v));
+    const dtf = new Intl.DateTimeFormat("sv-SE", { timeZone: TZ });
+    const fmtDate = (v: any) => dtf.format(new Date(v));
     const from = fromDate;
     const to = toDate;
 
-    // All completed orders in range
     const allOrders: any[] = (data as any)._rawOrders ?? [];
-    const filteredOrders = allOrders.filter((o: any) => {
-      const d = fmtDate(o.created_at);
-      return d >= from && d <= to;
-    });
-    const completedFiltered = filteredOrders.filter((o: any) => o.status === "completed");
-
-    // Items for completed filtered orders
-    const completedIds = new Set(completedFiltered.map((o: any) => o.id));
     const allItems: any[] = (data as any)._rawItems ?? [];
+
+    const custOrders = new Map<string, string>();
+    allOrders.forEach((o: any) => {
+      if (!o.customer_id) return;
+      const d = fmtDate(o.created_at);
+      const cur = custOrders.get(o.customer_id);
+      if (!cur || d < cur) custOrders.set(o.customer_id, d);
+    });
+
+    const filteredOrders: any[] = [];
+    const completedFiltered: any[] = [];
+    const ordersByStatus: any = {};
+    
+    const dailyMap = new Map<string, { revenue: number; orders: number }>();
+    const monthlyMap = new Map<string, { revenue: number; orders: number }>();
+    const branchMap = new Map<string, { revenue: number; orders: number }>();
+    const employeeMap = new Map<string, { revenue: number; orders: number }>();
+
+    let totalRevenue = 0;
+
+    allOrders.forEach((o: any) => {
+      const d = fmtDate(o.created_at);
+      if (d >= from && d <= to) {
+        filteredOrders.push(o);
+        ordersByStatus[o.status] = (ordersByStatus[o.status] ?? 0) + 1;
+
+        if (o.status === "completed") {
+          completedFiltered.push(o);
+          const amt = Number(o.total || 0);
+          totalRevenue += amt;
+
+          const curDay = dailyMap.get(d) || { revenue: 0, orders: 0 };
+          dailyMap.set(d, { revenue: curDay.revenue + amt, orders: curDay.orders + 1 });
+
+          const m = d.slice(0, 7);
+          const curMonth = monthlyMap.get(m) || { revenue: 0, orders: 0 };
+          monthlyMap.set(m, { revenue: curMonth.revenue + amt, orders: curMonth.orders + 1 });
+
+          if (o.branch_id) {
+            const curB = branchMap.get(o.branch_id) || { revenue: 0, orders: 0 };
+            branchMap.set(o.branch_id, { revenue: curB.revenue + amt, orders: curB.orders + 1 });
+          }
+
+          if (o.employee_id) {
+            const curE = employeeMap.get(o.employee_id) || { revenue: 0, orders: 0 };
+            employeeMap.set(o.employee_id, { revenue: curE.revenue + amt, orders: curE.orders + 1 });
+          }
+        }
+      }
+    });
+
+    const completedIds = new Set(completedFiltered.map((o: any) => o.id));
     const filteredItems = allItems.filter((i: any) => completedIds.has(i.order_id));
 
-    // Daily series
-    const dailyMap = new Map<string, number>();
-    completedFiltered.forEach((o: any) => {
-      const d = fmtDate(o.created_at);
-      dailyMap.set(d, (dailyMap.get(d) ?? 0) + Number(o.total || 0));
-    });
-    // Fill all days in range
     const daily: { date: string; revenue: number; orders: number }[] = [];
     const start = new Date(from + "T00:00:00+07:00");
     const end = new Date(to + "T23:59:59+07:00");
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const key = new Intl.DateTimeFormat("sv-SE", { timeZone: TZ }).format(d);
-      const dayOrders = completedFiltered.filter((o: any) => fmtDate(o.created_at) === key);
+      const key = dtf.format(d);
+      const dayStats = dailyMap.get(key) || { revenue: 0, orders: 0 };
       daily.push({
-        date: key.slice(5), // MM-DD
-        revenue: dayOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0),
-        orders: dayOrders.length,
+        date: key.slice(5),
+        revenue: dayStats.revenue,
+        orders: dayStats.orders,
       });
     }
 
-    // Monthly series
-    const monthlyMap = new Map<string, { revenue: number; orders: number }>();
-    completedFiltered.forEach((o: any) => {
-      const m = fmtDate(o.created_at).slice(0, 7);
-      const cur = monthlyMap.get(m) ?? { revenue: 0, orders: 0 };
-      monthlyMap.set(m, { revenue: cur.revenue + Number(o.total || 0), orders: cur.orders + 1 });
-    });
     const monthly = [...monthlyMap.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([k, v]) => ({ date: k.slice(0, 7), ...v }));
+      .map(([k, v]) => ({ date: k, ...v }));
 
-    // By branch
     const branches: any[] = (data as any)._rawBranches ?? [];
     const byBranch = branches.map((b: any) => {
-      const bOrders = completedFiltered.filter((o: any) => o.branch_id === b.id);
-      return { name: b.name, revenue: bOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0), orders: bOrders.length };
+      const stats = branchMap.get(b.id) || { revenue: 0, orders: 0 };
+      return { name: b.name, revenue: stats.revenue, orders: stats.orders };
     }).filter((b: any) => b.orders > 0).sort((a: any, b: any) => b.revenue - a.revenue);
 
-    // By employee
     const users: any[] = (data as any)._rawUsers ?? [];
     const byEmployee = users.map((u: any) => {
-      const uOrders = completedFiltered.filter((o: any) => o.employee_id === u.id);
-      return { name: u.full_name ?? u.name ?? "?", revenue: uOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0), orders: uOrders.length };
+      const stats = employeeMap.get(u.id) || { revenue: 0, orders: 0 };
+      return { name: u.full_name ?? u.name ?? "?", revenue: stats.revenue, orders: stats.orders };
     }).filter((e: any) => e.orders > 0).sort((a: any, b: any) => b.revenue - a.revenue);
 
-    // Top products
     const products: any[] = (data as any)._rawProducts ?? [];
     const productMap = new Map(products.map((p: any) => [p.id, p]));
     const qtyMap = new Map<string, { qty: number; revenue: number }>();
@@ -201,24 +238,9 @@ function Page() {
       .map(([pid, v]) => ({ name: (productMap.get(pid) as any)?.name ?? pid, ...v }))
       .sort((a, b) => b.qty - a.qty).slice(0, 8);
 
-    // Orders by status (all in range, not just completed)
-    const ordersByStatus = filteredOrders.reduce((acc: any, o: any) => {
-      acc[o.status] = (acc[o.status] ?? 0) + 1;
-      return acc;
-    }, {});
+    const totalCompletedOrders = completedFiltered.length;
+    const avgOrderValue = totalCompletedOrders > 0 ? totalRevenue / totalCompletedOrders : 0;
 
-    const avgOrderValue = completedFiltered.length > 0
-      ? completedFiltered.reduce((s: number, o: any) => s + Number(o.total || 0), 0) / completedFiltered.length
-      : 0;
-
-    // New customers in range (approximation via first order date)
-    const custOrders = new Map<string, string>();
-    allOrders.forEach((o: any) => {
-      if (!o.customer_id) return;
-      const d = fmtDate(o.created_at);
-      const cur = custOrders.get(o.customer_id);
-      if (!cur || d < cur) custOrders.set(o.customer_id, d);
-    });
     const newCust = [...custOrders.values()].filter(d => d >= from && d <= to).length;
 
     return {
@@ -232,11 +254,11 @@ function Page() {
       ordersByStatus,
       avgOrderValue,
       newCustomers: newCust,
+      totalRevenue,
+      totalCompletedOrders
     };
   }, [data, fromDate, toDate]);
 
-  const totalRevenue = useMemo(() => filteredOrders.filter((o: any) => o.status === "completed").reduce((s: number, o: any) => s + Number(o.total || 0), 0), [filteredOrders]);
-  const totalCompletedOrders = useMemo(() => filteredOrders.filter((o: any) => o.status === "completed").length, [filteredOrders]);
   const totalAllOrders = filteredOrders.length;
 
   if (!canView) {
@@ -284,7 +306,6 @@ function Page() {
 
   return (
     <AppShell title="Báo cáo & Thống kê">
-      {/* ── Date range filter bar ── */}
       <div className="mb-5 rounded-xl border bg-card p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div>
@@ -324,7 +345,6 @@ function Page() {
         <ProgressBarLoader />
       ) : (
         <div className="space-y-5">
-          {/* ── KPI cards ── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatBox icon={<TrendingUp className="h-5 w-5" />} label="Doanh thu" value={moneyFmt(totalRevenue)} sub={`${totalCompletedOrders} đơn hoàn tất`} color="text-green-600" />
             <StatBox icon={<ShoppingBag className="h-5 w-5" />} label="Tổng đơn" value={totalAllOrders} sub={`Hoàn tất: ${totalCompletedOrders}`} color="text-blue-600" />
@@ -332,7 +352,6 @@ function Page() {
             <StatBox icon={<Users className="h-5 w-5" />} label="KH mới" value={newCustomers} sub="Trong kỳ" color="text-orange-600" />
           </div>
 
-          {/* ── Revenue chart ── */}
           <Card>
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -354,7 +373,6 @@ function Page() {
             </div>
           </Card>
 
-          {/* ── Order count + Status ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <div className="font-semibold mb-3">Số đơn hàng theo {mode === "day" ? "ngày" : "tháng"}</div>
@@ -399,7 +417,6 @@ function Page() {
             </Card>
           </div>
 
-          {/* ── Branch + Employee ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <div className="font-semibold mb-3">Doanh thu theo chi nhánh</div>
@@ -474,7 +491,6 @@ function Page() {
             </Card>
           </div>
 
-          {/* ── Top products ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <div className="font-semibold mb-3">Top sản phẩm bán chạy</div>
@@ -516,7 +532,6 @@ function Page() {
             </Card>
           </div>
 
-          {/* ── Debt ── */}
           <Card>
             <div className="font-semibold mb-3">Công nợ phải thu ({data.debtors?.length ?? 0} khách)</div>
             <table className="w-full text-sm min-w-[480px]">

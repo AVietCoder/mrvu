@@ -3,14 +3,15 @@ import { createServerFn } from "@tanstack/react-start";
 import { fetchAllRows } from "./supabase";
 
 const TZ = "Asia/Ho_Chi_Minh";
+const dtfCache = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 
 function localDateKey(value: string | Date): string {
-  return new Intl.DateTimeFormat("sv-SE", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(value));
+  return dtfCache.format(new Date(value));
 }
 
 function normalizeDate(value: any): string {
@@ -21,7 +22,7 @@ function normalizeDate(value: any): string {
 export const getReports = createServerFn({ method: "GET" }).handler(async () => {
   const [orders, orderItems, products, customers, branches, users, stock] = await Promise.all([
     fetchAllRows<any>("orders", { select: "id, status, total, created_at, branch_id, employee_id, customer_id" }),
-    fetchAllRows<any>("order_items", { select: "order_id, product_id, qty" }),
+    fetchAllRows<any>("order_items", { select: "order_id, product_id, qty, unit_price" }),
     fetchAllRows<any>("products", { select: "id, name, sku, min_stock" }),
     fetchAllRows<any>("customers", { select: "id, name, phone, debt" }),
     fetchAllRows<any>("branches", { select: "id, name" }),
@@ -35,14 +36,18 @@ export const getReports = createServerFn({ method: "GET" }).handler(async () => 
 
   const today = new Date();
   const days: { date: string; revenue: number }[] = [];
+  
+  const recentDaysMap = new Map<string, number>();
+  completedOrders.forEach((o) => {
+    const k = normalizeDate(o.created_at);
+    recentDaysMap.set(k, (recentDaysMap.get(k) || 0) + Number(o.total || 0));
+  });
+
   for (let i = 13; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
     const key = localDateKey(d);
-    const revenue = completedOrders
-      .filter((o: any) => normalizeDate(o.created_at) === key)
-      .reduce((sum: number, order: any) => sum + Number(order.total || 0), 0);
-    days.push({ date: key.slice(5), revenue });
+    days.push({ date: key.slice(5), revenue: recentDaysMap.get(key) || 0 });
   }
 
   const orderMap = new Map(completedOrders.map((o: any) => [o.id, o]));
@@ -87,25 +92,35 @@ export const getReports = createServerFn({ method: "GET" }).handler(async () => 
   const productCount = products.length;
   const customerCount = customers.length;
 
+  const branchOrdersMap = new Map<string, { revenue: number; orders: number }>();
+  completedOrders.forEach((o) => {
+    if (!o.branch_id) return;
+    const cur = branchOrdersMap.get(o.branch_id) || { revenue: 0, orders: 0 };
+    branchOrdersMap.set(o.branch_id, { revenue: cur.revenue + Number(o.total || 0), orders: cur.orders + 1 });
+  });
+
   const byBranch = branches
     .map((branch: any) => {
-      const branchOrders = completedOrders.filter((o: any) => o.branch_id === branch.id);
+      const stats = branchOrdersMap.get(branch.id) || { revenue: 0, orders: 0 };
       return {
         name: branch.name,
-        revenue: branchOrders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0),
-        orders: branchOrders.length,
+        revenue: stats.revenue,
+        orders: stats.orders,
       };
     })
     .sort((a: any, b: any) => b.revenue - a.revenue);
 
+  const employeeOrdersMap = new Map<string, number>();
+  completedOrders.forEach((o) => {
+    if (!o.employee_id) return;
+    employeeOrdersMap.set(o.employee_id, (employeeOrdersMap.get(o.employee_id) || 0) + Number(o.total || 0));
+  });
+
   const byEmployee = users
-    .map((user: any) => {
-      const employeeOrders = completedOrders.filter((o: any) => o.employee_id === user.id);
-      return {
-        name: user.full_name,
-        revenue: employeeOrders.reduce((sum: number, order: any) => sum + Number(order.total || 0), 0),
-      };
-    })
+    .map((user: any) => ({
+      name: user.full_name,
+      revenue: employeeOrdersMap.get(user.id) || 0,
+    }))
     .sort((a: any, b: any) => b.revenue - a.revenue);
 
   return {
@@ -120,7 +135,6 @@ export const getReports = createServerFn({ method: "GET" }).handler(async () => 
     debtors,
     byBranch,
     byEmployee,
-    // Raw data for client-side date range filtering
     _rawOrders: orders,
     _rawItems: orderItems,
     _rawProducts: products,
