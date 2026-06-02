@@ -1115,7 +1115,6 @@ const userBranchIds = useMemo(() => {
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
-                      <span className={`text-[11px] rounded-full px-2 py-0.5 ${typeInfo?.color}`}>{typeInfo?.label}</span>
                       <span className={`text-[11px] rounded-full px-2 py-0.5 ${status?.color}`}>{status?.label}</span>
                     </div>
                   </div>
@@ -1198,7 +1197,6 @@ const userBranchIds = useMemo(() => {
                 <thead className="text-left text-muted-foreground border-b">
                   <tr>
                     <th className="py-2 pr-3">Tiêu đề</th>
-                    <th className="pr-3">Loại</th>
                     <th className="pr-3">Ngày</th>
                     <th className="pr-3">Chi nhánh</th>
                     {!isTech && !canApprove ? <th className="pr-3">Khách hàng</th> : null}
@@ -1222,7 +1220,6 @@ const userBranchIds = useMemo(() => {
                     return (
                       <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => setViewSchedule(s)}>
                         <td className="py-2 pr-3 font-medium max-w-[200px] truncate">{s.title}</td>
-                        <td className="pr-3"><span className={`text-xs rounded-full px-2 py-0.5 ${typeInfo?.color}`}>{typeInfo?.label}</span></td>
                         <td className="pr-3 text-xs whitespace-nowrap">{s.scheduled_date?.slice(0,10)} {s.scheduled_time}</td>
                         <td className="pr-3">
                           <div className="flex flex-wrap gap-1">
@@ -2218,7 +2215,6 @@ const userBranchIds = useMemo(() => {
                     "📋 Nội dung đơn hàng:",
                     "",
                     `• Tiêu đề: ${s.title}`,
-                    `• Công việc: ${SCHEDULE_TYPES.find((t) => t.value === s.type)?.label ?? s.type}`,
                     workType ? `• Loại hình công việc: ${workType.name}` : null,
                     `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`,
                     customer ? `• Khách hàng: ${customer.name}${customer.phone ? " — " + customer.phone : ""}` : null,
