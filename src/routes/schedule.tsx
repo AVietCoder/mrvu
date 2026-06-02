@@ -1996,7 +1996,12 @@ const userBranchIds = useMemo(() => {
                                   {d.name} (+{fmtMoney(d.bonus)})
                                 </span>
                               ))}
-                              {ln.difficulties.length === 0 && <span className="text-muted-foreground">—</span>}
+                              {(ln.extra_income ?? []).map((f: any, fi: number) => (
+                                <span key={`tn-${fi}`} className="rounded-full bg-green-100 text-green-700 px-2 py-0.5">
+                                  {f.product_id || "Thu nhập"} (+{fmtMoney(f.amount)})
+                                </span>
+                              ))}
+                              {ln.difficulties.length === 0 && (ln.extra_income ?? []).length === 0 && <span className="text-muted-foreground">—</span>}
                             </div>
                           </td>
                           <td className="px-3 text-right text-xs">{ln.num_people}</td>

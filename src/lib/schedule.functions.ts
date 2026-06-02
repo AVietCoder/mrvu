@@ -315,12 +315,15 @@ export const attendanceSummary = createServerFn({ method: "GET" })
     if (e1) throw new Error(e1.message);
 
     const ids = (schedules ?? []).map((s: any) => s.id);
-    const [assigns, diffs, wtypes, wdiffs, users, customers, orders] = await Promise.all([
+    const [assigns, diffs, fees, wtypes, wdiffs, users, customers, orders] = await Promise.all([
       ids.length
         ? supabase.from("schedule_assignments").select("schedule_id, user_id").in("schedule_id", ids).then((r) => r.data ?? [])
         : Promise.resolve([]),
       ids.length
         ? supabase.from("schedule_difficulties").select("schedule_id, difficulty_id").in("schedule_id", ids).then((r) => r.data ?? [])
+        : Promise.resolve([]),
+      ids.length
+        ? supabase.from("tech_fees").select("schedule_id, product_id, qty, unit_fee").in("schedule_id", ids).then((r) => r.data ?? [])
         : Promise.resolve([]),
       fetchRows("work_types"),
       fetchRows("work_difficulties"),
@@ -345,6 +348,19 @@ export const attendanceSummary = createServerFn({ method: "GET" })
     for (const d of diffs as any[]) {
       (diffsBySchedule[d.schedule_id] ||= []).push(d.difficulty_id);
     }
+    // Thu nhập khác (tech_fees) gom theo lịch — tổng 1 lịch = Σ(qty × unit_fee)
+    const feesBySchedule: Record<string, { items: any[]; total: number }> = {};
+    for (const f of fees as any[]) {
+      const bucket = (feesBySchedule[f.schedule_id] ||= { items: [], total: 0 });
+      const amount = Number(f.qty || 0) * Number(f.unit_fee || 0);
+      bucket.items.push({
+        product_id: f.product_id,
+        qty: Number(f.qty || 0),
+        unit_fee: Number(f.unit_fee || 0),
+        amount,
+      });
+      bucket.total += amount;
+    }
 
     // tổng hợp theo user
     const perUser: Record<string, {
@@ -354,6 +370,7 @@ export const attendanceSummary = createServerFn({ method: "GET" })
       type_points: number;
       diff_points: number;
       total_money: number;
+      extra_income: number;
       schedule_count: number;
       lines: any[];
     }> = {};
@@ -366,6 +383,9 @@ export const attendanceSummary = createServerFn({ method: "GET" })
       const dIds = diffsBySchedule[s.id] || [];
       const diffSumPrice = dIds.reduce((sum, did) => sum + Number(wdMap[did]?.bonus || 0), 0);
       const typePrice = Number(wt?.price || 0);
+      // Thu nhập khác của lịch: cộng vào tổng rồi chia theo số người
+      const feeBucket = feesBySchedule[s.id] || { items: [], total: 0 };
+      const extraIncomeTotal = feeBucket.total;
 
       for (const uid_ of people) {
         const u = userMap[uid_] || { id: uid_, full_name: uid_, username: "" };
@@ -376,15 +396,18 @@ export const attendanceSummary = createServerFn({ method: "GET" })
           type_points: 0,
           diff_points: 0,
           total_money: 0,
+          extra_income: 0,
           schedule_count: 0,
           lines: [],
         });
         const typePt = wt ? 1 / n : 0;
         const diffPt = dIds.length / n;
-        const money = (typePrice + diffSumPrice) / n;
+        // Tiền công/người = (loại hình + tính chất + thu nhập khác) / số người
+        const money = (typePrice + diffSumPrice + extraIncomeTotal) / n;
         row.type_points += typePt;
         row.diff_points += diffPt;
         row.total_money += money;
+        row.extra_income += extraIncomeTotal / n;
         row.schedule_count += 1;
         row.lines.push({
           schedule_id: s.id,
@@ -401,6 +424,9 @@ export const attendanceSummary = createServerFn({ method: "GET" })
             name: wdMap[id]?.name || id,
             bonus: Number(wdMap[id]?.bonus || 0),
           })),
+          extra_income: feeBucket.items,
+          extra_income_total: extraIncomeTotal,
+          extra_income_share: extraIncomeTotal / n,
           num_people: n,
           type_point_share: typePt,
           diff_point_share: diffPt,
