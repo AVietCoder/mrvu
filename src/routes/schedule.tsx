@@ -410,6 +410,7 @@ const userBranchIds = useMemo(() => {
 
   // Tính tiền công cho 1 người trong lịch
   function calcTechPay(scheduleId: string): number {
+    const schedule = (data?.schedules ?? []).find((s: any) => s.id === scheduleId);
     const fees = (data?.tech_fees ?? []).filter((f: any) => f.schedule_id === scheduleId);
     const diffIds = (data?.difficulties ?? []).filter((d: any) => d.schedule_id === scheduleId).map((d: any) => d.difficulty_id);
     const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === scheduleId);
@@ -423,8 +424,10 @@ const userBranchIds = useMemo(() => {
       return sum + (wdiff?.bonus ?? 0);
     }, 0);
     const diffBonus = diffBonusPerTask * numPeople;
-    // Tiền đơn hàng KHÔNG tính vào lương kỹ thuật viên
-    const totalPool = bonusTotal + diffBonus;
+    const workType = schedule?.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === schedule.work_type_id) : null;
+    const workTypePrice = Number(workType?.price || 0);
+    // Cộng tổng tất cả khoản hợp lệ rồi chia đều theo số người
+    const totalPool = bonusTotal + diffBonus + workTypePrice;
     return totalPool / numPeople;
   }
 
@@ -1688,6 +1691,8 @@ const userBranchIds = useMemo(() => {
               ))}
               {(() => {
                 const numPeople = Math.max(1, assignedUsers.length);
+                const workType = approveTarget?.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === approveTarget.work_type_id) : null;
+                const workTypePrice = Number(workType?.price || 0);
                 // Tiền thu nhập tổng
                 const bonusTotal = techFees.reduce((s, tf) => s + tf.qty * tf.unit_fee, 0);
                 // Tính chất công việc: tự động nhân theo số người
@@ -1695,13 +1700,14 @@ const userBranchIds = useMemo(() => {
                   const d = (data?.work_difficulties ?? []).find((x: any) => x.id === did);
                   return s + (d?.bonus ?? 0);
                 }, 0) * numPeople;
-                // Tiền đơn hàng liên kết
-                // orderTotal không tính vào lương
-                // Tiền đơn không tính vào lương kỹ thuật
-                const totalPool = bonusTotal + diffBonus;
+                // Cộng tổng tất cả khoản hợp lệ rồi chia đều theo số người
+                const totalPool = bonusTotal + diffBonus + workTypePrice;
                 const perPerson = totalPool / numPeople;
                 return (
                   <div className="rounded-md bg-muted/50 p-2 text-sm space-y-1">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Loại hình công việc: {workType?.name ?? "—"}</span><span>{fmtMoney(workTypePrice)}</span>
+                    </div>
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>Thu nhập</span><span>{fmtMoney(bonusTotal)}</span>
                     </div>
@@ -2142,12 +2148,11 @@ const userBranchIds = useMemo(() => {
                       return sum + (wd?.bonus ?? 0);
                     }, 0);
                     const diffBonus = diffBonusPerTask * numPeople;
-                    const totalPool = bonusTotal + diffBonus;
-                    const perPerson = totalPool / numPeople;
                     const workType = s.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === s.work_type_id) : null;
                     const workTypeLabel = workType?.name ?? "—";
-                    const workTypePrice = workType?.price;
-                    console.log(workTypePrice)
+                    const workTypePrice = Number(workType?.price || 0);
+                    const totalPool = bonusTotal + diffBonus + workTypePrice;
+                    const perPerson = totalPool / numPeople;
                     const scheduleTypeLabel = SCHEDULE_TYPES.find((t) => t.value === s.type)?.label ?? s.type ?? "—";
                     return (
                     <div>
