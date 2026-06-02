@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useRef } from "react";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   listProducts, upsertProduct, deleteProduct,
   upsertCategory, upsertBrand, deleteBrand, deleteCategory,
@@ -68,6 +69,8 @@ function ProductsPage() {
   const [open, setOpen] = useState(false);
   const [viewId, setViewId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  // ⚡ Debounce ô tìm kiếm: chỉ lọc lại danh sách sản phẩm sau khi ngừng gõ.
+  const debouncedSearch = useDebouncedValue(search, 250);
   const [page, setPage] = useState(1);
   const [filterCategory, setFilterCategory] = useState("");
   const [filterBrand, setFilterBrand] = useState("");
@@ -88,13 +91,13 @@ function ProductsPage() {
 
   const filtered = useMemo(
     () => (data?.products ?? []).filter((p) => {
-      const q = search.toLowerCase();
+      const q = debouncedSearch.toLowerCase();
       const matchSearch = p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q);
       const matchCat = !filterCategory || p.category_id === filterCategory;
       const matchBrand = !filterBrand || (p as any).brand_id === filterBrand;
       return matchSearch && matchCat && matchBrand;
     }),
-    [data, search, filterCategory, filterBrand],
+    [data, debouncedSearch, filterCategory, filterBrand],
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));

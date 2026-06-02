@@ -2,7 +2,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   listCash, createCashVoucher, updateCashVoucher,
   cancelCashVoucher, upsertCashVoucherType, deleteCashVoucherType,
@@ -10,6 +10,7 @@ import {
 import { getSettings } from "@/lib/settings.functions";
 import { AppShell } from "@/components/AppShell";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import { Pagination, DEFAULT_PAGE_SIZE } from "@/components/Pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -427,6 +428,10 @@ function Page() {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"" | "thu" | "chi">("");
   const [filterBank, setFilterBank] = useState<string>("");  // lọc theo STK ngân hàng (note chứa số TK)
+  // ⚡ Phân trang phía client để KHÔNG render hàng nghìn dòng cùng lúc (gây đơ
+  // trình duyệt). Tổng thu/chi/số dư vẫn tính trên TOÀN BỘ tập đã lọc ở memo
+  // riêng → số liệu tiền không bị ảnh hưởng bởi phân trang.
+  const [page, setPage] = useState(1);
   const [selectedVoucher, setSelectedVoucher] = useState<any>(null);
   const [openCreate, setOpenCreate] = useState(false);
   const [createKind, setCreateKind] = useState<"thu" | "chi">("thu");
@@ -579,6 +584,17 @@ function Page() {
       return matchFund && matchBranch && matchAccess && matchType && matchBank && matchSearch;
     });
   }, [allVouchers, fund, filterBranch, filterType, filterBank, search, canViewAll, user]);
+
+  // Reset về trang 1 mỗi khi đổi bộ lọc/tìm kiếm để không bị kẹt ở trang trống.
+  useEffect(() => {
+    setPage(1);
+  }, [fund, filterBranch, filterType, filterBank, search]);
+
+  // Chỉ cắt để HIỂN THỊ — không đụng tới tính toán tổng tiền.
+  const paged = useMemo(
+    () => filtered.slice((page - 1) * DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE),
+    [filtered, page],
+  );
 
 
 
@@ -916,7 +932,7 @@ function Page() {
         {/* Mobile cards */}
         {!isLoading && filtered.length > 0 && (
           <div className="block sm:hidden space-y-2">
-            {filtered.map((v: any) => {
+            {paged.map((v: any) => {
               const isActive = v.status === "active";
               const isThu = v.type === "thu";
               const sides = voucherSides(v);
@@ -1029,7 +1045,7 @@ function Page() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {filtered.map((v: any) => {
+                  {paged.map((v: any) => {
                     const isActive = v.status === "active";
                     const isThu = v.type === "thu";
                     const sides = voucherSides(v);
@@ -1154,6 +1170,17 @@ function Page() {
               </table>
             </div>
           </div>
+        )}
+
+        {/* ⚡ Phân trang danh sách phiếu — chỉ điều khiển HIỂN THỊ. */}
+        {!isLoading && filtered.length > 0 && (
+          <Pagination
+            page={page}
+            pageSize={DEFAULT_PAGE_SIZE}
+            total={filtered.length}
+            onPageChange={setPage}
+            label="phiếu"
+          />
         )}
       </div>
 

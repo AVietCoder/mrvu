@@ -121,7 +121,8 @@ export const listInventory = createServerFn({ method: "GET" }).handler(async () 
     fetchRows("branches", { orderBy: "name" }),
     fetchAllRows("stock"),
     fetchRows("stock_movements", { orderBy: "created_at", ascending: false, limit: 100 }),
-    fetchRows("stock_transfers", { orderBy: "created_at", ascending: false }),
+    // stock_transfers có thể vượt 1000 dòng → fetchAllRows để không mất phiếu cũ.
+    fetchAllRows("stock_transfers", { orderBy: "created_at", ascending: false }),
     fetchAllRows("stock_transfer_items"),
     fetchAllRows("orders", { select: "id, branch_id, status", orderBy: "created_at", ascending: false }),
     fetchAllRows("order_items", { select: "order_id, product_id, qty" }),

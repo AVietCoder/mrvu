@@ -407,7 +407,9 @@ async function autoCreateReceiptForOrder({
 }
 
 export const listOrders = createServerFn({ method: "GET" }).handler(async () => {
-  const [orders, items, products, customers, employees, branches, schedules, schedule_assignments, users, stock] =
+  // ⚡ users được fetch 1 LẦN rồi tái sử dụng cho cả `employees` và `users`
+  // (trước đây gọi 2 lần giống hệt → 1 round-trip thừa). Dữ liệu y hệt.
+  const [orders, items, products, customers, users, branches, schedules, schedule_assignments, stock] =
     await Promise.all([
       fetchAllRows("orders", { orderBy: "created_at", ascending: false }),
       fetchAllRows("order_items"),
@@ -421,7 +423,6 @@ export const listOrders = createServerFn({ method: "GET" }).handler(async () => 
         ascending: false,
       }),
       fetchAllRows("schedule_assignments"),
-      fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
       fetchAllRows("stock"),
     ]);
 
@@ -432,7 +433,7 @@ export const listOrders = createServerFn({ method: "GET" }).handler(async () => 
     items,
     products,
     customers,
-    employees: employees.map((u: any) => ({ id: u.id, name: u.full_name })),
+    employees: users.map((u: any) => ({ id: u.id, name: u.full_name })),
     branches,
     schedules: linkedSchedules,
     schedule_assignments,

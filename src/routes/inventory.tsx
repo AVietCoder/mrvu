@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useMemo, useState } from "react";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 import {
   listInventory,
@@ -145,6 +146,9 @@ function Page() {
   const [open, setOpen] = useState(false);
 
   const [search, setSearch] = useState("");
+  // ⚡ Debounce ô tìm kiếm tồn kho: lọc lại sau khi ngừng gõ → mượt hơn khi
+  // danh mục sản phẩm lớn.
+  const debouncedSearch = useDebouncedValue(search, 250);
   const [page, setPage] = useState(1);
 
   const [filterBranch, setFilterBranch] =
@@ -634,7 +638,7 @@ function Page() {
     return products
       .filter((p) => {
         const q =
-          search.toLowerCase();
+          debouncedSearch.toLowerCase();
 
         return (
           p.name
@@ -673,7 +677,7 @@ function Page() {
       });
   }, [
     products,
-    search,
+    debouncedSearch,
     sortBy,
     stockBy,
     stockMap,

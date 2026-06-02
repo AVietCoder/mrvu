@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { deleteWhere, fetchRows, insertRow, now, supabase, uid, updateWhere, logActivity } from "./supabase";
+import { deleteWhere, fetchAllRows, fetchRows, insertRow, now, supabase, uid, updateWhere, logActivity } from "./supabase";
 
 export const listSchedules = createServerFn({ method: "GET" }).handler(async () => {
   const [
@@ -18,23 +18,27 @@ export const listSchedules = createServerFn({ method: "GET" }).handler(async () 
     order_items,
     user_permissions,
   ] = await Promise.all([
-    fetchRows("schedules", { orderBy: "scheduled_date", ascending: false }),
-    fetchRows("schedule_assignments"),
-    fetchRows("schedule_difficulties"),
-    fetchRows("tech_fees"),
+    // ⚠️ Các bảng dưới đây CÓ THỂ vượt 1000 dòng. Supabase mặc định cắt ở
+    // 1000 → phải dùng fetchAllRows để KHÔNG mất dữ liệu (lịch/đơn/khách
+    // hiển thị thiếu, chấm công sai). fetchAllRows tự phân trang lấy đủ 100%.
+    fetchAllRows("schedules", { orderBy: "scheduled_date", ascending: false }),
+    fetchAllRows("schedule_assignments"),
+    fetchAllRows("schedule_difficulties"),
+    fetchAllRows("tech_fees"),
+    // Bảng cấu hình nhỏ (vài chục dòng) — giữ fetchRows là đủ.
     fetchRows("work_difficulties", { orderBy: "bonus", ascending: false }),
     fetchRows("work_types", { orderBy: "name" }),
     fetchRows("users", { select: "id, full_name, username, is_admin", orderBy: "full_name" }),
-    fetchRows("customers", { select: "id, name, phone, address, ward, district, province", orderBy: "created_at", ascending: false }),
+    fetchAllRows("customers", { select: "id, name, phone, address, ward, district, province", orderBy: "created_at", ascending: false }),
     fetchRows("branches", { orderBy: "name" }),
-    fetchRows("products", { select: "id, sku, name, tech_fee", orderBy: "name" }),
-    fetchRows("orders", {
+    fetchAllRows("products", { select: "id, sku, name, tech_fee", orderBy: "name" }),
+    fetchAllRows("orders", {
       select: "id, code, customer_id, branch_id, employee_id, status, subtotal, discount, discount_type, discount_pct, vat_rate, vat_amount, total, deposit, paid, payment_method, note, created_at",
       orderBy: "created_at",
       ascending: false,
     }),
-    fetchRows("order_items", { select: "order_id, product_id, qty, unit_price, discount, total" }),
-    fetchRows("user_permissions", { select: "user_id, permission" }),
+    fetchAllRows("order_items", { select: "order_id, product_id, qty, unit_price, discount, total" }),
+    fetchAllRows("user_permissions", { select: "user_id, permission" }),
   ]);
 
   // Gắn permissions vào users
