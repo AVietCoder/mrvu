@@ -229,6 +229,18 @@ export const payCustomerDebt = createServerFn({ method: "POST" })
 
     return { ok: true, code, new_debt: newDebt };
   });
+// Tra cứu khách hàng GỌN (cho ô chọn khách kiểu async: chỉ cần nhãn).
+export const getCustomerLite = createServerFn({ method: "GET" })
+  .handler(async ({ data }: { data: { id: string } }) => {
+    if (!data?.id) return null;
+    const rows = await fetchRows("customers", {
+      eq: { id: data.id },
+      select: "id, name, phone, address, ward, district, province",
+      limit: 1,
+    });
+    return (rows?.[0] as any) ?? null;
+  });
+
 export const getCustomerById = createServerFn({ method: "GET" })
   .handler(async ({ data }: { data: { id: string } }) => {
     const customer = await fetchRows("customers", {
