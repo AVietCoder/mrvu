@@ -217,11 +217,15 @@ function Page() {
   const upsertCustomerFn = useServerFn(upsertCustomer);
   const qc = useQueryClient();
 
-  // Dữ liệu cho FORM tạo đơn (sản phẩm, tồn kho, khách, chi nhánh, NV).
-  // KHÔNG còn kèm toàn bộ orders/order_items/schedules. Cache lâu vì ít đổi.
+  // Form tạo đơn mở/đóng — refs nặng chỉ tải khi form mở (xem dưới).
+  const [open, setOpen] = useState(false);
+
+  // Dữ liệu cho FORM tạo đơn (sản phẩm, tồn kho, NV). CHỈ tải khi mở form
+  // → lúc vào trang danh sách không tốn request nào cho phần này.
   const { data } = useQuery({
     queryKey: ["orderRefs"],
     queryFn: () => refsFn(),
+    enabled: open,
     staleTime: 60_000,
     gcTime: 10 * 60_000,
   });
@@ -230,14 +234,15 @@ function Page() {
   const { data: siteSettings } = useQuery({
     queryKey: ["site_settings"],
     queryFn: () => getSettingsFn(),
+    enabled: open,
   });
 
   const { data: workTypes = [] } = useQuery({
     queryKey: ["workTypes"],
     queryFn: () => listWorkTypesFn(),
+    enabled: open,
   });
 
-  const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<"orders" | "reserved">("orders");
   const [page, setPage] = useState(1);
@@ -553,7 +558,7 @@ function Page() {
   }
 
   function reset() {
-    const allowedBranches = (data?.branches ?? []).filter(
+    const allowedBranches = (stats?.branches ?? []).filter(
       (b: any) => isAdmin || !user || user.branch_ids.length === 0 || user.branch_ids.includes(b.id),
     );
 
@@ -860,7 +865,7 @@ function Page() {
                     value={branch}
                     onChange={setBranch}
                     placeholder="Tìm chi nhánh..."
-                    options={(data?.branches ?? [])
+                    options={(stats?.branches ?? [])
                       .filter((b: any) => isAdmin || !user || user.branch_ids.length === 0 || user.branch_ids.includes(b.id))
                       .map((b: any) => ({ value: b.id, label: b.name }))}
                   />
@@ -1722,7 +1727,7 @@ function Page() {
                 }}
               >
                 <option value="">Tất cả chi nhánh</option>
-                {(data?.branches ?? []).map((b: any) => (
+                {(stats?.branches ?? []).map((b: any) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>

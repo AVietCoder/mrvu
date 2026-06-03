@@ -582,15 +582,20 @@ export const searchOrdersPage = createServerFn({ method: "GET" }).handler(
 
 export const getOrderStats = createServerFn({ method: "GET" }).handler(
   async ({ data }: { data: { branchIds?: string[] | null } | undefined }) => {
-    const { data: r, error } = await supabase.rpc("orders_stats", {
-      p_branch_ids:
-        data?.branchIds && data.branchIds.length ? data.branchIds : null,
-    });
-    if (error) throw new Error(error.message);
+    const [statsRes, branches] = await Promise.all([
+      supabase.rpc("orders_stats", {
+        p_branch_ids:
+          data?.branchIds && data.branchIds.length ? data.branchIds : null,
+      }),
+      fetchRows("branches", { orderBy: "name" }),
+    ]);
+    if (statsRes.error) throw new Error(statsRes.error.message);
+    const r = statsRes.data;
     const row = (Array.isArray(r) ? r[0] : r) ?? {};
     return {
       reservedCount: Number(row.reserved_count ?? 0),
       totalOrders: Number(row.total_orders ?? 0),
+      branches: branches ?? [],
     };
   },
 );
