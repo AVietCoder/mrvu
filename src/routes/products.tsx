@@ -149,9 +149,13 @@ function ProductsPage() {
 
   async function remove(id: string, name: string) {
     if (!confirm(`Xóa sản phẩm "${name}"?`)) return;
-    await del({ data: { id, actor_id: user?.id } });
-    toast.success("Đã xóa sản phẩm");
-    qc.invalidateQueries({ queryKey: ["products"] });
+    try {
+      await del({ data: { id, actor_id: user?.id } });
+      await qc.invalidateQueries({ queryKey: ["products"] });
+      toast.success("Đã xóa sản phẩm");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi xóa sản phẩm");
+    }
   }
 
   async function addBrand() {

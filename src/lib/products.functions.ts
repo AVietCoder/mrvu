@@ -57,7 +57,11 @@ export const upsertProduct = createServerFn({ method: "POST" })
 
 export const deleteProduct = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string; actor_id?: string } }) => {
+    // Remove stock (has CASCADE but delete explicitly to be safe)
     await deleteWhere("stock", { product_id: data.id });
+    // Null out product_id in stock_movements and order_items (no CASCADE)
+    await updateWhere("stock_movements", { product_id: null }, { product_id: data.id });
+    await updateWhere("order_items", { product_id: null }, { product_id: data.id });
     await deleteWhere("products", { id: data.id });
     await logActivity({
       action: "delete_product",
@@ -89,12 +93,16 @@ export const upsertBrand = createServerFn({ method: "POST" })
 
 export const deleteBrand = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
+    // Null out brand_id on all products using this brand before deleting
+    await updateWhere("products", { brand_id: null }, { brand_id: data.id });
     await deleteWhere("brands", { id: data.id });
     return { ok: true };
   });
 
 export const deleteCategory = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
+    // Null out category_id on all products using this category before deleting
+    await updateWhere("products", { category_id: null }, { category_id: data.id });
     await deleteWhere("categories", { id: data.id });
     return { ok: true };
   });
