@@ -12,6 +12,7 @@ import {
   updateWhere,
   logActivity,
 } from "./supabase";
+import { recalculateCustomerDebt } from "./customers.functions";
 
 // ─── Gửi email thông báo admin ─────────────────────────────────────────────
 async function getAdminEmail(): Promise<string | null> {
@@ -361,7 +362,65 @@ async function nextCashCode(type: "thu" | "chi"): Promise<string> {
   return prefix + ts + rand;
 }
 
-async function autoCreateReceiptForOrder({
+// ─── Loại phiếu tự động (cache trong tiến trình để khỏi truy vấn lặp) ─────────
+let _orderReceiptTypeId: string | null | undefined; // 'thu' — Thu tiền đơn hàng / công nợ
+let _orderRefundTypeId: string | null | undefined;  // 'chi' — Hoàn tiền trả hàng
+
+async function ensureVoucherType(
+  kind: "thu" | "chi",
+  keywords: RegExp,
+  defaultName: string,
+): Promise<string | null> {
+  try {
+    const types = await fetchRows<any>("cash_voucher_types", {
+      eq: { kind },
+      select: "id, name, kind",
+    });
+    const found = (types || []).find((t: any) => keywords.test(String(t.name || "")));
+    if (found) return found.id;
+    const id = uid();
+    await insertRow("cash_voucher_types", { id, name: defaultName, kind });
+    return id;
+  } catch {
+    // Không chặn luồng chính nếu bảng loại phiếu gặp sự cố
+    return null;
+  }
+}
+
+async function getOrderReceiptTypeId(): Promise<string | null> {
+  if (_orderReceiptTypeId === undefined) {
+    _orderReceiptTypeId = await ensureVoucherType(
+      "thu",
+      /công\s*nợ|đơn\s*hàng|bán\s*hàng/i,
+      "Thu tiền đơn hàng",
+    );
+  }
+  return _orderReceiptTypeId ?? null;
+}
+
+async function getOrderRefundTypeId(): Promise<string | null> {
+  if (_orderRefundTypeId === undefined) {
+    _orderRefundTypeId = await ensureVoucherType(
+      "chi",
+      /trả\s*hàng|hoàn\s*tiền/i,
+      "Hoàn tiền trả hàng",
+    );
+  }
+  return _orderRefundTypeId ?? null;
+}
+
+/**
+ * Tạo 1 phiếu THU/CHI cho đơn hàng và ghi vào Sổ quỹ.
+ *
+ * - Set ĐẦY ĐỦ mô hình Bên A (quỹ/chi nhánh) → Bên B (khách hàng) để hiển thị
+ *   đúng trên trang Sổ quỹ (giống phiếu tạo tay), đồng thời vẫn giữ các cột cũ
+ *   (payer_customer_id / receiver_customer_id) để phần công nợ tính chính xác.
+ * - Gắn "Loại phiếu" = Thu tiền đơn hàng / Hoàn tiền trả hàng để dễ lọc.
+ * - `recalcDebt`: nếu true thì tính lại công nợ khách ngay (mặc định false để
+ *   giữ nguyên cách hạch toán công nợ hiện có của luồng đơn hàng).
+ */
+async function createOrderCashVoucher({
+  kind,
   orderCode,
   customerId,
   branchId,
@@ -371,7 +430,64 @@ async function autoCreateReceiptForOrder({
   paymentMethodLabel,
   createdAt,
   notePrefix,
+  noteOverride,
+  recalcDebt = false,
 }: {
+  kind: "thu" | "chi";
+  orderCode: string;
+  customerId: string | null;
+  branchId: string;
+  employeeId: string | null;
+  amount: number;
+  fundType: "tien_mat" | "ngan_hang";
+  paymentMethodLabel: string;
+  createdAt: string;
+  notePrefix?: string;
+  noteOverride?: string;
+  recalcDebt?: boolean;
+}) {
+  if (!amount || amount <= 0) return null;
+  const code = await nextCashCode(kind);
+  const isThu = kind === "thu";
+  const label = notePrefix ?? (isThu ? "Thu từ đơn" : "Chi cho đơn");
+  const voucherTypeId = isThu ? await getOrderReceiptTypeId() : await getOrderRefundTypeId();
+  const hasCustomer = !!customerId;
+
+  const voucher = await insertRow("cash_vouchers", {
+    id: uid(),
+    code,
+    type: kind, // 'thu' | 'chi'
+    fund_type: fundType, // 'tien_mat' | 'ngan_hang'
+    branch_id: branchId,
+    amount: Number(amount),
+    voucher_type_id: voucherTypeId,
+    // ── Mô hình A → B (Bên A LUÔN là chi nhánh/quỹ, Bên B là khách) ──
+    from_kind: "branch",
+    from_id: branchId,
+    from_name: null,
+    to_kind: hasCustomer ? "customer" : "other",
+    to_id: hasCustomer ? customerId : null,
+    to_name: hasCustomer ? null : "Khách lẻ",
+    // ── Cột cũ (để tính công nợ khách trong recalculateCustomerDebt) ──
+    collector_user_id: isThu ? employeeId || null : null,
+    payer_customer_id: isThu ? customerId || null : null,
+    payer_user_id: null,
+    receiver_customer_id: isThu ? null : customerId || null,
+    note: noteOverride ?? `${label} ${orderCode} — Hình thức: ${paymentMethodLabel}`,
+    accounting: true,
+    status: "active",
+    created_by: employeeId || null,
+    created_at: createdAt,
+  });
+
+  if (recalcDebt && customerId) {
+    await recalculateCustomerDebt(customerId).catch(() => undefined);
+  }
+  return voucher;
+}
+
+// Tương thích tên cũ: tạo phiếu THU cho đơn.
+async function autoCreateReceiptForOrder(args: {
   orderCode: string;
   customerId: string | null;
   branchId: string;
@@ -382,28 +498,7 @@ async function autoCreateReceiptForOrder({
   createdAt: string;
   notePrefix?: string;
 }) {
-  if (!amount || amount <= 0) return null;
-  const code = await nextCashCode("thu");
-  const label = notePrefix ?? "Thu từ đơn";
-  const voucher = await insertRow("cash_vouchers", {
-    id: uid(),
-    code,
-    type: "thu",
-    fund_type: fundType,
-    branch_id: branchId,
-    amount: Number(amount),
-    voucher_type_id: null,
-    collector_user_id: employeeId || null,
-    payer_customer_id: customerId || null,
-    payer_user_id: null,
-    receiver_customer_id: null,
-    note: `${label} ${orderCode} — Hình thức: ${paymentMethodLabel}`,
-    accounting: true,
-    status: "active",
-    created_by: employeeId || null,
-    created_at: createdAt,
-  });
-  return voucher;
+  return createOrderCashVoucher({ kind: "thu", ...args });
 }
 
 export const listOrders = createServerFn({ method: "GET" }).handler(async () => {
@@ -522,6 +617,9 @@ export const createOrder = createServerFn({ method: "POST" })
       }
 
       const receiptAmount = deposit + paid;
+      // Ghi rõ là "Đặt cọc đơn" nếu chỉ có tiền cọc (đơn mới đặt), ngược lại là thanh toán.
+      const createNotePrefix =
+        status !== "completed" && deposit > 0 && paid === 0 ? "Đặt cọc đơn" : "Thanh toán đơn";
       receipt = await autoCreateReceiptForOrder({
         orderCode: code,
         customerId: data.customer_id || null,
@@ -531,6 +629,7 @@ export const createOrder = createServerFn({ method: "POST" })
         fundType: paymentMethod,
         paymentMethodLabel,
         createdAt,
+        notePrefix: createNotePrefix,
       });
 
       await insertRow("activity_logs", {
@@ -657,22 +756,24 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
       // ✅ Truyền effectivePaid thay vì currentOrder.paid (đọc trước khi updateWhere)
       await applyCompletedOrderSideEffects({ ...currentOrder, paid: effectivePaid }, currentItems as any);
 
-      // Tạo phiếu thu = đúng số tiền khách trả lần này (effectivePaid)
-      // Phần còn thiếu (nếu có) sẽ tự động cộng vào công nợ qua applyCompletedOrderSideEffects
+      // Tạo phiếu thu = số tiền khách TRẢ THÊM lần này (effectivePaid - đã trả trước đó).
+      // Tiền cọc (nếu có) đã được tạo phiếu thu ngay lúc tạo đơn nên không cộng lại.
+      // Phần còn thiếu (nếu có) sẽ tự cộng vào công nợ qua applyCompletedOrderSideEffects.
       const paymentMethod = effectivePaymentMethod;
       const paymentMethodLabel =
         paymentMethod === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt";
 
+      const paidDelta = Math.max(0, effectivePaid - Number(currentOrder.paid || 0));
       await autoCreateReceiptForOrder({
         orderCode: currentOrder.code,
         customerId: currentOrder.customer_id || null,
         branchId: currentOrder.branch_id,
         employeeId: currentOrder.employee_id || null,
-        amount: effectivePaid,
+        amount: paidDelta,
         fundType: paymentMethod,
         paymentMethodLabel,
         createdAt: now(),
-        notePrefix: "Hoàn tất đơn",
+        notePrefix: "Thanh toán đơn",
       });
 
       // Gửi email thông báo admin khi hoàn thành đơn
@@ -847,23 +948,44 @@ export const updateOrder = createServerFn({ method: "POST" })
           },
           data.items,
         );
+      }
 
-        // Nếu chuyển sang completed từ trạng thái khác → tạo phiếu thu phần còn lại
-        if (existingStatus !== "completed") {
-          const remaining = Math.max(0, total - Number(data.deposit || 0) - Number(data.paid || 0));
-          await autoCreateReceiptForOrder({
-            orderCode: existingOrder.code,
-            customerId: data.customer_id || null,
-            branchId: data.branch_id,
-            employeeId: data.employee_id || null,
-            amount: remaining,
-            fundType: paymentMethod,
-            paymentMethodLabel:
-              paymentMethod === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt",
-            createdAt: now(),
-            notePrefix: "Hoàn tất đơn",
-          });
-        }
+      // ✅ Khi SỬA đơn: nếu số tiền khách đã trả (đặt cọc + thanh toán) thay đổi
+      //    thì ghi nhận vào Sổ quỹ phần CHÊNH LỆCH.
+      //    - Trả thêm  → tạo PHIẾU THU phần tăng thêm.
+      //    - Trả ít đi → tạo PHIẾU CHI (điều chỉnh giảm) phần giảm.
+      const oldCollected = Number(existingOrder.deposit || 0) + Number(existingOrder.paid || 0);
+      const newCollected = Number(data.deposit || 0) + Number(data.paid || 0);
+      const collectedDelta = newCollected - oldCollected;
+      const editPmLabel =
+        paymentMethod === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt";
+
+      if (collectedDelta > 0) {
+        await createOrderCashVoucher({
+          kind: "thu",
+          orderCode: existingOrder.code,
+          customerId: data.customer_id || null,
+          branchId: data.branch_id,
+          employeeId: data.employee_id || null,
+          amount: collectedDelta,
+          fundType: paymentMethod,
+          paymentMethodLabel: editPmLabel,
+          createdAt: now(),
+          notePrefix: "Thu thêm (sửa đơn)",
+        });
+      } else if (collectedDelta < 0) {
+        await createOrderCashVoucher({
+          kind: "chi",
+          orderCode: existingOrder.code,
+          customerId: data.customer_id || null,
+          branchId: data.branch_id,
+          employeeId: data.employee_id || null,
+          amount: -collectedDelta,
+          fundType: paymentMethod,
+          paymentMethodLabel: editPmLabel,
+          createdAt: now(),
+          notePrefix: "Điều chỉnh giảm thu (sửa đơn)",
+        });
       }
 
       return { ok: true };
@@ -1001,25 +1123,18 @@ export const createReturnOrder = createServerFn({ method: "POST" })
 
     // Tạo phiếu chi nếu đã trả tiền cho khách
     if (refundedToCustomer > 0) {
-      const cashCode = await nextCashCode("chi");
       const pm = originalOrder.payment_method === "ngan_hang" ? "ngan_hang" : "tien_mat";
-      await insertRow("cash_vouchers", {
-        id: uid(),
-        code: cashCode,
-        type: "chi",
-        fund_type: pm,
-        branch_id: branchId,
+      await createOrderCashVoucher({
+        kind: "chi",
+        orderCode: returnCode,
+        customerId: customerId || null,
+        branchId,
+        employeeId: data.employee_id || originalOrder.employee_id || null,
         amount: refundedToCustomer,
-        voucher_type_id: null,
-        collector_user_id: data.employee_id || originalOrder.employee_id || null,
-        payer_customer_id: null,
-        payer_user_id: null,
-        receiver_customer_id: customerId || null,
-        note: `Hoàn tiền trả hàng ${returnCode} (đơn gốc ${originalOrder.code})`,
-        accounting: true,
-        status: "active",
-        created_by: data.employee_id || originalOrder.employee_id || null,
-        created_at: createdAt,
+        fundType: pm,
+        paymentMethodLabel: pm === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt",
+        createdAt,
+        noteOverride: `Hoàn tiền trả hàng ${returnCode} (đơn gốc ${originalOrder.code})`,
       });
     }
 
