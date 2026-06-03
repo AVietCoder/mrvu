@@ -595,18 +595,12 @@ export const getOrderStats = createServerFn({ method: "GET" }).handler(
   },
 );
 
-// Dữ liệu tra cứu cho FORM tạo đơn (sản phẩm, tồn kho, khách, chi nhánh, nhân
-// viên). Tách khỏi danh sách đơn → không kéo theo orders/order_items/schedules.
-// Cache lâu vì ít thay đổi.
+// Dữ liệu tra cứu cho FORM tạo đơn (sản phẩm, tồn kho, chi nhánh, nhân viên).
+// KHÔNG còn tải toàn bộ khách hàng — ô chọn khách dùng tìm-kiếm-theo-server.
 export const getOrderFormRefs = createServerFn({ method: "GET" }).handler(
   async () => {
-    const [products, customers, users, branches, stock] = await Promise.all([
+    const [products, users, branches, stock] = await Promise.all([
       fetchAllRows("products", { orderBy: "name" }),
-      fetchAllRows("customers", {
-        select: "id, name, phone",
-        orderBy: "created_at",
-        ascending: false,
-      }),
       fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
       fetchRows("branches", { orderBy: "name" }),
       fetchAllRows("stock"),
@@ -614,10 +608,114 @@ export const getOrderFormRefs = createServerFn({ method: "GET" }).handler(
 
     return {
       products,
-      customers,
       employees: users.map((u: any) => ({ id: u.id, name: u.full_name })),
       branches,
       stock,
+    };
+  },
+);
+
+// Chi tiết 1 ĐƠN — thay cho việc tải cả DB ở trang /orders/$id.
+// Trả đúng dữ liệu cần để XEM: đơn + items + lịch liên kết, kèm sản phẩm/tồn
+// chỉ cho các SP trong đơn (cho phần xem tồn theo chi nhánh) + khách của đơn.
+export const getOrderDetail = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data: { id: string } }) => {
+    const id = data?.id;
+    if (!id) {
+      return {
+        orders: [],
+        items: [],
+        products: [],
+        stock: [],
+        branches: [],
+        customers: [],
+        employees: [],
+        users: [],
+        schedules: [],
+        schedule_assignments: [],
+      };
+    }
+
+    const [orderRows, items, branches, users, linkedSchedules] =
+      await Promise.all([
+        fetchRows("orders", { eq: { id }, limit: 1 }),
+        fetchRows("order_items", { eq: { order_id: id } }),
+        fetchRows("branches", { orderBy: "name" }),
+        fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
+        fetchRows("schedules", {
+          eq: { order_id: id },
+          orderBy: "created_at",
+          ascending: false,
+        }),
+      ]);
+
+    const order = orderRows?.[0] ?? null;
+    const productIds = [...new Set((items ?? []).map((i: any) => i.product_id).filter(Boolean))];
+    const scheduleIds = (linkedSchedules ?? []).map((s: any) => s.id);
+
+    const [products, stock, customerRows, schedule_assignments] =
+      await Promise.all([
+        productIds.length
+          ? fetchRows("products", { eq: { id: productIds } })
+          : Promise.resolve([]),
+        productIds.length
+          ? fetchRows("stock", { eq: { product_id: productIds } })
+          : Promise.resolve([]),
+        order?.customer_id
+          ? fetchRows("customers", { eq: { id: order.customer_id }, limit: 1 })
+          : Promise.resolve([]),
+        scheduleIds.length
+          ? fetchRows("schedule_assignments", { eq: { schedule_id: scheduleIds } })
+          : Promise.resolve([]),
+      ]);
+
+    return {
+      orders: order ? [order] : [],
+      items: items ?? [],
+      products: products ?? [],
+      stock: stock ?? [],
+      branches: branches ?? [],
+      customers: customerRows ?? [],
+      employees: (users ?? []).map((u: any) => ({ id: u.id, name: u.full_name })),
+      users: users ?? [],
+      schedules: linkedSchedules ?? [],
+      schedule_assignments: schedule_assignments ?? [],
+    };
+  },
+);
+
+// Dữ liệu tra cứu ĐẦY ĐỦ cho chế độ SỬA đơn ở /orders/$id (tải lười khi bấm Sửa):
+// sản phẩm/tồn/khách đầy đủ + lịch (để liên kết) + phân công + chi nhánh + NV.
+export const getOrderEditRefs = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const [products, customers, users, branches, stock, schedules, schedule_assignments] =
+      await Promise.all([
+        fetchAllRows("products", { orderBy: "name" }),
+        fetchAllRows("customers", {
+          select: "id, name, phone, address, ward, district, province",
+          orderBy: "created_at",
+          ascending: false,
+        }),
+        fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
+        fetchRows("branches", { orderBy: "name" }),
+        fetchAllRows("stock"),
+        fetchAllRows("schedules", {
+          select: "id, title, type, status, scheduled_date, scheduled_time, order_id, created_at",
+          orderBy: "created_at",
+          ascending: false,
+        }),
+        fetchAllRows("schedule_assignments"),
+      ]);
+
+    return {
+      products,
+      customers,
+      employees: users.map((u: any) => ({ id: u.id, name: u.full_name })),
+      users,
+      branches,
+      stock,
+      schedules,
+      schedule_assignments,
     };
   },
 );

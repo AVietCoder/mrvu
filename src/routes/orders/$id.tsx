@@ -8,7 +8,7 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, Fragment } from "react";
-import { listOrders, updateOrderStatus, updateOrder, createReturnOrder } from "@/lib/orders.functions";
+import { getOrderDetail, getOrderEditRefs, updateOrderStatus, updateOrder, createReturnOrder } from "@/lib/orders.functions";
 import { updateScheduleOrderLink } from "@/lib/schedule.functions";
 import { getSettings } from "@/lib/settings.functions";
 import { buildInvoiceHtml } from "@/lib/print-invoice";
@@ -103,7 +103,8 @@ function parseInput(val: string): number {
 function OrderDetailPage() {
   const { id } = useParams({ from: "/orders/$id" });
   const { isAdmin, user } = useAuth();
-  const listFn = useServerFn(listOrders);
+  const detailFn = useServerFn(getOrderDetail);
+  const editRefsFn = useServerFn(getOrderEditRefs);
   const updateStatusFn = useServerFn(updateOrderStatus);
   const updateOrderFn = useServerFn(updateOrder);
   const createReturnFn = useServerFn(createReturnOrder);
@@ -113,17 +114,33 @@ function OrderDetailPage() {
   const navigate = useNavigate();
 
   const {
-    data,
+    data: detailData,
     isLoading,
     refetch,
   } = useQuery({
-    queryKey: ["orders"],
-    queryFn: () => listFn(),
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
-    staleTime: 0,
-    gcTime: 0,
+    queryKey: ["orderDetail", id],
+    queryFn: () => detailFn({ data: { id } }),
+    staleTime: 15_000,
+    gcTime: 5 * 60_000,
   });
+
+  // Dữ liệu tra cứu ĐẦY ĐỦ (sản phẩm/khách/tồn/lịch) chỉ tải khi cần — tức là
+  // khi bấm Sửa hoặc Trả hàng. Lúc chỉ XEM thì KHÔNG tải (trang nhẹ & nhanh).
+  const [needEditRefs, setNeedEditRefs] = useState(false);
+  const { data: editRefs } = useQuery({
+    queryKey: ["orderEditRefs"],
+    queryFn: () => editRefsFn(),
+    enabled: needEditRefs,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+  });
+
+  // XEM dùng detailData (gọn). Khi sửa/trả, editRefs ghi đè các danh sách đầy đủ
+  // (products/customers/stock/schedules…) để form hoạt động như cũ.
+  const data = useMemo(
+    () => ({ ...(detailData ?? {}), ...(editRefs ?? {}) }),
+    [detailData, editRefs],
+  );
 
   const { data: siteSettings } = useQuery({
     queryKey: ["site_settings"],
@@ -201,6 +218,7 @@ function OrderDetailPage() {
 
   function startEdit() {
     if (!order) return;
+    setNeedEditRefs(true); // tải dữ liệu tra cứu đầy đủ cho form sửa
     setEditItems(
       orderItems.map((i: any) => ({
         product_id: i.product_id,
@@ -364,6 +382,7 @@ function OrderDetailPage() {
     setReturnDiscount(String(order.discount ?? 0));
     setReturnRefunded("0");
     setReturnNote("");
+    setNeedEditRefs(true); // cần danh sách SP đầy đủ cho phiếu trả hàng
     setReturnOpen(true);
   }
 

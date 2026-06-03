@@ -10,11 +10,12 @@ import {
   createOrder,
 } from "@/lib/orders.functions";
 import { createSchedule, listWorkTypes } from "@/lib/schedule.functions";
-import { upsertCustomer } from "@/lib/customers.functions";
+import { upsertCustomer, listCustomers, getCustomerLite } from "@/lib/customers.functions";
 import { buildInvoiceHtml } from "@/lib/print-invoice";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import { AsyncSearchableSelect } from "@/components/AsyncSearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -145,13 +146,12 @@ function printOrderSlip({
   vatRate,
   discountType,
   discountPct,
+  customerObj,
 }: any) {
   const moneyFmt = (n: number) =>
     new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " \u20ab";
 
-  const custObj = customer
-    ? (data?.customers ?? []).find((c: any) => c.id === customer)
-    : null;
+  const custObj = customerObj ?? null;
   const branchObj = branch
     ? (data?.branches ?? []).find((b: any) => b.id === branch)
     : null;
@@ -209,6 +209,8 @@ function Page() {
   const refsFn = useServerFn(getOrderFormRefs);
   const ordersFn = useServerFn(searchOrdersPage);
   const orderStatsFn = useServerFn(getOrderStats);
+  const listCustomersFn = useServerFn(listCustomers);
+  const custLiteFn = useServerFn(getCustomerLite);
   const create = useServerFn(createOrder);
   const createScheduleFn = useServerFn(createSchedule);
   const listWorkTypesFn = useServerFn(listWorkTypes);
@@ -331,7 +333,7 @@ function Page() {
   //    Tìm kiếm (mã đơn / tên khách), lọc trạng thái + chi nhánh, sort đều chạy
   //    ở Postgres. Mỗi lần chỉ tải PAGE_SIZE dòng kèm sẵn tên KH / chi nhánh /
   //    số lịch lắp. placeholderData: giữ trang cũ trong lúc tải → không nháy.
-  const { data: ordersData } = useQuery({
+  const { data: ordersData, isLoading: ordersLoading } = useQuery({
     queryKey: [
       "orders",
       "page",
@@ -374,14 +376,28 @@ function Page() {
     setPage(1);
   }, [activeTab, debouncedSearch, sortBy, filterStatus, filterBranch]);
 
-  const customerMap = useMemo(
-    () => new Map((data?.customers ?? []).map((c: any) => [c.id, c])),
-    [data?.customers],
-  );
+  // Khách đang chọn — resolve gọn (1 dòng) để dựng tiêu đề/địa chỉ lịch tự động.
+  // Không còn tải toàn bộ danh sách khách về client.
+  const [selectedCustomerObj, setSelectedCustomerObj] = useState<any>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!customer) {
+      setSelectedCustomerObj(null);
+      return;
+    }
+    custLiteFn({ data: { id: customer } })
+      .then((c) => {
+        if (!cancelled) setSelectedCustomerObj(c);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [customer]);
 
   useEffect(() => {
     if (createScheduleOnOrder) {
-      const cust = customer ? customerMap.get(customer) : null;
+      const cust = selectedCustomerObj;
       const currentType = workTypes.find((t: any) => t.id === scheduleForm.work_type_id);
       const currentTypeLabel = currentType?.name ?? "Công việc";
       
@@ -399,7 +415,7 @@ function Page() {
         address: f.address || autoAddress,
       }));
     }
-  }, [customer, scheduleForm.work_type_id, createScheduleOnOrder, customerMap, workTypes]);
+  }, [customer, scheduleForm.work_type_id, createScheduleOnOrder, selectedCustomerObj, workTypes]);
 
   const discount = useDiscountPct ? 0 : parseInput(discountRaw);
   const deposit = parseInput(depositRaw);
@@ -509,18 +525,26 @@ function Page() {
           _actor_id: user?.id,
         },
       });
-      await qc.invalidateQueries({ queryKey: ["orderRefs"] });
       toast.success(`Đã tạo khách hàng: ${quickCustName.trim()}`);
       setQuickCustOpen(false);
       const savedName = quickCustName.trim();
       const savedPhone = quickCustPhone.trim();
       resetQuickCustForm();
-      // Auto-select the new customer after data refreshes
+      // Tìm lại khách vừa tạo qua tìm-kiếm-server rồi tự chọn.
       setTimeout(async () => {
-        const fresh = await refsFn();
-        const newCust = (fresh?.customers ?? []).find((c: any) => c.name === savedName && (!savedPhone || c.phone === savedPhone));
-        if (newCust) setCustomer(newCust.id);
-      }, 500);
+        try {
+          const r = await listCustomersFn({
+            data: { search: savedName, page: 1, pageSize: 20 },
+          });
+          const newCust = (r?.customers ?? []).find(
+            (c: any) =>
+              c.name === savedName && (!savedPhone || c.phone === savedPhone),
+          );
+          if (newCust) setCustomer(newCust.id);
+        } catch {
+          /* ignore */
+        }
+      }, 400);
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi tạo khách hàng");
     } finally {
@@ -649,6 +673,8 @@ function Page() {
         congNo,
         items,
         customer,
+        customerName: selectedCustomerObj?.name ?? "Khách lẻ",
+        customerObj: selectedCustomerObj ?? null,
         branch,
         employee,
         paymentMethod,
@@ -767,7 +793,7 @@ function Page() {
   }
 
   return (
-    <AppShell title="Bán hàng" loading={!data}>
+    <AppShell title="Bán hàng" loading={ordersLoading}>
       <div className="mb-4 flex items-center gap-3 flex-wrap">
         <Dialog
           open={open}
@@ -804,16 +830,27 @@ function Page() {
                       <UserPlus className="h-3.5 w-3.5" /> Tạo mới
                     </button>
                   </div>
-                  <SearchableSelect
+                  <AsyncSearchableSelect
                     value={customer}
                     onChange={setCustomer}
                     emptyLabel="Khách lẻ"
                     placeholder="Tìm khách hàng..."
-                    options={(data?.customers ?? []).map((c: any) => ({
-                      value: c.id,
-                      label: c.name,
-                      sub: c.phone ?? undefined,
-                    }))}
+                    fetchOptions={async (q) => {
+                      const r = await listCustomersFn({
+                        data: { search: q, page: 1, pageSize: 20 },
+                      });
+                      return (r?.customers ?? []).map((c: any) => ({
+                        value: c.id,
+                        label: c.name,
+                        sub: c.phone ?? undefined,
+                      }));
+                    }}
+                    resolveSelected={async (idv) => {
+                      const c = await custLiteFn({ data: { id: idv } });
+                      return c
+                        ? { value: c.id, label: c.name, sub: c.phone ?? undefined }
+                        : null;
+                    }}
                   />
                 </div>
 
@@ -1518,9 +1555,7 @@ function Page() {
             </DialogHeader>
             {receiptOrder && (() => {
               const moneyFmt = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
-              const custName = receiptOrder.customer
-                ? (data?.customers ?? []).find((c: any) => c.id === receiptOrder.customer)?.name ?? "Khách lẻ"
-                : "Khách lẻ";
+              const custName = receiptOrder.customerName ?? "Khách lẻ";
               const branchName = receiptOrder.branch
                 ? (data?.branches ?? []).find((b: any) => b.id === receiptOrder.branch)?.name ?? "—"
                 : "—";
@@ -1602,6 +1637,7 @@ function Page() {
                       vatRate: receiptOrder.vatRate,
                       discountType: receiptOrder.discountType,
                       discountPct: receiptOrder.discountPct,
+                      customerObj: receiptOrder.customerObj,
                       tpl: (() => { try { return JSON.parse(siteSettings?.print_templates || "{}").order_invoice; } catch { return {}; } })(),
                     });
                   }
