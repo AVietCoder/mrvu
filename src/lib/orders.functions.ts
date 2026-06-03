@@ -537,6 +537,91 @@ export const listOrders = createServerFn({ method: "GET" }).handler(async () => 
   };
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// PHÂN TRANG PHÍA SERVER (mẫu giống listCustomers) — dùng cho danh sách đơn.
+// Trang Đơn hàng KHÔNG còn tải toàn bộ orders/order_items/schedules về client.
+// ─────────────────────────────────────────────────────────────────────────
+interface SearchOrdersArgs {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  branch?: string;
+  tab?: "orders" | "reserved";
+  branchIds?: string[] | null;
+  sortBy?: string;
+}
+
+export const searchOrdersPage = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data: SearchOrdersArgs | undefined }) => {
+    const page = Math.max(1, data?.page ?? 1);
+    const pageSize = Math.max(1, data?.pageSize ?? 20);
+    const offset = (page - 1) * pageSize;
+
+    const { data: rows, error } = await supabase.rpc("search_orders_page", {
+      p_search: data?.search || null,
+      p_status: data?.status || null,
+      p_branch: data?.branch || null,
+      p_tab: data?.tab || "orders",
+      p_branch_ids:
+        data?.branchIds && data.branchIds.length ? data.branchIds : null,
+      p_sort: data?.sortBy || "newest",
+      p_limit: pageSize,
+      p_offset: offset,
+    });
+    if (error) throw new Error(error.message);
+
+    const orders = (rows ?? []) as any[];
+    const totalFiltered = orders[0]?.filtered_count
+      ? Number(orders[0].filtered_count)
+      : 0;
+
+    return { orders, meta: { totalFiltered } };
+  },
+);
+
+export const getOrderStats = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data: { branchIds?: string[] | null } | undefined }) => {
+    const { data: r, error } = await supabase.rpc("orders_stats", {
+      p_branch_ids:
+        data?.branchIds && data.branchIds.length ? data.branchIds : null,
+    });
+    if (error) throw new Error(error.message);
+    const row = (Array.isArray(r) ? r[0] : r) ?? {};
+    return {
+      reservedCount: Number(row.reserved_count ?? 0),
+      totalOrders: Number(row.total_orders ?? 0),
+    };
+  },
+);
+
+// Dữ liệu tra cứu cho FORM tạo đơn (sản phẩm, tồn kho, khách, chi nhánh, nhân
+// viên). Tách khỏi danh sách đơn → không kéo theo orders/order_items/schedules.
+// Cache lâu vì ít thay đổi.
+export const getOrderFormRefs = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const [products, customers, users, branches, stock] = await Promise.all([
+      fetchAllRows("products", { orderBy: "name" }),
+      fetchAllRows("customers", {
+        select: "id, name, phone",
+        orderBy: "created_at",
+        ascending: false,
+      }),
+      fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
+      fetchRows("branches", { orderBy: "name" }),
+      fetchAllRows("stock"),
+    ]);
+
+    return {
+      products,
+      customers,
+      employees: users.map((u: any) => ({ id: u.id, name: u.full_name })),
+      branches,
+      stock,
+    };
+  },
+);
+
 export const createOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
     const subtotal = data.items.reduce(

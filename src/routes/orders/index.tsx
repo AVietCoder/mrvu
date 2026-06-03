@@ -3,7 +3,12 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, useEffect } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { listOrders, createOrder } from "@/lib/orders.functions";
+import {
+  searchOrdersPage,
+  getOrderStats,
+  getOrderFormRefs,
+  createOrder,
+} from "@/lib/orders.functions";
 import { createSchedule, listWorkTypes } from "@/lib/schedule.functions";
 import { upsertCustomer } from "@/lib/customers.functions";
 import { buildInvoiceHtml } from "@/lib/print-invoice";
@@ -201,16 +206,22 @@ function printOrderSlip({
 function Page() {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
-  const listFn = useServerFn(listOrders);
+  const refsFn = useServerFn(getOrderFormRefs);
+  const ordersFn = useServerFn(searchOrdersPage);
+  const orderStatsFn = useServerFn(getOrderStats);
   const create = useServerFn(createOrder);
   const createScheduleFn = useServerFn(createSchedule);
   const listWorkTypesFn = useServerFn(listWorkTypes);
   const upsertCustomerFn = useServerFn(upsertCustomer);
   const qc = useQueryClient();
 
+  // Dữ liệu cho FORM tạo đơn (sản phẩm, tồn kho, khách, chi nhánh, NV).
+  // KHÔNG còn kèm toàn bộ orders/order_items/schedules. Cache lâu vì ít đổi.
   const { data } = useQuery({
-    queryKey: ["orders"],
-    queryFn: () => listFn(),
+    queryKey: ["orderRefs"],
+    queryFn: () => refsFn(),
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
   });
 
   const getSettingsFn = useServerFn(getSettings);
@@ -308,6 +319,61 @@ function Page() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterBranch, setFilterBranch] = useState("");
 
+  // Phạm vi chi nhánh theo quyền: NV không phải admin chỉ thấy chi nhánh được gán.
+  // GIỮ NGUYÊN logic cũ (trước đây lọc ở client trong allOrders).
+  const branchScope = useMemo(
+    () =>
+      !isAdmin && user && user.branch_ids?.length ? user.branch_ids : null,
+    [isAdmin, user],
+  );
+
+  // ✅ Danh sách đơn lấy theo TRANG từ server (RPC search_orders_page).
+  //    Tìm kiếm (mã đơn / tên khách), lọc trạng thái + chi nhánh, sort đều chạy
+  //    ở Postgres. Mỗi lần chỉ tải PAGE_SIZE dòng kèm sẵn tên KH / chi nhánh /
+  //    số lịch lắp. placeholderData: giữ trang cũ trong lúc tải → không nháy.
+  const { data: ordersData } = useQuery({
+    queryKey: [
+      "orders",
+      "page",
+      activeTab,
+      page,
+      debouncedSearch,
+      sortBy,
+      filterStatus,
+      filterBranch,
+      branchScope,
+    ],
+    queryFn: () =>
+      ordersFn({
+        data: {
+          page,
+          pageSize: PAGE_SIZE,
+          search: debouncedSearch,
+          status: activeTab === "orders" ? filterStatus : "",
+          branch: filterBranch,
+          tab: activeTab,
+          sortBy,
+          branchIds: branchScope,
+        },
+      }),
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+  });
+
+  // Số đơn đặt hàng đang chờ (badge) — query riêng, cache lâu, không phụ thuộc trang.
+  const { data: stats } = useQuery({
+    queryKey: ["orders", "stats", branchScope],
+    queryFn: () => orderStatsFn({ data: { branchIds: branchScope } }),
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+  });
+
+  // Đổi tab/tìm kiếm/sort/bộ lọc → quay về trang 1.
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab, debouncedSearch, sortBy, filterStatus, filterBranch]);
+
   const customerMap = useMemo(
     () => new Map((data?.customers ?? []).map((c: any) => [c.id, c])),
     [data?.customers],
@@ -367,11 +433,6 @@ function Page() {
   const congNo = Math.max(0, khachCanThanhToan - khachThanhToan);    // phần tính vào công nợ
   const tienThua = Math.max(0, khachThanhToan - khachCanThanhToan);  // tiền thừa trả lại
 
-  const branchMap = useMemo(
-    () => new Map((data?.branches ?? []).map((b: any) => [b.id, b])),
-    [data?.branches],
-  );
-
   // Tồn kho theo sản phẩm cho CHI NHÁNH đang chọn (lấy từ bảng stock).
   // Sản phẩm KHÔNG có cột stock, nên phải tra từ data.stock, nếu không form luôn hiện Kho 0.
   // Chưa chọn chi nhánh -> cộng tổng tất cả chi nhánh để không hiển thị nhầm 0.
@@ -384,63 +445,12 @@ function Page() {
     return map;
   }, [data?.stock, branch]);
 
-  const scheduleMap = useMemo(() => {
-    const map = new Map<string, any[]>();
-    (data?.schedules ?? []).forEach((s: any) => {
-      const key = s.order_id;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(s);
-    });
-    return map;
-  }, [data?.schedules]);
-
-  const allOrders = useMemo(() => {
-    const orders = data?.orders ?? [];
-    if (!isAdmin && user && user.branch_ids.length > 0) {
-      return orders.filter((o: any) => user.branch_ids.includes(o.branch_id));
-    }
-    return orders;
-  }, [data?.orders, isAdmin, user]);
-
-  const invoiceOrders = useMemo(
-    () => allOrders.filter((o: any) => o.status !== "reserved"),
-    [allOrders],
-  );
-
-  const reservedOrders = useMemo(
-    () => allOrders.filter((o: any) => o.status === "reserved"),
-    [allOrders],
-  );
-
-  function applyFilter(list: typeof allOrders) {
-    const q = debouncedSearch.trim().toLowerCase();
-    return list
-      .filter((o) => {
-        const custName = customerMap.get(o.customer_id)?.name ?? "";
-        return (
-          (o.code.toLowerCase().includes(q) ||
-            custName.toLowerCase().includes(q)) &&
-          (!filterStatus || o.status === filterStatus) &&
-          (!filterBranch || o.branch_id === filterBranch)
-        );
-      })
-      .sort((a, b) => {
-        if (sortBy === "total_desc") return b.total - a.total;
-        if (sortBy === "total_asc") return a.total - b.total;
-        const dateA = a.status === "completed" ? (a.completed_at ?? a.created_at) : a.created_at;
-        const dateB = b.status === "completed" ? (b.completed_at ?? b.created_at) : b.created_at;
-        if (sortBy === "oldest") return new Date(dateA).getTime() - new Date(dateB).getTime();
-        return new Date(dateB).getTime() - new Date(dateA).getTime();
-      });
-  }
-
-  const filteredOrders = useMemo(
-    () => applyFilter(activeTab === "reserved" ? reservedOrders : invoiceOrders),
-    [activeTab, reservedOrders, invoiceOrders, debouncedSearch, sortBy, filterStatus, filterBranch, customerMap],
-  );
-
-  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
-  const pagedOrders = filteredOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // ✅ Danh sách + phân trang lấy thẳng từ server. Tab Hóa đơn/Đặt hàng, lọc,
+  //    sort, phạm vi chi nhánh đều do RPC xử lý — logic GIỮ NGUYÊN.
+  const pagedOrders = ordersData?.orders ?? [];
+  const totalFiltered = ordersData?.meta?.totalFiltered ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE));
+  const reservedCount = stats?.reservedCount ?? 0;
 
   function handleSearch(v: string) {
     setSearch(v);
@@ -499,7 +509,7 @@ function Page() {
           _actor_id: user?.id,
         },
       });
-      await qc.invalidateQueries({ queryKey: ["orders"] });
+      await qc.invalidateQueries({ queryKey: ["orderRefs"] });
       toast.success(`Đã tạo khách hàng: ${quickCustName.trim()}`);
       setQuickCustOpen(false);
       const savedName = quickCustName.trim();
@@ -507,7 +517,7 @@ function Page() {
       resetQuickCustForm();
       // Auto-select the new customer after data refreshes
       setTimeout(async () => {
-        const fresh = await listFn();
+        const fresh = await refsFn();
         const newCust = (fresh?.customers ?? []).find((c: any) => c.name === savedName && (!savedPhone || c.phone === savedPhone));
         if (newCust) setCustomer(newCust.id);
       }, 500);
@@ -653,6 +663,7 @@ function Page() {
       reset();
       setOpen(false);
       qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["orderRefs"] });
       qc.invalidateQueries({ queryKey: ["schedules"] });
       setReceiptOpen(true);
     } catch (e: any) {
@@ -662,7 +673,7 @@ function Page() {
     }
   }
 
-  function OrderTable({ rows }: { rows: typeof allOrders }) {
+  function OrderTable({ rows }: { rows: any[] }) {
     return (
       <div className="overflow-x-auto">
         <table className="w-full text-sm min-w-[680px]">
@@ -681,9 +692,9 @@ function Page() {
           </thead>
           <tbody>
             {rows.map((o, idx) => {
-              const cust = customerMap.get(o.customer_id)?.name ?? "Khách lẻ";
-              const br = branchMap.get(o.branch_id)?.name ?? "—";
-              const linked = scheduleMap.get(o.id) ?? [];
+              const cust = o.customer_name ?? "Khách lẻ";
+              const br = o.branch_name ?? "—";
+              const linkedCount = Number(o.schedule_count ?? 0);
               const globalIdx = (page - 1) * PAGE_SIZE + idx + 1;
 
               return (
@@ -718,14 +729,14 @@ function Page() {
                     </span>
                   </td>
                   <td className="pr-2" onClick={(e) => e.stopPropagation()}>
-                    {linked.length === 0 ? (
+                    {linkedCount === 0 ? (
                       <span className="text-xs text-muted-foreground">—</span>
                     ) : (
                       <Link
                         to="/schedule"
                         className="inline-flex items-center gap-1 text-xs rounded-md bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 hover:bg-blue-100"
                       >
-                        <CalendarDays className="h-3 w-3" /> {linked.length} lịch
+                        <CalendarDays className="h-3 w-3" /> {linkedCount} lịch
                       </Link>
                     )}
                   </td>
@@ -1605,9 +1616,9 @@ function Page() {
           </DialogContent>
         </Dialog>
 
-        {reservedOrders.length > 0 && (
+        {reservedCount > 0 && (
           <span className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1 flex items-center gap-1">
-            <Clock className="h-3 w-3" /> {reservedOrders.length} đơn đặt hàng chờ giao
+            <Clock className="h-3 w-3" /> {reservedCount} đơn đặt hàng chờ giao
           </span>
         )}
       </div>
@@ -1625,9 +1636,9 @@ function Page() {
           onClick={() => handleTab("reserved")}
         >
           <Clock className="h-4 w-4 inline mr-1" /> Đơn đặt hàng
-          {reservedOrders.length > 0 && (
+          {reservedCount > 0 && (
             <span className="text-xs bg-yellow-100 text-yellow-700 rounded-full px-1.5 py-0.5">
-              {reservedOrders.length}
+              {reservedCount}
             </span>
           )}
         </button>
@@ -1681,7 +1692,7 @@ function Page() {
               </select>
             </div>
           }
-          total={filteredOrders.length}
+          total={totalFiltered}
           totalLabel={activeTab === "reserved" ? "đơn đặt hàng" : "đơn hàng"}
         />
 
@@ -1690,7 +1701,7 @@ function Page() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between mt-4 pt-3 border-t text-sm flex-wrap gap-2">
             <span className="text-muted-foreground">
-              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filteredOrders.length)} / {filteredOrders.length}
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, totalFiltered)} / {totalFiltered}
             </span>
 
             <div className="flex items-center gap-1">
