@@ -2,7 +2,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { AppShell } from "@/components/AppShell";
 import { useAuth } from "@/context/AuthContext";
 import { listActivityLogs } from "@/lib/activity.functions";
@@ -131,16 +132,26 @@ function StatCard({ icon: Icon, label, value, accent }: any) {
 function ActivityPage() {
   const { isAdmin } = useAuth();
   const [search, setSearch] = useState("");
+  // Debounce ô tìm kiếm: `search` nằm trong queryKey và được gửi LÊN SERVER mỗi
+  // lần gõ. Debounce 300ms → mỗi lần ngừng gõ chỉ gọi server 1 lần (thay vì mỗi
+  // ký tự 1 lần). Tham số gửi đi vẫn là `search` nên server xử lý y hệt.
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [page, setPage] = useState(1);
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
+
+  // Về trang 1 đúng khi từ khoá (đã debounce) thực sự đổi → tránh gọi thừa
+  // 1 request ở trang cũ với từ khoá cũ.
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const listFn = useServerFn(listActivityLogs);
   const employeeDetailFn = useServerFn(getEmployeeDetail);
   const listUsers = useServerFn(listUsersFn);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["activity_logs", page, search],
-    queryFn: () => listFn({ data: { page, search } }),
+    queryKey: ["activity_logs", page, debouncedSearch],
+    queryFn: () => listFn({ data: { page, search: debouncedSearch } }),
     refetchInterval: 30_000, // tự làm mới mỗi 30 giây
     staleTime: 10_000,
     placeholderData: (prev) => prev,
@@ -203,7 +214,7 @@ function ActivityPage() {
             className="pl-9 bg-muted/30 border-0 focus-visible:ring-1 rounded-xl"
             placeholder="Tìm theo hành động, chi tiết..."
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/40 px-3 py-1.5 rounded-xl">

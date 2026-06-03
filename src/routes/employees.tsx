@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, type FormEvent } from "react";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   listUsersFn,
   registerFn,
@@ -68,6 +69,8 @@ function Page() {
   });
 
   const [search, setSearch] = useState("");
+  // Debounce tìm kiếm nhân viên: lọc lại sau khi ngừng gõ, kết quả không đổi.
+  const debouncedSearch = useDebouncedValue(search, 250);
   const [sortBy, setSortBy] = useState("name");
   const [page, setPage] = useState(1);
 
@@ -97,7 +100,7 @@ function Page() {
   const [bulkSelect, setBulkSelect] = useState<string[]>([]);
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = debouncedSearch.toLowerCase();
     return (users ?? [])
       .filter((u) => Number(u.is_admin) !== 1)
       .filter(
@@ -110,7 +113,7 @@ function Page() {
         if (sortBy === "perm") return b.permissions.length - a.permissions.length;
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
-  }, [users, search, sortBy]);
+  }, [users, debouncedSearch, sortBy]);
 
   const paginated = useMemo(
     () => filtered.slice((page - 1) * DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE),

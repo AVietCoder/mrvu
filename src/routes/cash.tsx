@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, useCallback, useEffect } from "react";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   listCash, createCashVoucher, updateCashVoucher,
   cancelCashVoucher, upsertCashVoucherType, deleteCashVoucherType,
@@ -426,6 +427,9 @@ function Page() {
     return activeBranchId ?? user?.branch_ids?.[0] ?? "";
   });
   const [search, setSearch] = useState("");
+  // Debounce tìm kiếm sổ quỹ: chỉ lọc lại sau khi ngừng gõ. Tổng thu/chi và kết
+  // quả lọc giữ nguyên — chỉ giảm số lần quét danh sách phiếu khi dữ liệu lớn.
+  const debouncedSearch = useDebouncedValue(search, 250);
   const [filterType, setFilterType] = useState<"" | "thu" | "chi">("");
   const [filterBank, setFilterBank] = useState<string>("");  // lọc theo STK ngân hàng (note chứa số TK)
   // ⚡ Phân trang phía client để KHÔNG render hàng nghìn dòng cùng lúc (gây đơ
@@ -574,16 +578,16 @@ function Page() {
       const matchType  = !filterType || v.type === filterType;
       const matchBank  = !filterBank || (v.note ?? "").includes(filterBank); // lọc theo số TK trong note
       const sides = voucherSides(v);
-      const q = search.toLowerCase();
+      const q = debouncedSearch.toLowerCase();
       const matchSearch =
-        !search ||
+        !debouncedSearch ||
         v.code?.toLowerCase().includes(q) ||
         sides.a?.toLowerCase().includes(q) ||
         sides.b?.toLowerCase().includes(q) ||
         v.note?.toLowerCase().includes(q);
       return matchFund && matchBranch && matchAccess && matchType && matchBank && matchSearch;
     });
-  }, [allVouchers, fund, filterBranch, filterType, filterBank, search, canViewAll, user]);
+  }, [allVouchers, fund, filterBranch, filterType, filterBank, debouncedSearch, canViewAll, user]);
 
   // Reset về trang 1 mỗi khi đổi bộ lọc/tìm kiếm để không bị kẹt ở trang trống.
   useEffect(() => {

@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, useEffect } from "react";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { listOrders, createOrder } from "@/lib/orders.functions";
 import { createSchedule, listWorkTypes } from "@/lib/schedule.functions";
 import { upsertCustomer } from "@/lib/customers.functions";
@@ -299,6 +300,10 @@ function Page() {
   });
 
   const [search, setSearch] = useState("");
+  // Debounce ô tìm kiếm: input vẫn cập nhật tức thì (value=search), nhưng việc
+  // lọc/sắp xếp toàn bộ danh sách chỉ chạy lại sau khi ngừng gõ → giảm tải CPU
+  // khi có hàng nghìn đơn. KẾT QUẢ lọc cuối cùng GIỐNG HỆT trước.
+  const debouncedSearch = useDebouncedValue(search, 250);
   const [sortBy, setSortBy] = useState("newest");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterBranch, setFilterBranch] = useState("");
@@ -408,7 +413,7 @@ function Page() {
   );
 
   function applyFilter(list: typeof allOrders) {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     return list
       .filter((o) => {
         const custName = customerMap.get(o.customer_id)?.name ?? "";
@@ -431,7 +436,7 @@ function Page() {
 
   const filteredOrders = useMemo(
     () => applyFilter(activeTab === "reserved" ? reservedOrders : invoiceOrders),
-    [activeTab, reservedOrders, invoiceOrders, search, sortBy, filterStatus, filterBranch, customerMap],
+    [activeTab, reservedOrders, invoiceOrders, debouncedSearch, sortBy, filterStatus, filterBranch, customerMap],
   );
 
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));

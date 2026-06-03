@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   listSchedules, createSchedule, approveSchedule,
   updateScheduleStatus, deleteSchedule,
@@ -89,6 +90,10 @@ function Page() {
   const searchCustomersFn = useServerFn(searchCustomersForSchedule);
   const updateFn = useServerFn(updateSchedule);
   const qc = useQueryClient();
+async function refreshQuery(queryKey: readonly unknown[]) {
+  await qc.invalidateQueries({ queryKey });
+  await qc.refetchQueries({ queryKey });
+}
 
   const canCreate  = isAdmin || (!!user && hasPermission(user, "create_schedule"));
   const canApprove = isAdmin || (!!user && hasPermission(user, "approve_schedule"));
@@ -185,6 +190,9 @@ function Page() {
   };
 
   const [search, setSearch] = useState("");
+  // Debounce tìm kiếm: lọc lại danh sách lịch chỉ sau khi ngừng gõ. Kết quả lọc
+  // cuối cùng giống hệt — chỉ giảm số lần lọc/sắp xếp khi dữ liệu lớn.
+  const debouncedSearch = useDebouncedValue(search, 250);
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 15;
@@ -311,8 +319,8 @@ function Page() {
         return true;
       });
     }
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.trim().toLowerCase();
       list = list.filter((s: any) => {
         const cust = (data?.customers ?? []).find((c: any) => c.id === s.customer_id);
         return (
@@ -329,7 +337,7 @@ function Page() {
       return sortBy === "oldest" ? da.localeCompare(db) : db.localeCompare(da);
     });
     return list;
-  }, [data, isTech, user, filterStatus, filterType, filterFrom, filterTo, search, sortBy, branchFilterIds]);
+  }, [data, isTech, user, filterStatus, filterType, filterFrom, filterTo, debouncedSearch, sortBy, branchFilterIds]);
 
   const pagedSchedules = useMemo(() => mySchedules.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [mySchedules, page]);
   const grouped = useMemo(() => groupByDate(mySchedules), [mySchedules]);
@@ -362,8 +370,8 @@ function Page() {
       toast.success("Đã tạo lịch" + (createForm.order_id ? " (đã liên kết đơn hàng)" : ""));
       setCreateOpen(false);
       setCreateForm({ title: "", type: "install", scheduled_date: todayStr, scheduled_time: nowTimeStr, customer_id: "", branch_id: "", branch_ids: [], order_id: "", address: "", note: "" });
-      qc.invalidateQueries({ queryKey: ["schedules"] });
-      qc.invalidateQueries({ queryKey: ["orders"] });
+      await refreshQuery(["schedules"]);
+      await refreshQuery(["orders"]);
     } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
     finally { setCreating(false); }
   }
@@ -388,24 +396,24 @@ function Page() {
       await approveFn({ data: { schedule_id: approveTarget.id, user_ids: assignedUsers, difficulty_ids: assignedDiffs, tech_fees: techFees.map(tf => ({ product_id: tf.product_id, qty: tf.qty, unit_fee: tf.unit_fee, user_id: tf.user_id || undefined })), work_type_id: workTypeId || null, scheduled_date: approveDate || null, actor_id: user?.id }});
       toast.success("Đã duyệt và phân công");
       setApproveOpen(false);
-      qc.invalidateQueries({ queryKey: ["schedules"] });
-      qc.invalidateQueries({ queryKey: ["attendance"] });
+      await refreshQuery(["schedules"]);
+      await refreshQuery(["attendance"]);
     } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
     finally { setApproving(false); }
   }
 
   async function handleStatus(id: string, status: string) {
     await statusFn({ data: { id, status, actor_id: user?.id } });
-    qc.invalidateQueries({ queryKey: ["schedules"] });
-    qc.invalidateQueries({ queryKey: ["attendance"] });
+    await refreshQuery(["schedules"]);
+    await refreshQuery(["attendance"]);
     toast.success("Đã cập nhật trạng thái");
   }
 
   async function handleDelete(id: string) {
     if (!confirm("Xóa lịch này?")) return;
     await deleteFn({ data: { id, actor_id: user?.id } });
-    qc.invalidateQueries({ queryKey: ["schedules"] });
-    qc.invalidateQueries({ queryKey: ["attendance"] });
+    await refreshQuery(["schedules"]);
+    await refreshQuery(["attendance"]);
     toast.success("Đã xóa");
   }
 
@@ -424,8 +432,8 @@ function Page() {
       await updateFn({ data: { id: editTarget.id, title: editForm.title.trim(), scheduled_date: editForm.scheduled_date, scheduled_time: editForm.scheduled_time || null, branch_id: editForm.branch_id || null, order_id: editForm.order_id || null, customer_id: editForm.customer_id || null, address: editForm.address || null, note: editForm.note || null, assigned_user_ids: editForm.assigned_user_ids, created_by: editForm.created_by || undefined, actor_id: user.id, actor_is_admin: !!isAdmin }});
       toast.success("Đã cập nhật lịch");
       setEditOpen(false);
-      await qc.invalidateQueries({ queryKey: ["schedules"] });
-      await qc.invalidateQueries({ queryKey: ["attendance"] });
+      await refreshQuery(["schedules"]);
+      await refreshQuery(["attendance"]);
     } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
     finally { setEditSaving(false); }
   }
@@ -436,7 +444,7 @@ function Page() {
       toast.success("Đã lưu");
       setDiffOpen(false);
       setDiffForm({ name: "", description: "", bonus: "0" });
-      qc.invalidateQueries({ queryKey: ["work-difficulties"] });
+      await refreshQuery(["work-difficulties"]);
     } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
   }
 
@@ -447,15 +455,15 @@ function Page() {
       toast.success("Đã lưu loại hình");
       setWtOpen(false);
       setWtForm({ name: "", description: "", price: "0" });
-      qc.invalidateQueries({ queryKey: ["work-types"] });
-      qc.invalidateQueries({ queryKey: ["schedules"] });
+      await refreshQuery(["work-types"]);
+      await refreshQuery(["schedules"]);
     } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
   }
 
   async function handleDeleteWT(id: string) {
     if (!confirm("Xóa loại hình này?")) return;
     await deleteWT({ data: { id, actor_id: user?.id } });
-    qc.invalidateQueries({ queryKey: ["work-types"] });
+    await refreshQuery(["work-types"]);
   }
 
   async function handleDeleteDiff(id: string) {
@@ -984,7 +992,7 @@ function Page() {
             <div>
               {(() => {
                 const numPeople = Math.max(1, assignedUsers.length);
-                const workType = approveTarget?.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === approveTarget.work_type_id) : null;
+                const workType = workTypeId ? (data?.work_types ?? []).find((w: any) => w.id === workTypeId) : null;
                 const workTypePrice = Number(workType?.price || 0);
                 const diffBonus = assignedDiffs.reduce((s, did) => { const d = (data?.work_difficulties ?? []).find((x: any) => x.id === did); return s + (d?.bonus ?? 0); }, 0) * numPeople;
                 const sharedBonus = techFees.filter(tf => !tf.user_id).reduce((s, tf) => s + tf.qty * tf.unit_fee, 0);
