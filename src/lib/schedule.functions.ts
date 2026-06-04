@@ -111,14 +111,29 @@ export const approveSchedule = createServerFn({ method: "POST" })
     data: {
       schedule_id: string;
       user_ids: string[];
-      difficulty_ids: string[];
+      // Mỗi tính chất kèm số lượng (qty). Vẫn nhận difficulty_ids cũ để tương thích ngược.
+      difficulties?: { difficulty_id: string; qty?: number }[];
+      difficulty_ids?: string[];
       tech_fees: { product_id: string; qty: number; unit_fee: number; user_id?: string }[];
       work_type_id?: string | null;
+      work_type_qty?: number;
       scheduled_date?: string | null;
       actor_id?: string;
     };
   }) => {
-    const updateFields: Record<string, any> = { status: "approved", work_type_id: data.work_type_id || null };
+    // Chuẩn hoá danh sách tính chất + số lượng (hỗ trợ cả payload cũ).
+    const diffList: { difficulty_id: string; qty: number }[] =
+      (data.difficulties && data.difficulties.length
+        ? data.difficulties
+        : (data.difficulty_ids ?? []).map((id) => ({ difficulty_id: id }))
+      ).map((d) => ({ difficulty_id: d.difficulty_id, qty: Math.max(1, Number(d.qty ?? 1)) }));
+
+    const updateFields: Record<string, any> = {
+      status: "approved",
+      work_type_id: data.work_type_id || null,
+      // Không chọn loại hình thì qty = 1 (vô hại); có chọn thì lấy qty người dùng nhập.
+      work_type_qty: data.work_type_id ? Math.max(1, Number(data.work_type_qty ?? 1)) : 1,
+    };
     if (data.scheduled_date) updateFields.scheduled_date = data.scheduled_date;
     await updateWhere(
       "schedules",
@@ -137,11 +152,12 @@ export const approveSchedule = createServerFn({ method: "POST" })
     }
 
     await deleteWhere("schedule_difficulties", { schedule_id: data.schedule_id });
-    if (data.difficulty_ids.length) {
+    if (diffList.length) {
       await supabase.from("schedule_difficulties").insert(
-        data.difficulty_ids.map((difficulty_id) => ({
+        diffList.map((d) => ({
           schedule_id: data.schedule_id,
-          difficulty_id,
+          difficulty_id: d.difficulty_id,
+          qty: d.qty,
         })),
       );
     }
@@ -313,7 +329,7 @@ export const attendanceSummary = createServerFn({ method: "GET" })
 
     const { data: schedules, error: e1 } = await supabase
       .from("schedules")
-      .select("id, title, scheduled_date, scheduled_time, work_type_id, status, customer_id, order_id, address")
+      .select("id, title, scheduled_date, scheduled_time, work_type_id, work_type_qty, status, customer_id, order_id, address")
       .gte("scheduled_date", from)
       .lt("scheduled_date", next)
       .in("status", ["approved", "in_progress", "done"]);
@@ -325,7 +341,7 @@ export const attendanceSummary = createServerFn({ method: "GET" })
         ? supabase.from("schedule_assignments").select("schedule_id, user_id").in("schedule_id", ids).then((r) => r.data ?? [])
         : Promise.resolve([]),
       ids.length
-        ? supabase.from("schedule_difficulties").select("schedule_id, difficulty_id").in("schedule_id", ids).then((r) => r.data ?? [])
+        ? supabase.from("schedule_difficulties").select("schedule_id, difficulty_id, qty").in("schedule_id", ids).then((r) => r.data ?? [])
         : Promise.resolve([]),
       ids.length
         ? supabase.from("tech_fees").select("schedule_id, product_id, qty, unit_fee, user_id").in("schedule_id", ids).then((r) => r.data ?? [])
@@ -349,9 +365,9 @@ export const attendanceSummary = createServerFn({ method: "GET" })
     for (const a of assigns as any[]) {
       (assignBySchedule[a.schedule_id] ||= []).push(a.user_id);
     }
-    const diffsBySchedule: Record<string, string[]> = {};
+    const diffsBySchedule: Record<string, { difficulty_id: string; qty: number }[]> = {};
     for (const d of diffs as any[]) {
-      (diffsBySchedule[d.schedule_id] ||= []).push(d.difficulty_id);
+      (diffsBySchedule[d.schedule_id] ||= []).push({ difficulty_id: d.difficulty_id, qty: Math.max(1, Number(d.qty ?? 1)) });
     }
     // Thu nhập khác (tech_fees) gom theo lịch — tách riêng: phần chia đều và phần gán cho user cụ thể
     const feesBySchedule: Record<string, { items: any[]; sharedTotal: number; perUserExtra: Record<string, number> }> = {};
@@ -392,9 +408,11 @@ export const attendanceSummary = createServerFn({ method: "GET" })
       if (!people.length) continue;
       const n = people.length;
       const wt = s.work_type_id ? wtMap[s.work_type_id] : null;
-      const dIds = diffsBySchedule[s.id] || [];
-      const diffSumPrice = dIds.reduce((sum, did) => sum + Number(wdMap[did]?.bonus || 0), 0);
-      const typePrice = Number(wt?.price || 0);
+      const wtQty = Math.max(1, Number(s.work_type_qty ?? 1));
+      const dRows = diffsBySchedule[s.id] || [];
+      // TIỀN nhân theo số lượng; ĐIỂM thì không (vẫn đếm số tính chất / loại hình).
+      const diffSumPrice = dRows.reduce((sum, d) => sum + Number(wdMap[d.difficulty_id]?.bonus || 0) * d.qty, 0);
+      const typePrice = Number(wt?.price || 0) * wtQty;
       // Thu nhập khác: phần chia đều và phần riêng theo user
       const feeBucket = feesBySchedule[s.id] || { items: [], sharedTotal: 0, perUserExtra: {} };
       const sharedExtraTotal = feeBucket.sharedTotal;
@@ -413,7 +431,7 @@ export const attendanceSummary = createServerFn({ method: "GET" })
           lines: [],
         });
         const typePt = wt ? 1 / n : 0;
-        const diffPt = dIds.length / n;
+        const diffPt = dRows.length / n;
         // Tiền thu nhập riêng của user này trong lịch (nếu có)
         const userDirectExtra = feeBucket.perUserExtra[uid_] ?? 0;
         // Tiền công/người = (loại hình + tính chất + phần chia đều) / số người + tiền riêng
@@ -433,11 +451,12 @@ export const attendanceSummary = createServerFn({ method: "GET" })
           customer_id: s.customer_id,
           order_id: s.order_id,
           address: s.address,
-          work_type: wt ? { id: wt.id, name: wt.name, price: Number(wt.price || 0) } : null,
-          difficulties: dIds.map((id) => ({
-            id,
-            name: wdMap[id]?.name || id,
-            bonus: Number(wdMap[id]?.bonus || 0),
+          work_type: wt ? { id: wt.id, name: wt.name, price: Number(wt.price || 0), qty: wtQty } : null,
+          difficulties: dRows.map((d) => ({
+            id: d.difficulty_id,
+            name: wdMap[d.difficulty_id]?.name || d.difficulty_id,
+            bonus: Number(wdMap[d.difficulty_id]?.bonus || 0),
+            qty: d.qty,
           })),
           extra_income: feeBucket.items,
           extra_income_total: sharedExtraTotal + Object.values(feeBucket.perUserExtra).reduce((a, b) => a + b, 0),

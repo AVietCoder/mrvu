@@ -280,6 +280,8 @@ CREATE TABLE public.schedules (
   CONSTRAINT schedules_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id),
   CONSTRAINT schedules_work_type_id_fkey FOREIGN KEY (work_type_id) REFERENCES public.work_types(id)
 );
+-- work_type_qty: số lượng của loại hình công việc (Thành tiền = price × qty). Mặc định 1.
+ALTER TABLE public.schedules ADD COLUMN IF NOT EXISTS work_type_qty integer NOT NULL DEFAULT 1;
 CREATE TABLE public.schedule_assignments (
   schedule_id text NOT NULL,
   user_id text NOT NULL,
@@ -289,6 +291,7 @@ CREATE TABLE public.schedule_assignments (
 CREATE TABLE public.schedule_difficulties (
   schedule_id text NOT NULL,
   difficulty_id text NOT NULL,
+  qty integer NOT NULL DEFAULT 1,
   CONSTRAINT schedule_difficulties_pkey PRIMARY KEY (schedule_id, difficulty_id),
   CONSTRAINT schedule_difficulties_schedule_id_fkey FOREIGN KEY (schedule_id) REFERENCES public.schedules(id),
   CONSTRAINT schedule_difficulties_difficulty_id_fkey FOREIGN KEY (difficulty_id) REFERENCES public.work_difficulties(id)

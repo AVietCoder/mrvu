@@ -25,7 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  CalendarDays, Plus, CheckCircle2, Clock, Trash2,
+  CalendarDays, Plus, Minus, CheckCircle2, Clock, Trash2,
   Wrench, ShieldOff, Settings, Pencil, Receipt, ExternalLink, UserCog, Loader2, BarChart3, Tag, Eye, X, Copy, Check, Printer, ChevronDown, ChevronUp
 } from "lucide-react";
 import { toast } from "sonner";
@@ -46,6 +46,38 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   done:        { label: "Hoàn thành",   color: "bg-green-100 text-green-700" },
   cancelled:   { label: "Đã hủy",       color: "bg-gray-100 text-gray-700" },
 };
+
+// Ô chọn số lượng (− [n] +) dùng cho loại hình & tính chất công việc.
+function QtyStepper({ value, onChange, min = 1, disabled = false }: { value: number; onChange: (v: number) => void; min?: number; disabled?: boolean }) {
+  const v = Number.isFinite(value) ? value : min;
+  return (
+    <div className={`inline-flex items-center rounded-md border bg-background ${disabled ? "opacity-50" : ""}`}>
+      <button
+        type="button"
+        disabled={disabled || v <= min}
+        onClick={() => onChange(Math.max(min, v - 1))}
+        className="grid h-7 w-7 place-items-center rounded-l-md text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
+        aria-label="Giảm"
+      ><Minus className="h-3.5 w-3.5" /></button>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={min}
+        value={v}
+        disabled={disabled}
+        onChange={(e) => { const n = parseInt(e.target.value, 10); onChange(Number.isFinite(n) ? Math.max(min, n) : min); }}
+        className="h-7 w-10 border-x bg-transparent text-center text-sm tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      />
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onChange(v + 1)}
+        className="grid h-7 w-7 place-items-center rounded-r-md text-muted-foreground transition-colors hover:bg-muted"
+        aria-label="Tăng"
+      ><Plus className="h-3.5 w-3.5" /></button>
+    </div>
+  );
+}
 
 function groupByDate(schedules: any[]) {
   const map: Record<string, any[]> = {};
@@ -253,6 +285,8 @@ async function refreshQuery(queryKey: readonly unknown[]) {
   const [approveTarget, setApproveTarget] = useState<any>(null);
   const [assignedUsers, setAssignedUsers] = useState<string[]>([]);
   const [assignedDiffs, setAssignedDiffs] = useState<string[]>([]);
+  const [diffQty, setDiffQty] = useState<Record<string, number>>({});
+  const [workTypeQty, setWorkTypeQty] = useState<number>(1);
   const [techFees, setTechFees] = useState<{ product_id: string; qty: number; unit_fee: number; user_id?: string }[]>([]);
   const [approveDate, setApproveDate] = useState<string>("");
 
@@ -345,17 +379,17 @@ async function refreshQuery(queryKey: readonly unknown[]) {
   function calcTechPay(scheduleId: string): number {
     const schedule = (data?.schedules ?? []).find((s: any) => s.id === scheduleId);
     const fees = (data?.tech_fees ?? []).filter((f: any) => f.schedule_id === scheduleId);
-    const diffIds = (data?.difficulties ?? []).filter((d: any) => d.schedule_id === scheduleId).map((d: any) => d.difficulty_id);
+    const diffRows = (data?.difficulties ?? []).filter((d: any) => d.schedule_id === scheduleId);
     const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === scheduleId);
     const numPeople = Math.max(1, assignees.length);
     const bonusTotal = fees.reduce((sum: number, f: any) => sum + f.qty * f.unit_fee, 0);
-    const diffBonusPerTask = diffIds.reduce((sum: number, did: string) => {
-      const wdiff = (data?.work_difficulties ?? []).find((w: any) => w.id === did);
-      return sum + (wdiff?.bonus ?? 0);
+    const diffBonusPerTask = diffRows.reduce((sum: number, d: any) => {
+      const wdiff = (data?.work_difficulties ?? []).find((w: any) => w.id === d.difficulty_id);
+      return sum + (wdiff?.bonus ?? 0) * Math.max(1, Number(d.qty ?? 1));
     }, 0);
     const diffBonus = diffBonusPerTask * numPeople;
     const workType = schedule?.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === schedule.work_type_id) : null;
-    const workTypePrice = Number(workType?.price || 0);
+    const workTypePrice = Number(workType?.price || 0) * Math.max(1, Number(schedule?.work_type_qty ?? 1));
     const totalPool = bonusTotal + diffBonus + workTypePrice;
     return totalPool / numPeople;
   }
@@ -379,12 +413,16 @@ async function refreshQuery(queryKey: readonly unknown[]) {
   function openApprove(s: any) {
     setApproveTarget(s);
     const existing = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id).map((a: any) => a.user_id);
-    const existingDiffs = (data?.difficulties ?? []).filter((d: any) => d.schedule_id === s.id).map((d: any) => d.difficulty_id);
+    const existingDiffRows = (data?.difficulties ?? []).filter((d: any) => d.schedule_id === s.id);
     const existingFees = (data?.tech_fees ?? []).filter((f: any) => f.schedule_id === s.id);
     setAssignedUsers(existing);
-    setAssignedDiffs(existingDiffs);
+    setAssignedDiffs(existingDiffRows.map((d: any) => d.difficulty_id));
+    const dq: Record<string, number> = {};
+    for (const d of existingDiffRows) dq[d.difficulty_id] = Math.max(1, Number(d.qty ?? 1));
+    setDiffQty(dq);
     setTechFees(existingFees.length > 0 ? existingFees : []);
     setWorkTypeId(s.work_type_id || "");
+    setWorkTypeQty(Math.max(1, Number(s.work_type_qty ?? 1)));
     setApproveDate(s.scheduled_date?.slice(0, 10) ?? "");
     setApproveOpen(true);
   }
@@ -393,7 +431,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
     if (!approveTarget) return;
     setApproving(true);
     try {
-      await approveFn({ data: { schedule_id: approveTarget.id, user_ids: assignedUsers, difficulty_ids: assignedDiffs, tech_fees: techFees.map(tf => ({ product_id: tf.product_id, qty: tf.qty, unit_fee: tf.unit_fee, user_id: tf.user_id || undefined })), work_type_id: workTypeId || null, scheduled_date: approveDate || null, actor_id: user?.id }});
+      await approveFn({ data: { schedule_id: approveTarget.id, user_ids: assignedUsers, difficulties: assignedDiffs.map((id) => ({ difficulty_id: id, qty: Math.max(1, diffQty[id] ?? 1) })), tech_fees: techFees.map(tf => ({ product_id: tf.product_id, qty: tf.qty, unit_fee: tf.unit_fee, user_id: tf.user_id || undefined })), work_type_id: workTypeId || null, work_type_qty: workTypeId ? Math.max(1, workTypeQty) : 1, scheduled_date: approveDate || null, actor_id: user?.id }});
       toast.success("Đã duyệt và phân công");
       setApproveOpen(false);
       await refreshQuery(["schedules"]);
@@ -972,36 +1010,69 @@ async function refreshQuery(queryKey: readonly unknown[]) {
               </div>
             </div>
             <div>
-              <Label className="font-medium">Loại hình công việc (chấm công)</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label className="font-medium">Loại hình công việc (chấm công)</Label>
+                <span className="text-xs font-medium text-muted-foreground">Thành tiền</span>
+              </div>
               <div className="text-xs text-muted-foreground mb-1">Mỗi lịch chỉ chọn 1 loại hình. Điểm = 1 chia đều theo số NV.</div>
               <select className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm" value={workTypeId} onChange={(e) => setWorkTypeId(e.target.value)}>
                 <option value="">— Không tính loại hình —</option>
                 {((data?.work_types ?? wtData) ?? []).map((w: any) => <option key={w.id} value={w.id}>{w.name} — {fmtMoney(w.price)}</option>)}
               </select>
+              {workTypeId && (() => {
+                const wt = ((data?.work_types ?? wtData) ?? []).find((w: any) => w.id === workTypeId);
+                const price = Number(wt?.price || 0);
+                const q = Math.max(1, workTypeQty);
+                return (
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-sm"><span className="text-muted-foreground">Số lượng:</span><QtyStepper value={q} onChange={setWorkTypeQty} /></div>
+                    <span className="font-semibold text-green-600">{fmtMoney(price * q)}</span>
+                  </div>
+                );
+              })()}
             </div>
             <div>
-              <Label className="font-medium">Tính chất công việc (chấm công)</Label>
-              <div className="text-xs text-muted-foreground mb-1">Có thể tick nhiều. Mỗi tính chất = 1 điểm chia đều theo số NV.</div>
-              <div className="mt-1 border rounded-md p-2 space-y-1">
-                {(data?.work_difficulties ?? []).map((d: any) => (
-                  <label key={d.id} className="flex items-center justify-between text-sm cursor-pointer"><div className="flex items-center gap-2"><input type="checkbox" checked={assignedDiffs.includes(d.id)} onChange={() => setAssignedDiffs((p) => p.includes(d.id) ? p.filter((x) => x !== d.id) : [...p, d.id])} /> {d.name}</div><span className="text-green-600 font-medium">+{fmtMoney(d.bonus)}</span></label>
-                ))}
-                {(data?.work_difficulties ?? []).length === 0 && <div className="text-xs text-muted-foreground italic">Chưa có tính chất CV — admin cần tạo trước.</div>}
+              <div className="flex items-center justify-between gap-2">
+                <Label className="font-medium">Tính chất công việc (chấm công)</Label>
+                <div className="flex items-center gap-3 text-xs font-medium text-muted-foreground"><span>Số lượng</span><span>Thành tiền</span></div>
+              </div>
+              <div className="text-xs text-muted-foreground mb-1">Có thể tick nhiều. Mỗi tính chất = 1 điểm chia đều theo số NV. Tiền nhân theo số lượng.</div>
+              <div className="mt-1 rounded-md border divide-y">
+                {(data?.work_difficulties ?? []).map((d: any) => {
+                  const checked = assignedDiffs.includes(d.id);
+                  const q = Math.max(1, diffQty[d.id] ?? 1);
+                  const line = Number(d.bonus || 0) * q;
+                  return (
+                    <div key={d.id} className="flex items-center gap-2 px-2 py-1.5 text-sm">
+                      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                        <input type="checkbox" checked={checked} onChange={() => { setAssignedDiffs((p) => p.includes(d.id) ? p.filter((x) => x !== d.id) : [...p, d.id]); setDiffQty((m) => ({ ...m, [d.id]: m[d.id] ?? 1 })); }} />
+                        <span className="truncate">{d.name}</span>
+                      </label>
+                      <div className={checked ? "" : "pointer-events-none opacity-40"}>
+                        <QtyStepper value={q} onChange={(v) => setDiffQty((m) => ({ ...m, [d.id]: v }))} disabled={!checked} />
+                      </div>
+                      <span className="w-24 shrink-0 text-right font-medium text-green-600">+{fmtMoney(line)}</span>
+                    </div>
+                  );
+                })}
+                {(data?.work_difficulties ?? []).length === 0 && <div className="px-2 py-1.5 text-xs italic text-muted-foreground">Chưa có tính chất CV — admin cần tạo trước.</div>}
               </div>
             </div>
             <div>
               {(() => {
                 const numPeople = Math.max(1, assignedUsers.length);
-                const workType = workTypeId ? (data?.work_types ?? []).find((w: any) => w.id === workTypeId) : null;
-                const workTypePrice = Number(workType?.price || 0);
-                const diffBonus = assignedDiffs.reduce((s, did) => { const d = (data?.work_difficulties ?? []).find((x: any) => x.id === did); return s + (d?.bonus ?? 0); }, 0) * numPeople;
+                const workType = workTypeId ? ((data?.work_types ?? wtData) ?? []).find((w: any) => w.id === workTypeId) : null;
+                const wtQty = Math.max(1, workTypeQty);
+                const workTypeTotal = Number(workType?.price || 0) * wtQty;
+                const diffLineSum = assignedDiffs.reduce((s, did) => { const d = (data?.work_difficulties ?? []).find((x: any) => x.id === did); return s + (Number(d?.bonus ?? 0) * Math.max(1, diffQty[did] ?? 1)); }, 0);
+                const diffBonus = diffLineSum * numPeople;
                 const sharedBonus = techFees.filter(tf => !tf.user_id).reduce((s, tf) => s + tf.qty * tf.unit_fee, 0);
                 const perUserBonus: Record<string, number> = {};
                 for (const tf of techFees.filter(tf => tf.user_id)) { perUserBonus[tf.user_id!] = (perUserBonus[tf.user_id!] ?? 0) + tf.qty * tf.unit_fee; }
-                const basePerPerson = (workTypePrice + diffBonus + sharedBonus) / numPeople;
+                const basePerPerson = (workTypeTotal + diffBonus + sharedBonus) / numPeople;
                 return (
                   <div className="rounded-md bg-muted/50 p-2 text-sm space-y-1 mt-1">
-                    <div className="flex justify-between text-xs text-muted-foreground"><span>Loại hình công việc: {workType?.name ?? "—"}</span><span>{fmtMoney(workTypePrice)}</span></div>
+                    <div className="flex justify-between text-xs text-muted-foreground"><span>Loại hình công việc: {workType?.name ?? "—"}{workType && wtQty > 1 ? ` × ${wtQty}` : ""}</span><span>{fmtMoney(workTypeTotal)}</span></div>
                     <div className="flex justify-between text-xs text-muted-foreground"><span>Tính chất CV × {numPeople} người</span><span>{fmtMoney(diffBonus)}</span></div>
                     <div className="flex justify-between text-xs text-muted-foreground"><span>Thu nhập chia đều</span><span>{fmtMoney(sharedBonus)}</span></div>
                     {Object.keys(perUserBonus).length > 0 && <div className="flex justify-between text-xs text-muted-foreground"><span>Thu nhập riêng (tổng)</span><span>{fmtMoney(Object.values(perUserBonus).reduce((a, b) => a + b, 0))}</span></div>}
@@ -1327,12 +1398,13 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                   )}
                   {(fees.length > 0 || diffIds.length > 0 || s.type || s.work_type_id) && (() => {
                     const numPeople = Math.max(1, assignees.length);
+                    const wtQty = Math.max(1, Number(s.work_type_qty ?? 1));
                     const bonusTotal = fees.reduce((sum: number, f: any) => sum + f.qty * f.unit_fee, 0);
-                    const diffBonusPerTask = diffIds.reduce((sum: number, d: any) => { const wd = data?.work_difficulties.find((w: any) => w.id === d.difficulty_id); return sum + (wd?.bonus ?? 0); }, 0);
+                    const diffBonusPerTask = diffIds.reduce((sum: number, d: any) => { const wd = data?.work_difficulties.find((w: any) => w.id === d.difficulty_id); return sum + (wd?.bonus ?? 0) * Math.max(1, Number(d.qty ?? 1)); }, 0);
                     const diffBonus = diffBonusPerTask * numPeople;
                     const workType = s.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === s.work_type_id) : null;
                     const workTypeLabel = workType?.name ?? "—";
-                    const workTypePrice = Number(workType?.price || 0);
+                    const workTypePrice = Number(workType?.price || 0) * wtQty;
                     const totalPool = bonusTotal + diffBonus + workTypePrice;
                     const perPerson = totalPool / numPeople;
                     return (
@@ -1340,12 +1412,13 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                       <div className="font-medium text-sm mb-2">Tiền công dự kiến</div>
                       <div className="space-y-1.5">
                         <div className="grid grid-cols-1 gap-1.5">
-                          <div className="flex justify-between text-sm rounded border px-3 py-2"><span>Loại hình công việc</span><span className="font-medium text-foreground">{workTypeLabel}{workTypePrice !== undefined ? ` • ${fmtMoney(workTypePrice)}` : ""}</span></div>
+                          <div className="flex justify-between text-sm rounded border px-3 py-2"><span>Loại hình công việc{workType && wtQty > 1 ? ` × ${wtQty}` : ""}</span><span className="font-medium text-foreground">{workTypeLabel}{workType ? ` • ${fmtMoney(workTypePrice)}` : ""}</span></div>
                         </div>
                         {fees.map((f: any) => <div key={f.product_id} className="flex justify-between text-sm rounded border px-3 py-2"><span>{f.product_id} × {f.qty}</span><span className="font-medium text-green-600">+{fmtMoney(f.qty * f.unit_fee)}</span></div>)}
                         {diffIds.map((d: any) => {
                           const wd = data?.work_difficulties.find((w: any) => w.id === d.difficulty_id);
-                          return wd ? <div key={d.difficulty_id} className="flex justify-between text-sm rounded border px-3 py-2"><span>{wd.name} × {numPeople} người</span><span className="font-medium text-green-600">+{fmtMoney(wd.bonus * numPeople)}</span></div> : null;
+                          const q = Math.max(1, Number(d.qty ?? 1));
+                          return wd ? <div key={d.difficulty_id} className="flex justify-between text-sm rounded border px-3 py-2"><span>{wd.name}{q > 1 ? ` × ${q}` : ""} × {numPeople} người</span><span className="font-medium text-green-600">+{fmtMoney(wd.bonus * q * numPeople)}</span></div> : null;
                         })}
                         <div className="flex justify-between font-semibold text-sm rounded border border-green-200 bg-green-50 px-3 py-2"><span>Tiền công / người ({numPeople} người)</span><span className="text-green-700">{fmtMoney(perPerson)}</span></div>
                       </div>
