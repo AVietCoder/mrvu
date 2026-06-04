@@ -6,7 +6,9 @@ import { Fragment, useMemo, useState } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 import {
-  listInventory,
+  searchInventoryPage,
+  getInventoryRefs,
+  getStockExport,
   createMovement,
   createTransfer,
   confirmTransfer,
@@ -107,7 +109,9 @@ function createTransferItem(
 function Page() {
   const { user, isAdmin, activeBranchId } = useAuth();
 
-  const list = useServerFn(listInventory);
+  const refsFn = useServerFn(getInventoryRefs);
+  const invFn = useServerFn(searchInventoryPage);
+  const exportFn = useServerFn(getStockExport);
   const move = useServerFn(createMovement);
   const createTrf = useServerFn(createTransfer);
   const confirmTrf = useServerFn(confirmTransfer);
@@ -117,9 +121,13 @@ function Page() {
 
   const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  // Dữ liệu phụ trợ: chi nhánh, sản phẩm (gọn) cho phiếu nhập/chuyển, lịch sử
+  // nhập-xuất, phiếu chuyển đang chờ. KHÔNG còn tải toàn bộ stock + toàn bộ đơn.
+  const { data } = useQuery({
     queryKey: ["inventory"],
-    queryFn: () => list(),
+    queryFn: () => refsFn(),
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
   });
 
   const { data: siteSettings } = useQuery({
@@ -161,6 +169,26 @@ function Page() {
     useState("stock_desc");
 
   const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
+
+  // ✅ Bảng tồn kho theo TRANG từ server (RPC search_inventory_page): tìm kiếm,
+  //    lọc chi nhánh, sort, tính tồn + đơn chờ đều ở Postgres. Mỗi lần ~20 dòng
+  //    kèm sẵn chi tiết theo chi nhánh (JSON). placeholderData giữ trang cũ.
+  const { data: inventoryData, isLoading } = useQuery({
+    queryKey: ["inventory", "page", page, debouncedSearch, sortBy, filterBranch],
+    queryFn: () =>
+      invFn({
+        data: {
+          page,
+          pageSize: DEFAULT_PAGE_SIZE,
+          search: debouncedSearch,
+          branch: filterBranch,
+          sort: sortBy,
+        },
+      }),
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+  });
 
   const [voucherNote, setVoucherNote] =
     useState("");
@@ -220,27 +248,7 @@ function Page() {
   // ✅ allBranches = tất cả CN để hiển thị trong filter (nhân viên xem full)
   const allBranches = branches;
 
-  const pendingOrderSummaries = data?.pending_order_summaries ?? [];
-
-  const pendingOrderMap = useMemo(() => {
-    const map = new Map<string, { qty: number; order_count: number }>();
-    for (const row of pendingOrderSummaries as any[]) {
-      const key = `${row.product_id}__${row.branch_id ?? ""}`;
-      map.set(key, {
-        qty: Number(row.qty || 0),
-        order_count: Number(row.order_count || 0),
-      });
-    }
-    return map;
-  }, [pendingOrderSummaries]);
-
-  const stockMap = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const row of (data?.stock ?? []) as any[]) {
-      map.set(`${row.product_id}__${row.branch_id}`, Number(row.qty || 0));
-    }
-    return map;
-  }, [data?.stock]);
+  // (Đơn chờ & tồn theo chi nhánh giờ do RPC trả kèm mỗi dòng — không dựng map ở client.)
 
   const pendingTransfers = useMemo(() => {
     const transfers = (data?.transfers ?? []) as any[];
@@ -601,6 +609,11 @@ function Page() {
     ? branches.filter((b: any) => b.id === filterBranch)
     : branches;
 
+  // Dòng hiển thị lấy thẳng từ server (đã lọc/sort/phân trang).
+  const paginatedProducts = inventoryData?.products ?? [];
+  const totalFiltered = inventoryData?.meta?.totalFiltered ?? 0;
+
+  // Dựng lại branchStatsMap từ JSON "branches" mà RPC trả về cho từng dòng.
   const branchStatsMap = useMemo(() => {
     const map = new Map<
       string,
@@ -612,82 +625,20 @@ function Page() {
         pendingOrders: number;
       }>
     >();
-
-    for (const product of products as any[]) {
+    for (const row of paginatedProducts as any[]) {
       map.set(
-        product.id,
-        visibleBranches.map((branch) => {
-          const stock = stockMap.get(`${product.id}__${branch.id}`) ?? 0;
-          const pending = pendingOrderMap.get(`${product.id}__${branch.id}`);
-
-          return {
-            branchId: branch.id,
-            branchName: branch.name,
-            stock,
-            pendingQty: pending?.qty ?? 0,
-            pendingOrders: pending?.order_count ?? 0,
-          };
-        }),
+        row.id,
+        ((row.branches ?? []) as any[]).map((b) => ({
+          branchId: b.branch_id,
+          branchName: b.branch_name,
+          stock: Number(b.stock || 0),
+          pendingQty: Number(b.pending_qty || 0),
+          pendingOrders: Number(b.pending_orders || 0),
+        })),
       );
     }
-
     return map;
-  }, [products, visibleBranches, stockMap, pendingOrderMap]);
-
-  const filteredProducts = useMemo(() => {
-    return products
-      .filter((p) => {
-        const q =
-          debouncedSearch.toLowerCase();
-
-        return (
-          p.name
-            .toLowerCase()
-            .includes(q) ||
-          p.sku
-            .toLowerCase()
-            .includes(q)
-        );
-      })
-      .sort((a, b) => {
-        if (sortBy === "name")
-          return a.name.localeCompare(
-            b.name
-          );
-
-        if (sortBy === "sku")
-          return a.sku.localeCompare(
-            b.sku
-          );
-
-        const stockA = visibleBranches.reduce(
-          (sum, branch) => sum + (stockMap.get(`${a.id}__${branch.id}`) ?? 0),
-          0,
-        );
-
-        const stockB = visibleBranches.reduce(
-          (sum, branch) => sum + (stockMap.get(`${b.id}__${branch.id}`) ?? 0),
-          0,
-        );
-
-        return stockBy ===
-          "stock_asc"
-          ? stockA - stockB
-          : stockB - stockA;
-      });
-  }, [
-    products,
-    debouncedSearch,
-    sortBy,
-    stockBy,
-    stockMap,
-    visibleBranches,
-  ]);
-
-  const paginatedProducts = useMemo(
-    () => filteredProducts.slice((page - 1) * DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE),
-    [filteredProducts, page],
-  );
+  }, [paginatedProducts]);
 
   const voucherTitle =
     type === "in"
@@ -695,10 +646,10 @@ function Page() {
       : "Phiếu chuyển kho";
 
   // Xuất CSV danh sách tồn kho > 0 theo từng chi nhánh
-  function exportStockExcel() {
+  async function exportStockExcel() {
     const branchesList = allowedBranches;
-    const productsList = data?.products ?? [];
-    const stockList = data?.stock ?? [];
+    // Tải toàn bộ tồn kho CHỈ tại thời điểm bấm xuất (không tải lúc vào trang).
+    const { products: productsList, stock: stockList } = await exportFn();
 
     const rows: string[][] = [];
     rows.push(["STT", "Mã SP", "Tên sản phẩm", ...branchesList.map((b: any) => b.name), "Tổng tồn"]);
@@ -735,7 +686,7 @@ function Page() {
   }
 
   return (
-    <AppShell title="Quản lý tồn kho" loading={isLoading && !data}>
+    <AppShell title="Quản lý tồn kho" loading={isLoading}>
       <div className="mb-4 flex flex-wrap gap-2">
         {canIn && (
           <Button onClick={() => startAction("in")}>
@@ -820,7 +771,7 @@ function Page() {
                 {visibleBranches.length} chi nhánh
               </span>
               <span className="rounded-full border bg-background px-3 py-1.5">
-                {filteredProducts.length} sản phẩm
+                {totalFiltered} sản phẩm
               </span>
             </div>
           </div>
@@ -853,11 +804,10 @@ function Page() {
               <select
                 className="h-9 rounded-md border bg-background px-2 text-sm"
                 value={filterBranch}
-                onChange={(e) =>
-                  setFilterBranch(
-                    e.target.value
-                  )
-                }
+                onChange={(e) => {
+                  setFilterBranch(e.target.value);
+                  setPage(1);
+                }}
               >
                 <option value="">
                   Tất cả chi nhánh
@@ -874,7 +824,7 @@ function Page() {
                 ))}
               </select>
             }
-            total={filteredProducts.length}
+            total={totalFiltered}
             totalLabel="sản phẩm"
           />
         </div>
@@ -1032,7 +982,7 @@ function Page() {
       <Pagination
         page={page}
         pageSize={DEFAULT_PAGE_SIZE}
-        total={filteredProducts.length}
+        total={totalFiltered}
         onPageChange={setPage}
         label="sản phẩm"
       />

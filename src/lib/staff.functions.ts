@@ -39,13 +39,10 @@ export const deleteEmployee = createServerFn({ method: "POST" })
   });
 
 export const listBranches = createServerFn({ method: "GET" }).handler(async () => {
-  const [branches, stock, orders] = await Promise.all([
-    fetchRows("branches", { orderBy: "name" }),
-    fetchAllRows("stock"),
-    fetchAllRows("orders", { orderBy: "created_at", ascending: false }),
-  ]);
-
-  return { branches, stock, orders };
+  // Trang Chi nhánh chỉ cần danh sách chi nhánh (số đơn/doanh thu lấy từ getReports).
+  // Trước đây hàm này tải kèm TOÀN BỘ stock + TOÀN BỘ orders (không dùng) → bỏ.
+  const branches = await fetchRows("branches", { orderBy: "name" });
+  return { branches };
 });
 
 export const upsertBranch = createServerFn({ method: "POST" })

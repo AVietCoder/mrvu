@@ -113,6 +113,62 @@ function buildPendingOrderSummaries(
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// PHÂN TRANG PHÍA SERVER cho bảng tồn kho (mẫu giống listCustomers).
+// Mỗi trang ~20 sản phẩm kèm tổng tồn + đơn chờ + chi tiết theo chi nhánh (JSON).
+// ─────────────────────────────────────────────────────────────────────────
+export const searchInventoryPage = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data: { page?: number; pageSize?: number; search?: string; branch?: string; sort?: string } | undefined }) => {
+    const page = Math.max(1, data?.page ?? 1);
+    const pageSize = Math.max(1, data?.pageSize ?? 20);
+    const offset = (page - 1) * pageSize;
+
+    const { data: rows, error } = await supabase.rpc("search_inventory_page", {
+      p_search: data?.search || null,
+      p_branch: data?.branch || null,
+      p_sort: data?.sort || "name",
+      p_limit: pageSize,
+      p_offset: offset,
+    });
+    if (error) throw new Error(error.message);
+
+    const products = (rows ?? []) as any[];
+    const totalFiltered = products[0]?.filtered_count
+      ? Number(products[0].filtered_count)
+      : 0;
+    return { products, meta: { totalFiltered } };
+  },
+);
+
+// Dữ liệu phụ trợ (KHÔNG kèm toàn bộ stock/orders): chi nhánh, sản phẩm gọn cho
+// ô chọn ở phiếu nhập/chuyển, 100 lượt nhập-xuất gần nhất, và phiếu chuyển ĐANG CHỜ.
+export const getInventoryRefs = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const [products, branches, movements, transfers] = await Promise.all([
+      fetchAllRows("products", { select: "id, name, sku", orderBy: "name" }),
+      fetchRows("branches", { orderBy: "name" }),
+      fetchRows("stock_movements", { orderBy: "created_at", ascending: false, limit: 100 }),
+      fetchRows("stock_transfers", { eq: { status: "pending" }, orderBy: "created_at", ascending: false }),
+    ]);
+    const transferIds = (transfers ?? []).map((t: any) => t.id);
+    const transfer_items = transferIds.length
+      ? await fetchRows("stock_transfer_items", { eq: { transfer_id: transferIds } })
+      : [];
+    return { products, branches, movements, transfers, transfer_items };
+  },
+);
+
+// Xuất Excel tồn kho: tải toàn bộ stock CHỈ khi bấm nút (không tải lúc vào trang).
+export const getStockExport = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const [products, stock] = await Promise.all([
+      fetchAllRows("products", { select: "id, sku, name", orderBy: "name" }),
+      fetchAllRows("stock"),
+    ]);
+    return { products, stock };
+  },
+);
+
 export const listInventory = createServerFn({ method: "GET" }).handler(async () => {
   const [products, branches, stock, movements, transfers, transfer_items, orders, order_items] = await Promise.all([
     // products & stock có thể > 1000 dòng (products × branches) -> phải dùng fetchAllRows,
