@@ -14,6 +14,7 @@ import {
   confirmTransfer,
   cancelTransfer,
   updateTransferItems,
+  adjustStockDirect,
 } from "@/lib/inventory.functions";
 
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -49,6 +50,9 @@ import {
   Package2,
   ShoppingCart,
   Loader2,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 
 import { toast } from "sonner";
@@ -118,6 +122,7 @@ function Page() {
   const cancelTrf = useServerFn(cancelTransfer);
   const updateTrfItems = useServerFn(updateTransferItems);
   const getSettingsFn = useServerFn(getSettings);
+  const adjustStockFn = useServerFn(adjustStockDirect);
 
   const qc = useQueryClient();
 
@@ -169,6 +174,60 @@ function Page() {
     useState("stock_desc");
 
   const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
+
+  // ── Admin inline stock edit ───────────────────────────────────────────
+  // editingStock[productId__branchId] = current edit value string
+  const [editingStock, setEditingStock] = useState<Record<string, string>>({});
+  // savingStock[productId__branchId] = true khi đang gửi request
+  const [savingStock, setSavingStock] = useState<Record<string, boolean>>({});
+
+  function stockEditKey(productId: string, branchId: string) {
+    return `${productId}__${branchId}`;
+  }
+
+  function startEditStock(productId: string, branchId: string, currentQty: number) {
+    setEditingStock((prev) => ({
+      ...prev,
+      [stockEditKey(productId, branchId)]: String(currentQty),
+    }));
+  }
+
+  function cancelEditStock(productId: string, branchId: string) {
+    setEditingStock((prev) => {
+      const next = { ...prev };
+      delete next[stockEditKey(productId, branchId)];
+      return next;
+    });
+  }
+
+  async function saveEditStock(productId: string, branchId: string) {
+    const key = stockEditKey(productId, branchId);
+    const raw = editingStock[key];
+    if (raw === undefined) return;
+    const newQty = Math.max(0, parseInt(raw.replace(/\D/g, "") || "0", 10));
+    setSavingStock((prev) => ({ ...prev, [key]: true }));
+    try {
+      await adjustStockFn({
+        data: {
+          product_id: productId,
+          branch_id: branchId,
+          new_qty: newQty,
+          actor_id: user?.id,
+        },
+      });
+      toast.success(`Đã cập nhật tồn kho`);
+      cancelEditStock(productId, branchId);
+      qc.invalidateQueries({ queryKey: ["inventory"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Có lỗi xảy ra");
+    } finally {
+      setSavingStock((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  }
 
   // ✅ Bảng tồn kho theo TRANG từ server (RPC search_inventory_page): tìm kiếm,
   //    lọc chi nhánh, sort, tính tồn + đơn chờ đều ở Postgres. Mỗi lần ~20 dòng
@@ -911,12 +970,18 @@ function Page() {
                               <div className="rounded-2xl border bg-muted/20 p-3">
                                 <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
                                   <span>Chi tiết theo chi nhánh</span>
-                                  <span>Click để xem tổng ở từng chi nhánh</span>
+                                  {isAdmin
+                                    ? <span className="flex items-center gap-1 text-primary/70"><Pencil className="h-3 w-3" />Bấm ✏️ để chỉnh số lượng</span>
+                                    : <span>Click để xem tổng ở từng chi nhánh</span>
+                                  }
                                 </div>
 
                                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                                   {branchStats.map((item) => {
                                     const isLowStock = item.stock <= p.min_stock;
+                                    const eKey = stockEditKey(p.id, item.branchId);
+                                    const isEditing = eKey in editingStock;
+                                    const isSaving = !!savingStock[eKey];
                                     return (
                                       <div
                                         key={item.branchId}
@@ -939,13 +1004,67 @@ function Page() {
                                           </div>
                                         </div>
 
-                                        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
-                                          <span className="rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700">
-                                            Tồn {item.stock}
-                                          </span>
-                                          <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-700">
-                                            Đặt {item.pendingQty}
-                                          </span>
+                                        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                                          {isAdmin && isEditing ? (
+                                            /* ── Admin: inline edit mode ── */
+                                            <div className="flex items-center gap-1 w-full">
+                                              <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                className="h-7 w-20 rounded-lg border border-primary/50 bg-primary/5 px-2 text-sm font-mono text-center focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                                value={editingStock[eKey]}
+                                                autoFocus
+                                                onChange={(e) =>
+                                                  setEditingStock((prev) => ({
+                                                    ...prev,
+                                                    [eKey]: e.target.value.replace(/\D/g, ""),
+                                                  }))
+                                                }
+                                                onKeyDown={(e) => {
+                                                  if (e.key === "Enter") saveEditStock(p.id, item.branchId);
+                                                  if (e.key === "Escape") cancelEditStock(p.id, item.branchId);
+                                                }}
+                                                disabled={isSaving}
+                                              />
+                                              <button
+                                                onClick={() => saveEditStock(p.id, item.branchId)}
+                                                disabled={isSaving}
+                                                className="h-7 w-7 flex items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors disabled:opacity-50"
+                                                title="Lưu"
+                                              >
+                                                {isSaving
+                                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                  : <Check className="h-3.5 w-3.5" />}
+                                              </button>
+                                              <button
+                                                onClick={() => cancelEditStock(p.id, item.branchId)}
+                                                disabled={isSaving}
+                                                className="h-7 w-7 flex items-center justify-center rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 transition-colors disabled:opacity-50"
+                                                title="Hủy"
+                                              >
+                                                <X className="h-3.5 w-3.5" />
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            /* ── Normal / view mode ── */
+                                            <>
+                                              <span className="rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700">
+                                                Tồn {item.stock}
+                                              </span>
+                                              <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-700">
+                                                Đặt {item.pendingQty}
+                                              </span>
+                                              {isAdmin && (
+                                                <button
+                                                  onClick={() => startEditStock(p.id, item.branchId, item.stock)}
+                                                  className="ml-auto h-6 w-6 flex items-center justify-center rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                                  title="Chỉnh số lượng (Admin)"
+                                                >
+                                                  <Pencil className="h-3 w-3" />
+                                                </button>
+                                              )}
+                                            </>
+                                          )}
                                         </div>
                                       </div>
                                     );

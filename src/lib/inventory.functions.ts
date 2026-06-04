@@ -387,3 +387,66 @@ export const cancelTransfer = createServerFn({ method: "POST" })
     await logActivity({ action: "cancel_transfer", detail: `Hủy phiếu chuyển kho ${data.transfer_id}` });
     return { ok: true };
   });
+
+// ─────────────────────────────────────────────────────────────────────────
+// ADMIN: Chỉnh số lượng tồn kho trực tiếp theo từng chi nhánh
+// Chỉ dùng để điều chỉnh sai lệch; tạo movement ghi lịch sử để truy vết.
+// ─────────────────────────────────────────────────────────────────────────
+export const adjustStockDirect = createServerFn({ method: "POST" })
+  .handler(async ({
+    data,
+  }: {
+    data: {
+      product_id: string;
+      branch_id: string;
+      new_qty: number;
+      note?: string;
+      actor_id?: string;
+    };
+  }) => {
+    const newQty = Math.max(0, Math.round(Number(data.new_qty)));
+
+    // Lấy tồn hiện tại
+    const row = await fetchRow<{ qty: number }>("stock", {
+      eq: { product_id: data.product_id, branch_id: data.branch_id },
+      select: "qty",
+    });
+    const oldQty = Number(row?.qty ?? 0);
+
+    if (oldQty === newQty) return { ok: true, changed: false };
+
+    // Ghi thẳng vào bảng stock
+    if (row) {
+      await updateWhere("stock", { qty: newQty }, { product_id: data.product_id, branch_id: data.branch_id });
+    } else {
+      await insertRow("stock", {
+        product_id: data.product_id,
+        branch_id: data.branch_id,
+        qty: newQty,
+      });
+    }
+
+    const delta = newQty - oldQty;
+
+    // Ghi lịch sử movement để truy vết
+    await insertRow("stock_movements", {
+      id: uid(),
+      type: delta > 0 ? "in" : "out",
+      product_id: data.product_id,
+      from_branch: delta < 0 ? data.branch_id : null,
+      to_branch: delta > 0 ? data.branch_id : null,
+      qty: Math.abs(delta),
+      unit_cost: 0,
+      note: data.note || `Admin điều chỉnh tồn kho: ${oldQty} → ${newQty}`,
+      created_at: now(),
+      created_by: data.actor_id || null,
+    });
+
+    await logActivity({
+      action: "stock_adjust",
+      detail: `Điều chỉnh tồn kho SP ${data.product_id} tại ${data.branch_id}: ${oldQty} → ${newQty}${data.note ? ' — ' + data.note : ''}`,
+      employee_id: data.actor_id || null,
+    });
+
+    return { ok: true, changed: true, oldQty, newQty };
+  });
