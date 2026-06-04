@@ -65,6 +65,7 @@ const ACTION_CONFIG: Record<string, { label: string; color: string; dot: string 
   update_branch:    { label: "Sửa chi nhánh",  color: "bg-blue-50 text-blue-600 border-blue-200",      dot: "bg-blue-300" },
   delete_branch:    { label: "Xóa chi nhánh",  color: "bg-red-50 text-red-700 border-red-200",         dot: "bg-red-400" },
   stock_in:         { label: "Nhập kho",        color: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-400" },
+  stock_adjust:     { label: "Điều chỉnh tồn kho",        color: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-400" },
   stock_out:        { label: "Xuất kho",        color: "bg-pink-50 text-pink-700 border-pink-200",      dot: "bg-pink-400" },
   stock_transfer:   { label: "Chuyển kho",      color: "bg-purple-50 text-purple-700 border-purple-200", dot: "bg-purple-400" },
   cancel_transfer:  { label: "Huỷ chuyển kho", color: "bg-rose-50 text-rose-700 border-rose-200",      dot: "bg-rose-400" },
