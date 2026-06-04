@@ -163,6 +163,26 @@ async function refreshQuery(queryKey: readonly unknown[]) {
     [data?.branches],
   );
 
+  const usersById = useMemo(
+    () => new Map((data?.users ?? []).map((u: any) => [String(u.id), u])),
+    [data?.users],
+  );
+
+  const approvableTechUsers = useMemo(
+    () => (data?.users ?? []).filter((u: any) => u.is_admin || (u.permissions ?? []).includes("technician")),
+    [data?.users],
+  );
+
+  const workTypesById = useMemo(
+    () => new Map(((data?.work_types ?? wtData) ?? []).map((w: any) => [String(w.id), w])),
+    [data?.work_types, wtData],
+  );
+
+  const workDifficultiesById = useMemo(
+    () => new Map((data?.work_difficulties ?? []).map((w: any) => [String(w.id), w])),
+    [data?.work_difficulties],
+  );
+
   function getScheduleBranchIds(schedule: any) {
     return Array.from(
       new Set(
@@ -313,6 +333,36 @@ async function refreshQuery(queryKey: readonly unknown[]) {
     name: "", description: "", price: "0",
   });
   const [workTypeId, setWorkTypeId] = useState<string>("");
+
+  const approveSummary = useMemo(() => {
+    if (!approveOpen) return null;
+    const numPeople = Math.max(1, assignedUsers.length);
+    const workType = workTypeId ? (workTypesById.get(workTypeId) ?? null) : null;
+    const wtQty = Math.max(1, workTypeQty);
+    const workTypeTotal = Number(workType?.price || 0) * wtQty;
+    const diffLineSum = assignedDiffs.reduce((sum, did) => {
+      const d = workDifficultiesById.get(did);
+      return sum + Number(d?.bonus || 0) * Math.max(1, diffQty[did] ?? 1);
+    }, 0);
+    const diffBonus = diffLineSum * numPeople;
+    const sharedBonus = techFees.filter((tf) => !tf.user_id).reduce((sum, tf) => sum + tf.qty * tf.unit_fee, 0);
+    const perUserBonus: Record<string, number> = {};
+    for (const tf of techFees.filter((tf) => tf.user_id)) {
+      perUserBonus[tf.user_id!] = (perUserBonus[tf.user_id!] ?? 0) + tf.qty * tf.unit_fee;
+    }
+    const basePerPerson = (workTypeTotal + diffBonus + sharedBonus) / numPeople;
+    return { numPeople, workType, wtQty, workTypeTotal, diffBonus, sharedBonus, perUserBonus, basePerPerson };
+  }, [
+    approveOpen,
+    assignedUsers,
+    assignedDiffs,
+    diffQty,
+    workTypeId,
+    workTypeQty,
+    techFees,
+    workTypesById,
+    workDifficultiesById,
+  ]);
 
   const [attPickedDate, setAttPickedDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const attFrom = attPickedDate.slice(0, 7) + "-01";
@@ -624,7 +674,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                     const status = STATUS_LABELS[s.status];
                     const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id);
                     const techPay = isTech ? calcTechPay(s.id) : null;
-                    const customer = data?.customers.find((c: any) => c.id === s.customer_id);
+                    const customer = (data?.customers ?? []).find((c: any) => c.id === s.customer_id);
                     const linkedOrder: any = s.order_id ? (data?.orders ?? []).find((o: any) => o.id === s.order_id) : null;
                     return (
                       <Card key={s.id} className="relative h-full">
@@ -654,14 +704,14 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                         )}
                         {customer && (canApprove || isAdmin) && <div className="text-xs text-muted-foreground mb-1">👤 {customer.name}</div>}
                         {s.address && <div className="text-xs text-muted-foreground mb-1">📍 {s.address}</div>}
-                        {assignees.length > 0 && <div className="flex flex-wrap gap-1 mb-2">{assignees.map((a: any) => { const u = data?.users.find((u: any) => u.id === a.user_id); return <span key={a.user_id} className="text-xs bg-muted rounded-full px-2 py-0.5">{u?.full_name ?? a.user_id}</span>; })}</div>}
+                        {assignees.length > 0 && <div className="flex flex-wrap gap-1 mb-2">{assignees.map((a: any) => { const u = usersById.get(String(a.user_id)); return <span key={a.user_id} className="text-xs bg-muted rounded-full px-2 py-0.5">{u?.full_name ?? a.user_id}</span>; })}</div>}
                         {isTech && techPay !== null && techPay > 0 && <div className="text-sm font-semibold text-green-600 mb-2">💰 Tiền công: {fmtMoney(techPay)}</div>}
                         {s.assigned_by && (() => {
-                          const assigner = data?.users.find((u: any) => u.id === s.assigned_by);
+                          const assigner = usersById.get(String(s.assigned_by));
                           return assigner ? <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><UserCog className="h-3 w-3" /><span>Người giao việc: <span className="font-medium text-foreground">{assigner.full_name}</span></span></div> : null;
                         })()}
                         {s.created_by && (() => {
-                          const creator = data?.users.find((u: any) => u.id === s.created_by);
+                          const creator = usersById.get(String(s.created_by));
                           return creator ? <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><UserCog className="h-3 w-3" /><span>Người tạo: <span className="font-medium">{creator.full_name}</span></span></div> : null;
                         })()}
                         <div className="flex gap-1 flex-wrap mt-2">
@@ -689,15 +739,15 @@ async function refreshQuery(queryKey: readonly unknown[]) {
               const typeInfo = SCHEDULE_TYPES.find((t) => t.value === s.type);
               const status = STATUS_LABELS[s.status];
               const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id);
-              const customer = data?.customers.find((c: any) => c.id === s.customer_id);
+              const customer = (data?.customers ?? []).find((c: any) => c.id === s.customer_id);
               const techPay = isTech ? calcTechPay(s.id) : null;
-              const assigner = s.assigned_by ? data?.users.find((u: any) => u.id === s.assigned_by) : null;
-              const creator = s.created_by ? data?.users.find((u: any) => u.id === s.created_by) : null;
+              const assigner = s.assigned_by ? usersById.get(String(s.assigned_by)) : null;
+              const creator = s.created_by ? usersById.get(String(s.created_by)) : null;
               const branchNames = getScheduleBranchNames(s);
               const linkedOrder: any = s.order_id ? (data?.orders ?? []).find((o: any) => o.id === s.order_id) : null;
               function buildMsgContent(s: any) {
                 const workType = s.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === s.work_type_id) : null;
-                const assigneeLines = assignees.length > 0 ? assignees.map((a: any) => { const u = data?.users.find((u: any) => u.id === a.user_id); return `  - ${u?.full_name ?? a.user_id}`; }) : [];
+                const assigneeLines = assignees.length > 0 ? assignees.map((a: any) => { const u = usersById.get(String(a.user_id)); return `  - ${u?.full_name ?? a.user_id}`; }) : [];
                 const orderItemLines: string[] = [];
                 if (linkedOrder) {
                   const items = (data?.order_items ?? []).filter((oi: any) => oi.order_id === linkedOrder.id);
@@ -718,7 +768,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                   {branchNames.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{branchNames.map((name) => <span key={name} className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">{name}</span>)}</div>}
                   <div className="mt-3 space-y-1.5 text-sm">
                     {!isTech && !canApprove && <div className="text-muted-foreground">Khách hàng: <span className="text-foreground">{customer?.name ?? "—"}</span></div>}
-                    <div className="text-muted-foreground">Phụ trách: <span className="text-foreground">{assignees.length > 0 ? assignees.map((a: any) => data?.users.find((u: any) => u.id === a.user_id)?.full_name ?? "?").join(", ") : "Chưa phân công"}</span></div>
+                    <div className="text-muted-foreground">Phụ trách: <span className="text-foreground">{assignees.length > 0 ? assignees.map((a: any) => usersById.get(String(a.user_id))?.full_name ?? "?").join(", ") : "Chưa phân công"}</span></div>
                     <div className="text-muted-foreground">Người tạo: <span className="text-foreground">{creator?.full_name ?? "—"}</span></div>
                     {assigner && <div className="text-muted-foreground">Giao việc: <span className="text-foreground">{assigner.full_name}</span></div>}
                     {isTech && <div className="font-semibold text-green-600">Tiền công: {techPay ? fmtMoney(techPay) : "—"}</div>}
@@ -749,9 +799,9 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                   {pagedSchedules.map((s: any) => {
                     const status = STATUS_LABELS[s.status];
                     const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id);
-                    const customer = data?.customers.find((c: any) => c.id === s.customer_id);
+                    const customer = (data?.customers ?? []).find((c: any) => c.id === s.customer_id);
                     const techPay = isTech ? calcTechPay(s.id) : null;
-                    const creator = s.created_by ? data?.users.find((u: any) => u.id === s.created_by) : null;
+                    const creator = s.created_by ? usersById.get(String(s.created_by)) : null;
                     const branchNames = getScheduleBranchNames(s);
                     return (
                       <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => setViewSchedule(s)}>
@@ -759,7 +809,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                         <td className="pr-3 text-xs whitespace-nowrap">{s.scheduled_date?.slice(0,10)} {s.scheduled_time}</td>
                         <td className="pr-3"><div className="flex flex-wrap gap-1">{branchNames.length > 0 ? branchNames.map((name) => <span key={name} className="text-xs rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">{name}</span>) : <span className="text-xs text-muted-foreground">—</span>}</div></td>
                         {!isTech && !canApprove ? <td className="pr-3 text-muted-foreground text-sm">{customer?.name ?? "—"}</td> : null}
-                        <td className="pr-3"><div className="flex flex-wrap gap-1">{assignees.map((a: any) => { const u = data?.users.find((u: any) => u.id === a.user_id); return <span key={a.user_id} className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">{u?.full_name ?? "?"}</span>; })}{assignees.length === 0 && <span className="text-xs text-muted-foreground">Chưa phân công</span>}</div></td>
+                        <td className="pr-3"><div className="flex flex-wrap gap-1">{assignees.map((a: any) => { const u = usersById.get(String(a.user_id)); return <span key={a.user_id} className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">{u?.full_name ?? "?"}</span>; })}{assignees.length === 0 && <span className="text-xs text-muted-foreground">Chưa phân công</span>}</div></td>
                         <td className="pr-3">{creator ? <span className="text-xs bg-orange-100 text-orange-700 rounded-full px-2 py-0.5">{creator.full_name}</span> : <span className="text-xs text-muted-foreground">—</span>}</td>
                         <td className="pr-3"><span className={`text-xs rounded-full px-2 py-0.5 ${status?.color}`}>{status?.label}</span></td>
                         {isTech && <td className="pr-3 text-green-600 font-medium text-sm">{techPay ? fmtMoney(techPay) : "—"}</td>}
@@ -1003,10 +1053,19 @@ async function refreshQuery(queryKey: readonly unknown[]) {
               <Label className="font-medium">Phân công nhân viên kỹ thuật</Label>
               <div className="text-xs text-muted-foreground mb-1">Chỉ hiện nhân viên có quyền kỹ thuật.</div>
               <div className="mt-2 border rounded-md p-2 space-y-1 max-h-40 overflow-y-auto">
-                {(data?.users ?? []).filter((u: any) => u.is_admin || (u.permissions ?? []).includes("technician")).map((u: any) => (
-                  <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={assignedUsers.includes(u.id)} onChange={() => setAssignedUsers((p) => p.includes(u.id) ? p.filter((x) => x !== u.id) : [...p, u.id])} /> {u.full_name}{u.is_admin ? <span className="ml-1 text-xs text-blue-600">(Admin)</span> : null}</label>
-                ))}
-                {(data?.users ?? []).filter((u: any) => u.is_admin || (u.permissions ?? []).includes("technician")).length === 0 && <div className="text-xs text-muted-foreground italic">Chưa có nhân viên kỹ thuật — cần phân quyền trước.</div>}
+                {approvableTechUsers.length > 0 ? approvableTechUsers.map((u: any) => (
+                  <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={assignedUsers.includes(u.id)}
+                      onChange={() => setAssignedUsers((p) => (p.includes(u.id) ? p.filter((x) => x !== u.id) : [...p, u.id]))}
+                    />
+                    {u.full_name}
+                    {u.is_admin ? <span className="ml-1 text-xs text-blue-600">(Admin)</span> : null}
+                  </label>
+                )) : (
+                  <div className="text-xs text-muted-foreground italic">Chưa có nhân viên kỹ thuật — cần phân quyền trước.</div>
+                )}
               </div>
             </div>
             <div>
@@ -1020,7 +1079,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                 {((data?.work_types ?? wtData) ?? []).map((w: any) => <option key={w.id} value={w.id}>{w.name} — {fmtMoney(w.price)}</option>)}
               </select>
               {workTypeId && (() => {
-                const wt = ((data?.work_types ?? wtData) ?? []).find((w: any) => w.id === workTypeId);
+                const wt = workTypesById.get(workTypeId);
                 const price = Number(wt?.price || 0);
                 const q = Math.max(1, workTypeQty);
                 return (
@@ -1045,7 +1104,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                   return (
                     <div key={d.id} className="flex items-center gap-2 px-2 py-1.5 text-sm">
                       <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
-                        <input type="checkbox" checked={checked} onChange={() => { setAssignedDiffs((p) => p.includes(d.id) ? p.filter((x) => x !== d.id) : [...p, d.id]); setDiffQty((m) => ({ ...m, [d.id]: m[d.id] ?? 1 })); }} />
+                        <input type="checkbox" checked={checked} onChange={() => { setAssignedDiffs((p) => (p.includes(d.id) ? p.filter((x) => x !== d.id) : [...p, d.id])); setDiffQty((m) => ({ ...m, [d.id]: m[d.id] ?? 1 })); }} />
                         <span className="truncate">{d.name}</span>
                       </label>
                       <div className={checked ? "" : "pointer-events-none opacity-40"}>
@@ -1059,40 +1118,28 @@ async function refreshQuery(queryKey: readonly unknown[]) {
               </div>
             </div>
             <div>
-              {(() => {
-                const numPeople = Math.max(1, assignedUsers.length);
-                const workType = workTypeId ? ((data?.work_types ?? wtData) ?? []).find((w: any) => w.id === workTypeId) : null;
-                const wtQty = Math.max(1, workTypeQty);
-                const workTypeTotal = Number(workType?.price || 0) * wtQty;
-                const diffLineSum = assignedDiffs.reduce((s, did) => { const d = (data?.work_difficulties ?? []).find((x: any) => x.id === did); return s + (Number(d?.bonus ?? 0) * Math.max(1, diffQty[did] ?? 1)); }, 0);
-                const diffBonus = diffLineSum * numPeople;
-                const sharedBonus = techFees.filter(tf => !tf.user_id).reduce((s, tf) => s + tf.qty * tf.unit_fee, 0);
-                const perUserBonus: Record<string, number> = {};
-                for (const tf of techFees.filter(tf => tf.user_id)) { perUserBonus[tf.user_id!] = (perUserBonus[tf.user_id!] ?? 0) + tf.qty * tf.unit_fee; }
-                const basePerPerson = (workTypeTotal + diffBonus + sharedBonus) / numPeople;
-                return (
-                  <div className="rounded-md bg-muted/50 p-2 text-sm space-y-1 mt-1">
-                    <div className="flex justify-between text-xs text-muted-foreground"><span>Loại hình công việc: {workType?.name ?? "—"}{workType && wtQty > 1 ? ` × ${wtQty}` : ""}</span><span>{fmtMoney(workTypeTotal)}</span></div>
-                    <div className="flex justify-between text-xs text-muted-foreground"><span>Tính chất CV × {numPeople} người</span><span>{fmtMoney(diffBonus)}</span></div>
-                    <div className="flex justify-between text-xs text-muted-foreground"><span>Thu nhập chia đều</span><span>{fmtMoney(sharedBonus)}</span></div>
-                    {Object.keys(perUserBonus).length > 0 && <div className="flex justify-between text-xs text-muted-foreground"><span>Thu nhập riêng (tổng)</span><span>{fmtMoney(Object.values(perUserBonus).reduce((a, b) => a + b, 0))}</span></div>}
-                    <div className="border-t pt-1 space-y-0.5">
-                      {numPeople === 1 ? (
-                        <div className="flex justify-between font-semibold"><span>Tiền công / người</span><span className="text-green-600">{fmtMoney(basePerPerson + (perUserBonus[assignedUsers[0]] ?? 0))}</span></div>
-                      ) : (
-                        <>
-                          <div className="flex justify-between text-xs text-muted-foreground"><span>Phần chia đều / người ({numPeople} người)</span><span>{fmtMoney(basePerPerson)}</span></div>
-                          {assignedUsers.map((uid) => {
-                            const u = (data?.users ?? []).find((x: any) => x.id === uid);
-                            const extra = perUserBonus[uid] ?? 0;
-                            return <div key={uid} className="flex justify-between font-semibold"><span>{u?.full_name ?? uid}</span><span className="text-green-600">{fmtMoney(basePerPerson + extra)}</span></div>;
-                          })}
-                        </>
-                      )}
-                    </div>
+              {approveSummary && (
+                <div className="rounded-md bg-muted/50 p-2 text-sm space-y-1 mt-1">
+                  <div className="flex justify-between text-xs text-muted-foreground"><span>Loại hình công việc: {approveSummary.workType?.name ?? "—"}{approveSummary.workType && approveSummary.wtQty > 1 ? ` × ${approveSummary.wtQty}` : ""}</span><span>{fmtMoney(approveSummary.workTypeTotal)}</span></div>
+                  <div className="flex justify-between text-xs text-muted-foreground"><span>Tính chất CV × {approveSummary.numPeople} người</span><span>{fmtMoney(approveSummary.diffBonus)}</span></div>
+                  <div className="flex justify-between text-xs text-muted-foreground"><span>Thu nhập chia đều</span><span>{fmtMoney(approveSummary.sharedBonus)}</span></div>
+                  {Object.keys(approveSummary.perUserBonus).length > 0 && <div className="flex justify-between text-xs text-muted-foreground"><span>Thu nhập riêng (tổng)</span><span>{fmtMoney(Object.values(approveSummary.perUserBonus).reduce((a, b) => a + b, 0))}</span></div>}
+                  <div className="border-t pt-1 space-y-0.5">
+                    {approveSummary.numPeople === 1 ? (
+                      <div className="flex justify-between font-semibold"><span>Tiền công / người</span><span className="text-green-600">{fmtMoney(approveSummary.basePerPerson + (approveSummary.perUserBonus[assignedUsers[0]] ?? 0))}</span></div>
+                    ) : (
+                      <>
+                        <div className="flex justify-between text-xs text-muted-foreground"><span>Phần chia đều / người ({approveSummary.numPeople} người)</span><span>{fmtMoney(approveSummary.basePerPerson)}</span></div>
+                        {assignedUsers.map((uid) => {
+                          const u = usersById.get(uid);
+                          const extra = approveSummary.perUserBonus[uid] ?? 0;
+                          return <div key={uid} className="flex justify-between font-semibold"><span>{u?.full_name ?? uid}</span><span className="text-green-600">{fmtMoney(approveSummary.basePerPerson + extra)}</span></div>;
+                        })}
+                      </>
+                    )}
                   </div>
-                );
-              })()}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -1348,9 +1395,9 @@ async function refreshQuery(queryKey: readonly unknown[]) {
             const typeInfo = SCHEDULE_TYPES.find((t) => t.value === s.type);
             const status = STATUS_LABELS[s.status];
             const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id);
-            const customer = data?.customers.find((c: any) => c.id === s.customer_id);
-            const assigner = s.assigned_by ? data?.users.find((u: any) => u.id === s.assigned_by) : null;
-            const creator = s.created_by ? data?.users.find((u: any) => u.id === s.created_by) : null;
+            const customer = (data?.customers ?? []).find((c: any) => c.id === s.customer_id);
+            const assigner = s.assigned_by ? usersById.get(String(s.assigned_by)) : null;
+            const creator = s.created_by ? usersById.get(String(s.created_by)) : null;
             const linkedOrder: any = s.order_id ? (data?.orders ?? []).find((o: any) => o.id === s.order_id) : null;
             const techPay = calcTechPay(s.id);
             const fees = (data?.tech_fees ?? []).filter((f: any) => f.schedule_id === s.id);
@@ -1385,7 +1432,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                       {assignees.length > 0 && (
                         <div className="rounded-lg border bg-blue-50 border-blue-200 px-3 py-2">
                           <div className="text-xs text-blue-600 mb-1.5">Người phụ trách / thực hiện ({assignees.length})</div>
-                          <div className="flex flex-wrap gap-1.5">{assignees.map((a: any) => { const u = data?.users.find((u: any) => u.id === a.user_id); return <span key={a.user_id} className="text-sm bg-blue-100 text-blue-700 rounded-full px-3 py-1 font-medium">{u?.full_name ?? a.user_id}</span>; })}</div>
+                          <div className="flex flex-wrap gap-1.5">{assignees.map((a: any) => { const u = usersById.get(String(a.user_id)); return <span key={a.user_id} className="text-sm bg-blue-100 text-blue-700 rounded-full px-3 py-1 font-medium">{u?.full_name ?? a.user_id}</span>; })}</div>
                         </div>
                       )}
                     </div>
@@ -1440,7 +1487,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                       }
                     } else { orderItemLines.push(`• Đơn hàng: ${linkedOrder.code} — ${fmtMoney(linkedOrder.total)}`); }
                   }
-                  const assigneeLines: string[] = assignees.length > 0 ? assignees.map((a: any) => { const u = data?.users.find((u: any) => u.id === a.user_id); return `  - ${u?.full_name ?? a.user_id}`; }) : [];
+                  const assigneeLines: string[] = assignees.length > 0 ? assignees.map((a: any) => { const u = usersById.get(String(a.user_id)); return `  - ${u?.full_name ?? a.user_id}`; }) : [];
                   const msgContent = [ "📋 Nội dung đơn hàng:", "", `• Tiêu đề: ${s.title}`, workType ? `• Loại hình công việc: ${workType.name}` : null, `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`, customer ? `• Khách hàng: ${customer.name}${customer.phone ? " — " + customer.phone : ""}` : null, s.address ? `• Địa chỉ: ${s.address}` : null, ...orderItemLines, assigner ? `• Người giao việc: ${assigner.full_name}` : null, creator ? `• Người tạo lịch: ${creator.full_name}` : null, assignees.length > 0 ? `• Người thực hiện:` : null, ...assigneeLines, s.note ? `• Ghi chú: ${s.note}` : null, `• Trạng thái: ${STATUS_LABELS[s.status]?.label ?? s.status}`].filter((v) => v !== null).join("\n");
                   function copyMsg() { navigator.clipboard.writeText(msgContent).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }
                   return (
