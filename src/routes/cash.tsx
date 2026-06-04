@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
-  listCash, createCashVoucher, updateCashVoucher,
+  getCashRefs, searchCashPage, createCashVoucher, updateCashVoucher,
   cancelCashVoucher, upsertCashVoucherType, deleteCashVoucherType,
 } from "@/lib/cash.functions";
 import { getSettings } from "@/lib/settings.functions";
@@ -394,7 +394,8 @@ function VoucherForm({
 function Page() {
   const { user, isAdmin , activeBranchId } = useAuth();
   const qc = useQueryClient();
-  const listFn = useServerFn(listCash);
+  const refsFn = useServerFn(getCashRefs);
+  const cashFn = useServerFn(searchCashPage);
   const createFn = useServerFn(createCashVoucher);
   const updateFn = useServerFn(updateCashVoucher);
   const cancelFn = useServerFn(cancelCashVoucher);
@@ -402,7 +403,7 @@ function Page() {
   const deleteTypeFn = useServerFn(deleteCashVoucherType);
   const getSettingsFn = useServerFn(getSettings);
 
-  const { data, isLoading } = useQuery({ queryKey: ["cash"], queryFn: () => listFn() });
+  const { data, isLoading } = useQuery({ queryKey: ["cash"], queryFn: () => refsFn(), staleTime: 60_000, gcTime: 10 * 60_000 });
   const { data: siteSettings } = useQuery({ queryKey: ["site_settings"], queryFn: () => getSettingsFn() });
 
   const canViewAll = isAdmin || user?.permissions.includes("view_cash_all");
@@ -452,7 +453,29 @@ function Page() {
   const [savingType, setSavingType] = useState<string | null>(null);
   const [deletingType, setDeletingType] = useState<string | null>(null);
 
-  const allVouchers  = data?.vouchers     ?? [];
+  // Trang phiếu + số liệu (thu/chi/số dư) tính ở SERVER theo bộ lọc hiện tại.
+  // Đổi bộ lọc/trang → đổi query key → chỉ tải đúng 1 trang.
+  const { data: cashData, isLoading: cashLoading } = useQuery({
+    queryKey: ["cash", "page", page, fund, filterBranch, filterType, filterBank, debouncedSearch, canViewAll, (user?.branch_ids ?? []).join(",")],
+    queryFn: () =>
+      cashFn({
+        data: {
+          page,
+          pageSize: DEFAULT_PAGE_SIZE,
+          fund,
+          filterBranch,
+          filterType,
+          filterBank,
+          search: debouncedSearch,
+          canViewAll: !!canViewAll,
+          branchIds: user?.branch_ids ?? [],
+        },
+      }),
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+  });
+
   const branches     = data?.branches     ?? [];
   const users        = data?.users        ?? [];
   const customers    = data?.customers    ?? [];
@@ -540,65 +563,17 @@ function Page() {
     return found ?? null;
   };
 
-  const branchStats = useMemo(() => {
-    const currentFund = fund === "all" ? null : fund;
-    const list = allVouchers.filter(
-      (v: any) =>
-        v.status === "active" &&
-        (currentFund ? v.fund_type === currentFund : true),
-    );
+  // Số liệu thu/chi/số dư lấy từ server (tính theo đúng công thức cũ).
+  const branchStats = cashData?.stats ?? { thu: 0, chi: 0, ton: 0 };
 
-    if (filterBranch) {
-      // Theo 1 chi nhánh: tính cộng/trừ quỹ theo mô hình A → B
-      let thu = 0, chi = 0;
-      for (const v of list) {
-        const d = branchDelta(v, filterBranch);
-        if (d > 0) thu += d;
-        else if (d < 0) chi += -d;
-      }
-      return { thu, chi, ton: thu - chi };
-    }
-
-    // Toàn bộ: tổng thu / tổng chi như cũ
-    const thu = list.filter((v: any) => v.type === "thu").reduce((s: number, v: any) => s + v.amount, 0);
-    const chi = list.filter((v: any) => v.type === "chi").reduce((s: number, v: any) => s + v.amount, 0);
-    return { thu, chi, ton: thu - chi };
-  }, [allVouchers, fund, filterBranch]);
-
-  const filtered = useMemo(() => {
-    const currentFund = fund === "all" ? null : fund;
-    return allVouchers.filter((v: any) => {
-      const matchFund   = !currentFund || v.fund_type === currentFund;
-      const bIds = voucherBranchIds(v);
-      const matchBranch = !filterBranch || bIds.includes(filterBranch);
-      const matchAccess =
-        canViewAll ||
-        (user?.branch_ids?.length === 0) ||
-        bIds.some((id) => user?.branch_ids?.includes(id));
-      const matchType  = !filterType || v.type === filterType;
-      const matchBank  = !filterBank || (v.note ?? "").includes(filterBank); // lọc theo số TK trong note
-      const sides = voucherSides(v);
-      const q = debouncedSearch.toLowerCase();
-      const matchSearch =
-        !debouncedSearch ||
-        v.code?.toLowerCase().includes(q) ||
-        sides.a?.toLowerCase().includes(q) ||
-        sides.b?.toLowerCase().includes(q) ||
-        v.note?.toLowerCase().includes(q);
-      return matchFund && matchBranch && matchAccess && matchType && matchBank && matchSearch;
-    });
-  }, [allVouchers, fund, filterBranch, filterType, filterBank, debouncedSearch, canViewAll, user]);
+  // Danh sách + tổng số lấy từ server (đã lọc/sort/phân trang).
+  const paged = cashData?.vouchers ?? [];
+  const totalFiltered = cashData?.meta?.totalFiltered ?? 0;
 
   // Reset về trang 1 mỗi khi đổi bộ lọc/tìm kiếm để không bị kẹt ở trang trống.
   useEffect(() => {
     setPage(1);
   }, [fund, filterBranch, filterType, filterBank, search]);
-
-  // Chỉ cắt để HIỂN THỊ — không đụng tới tính toán tổng tiền.
-  const paged = useMemo(
-    () => filtered.slice((page - 1) * DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE),
-    [filtered, page],
-  );
 
 
 
@@ -790,7 +765,7 @@ function Page() {
 
   // ── render ────────────────────────────────────────────────────────────
   return (
-    <AppShell title="Sổ quỹ" loading={isLoading && !data}>
+    <AppShell title="Sổ quỹ" loading={cashLoading && !cashData}>
       <div className="space-y-4">
 
         {/* ── Header actions ── */}
@@ -929,12 +904,12 @@ function Page() {
         {isLoading && (
           <div className="py-12 text-center text-muted-foreground">Đang tải dữ liệu...</div>
         )}
-        {!isLoading && filtered.length === 0 && (
+        {!cashLoading && totalFiltered === 0 && (
           <div className="py-12 text-center text-muted-foreground">Chưa có phiếu nào</div>
         )}
 
         {/* Mobile cards */}
-        {!isLoading && filtered.length > 0 && (
+        {!cashLoading && totalFiltered > 0 && (
           <div className="block sm:hidden space-y-2">
             {paged.map((v: any) => {
               const isActive = v.status === "active";
@@ -1031,7 +1006,7 @@ function Page() {
         )}
 
         {/* Desktop table */}
-        {!isLoading && filtered.length > 0 && (
+        {!cashLoading && totalFiltered > 0 && (
           <div className="hidden sm:block rounded-xl border overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[640px]">
@@ -1177,11 +1152,11 @@ function Page() {
         )}
 
         {/* ⚡ Phân trang danh sách phiếu — chỉ điều khiển HIỂN THỊ. */}
-        {!isLoading && filtered.length > 0 && (
+        {!cashLoading && totalFiltered > 0 && (
           <Pagination
             page={page}
             pageSize={DEFAULT_PAGE_SIZE}
-            total={filtered.length}
+            total={totalFiltered}
             onPageChange={setPage}
             label="phiếu"
           />

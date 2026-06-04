@@ -52,6 +52,139 @@ function legacyFieldsFromAB(data: any) {
 }
 
 // ─── listCash — trả về toàn bộ dữ liệu cần thiết cho trang Sổ quỹ ──────────
+// ─────────────────────────────────────────────────────────────────────────
+// Sổ quỹ: TÍNH Ở SERVER để client chỉ nhận 1 trang + số liệu (thay vì tải TẤT
+// CẢ phiếu). Logic lọc / số dư (branchDelta, bên A→B, quyền xem) ĐƯỢC SAO Y
+// NGUYÊN từ trang cũ → số tiền không đổi.
+// ─────────────────────────────────────────────────────────────────────────
+export const searchCashPage = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data: any }) => {
+    const page = Math.max(1, data?.page ?? 1);
+    const pageSize = Math.max(1, data?.pageSize ?? 20);
+    const fund = data?.fund ?? "all";
+    const filterBranch = data?.filterBranch ?? "";
+    const filterType = data?.filterType ?? "";
+    const filterBank = data?.filterBank ?? "";
+    const search = (data?.search ?? "").toLowerCase();
+    const canViewAll = !!data?.canViewAll;
+    const branchIds: string[] = data?.branchIds ?? [];
+
+    const [vouchers, branches, users, customers] = await Promise.all([
+      fetchAllRows("cash_vouchers", { orderBy: "created_at", ascending: false }),
+      fetchRows("branches", { orderBy: "name" }),
+      fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
+      fetchAllRows("customers", { select: "id, name", orderBy: "created_at", ascending: false }),
+    ]);
+
+    const branchName = new Map((branches as any[]).map((b) => [b.id, b.name]));
+    const userName = new Map((users as any[]).map((u) => [u.id, u.full_name]));
+    const custName = new Map((customers as any[]).map((c) => [c.id, c.name]));
+    const gBranch = (id: string) => branchName.get(id) ?? "";
+    const gUser = (id: string) => userName.get(id) ?? "";
+    const gCust = (id: string) => custName.get(id) ?? "";
+
+    const sideLabel = (kind: string, id: string, name: string): string => {
+      if (kind === "customer") return gCust(id) || "Khách hàng";
+      if (kind === "user") return gUser(id) || "Nhân viên";
+      if (kind === "branch") return gBranch(id) || "Chi nhánh";
+      if (kind === "other") return name || "—";
+      return "—";
+    };
+    const voucherSides = (v: any): { a: string; b: string } => {
+      if (v.from_kind || v.to_kind) {
+        return {
+          a: sideLabel(v.from_kind, v.from_id, v.from_name),
+          b: sideLabel(v.to_kind, v.to_id, v.to_name),
+        };
+      }
+      const isThu = v.type === "thu";
+      const a = v.branch_id
+        ? gBranch(v.branch_id)
+        : (isThu ? gUser(v.collector_user_id) : gUser(v.payer_user_id)) || "—";
+      const b = (isThu ? gCust(v.payer_customer_id) : gCust(v.receiver_customer_id)) || "—";
+      return { a, b };
+    };
+    const voucherBranchIds = (v: any): string[] => {
+      if (!v.from_kind && !v.to_kind) return v.branch_id ? [v.branch_id] : [];
+      const ids: string[] = [];
+      if (v.from_kind === "branch" && v.from_id) ids.push(v.from_id);
+      if (v.to_kind === "branch" && v.to_id) ids.push(v.to_id);
+      return ids;
+    };
+    const branchDelta = (v: any, bId: string): number => {
+      const amt = Number(v.amount) || 0;
+      const isThu = v.type === "thu";
+      if (!v.from_kind && !v.to_kind) {
+        if (v.branch_id === bId) return isThu ? amt : -amt;
+        return 0;
+      }
+      let d = 0;
+      if (v.from_kind === "branch" && v.from_id === bId) d += isThu ? amt : -amt;
+      if (v.to_kind === "branch" && v.to_id === bId) d += isThu ? -amt : amt;
+      return d;
+    };
+
+    const currentFund = fund === "all" ? null : fund;
+
+    // Số liệu (CHỈ phiếu active) — y nguyên branchStats cũ.
+    const active = (vouchers as any[]).filter(
+      (v) => v.status === "active" && (currentFund ? v.fund_type === currentFund : true),
+    );
+    let stats: { thu: number; chi: number; ton: number };
+    if (filterBranch) {
+      let thu = 0, chi = 0;
+      for (const v of active) {
+        const d = branchDelta(v, filterBranch);
+        if (d > 0) thu += d;
+        else if (d < 0) chi += -d;
+      }
+      stats = { thu, chi, ton: thu - chi };
+    } else {
+      const thu = active.filter((v) => v.type === "thu").reduce((s, v) => s + Number(v.amount || 0), 0);
+      const chi = active.filter((v) => v.type === "chi").reduce((s, v) => s + Number(v.amount || 0), 0);
+      stats = { thu, chi, ton: thu - chi };
+    }
+
+    // Danh sách (mọi trạng thái) — y nguyên filtered cũ.
+    const filtered = (vouchers as any[]).filter((v) => {
+      const matchFund = !currentFund || v.fund_type === currentFund;
+      const bIds = voucherBranchIds(v);
+      const matchBranch = !filterBranch || bIds.includes(filterBranch);
+      const matchAccess =
+        canViewAll || branchIds.length === 0 || bIds.some((id) => branchIds.includes(id));
+      const matchType = !filterType || v.type === filterType;
+      const matchBank = !filterBank || (v.note ?? "").includes(filterBank);
+      const sides = voucherSides(v);
+      const matchSearch =
+        !search ||
+        v.code?.toLowerCase().includes(search) ||
+        sides.a?.toLowerCase().includes(search) ||
+        sides.b?.toLowerCase().includes(search) ||
+        v.note?.toLowerCase().includes(search);
+      return matchFund && matchBranch && matchAccess && matchType && matchBank && matchSearch;
+    });
+
+    const totalFiltered = filtered.length;
+    const start = (page - 1) * pageSize;
+    return {
+      vouchers: filtered.slice(start, start + pageSize),
+      meta: { totalFiltered },
+      stats,
+    };
+  },
+);
+
+// Dữ liệu tra cứu cho form + hiển thị tên (KHÔNG kèm danh sách phiếu).
+export const getCashRefs = createServerFn({ method: "GET" }).handler(async () => {
+  const [branches, users, customers, voucherTypes] = await Promise.all([
+    fetchRows("branches", { orderBy: "name" }),
+    fetchRows("users", { select: "id, full_name, is_admin", orderBy: "full_name" }),
+    fetchAllRows("customers", { select: "id, name, phone", orderBy: "created_at", ascending: false }),
+    fetchRows("cash_voucher_types", { orderBy: "name" }),
+  ]);
+  return { branches, users, customers, voucherTypes };
+});
+
 export const listCash = createServerFn({ method: "GET" }).handler(async () => {
   // ❗ cash_vouchers, customers có thể vượt 1000 dòng → dùng fetchAllRows.
   const [vouchers, branches, users, customers, voucherTypes] = await Promise.all([
