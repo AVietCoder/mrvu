@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useRef } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
-  searchProductsPage, getProductStats, upsertProduct, deleteProduct,
+  listProducts, upsertProduct, deleteProduct,
   upsertCategory, upsertBrand, deleteBrand, deleteCategory,
 } from "@/lib/products.functions";
 import { uploadImageToCloudinary } from "@/lib/cloudinary";
@@ -55,8 +55,7 @@ function parseInput(val: string): number {
 
 function ProductsPage() {
   const { user, isAdmin } = useAuth();
-  const listFn    = useServerFn(searchProductsPage);
-  const statsFn   = useServerFn(getProductStats);
+  const list      = useServerFn(listProducts);
   const upsert    = useServerFn(upsertProduct);
   const del       = useServerFn(deleteProduct);
   const upsertCat = useServerFn(upsertCategory);
@@ -65,6 +64,7 @@ function ProductsPage() {
   const delCat    = useServerFn(deleteCategory);
   const qc = useQueryClient();
 
+  const { data, isLoading } = useQuery({ queryKey: ["products"], queryFn: () => list() });
   const [form, setForm] = useState<FormState>(empty);
   const [open, setOpen] = useState(false);
   const [viewId, setViewId] = useState<string | null>(null);
@@ -74,34 +74,6 @@ function ProductsPage() {
   const [page, setPage] = useState(1);
   const [filterCategory, setFilterCategory] = useState("");
   const [filterBrand, setFilterBrand] = useState("");
-
-  // Danh sách hàng hóa theo TRANG — lọc/tìm kiếm chạy ở Postgres, mỗi lần ~20
-  // dòng (kèm tổng tồn + tồn theo chi nhánh cho dialog "Xem"). placeholderData
-  // giữ trang cũ trong lúc tải để không nháy.
-  const { data: listData, isLoading } = useQuery({
-    queryKey: ["products", "page", page, debouncedSearch, filterCategory, filterBrand],
-    queryFn: () =>
-      listFn({
-        data: {
-          page,
-          pageSize: PAGE_SIZE,
-          search: debouncedSearch,
-          category: filterCategory,
-          brand: filterBrand,
-        },
-      }),
-    placeholderData: (prev) => prev,
-    staleTime: 30_000,
-    gcTime: 5 * 60_000,
-  });
-
-  // Số liệu + danh mục/thương hiệu/chi nhánh (đều nhẹ), gộp 1 lần gọi, cache lâu.
-  const { data: stats } = useQuery({
-    queryKey: ["products", "stats"],
-    queryFn: () => statsFn(),
-    staleTime: 60_000,
-    gcTime: 10 * 60_000,
-  });
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -117,16 +89,28 @@ function ProductsPage() {
   const [deletingBrand, setDeletingBrand] = useState<string | null>(null);
   const [deletingCat, setDeletingCat] = useState<string | null>(null);
 
-  // Server đã lọc + phân trang sẵn → dùng thẳng.
-  const paginated = listData?.products ?? [];
-  const totalFiltered = listData?.meta?.totalFiltered ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE));
+  const filtered = useMemo(
+    () => (data?.products ?? []).filter((p) => {
+      const q = debouncedSearch.toLowerCase();
+      const matchSearch = p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q);
+      const matchCat = !filterCategory || p.category_id === filterCategory;
+      const matchBrand = !filterBrand || (p as any).brand_id === filterBrand;
+      return matchSearch && matchCat && matchBrand;
+    }),
+    [data, debouncedSearch, filterCategory, filterBrand],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function handleSearch(val: string) { setSearch(val); setPage(1); }
 
+  const totalsByProduct = (id: string) =>
+    (data?.stock ?? []).filter((s) => s.product_id === id).reduce((a, b) => a + b.qty, 0);
+
   function startNew() { setForm(empty); setOpen(true); }
   function startEdit(id: string) {
-    const p = paginated.find((x: any) => x.id === id)!;
+    const p = data!.products.find((x) => x.id === id)!;
     setForm({
       id: p.id, name: p.name,
       category_id: p.category_id ?? "",
@@ -265,20 +249,20 @@ function ProductsPage() {
   }
 
   // View product detail
-  const viewProduct = viewId ? paginated.find((p: any) => p.id === viewId) : null;
-  const viewStock = (viewProduct?.stock_by_branch ?? []) as any[];
-  const viewTotalStock = Number(viewProduct?.total_stock ?? 0);
+  const viewProduct = viewId ? data?.products.find((p) => p.id === viewId) : null;
+  const viewStock = viewId ? (data?.stock ?? []).filter((s) => s.product_id === viewId) : [];
+  const viewTotalStock = viewStock.reduce((a, b) => a + b.qty, 0);
 
   // Low stock count
-  const lowStockCount = stats?.lowStockCount ?? 0;
+  const lowStockCount = (data?.products ?? []).filter((p) => totalsByProduct(p.id) <= p.min_stock).length;
 
   return (
-    <AppShell title="Quản lý hàng hóa" loading={isLoading}>
+    <AppShell title="Quản lý hàng hóa" loading={isLoading && !data}>
       {/* Stats */}
       <div className="hidden md:grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <Card>
           <div className="flex items-center gap-2 mb-1"><Package className="h-4 w-4 text-muted-foreground" /><div className="text-xs text-muted-foreground uppercase">Tổng sản phẩm</div></div>
-          <div className="text-2xl font-semibold">{stats?.totalProducts ?? 0}</div>
+          <div className="text-2xl font-semibold">{(data?.products ?? []).length}</div>
         </Card>
         <Card>
           <div className="flex items-center gap-2 mb-1"><AlertTriangle className="h-4 w-4 text-destructive" /><div className="text-xs text-muted-foreground uppercase">Tồn kho thấp</div></div>
@@ -286,11 +270,11 @@ function ProductsPage() {
         </Card>
         <Card>
           <div className="text-xs text-muted-foreground uppercase mb-1">Danh mục</div>
-          <div className="text-2xl font-semibold">{(stats?.categories ?? []).length}</div>
+          <div className="text-2xl font-semibold">{(data?.categories ?? []).length}</div>
         </Card>
         <Card>
           <div className="text-xs text-muted-foreground uppercase mb-1">Thương hiệu</div>
-          <div className="text-2xl font-semibold">{(stats?.brands ?? []).length}</div>
+          <div className="text-2xl font-semibold">{(data?.brands ?? []).length}</div>
         </Card>
       </div>
 
@@ -308,12 +292,12 @@ function ProductsPage() {
           <select className="h-9 rounded-md border bg-background px-2 text-sm"
             value={filterCategory} onChange={(e) => { setFilterCategory(e.target.value); setPage(1); }}>
             <option value="">Tất cả danh mục</option>
-            {(stats?.categories ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {(data?.categories ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <select className="h-9 rounded-md border bg-background px-2 text-sm"
             value={filterBrand} onChange={(e) => { setFilterBrand(e.target.value); setPage(1); }}>
             <option value="">Tất cả thương hiệu</option>
-            {(stats?.brands ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {(data?.brands ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
 
           {isAdmin && (
@@ -344,7 +328,7 @@ function ProductsPage() {
                 </thead>
                 <tbody>
                   {paginated.map((p, idx) => {
-                    const qty = Number(p.total_stock ?? 0);
+                    const qty = totalsByProduct(p.id);
                     const low = qty <= p.min_stock;
                     const globalIdx = (page - 1) * PAGE_SIZE + idx + 1;
                     return (
@@ -378,7 +362,7 @@ function ProductsPage() {
                       </tr>
                     );
                   })}
-                  {paginated.length === 0 && (
+                  {filtered.length === 0 && (
                     <tr>
                       <td colSpan={8} className="py-8 text-center text-muted-foreground">Không có sản phẩm</td>
                     </tr>
@@ -390,7 +374,7 @@ function ProductsPage() {
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-4 text-sm border-t pt-3">
                 <span className="text-muted-foreground">
-                  {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, totalFiltered)} / {totalFiltered} sản phẩm
+                  {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} / {filtered.length} sản phẩm
                 </span>
                 <div className="flex items-center gap-1">
                   <Button size="icon" variant="outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
@@ -431,14 +415,14 @@ function ProductsPage() {
                 <select className="h-9 rounded-md border bg-background px-3 text-sm w-full"
                   value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
                   <option value="">— Chọn nhóm —</option>
-                  {(stats?.categories ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {data?.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </Field>
               <Field label="Thương hiệu *">
                 <select className="h-9 rounded-md border bg-background px-3 text-sm w-full"
                   value={form.brand_id} onChange={(e) => setForm({ ...form, brand_id: e.target.value })}>
                   <option value="">— Chọn thương hiệu —</option>
-                  {(stats?.brands ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  {data?.brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </Field>
               <Field label="Giá vốn (₫)">
@@ -568,11 +552,11 @@ function ProductsPage() {
                     <>
                       <div className="rounded-lg border bg-muted/30 p-3">
                         <div className="text-xs text-muted-foreground mb-1">Danh mục</div>
-                        <div className="font-medium">{(stats?.categories ?? []).find((c) => c.id === viewProduct.category_id)?.name ?? "—"}</div>
+                        <div className="font-medium">{data?.categories.find((c) => c.id === viewProduct.category_id)?.name ?? "—"}</div>
                       </div>
                       <div className="rounded-lg border bg-muted/30 p-3">
                         <div className="text-xs text-muted-foreground mb-1">Thương hiệu</div>
-                        <div className="font-medium">{(stats?.brands ?? []).find((b) => b.id === (viewProduct as any).brand_id)?.name ?? "—"}</div>
+                        <div className="font-medium">{data?.brands.find((b) => b.id === (viewProduct as any).brand_id)?.name ?? "—"}</div>
                       </div>
                       <div className="rounded-lg border bg-amber-50 border-amber-200 p-3">
                         <div className="text-xs text-amber-700 mb-1">Giá vốn</div>
@@ -590,7 +574,7 @@ function ProductsPage() {
                 <div>
                   <div className="font-medium text-sm mb-2">Tồn kho theo chi nhánh</div>
                   <div className="space-y-1.5">
-                    {(stats?.branches ?? []).map((b) => {
+                    {(data?.branches ?? []).map((b) => {
                       const qty = viewStock.find((s) => s.branch_id === b.id)?.qty ?? 0;
                       const low = qty <= viewProduct.min_stock;
                       return (
@@ -642,7 +626,7 @@ function ProductsPage() {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <span className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Thương hiệu</span>
-                <span className="text-xs text-muted-foreground">{(stats?.brands ?? []).length ?? 0} mục</span>
+                <span className="text-xs text-muted-foreground">{data?.brands.length ?? 0} mục</span>
               </div>
               {isAdmin && (
                 <div className="flex gap-2 mb-3">
@@ -660,7 +644,7 @@ function ProductsPage() {
                 </div>
               )}
               <div className="space-y-1.5 max-h-44 overflow-y-auto overscroll-contain">
-                {(stats?.brands ?? []).map((b: any) => (
+                {(data?.brands ?? []).map((b: any) => (
                   <div key={b.id} className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2 text-sm group hover:bg-muted/30 transition-colors">
                     {editingBrandId === b.id ? (
                       <>
@@ -692,7 +676,7 @@ function ProductsPage() {
                     )}
                   </div>
                 ))}
-                {(stats?.brands ?? []).length === 0 && (
+                {(data?.brands ?? []).length === 0 && (
                   <div className="py-4 text-center text-sm text-muted-foreground">Chưa có thương hiệu</div>
                 )}
               </div>
@@ -704,7 +688,7 @@ function ProductsPage() {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <span className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">Danh mục (nhóm hàng)</span>
-                <span className="text-xs text-muted-foreground">{(stats?.categories ?? []).length ?? 0} mục</span>
+                <span className="text-xs text-muted-foreground">{data?.categories.length ?? 0} mục</span>
               </div>
               {isAdmin && (
                 <div className="flex gap-2 mb-3">
@@ -722,7 +706,7 @@ function ProductsPage() {
                 </div>
               )}
               <div className="space-y-1.5 max-h-44 overflow-y-auto overscroll-contain">
-                {(stats?.categories ?? []).map((c: any) => (
+                {(data?.categories ?? []).map((c: any) => (
                   <div key={c.id} className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2 text-sm group hover:bg-muted/30 transition-colors">
                     {editingCatId === c.id ? (
                       <>
@@ -754,7 +738,7 @@ function ProductsPage() {
                     )}
                   </div>
                 ))}
-                {(stats?.categories ?? []).length === 0 && (
+                {(data?.categories ?? []).length === 0 && (
                   <div className="py-4 text-center text-sm text-muted-foreground">Chưa có danh mục</div>
                 )}
               </div>
