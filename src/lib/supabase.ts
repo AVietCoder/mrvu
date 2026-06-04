@@ -16,7 +16,7 @@
  *   TURSO_AUTH_TOKEN     Turso auth token
  */
 
-import { createClient, type Client, type InValue } from "@libsql/client";
+import { createClient, type Client, type InValue } from "@libsql/client/web";
 
 // ─── Client (lazy singleton) ──────────────────────────────────────────────
 let _client: Client | null = null;
