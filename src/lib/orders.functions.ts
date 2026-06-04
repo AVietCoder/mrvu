@@ -1002,7 +1002,7 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
       } catch (_emailErr) {
         // Lỗi email không ảnh hưởng việc cập nhật trạng thái
       }
-      await logActivity({ action: "complete_order", detail: `Hoàn tất đơn ${currentOrder.code}` });
+      await logActivity({ action: "complete_order", detail: `Hoàn tất đơn ${currentOrder.code}`, employee_id: data.actor_id || currentOrder.employee_id || null });
     }
 
     if (data.status === "cancelled") {
@@ -1030,7 +1030,7 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
       }
       // Xóa phiếu thu chi liên quan đến đơn hàng bị hủy
       await revertCashVouchersForOrder(currentOrder.code);
-      await logActivity({ action: "cancel_order", detail: `Hủy đơn ${currentOrder.code} — đã rollback phiếu thu chi` });
+      await logActivity({ action: "cancel_order", detail: `Hủy đơn ${currentOrder.code} — đã rollback phiếu thu chi`, employee_id: data.actor_id || currentOrder.employee_id || null });
     }
 
     return { ok: true };
