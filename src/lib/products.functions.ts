@@ -1,11 +1,62 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { countRows, deleteWhere, fetchAllRows, fetchRows, insertRow, now, uid, updateWhere, logActivity } from "./supabase";
+import { countRows, deleteWhere, fetchAllRows, fetchRows, insertRow, now, supabase, uid, updateWhere, logActivity } from "./supabase";
 
 async function nextSku(): Promise<string> {
   const count = await countRows("products");
   return "SP-" + String(count + 1).padStart(4, "0");
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// PHÂN TRANG PHÍA SERVER cho danh sách hàng hóa (mẫu giống listCustomers).
+// ─────────────────────────────────────────────────────────────────────────
+interface SearchProductsArgs {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  category?: string;
+  brand?: string;
+}
+
+export const searchProductsPage = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data: SearchProductsArgs | undefined }) => {
+    const page = Math.max(1, data?.page ?? 1);
+    const pageSize = Math.max(1, data?.pageSize ?? 20);
+    const offset = (page - 1) * pageSize;
+
+    const { data: rows, error } = await supabase.rpc("search_products_page", {
+      p_search: data?.search || null,
+      p_category: data?.category || null,
+      p_brand: data?.brand || null,
+      p_limit: pageSize,
+      p_offset: offset,
+    });
+    if (error) throw new Error(error.message);
+
+    const products = (rows ?? []) as any[];
+    const totalFiltered = products[0]?.filtered_count
+      ? Number(products[0].filtered_count)
+      : 0;
+
+    return { products, meta: { totalFiltered } };
+  },
+);
+
+// Số liệu + danh sách phụ trợ (danh mục/thương hiệu/chi nhánh) — gộp 1 lần gọi.
+export const getProductStats = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const { data, error } = await supabase.rpc("products_stats");
+    if (error) throw new Error(error.message);
+    const s = (data ?? {}) as any;
+    return {
+      totalProducts: Number(s.total_products ?? 0),
+      lowStockCount: Number(s.low_stock_count ?? 0),
+      categories: (s.categories ?? []) as any[],
+      brands: (s.brands ?? []) as any[],
+      branches: (s.branches ?? []) as any[],
+    };
+  },
+);
 
 export const listProducts = createServerFn({ method: "GET" }).handler(async () => {
   const [products, categories, brands, stock] = await Promise.all([
