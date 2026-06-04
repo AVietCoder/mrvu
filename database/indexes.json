@@ -1,0 +1,836 @@
+[
+  {
+    "schemaname": "public",
+    "tablename": "schedules",
+    "indexname": "idx_schedules_status_date",
+    "indexdef": "CREATE INDEX idx_schedules_status_date ON public.schedules USING btree (status, scheduled_date DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedules",
+    "indexname": "idx_schedules_scheduled_date",
+    "indexdef": "CREATE INDEX idx_schedules_scheduled_date ON public.schedules USING btree (scheduled_date)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedules",
+    "indexname": "idx_schedules_order_id",
+    "indexdef": "CREATE INDEX idx_schedules_order_id ON public.schedules USING btree (order_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedules",
+    "indexname": "idx_schedules_created_at",
+    "indexdef": "CREATE INDEX idx_schedules_created_at ON public.schedules USING btree (created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedules",
+    "indexname": "schedules_pkey",
+    "indexdef": "CREATE UNIQUE INDEX schedules_pkey ON public.schedules USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedules",
+    "indexname": "idx_schedules_customer",
+    "indexdef": "CREATE INDEX idx_schedules_customer ON public.schedules USING btree (customer_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedules",
+    "indexname": "idx_schedules_order",
+    "indexdef": "CREATE INDEX idx_schedules_order ON public.schedules USING btree (order_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedules",
+    "indexname": "idx_schedules_branch",
+    "indexdef": "CREATE INDEX idx_schedules_branch ON public.schedules USING btree (branch_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedules",
+    "indexname": "idx_schedules_date",
+    "indexdef": "CREATE INDEX idx_schedules_date ON public.schedules USING btree (scheduled_date)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedules",
+    "indexname": "idx_schedules_status",
+    "indexdef": "CREATE INDEX idx_schedules_status ON public.schedules USING btree (status)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedules",
+    "indexname": "idx_schedules_created",
+    "indexdef": "CREATE INDEX idx_schedules_created ON public.schedules USING btree (created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedules",
+    "indexname": "idx_schedules_date_status",
+    "indexdef": "CREATE INDEX idx_schedules_date_status ON public.schedules USING btree (scheduled_date, status)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_transfers",
+    "indexname": "idx_transfers_created_at",
+    "indexdef": "CREATE INDEX idx_transfers_created_at ON public.stock_transfers USING btree (created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_transfers",
+    "indexname": "stock_transfers_pkey",
+    "indexdef": "CREATE UNIQUE INDEX stock_transfers_pkey ON public.stock_transfers USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_transfers",
+    "indexname": "idx_transfers_from",
+    "indexdef": "CREATE INDEX idx_transfers_from ON public.stock_transfers USING btree (from_branch)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_transfers",
+    "indexname": "idx_transfers_to",
+    "indexdef": "CREATE INDEX idx_transfers_to ON public.stock_transfers USING btree (to_branch)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_transfers",
+    "indexname": "idx_transfers_status",
+    "indexdef": "CREATE INDEX idx_transfers_status ON public.stock_transfers USING btree (status)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_transfers",
+    "indexname": "idx_transfers_created",
+    "indexdef": "CREATE INDEX idx_transfers_created ON public.stock_transfers USING btree (created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "user_branches",
+    "indexname": "user_branches_pkey",
+    "indexdef": "CREATE UNIQUE INDEX user_branches_pkey ON public.user_branches USING btree (user_id, branch_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "user_permissions",
+    "indexname": "user_permissions_pkey",
+    "indexdef": "CREATE UNIQUE INDEX user_permissions_pkey ON public.user_permissions USING btree (user_id, permission)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "user_activity_logs",
+    "indexname": "user_activity_logs_pkey",
+    "indexdef": "CREATE UNIQUE INDEX user_activity_logs_pkey ON public.user_activity_logs USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_vouchers_from_branch",
+    "indexdef": "CREATE INDEX idx_cash_vouchers_from_branch ON public.cash_vouchers USING btree (from_id) WHERE (from_kind = 'branch'::text)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_vouchers_to_branch",
+    "indexdef": "CREATE INDEX idx_cash_vouchers_to_branch ON public.cash_vouchers USING btree (to_id) WHERE (to_kind = 'branch'::text)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_vouchers_payer",
+    "indexdef": "CREATE INDEX idx_cash_vouchers_payer ON public.cash_vouchers USING btree (payer_customer_id, type, status)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_vouchers_receiver",
+    "indexdef": "CREATE INDEX idx_cash_vouchers_receiver ON public.cash_vouchers USING btree (receiver_customer_id, type, status)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_vouchers_type_status_created",
+    "indexdef": "CREATE INDEX idx_vouchers_type_status_created ON public.cash_vouchers USING btree (type, status, created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_vouchers_branch",
+    "indexdef": "CREATE INDEX idx_vouchers_branch ON public.cash_vouchers USING btree (branch_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_vouchers_payer_customer",
+    "indexdef": "CREATE INDEX idx_vouchers_payer_customer ON public.cash_vouchers USING btree (payer_customer_id) WHERE (payer_customer_id IS NOT NULL)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_vouchers_receiver_customer",
+    "indexdef": "CREATE INDEX idx_vouchers_receiver_customer ON public.cash_vouchers USING btree (receiver_customer_id) WHERE (receiver_customer_id IS NOT NULL)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_vouchers_code",
+    "indexdef": "CREATE INDEX idx_vouchers_code ON public.cash_vouchers USING btree (code)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_vouchers_code_trgm",
+    "indexdef": "CREATE INDEX idx_vouchers_code_trgm ON public.cash_vouchers USING gin (code gin_trgm_ops)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_vouchers_created_at",
+    "indexdef": "CREATE INDEX idx_cash_vouchers_created_at ON public.cash_vouchers USING btree (created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_vouchers_type",
+    "indexdef": "CREATE INDEX idx_cash_vouchers_type ON public.cash_vouchers USING btree (type)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_vouchers_fund_type",
+    "indexdef": "CREATE INDEX idx_cash_vouchers_fund_type ON public.cash_vouchers USING btree (fund_type)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_vouchers_branch_id",
+    "indexdef": "CREATE INDEX idx_cash_vouchers_branch_id ON public.cash_vouchers USING btree (branch_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_vouchers_payer_cust",
+    "indexdef": "CREATE INDEX idx_cash_vouchers_payer_cust ON public.cash_vouchers USING btree (payer_customer_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_vouchers_recv_cust",
+    "indexdef": "CREATE INDEX idx_cash_vouchers_recv_cust ON public.cash_vouchers USING btree (receiver_customer_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_vouchers_from_to",
+    "indexdef": "CREATE INDEX idx_cash_vouchers_from_to ON public.cash_vouchers USING btree (from_kind, from_id, to_kind, to_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_vouchers_code_trgm",
+    "indexdef": "CREATE INDEX idx_cash_vouchers_code_trgm ON public.cash_vouchers USING gin (code gin_trgm_ops)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "cash_vouchers_pkey",
+    "indexdef": "CREATE UNIQUE INDEX cash_vouchers_pkey ON public.cash_vouchers USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "cash_vouchers_code_key",
+    "indexdef": "CREATE UNIQUE INDEX cash_vouchers_code_key ON public.cash_vouchers USING btree (code)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_branch",
+    "indexdef": "CREATE INDEX idx_cash_branch ON public.cash_vouchers USING btree (branch_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_type",
+    "indexdef": "CREATE INDEX idx_cash_type ON public.cash_vouchers USING btree (type)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_payer",
+    "indexdef": "CREATE INDEX idx_cash_payer ON public.cash_vouchers USING btree (payer_customer_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_created",
+    "indexdef": "CREATE INDEX idx_cash_created ON public.cash_vouchers USING btree (created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_payer_type",
+    "indexdef": "CREATE INDEX idx_cash_payer_type ON public.cash_vouchers USING btree (payer_customer_id, type)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_recv_type",
+    "indexdef": "CREATE INDEX idx_cash_recv_type ON public.cash_vouchers USING btree (receiver_customer_id, type)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_type_created",
+    "indexdef": "CREATE INDEX idx_cash_type_created ON public.cash_vouchers USING btree (type, created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_vouchers",
+    "indexname": "idx_cash_status",
+    "indexdef": "CREATE INDEX idx_cash_status ON public.cash_vouchers USING btree (status)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "work_types",
+    "indexname": "work_types_pkey",
+    "indexdef": "CREATE UNIQUE INDEX work_types_pkey ON public.work_types USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_movements",
+    "indexname": "idx_movements_from_branch",
+    "indexdef": "CREATE INDEX idx_movements_from_branch ON public.stock_movements USING btree (from_branch)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_movements",
+    "indexname": "idx_movements_to_branch",
+    "indexdef": "CREATE INDEX idx_movements_to_branch ON public.stock_movements USING btree (to_branch)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_movements",
+    "indexname": "idx_movements_product_id",
+    "indexdef": "CREATE INDEX idx_movements_product_id ON public.stock_movements USING btree (product_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_movements",
+    "indexname": "stock_movements_pkey",
+    "indexdef": "CREATE UNIQUE INDEX stock_movements_pkey ON public.stock_movements USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_movements",
+    "indexname": "idx_movements_branch",
+    "indexdef": "CREATE INDEX idx_movements_branch ON public.stock_movements USING btree (branch_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_movements",
+    "indexname": "idx_movements_product",
+    "indexdef": "CREATE INDEX idx_movements_product ON public.stock_movements USING btree (product_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_movements",
+    "indexname": "idx_movements_created",
+    "indexdef": "CREATE INDEX idx_movements_created ON public.stock_movements USING btree (created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "cash_voucher_types",
+    "indexname": "cash_voucher_types_pkey",
+    "indexdef": "CREATE UNIQUE INDEX cash_voucher_types_pkey ON public.cash_voucher_types USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customers",
+    "indexname": "idx_customers_name_trgm",
+    "indexdef": "CREATE INDEX idx_customers_name_trgm ON public.customers USING gin (lower(name) gin_trgm_ops)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customers",
+    "indexname": "idx_customers_phone_trgm",
+    "indexdef": "CREATE INDEX idx_customers_phone_trgm ON public.customers USING gin (phone gin_trgm_ops)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customers",
+    "indexname": "idx_customers_email_trgm",
+    "indexdef": "CREATE INDEX idx_customers_email_trgm ON public.customers USING gin (email gin_trgm_ops)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customers",
+    "indexname": "idx_customers_group_name",
+    "indexdef": "CREATE INDEX idx_customers_group_name ON public.customers USING btree (group_name)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customers",
+    "indexname": "idx_customers_created_at",
+    "indexdef": "CREATE INDEX idx_customers_created_at ON public.customers USING btree (created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customers",
+    "indexname": "idx_customers_debt",
+    "indexdef": "CREATE INDEX idx_customers_debt ON public.customers USING btree (debt)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customers",
+    "indexname": "customers_pkey",
+    "indexdef": "CREATE UNIQUE INDEX customers_pkey ON public.customers USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customers",
+    "indexname": "customers_external_code_key",
+    "indexdef": "CREATE UNIQUE INDEX customers_external_code_key ON public.customers USING btree (external_code)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customers",
+    "indexname": "idx_customers_phone",
+    "indexdef": "CREATE INDEX idx_customers_phone ON public.customers USING btree (phone)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customers",
+    "indexname": "idx_customers_ext",
+    "indexdef": "CREATE INDEX idx_customers_ext ON public.customers USING btree (external_code)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "customers",
+    "indexname": "idx_customers_group",
+    "indexdef": "CREATE INDEX idx_customers_group ON public.customers USING btree (group_name)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "branches",
+    "indexname": "branches_pkey",
+    "indexdef": "CREATE UNIQUE INDEX branches_pkey ON public.branches USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "work_difficulties",
+    "indexname": "work_difficulties_pkey",
+    "indexdef": "CREATE UNIQUE INDEX work_difficulties_pkey ON public.work_difficulties USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "activity_logs",
+    "indexname": "idx_activity_employee",
+    "indexdef": "CREATE INDEX idx_activity_employee ON public.activity_logs USING btree (employee_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "activity_logs",
+    "indexname": "idx_activity_created_at",
+    "indexdef": "CREATE INDEX idx_activity_created_at ON public.activity_logs USING btree (created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "activity_logs",
+    "indexname": "idx_activity_employee_id",
+    "indexdef": "CREATE INDEX idx_activity_employee_id ON public.activity_logs USING btree (employee_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "activity_logs",
+    "indexname": "activity_logs_pkey",
+    "indexdef": "CREATE UNIQUE INDEX activity_logs_pkey ON public.activity_logs USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "activity_logs",
+    "indexname": "idx_activity_created",
+    "indexdef": "CREATE INDEX idx_activity_created ON public.activity_logs USING btree (created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_transfer_items",
+    "indexname": "stock_transfer_items_pkey",
+    "indexdef": "CREATE UNIQUE INDEX stock_transfer_items_pkey ON public.stock_transfer_items USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_transfer_items",
+    "indexname": "idx_transfer_items_transfer",
+    "indexdef": "CREATE INDEX idx_transfer_items_transfer ON public.stock_transfer_items USING btree (transfer_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock_transfer_items",
+    "indexname": "idx_transfer_items_product",
+    "indexdef": "CREATE INDEX idx_transfer_items_product ON public.stock_transfer_items USING btree (product_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "site_settings",
+    "indexname": "site_settings_pkey",
+    "indexdef": "CREATE UNIQUE INDEX site_settings_pkey ON public.site_settings USING btree (key)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "products",
+    "indexname": "idx_products_brand",
+    "indexdef": "CREATE INDEX idx_products_brand ON public.products USING btree (brand_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "products",
+    "indexname": "idx_products_name_trgm",
+    "indexdef": "CREATE INDEX idx_products_name_trgm ON public.products USING gin (name gin_trgm_ops)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "products",
+    "indexname": "idx_products_sku_trgm",
+    "indexdef": "CREATE INDEX idx_products_sku_trgm ON public.products USING gin (sku gin_trgm_ops)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "products",
+    "indexname": "idx_products_name",
+    "indexdef": "CREATE INDEX idx_products_name ON public.products USING btree (name)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "products",
+    "indexname": "idx_products_category_id",
+    "indexdef": "CREATE INDEX idx_products_category_id ON public.products USING btree (category_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "products",
+    "indexname": "idx_products_brand_id",
+    "indexdef": "CREATE INDEX idx_products_brand_id ON public.products USING btree (brand_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "products",
+    "indexname": "products_pkey",
+    "indexdef": "CREATE UNIQUE INDEX products_pkey ON public.products USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "products",
+    "indexname": "products_sku_key",
+    "indexdef": "CREATE UNIQUE INDEX products_sku_key ON public.products USING btree (sku)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "products",
+    "indexname": "idx_products_sku",
+    "indexdef": "CREATE INDEX idx_products_sku ON public.products USING btree (sku)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "products",
+    "indexname": "idx_products_category",
+    "indexdef": "CREATE INDEX idx_products_category ON public.products USING btree (category_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "categories",
+    "indexname": "categories_pkey",
+    "indexdef": "CREATE UNIQUE INDEX categories_pkey ON public.categories USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "brands",
+    "indexname": "brands_pkey",
+    "indexdef": "CREATE UNIQUE INDEX brands_pkey ON public.brands USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "users",
+    "indexname": "idx_users_full_name",
+    "indexdef": "CREATE INDEX idx_users_full_name ON public.users USING btree (full_name)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "users",
+    "indexname": "users_pkey",
+    "indexdef": "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "users",
+    "indexname": "users_username_key",
+    "indexdef": "CREATE UNIQUE INDEX users_username_key ON public.users USING btree (username)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "users",
+    "indexname": "idx_users_username",
+    "indexdef": "CREATE INDEX idx_users_username ON public.users USING btree (username)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "users",
+    "indexname": "idx_users_kv_employee_id",
+    "indexdef": "CREATE INDEX idx_users_kv_employee_id ON public.users USING btree (kv_employee_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_customer_status",
+    "indexdef": "CREATE INDEX idx_orders_customer_status ON public.orders USING btree (customer_id, status)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_customer_id",
+    "indexdef": "CREATE INDEX idx_orders_customer_id ON public.orders USING btree (customer_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_branch_status",
+    "indexdef": "CREATE INDEX idx_orders_branch_status ON public.orders USING btree (branch_id, status)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_employee_id",
+    "indexdef": "CREATE INDEX idx_orders_employee_id ON public.orders USING btree (employee_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_status_created",
+    "indexdef": "CREATE INDEX idx_orders_status_created ON public.orders USING btree (status, created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_completed_at",
+    "indexdef": "CREATE INDEX idx_orders_completed_at ON public.orders USING btree (completed_at DESC) WHERE (completed_at IS NOT NULL)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_code_trgm",
+    "indexdef": "CREATE INDEX idx_orders_code_trgm ON public.orders USING gin (code gin_trgm_ops)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_sort_date",
+    "indexdef": "CREATE INDEX idx_orders_sort_date ON public.orders USING btree ((\nCASE\n    WHEN ((status = 'completed'::text) AND (completed_at IS NOT NULL)) THEN completed_at\n    ELSE created_at\nEND) DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_created_at",
+    "indexdef": "CREATE INDEX idx_orders_created_at ON public.orders USING btree (created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_branch_id",
+    "indexdef": "CREATE INDEX idx_orders_branch_id ON public.orders USING btree (branch_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "orders_pkey",
+    "indexdef": "CREATE UNIQUE INDEX orders_pkey ON public.orders USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "orders_code_key",
+    "indexdef": "CREATE UNIQUE INDEX orders_code_key ON public.orders USING btree (code)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_customer",
+    "indexdef": "CREATE INDEX idx_orders_customer ON public.orders USING btree (customer_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_branch",
+    "indexdef": "CREATE INDEX idx_orders_branch ON public.orders USING btree (branch_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_employee",
+    "indexdef": "CREATE INDEX idx_orders_employee ON public.orders USING btree (employee_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_status",
+    "indexdef": "CREATE INDEX idx_orders_status ON public.orders USING btree (status)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_created",
+    "indexdef": "CREATE INDEX idx_orders_created ON public.orders USING btree (created_at DESC)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "indexname": "idx_orders_code",
+    "indexdef": "CREATE INDEX idx_orders_code ON public.orders USING btree (code)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_items",
+    "indexname": "idx_order_items_order_id",
+    "indexdef": "CREATE INDEX idx_order_items_order_id ON public.order_items USING btree (order_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_items",
+    "indexname": "idx_order_items_product_id",
+    "indexdef": "CREATE INDEX idx_order_items_product_id ON public.order_items USING btree (product_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_items",
+    "indexname": "order_items_pkey",
+    "indexdef": "CREATE UNIQUE INDEX order_items_pkey ON public.order_items USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_items",
+    "indexname": "idx_order_items_order",
+    "indexdef": "CREATE INDEX idx_order_items_order ON public.order_items USING btree (order_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_items",
+    "indexname": "idx_order_items_product",
+    "indexdef": "CREATE INDEX idx_order_items_product ON public.order_items USING btree (product_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "employees",
+    "indexname": "employees_pkey",
+    "indexdef": "CREATE UNIQUE INDEX employees_pkey ON public.employees USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "employees",
+    "indexname": "idx_employees_branch",
+    "indexdef": "CREATE INDEX idx_employees_branch ON public.employees USING btree (branch_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock",
+    "indexname": "idx_stock_product_id",
+    "indexdef": "CREATE INDEX idx_stock_product_id ON public.stock USING btree (product_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock",
+    "indexname": "idx_stock_branch_id",
+    "indexdef": "CREATE INDEX idx_stock_branch_id ON public.stock USING btree (branch_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock",
+    "indexname": "stock_pkey",
+    "indexdef": "CREATE UNIQUE INDEX stock_pkey ON public.stock USING btree (product_id, branch_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock",
+    "indexname": "idx_stock_product",
+    "indexdef": "CREATE INDEX idx_stock_product ON public.stock USING btree (product_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "stock",
+    "indexname": "idx_stock_branch",
+    "indexdef": "CREATE INDEX idx_stock_branch ON public.stock USING btree (branch_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedule_assignments",
+    "indexname": "idx_schedule_assignments_sid",
+    "indexdef": "CREATE INDEX idx_schedule_assignments_sid ON public.schedule_assignments USING btree (schedule_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedule_assignments",
+    "indexname": "idx_schedule_assignments_uid",
+    "indexdef": "CREATE INDEX idx_schedule_assignments_uid ON public.schedule_assignments USING btree (user_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedule_assignments",
+    "indexname": "idx_schedule_assignments_sched_id",
+    "indexdef": "CREATE INDEX idx_schedule_assignments_sched_id ON public.schedule_assignments USING btree (schedule_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedule_assignments",
+    "indexname": "idx_sched_assign_schedule",
+    "indexdef": "CREATE INDEX idx_sched_assign_schedule ON public.schedule_assignments USING btree (schedule_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedule_assignments",
+    "indexname": "idx_sched_assign_user",
+    "indexdef": "CREATE INDEX idx_sched_assign_user ON public.schedule_assignments USING btree (user_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedule_assignments",
+    "indexname": "schedule_assignments_pkey",
+    "indexdef": "CREATE UNIQUE INDEX schedule_assignments_pkey ON public.schedule_assignments USING btree (schedule_id, user_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedule_assignments",
+    "indexname": "idx_assignments_schedule",
+    "indexdef": "CREATE INDEX idx_assignments_schedule ON public.schedule_assignments USING btree (schedule_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedule_assignments",
+    "indexname": "idx_assignments_user",
+    "indexdef": "CREATE INDEX idx_assignments_user ON public.schedule_assignments USING btree (user_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedule_difficulties",
+    "indexname": "schedule_difficulties_pkey",
+    "indexdef": "CREATE UNIQUE INDEX schedule_difficulties_pkey ON public.schedule_difficulties USING btree (schedule_id, difficulty_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "schedule_difficulties",
+    "indexname": "idx_sched_diff_schedule",
+    "indexdef": "CREATE INDEX idx_sched_diff_schedule ON public.schedule_difficulties USING btree (schedule_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "tech_fees",
+    "indexname": "tech_fees_pkey",
+    "indexdef": "CREATE UNIQUE INDEX tech_fees_pkey ON public.tech_fees USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "tech_fees",
+    "indexname": "idx_tech_fees_schedule",
+    "indexdef": "CREATE INDEX idx_tech_fees_schedule ON public.tech_fees USING btree (schedule_id)"
+  }
+]

@@ -1,0 +1,272 @@
+[
+  {
+    "schema_name": "public",
+    "function_name": "set_limit",
+    "definition": "CREATE OR REPLACE FUNCTION public.set_limit(real)\n RETURNS real\n LANGUAGE c\n STRICT\nAS '$libdir/pg_trgm', $function$set_limit$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "word_similarity_commutator_op",
+    "definition": "CREATE OR REPLACE FUNCTION public.word_similarity_commutator_op(text, text)\n RETURNS boolean\n LANGUAGE c\n STABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$word_similarity_commutator_op$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "similarity_dist",
+    "definition": "CREATE OR REPLACE FUNCTION public.similarity_dist(text, text)\n RETURNS real\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$similarity_dist$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "word_similarity_dist_op",
+    "definition": "CREATE OR REPLACE FUNCTION public.word_similarity_dist_op(text, text)\n RETURNS real\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$word_similarity_dist_op$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "word_similarity_dist_commutator_op",
+    "definition": "CREATE OR REPLACE FUNCTION public.word_similarity_dist_commutator_op(text, text)\n RETURNS real\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$word_similarity_dist_commutator_op$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gtrgm_in",
+    "definition": "CREATE OR REPLACE FUNCTION public.gtrgm_in(cstring)\n RETURNS gtrgm\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$gtrgm_in$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gtrgm_out",
+    "definition": "CREATE OR REPLACE FUNCTION public.gtrgm_out(gtrgm)\n RETURNS cstring\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$gtrgm_out$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gtrgm_consistent",
+    "definition": "CREATE OR REPLACE FUNCTION public.gtrgm_consistent(internal, text, smallint, oid, internal)\n RETURNS boolean\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$gtrgm_consistent$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "show_limit",
+    "definition": "CREATE OR REPLACE FUNCTION public.show_limit()\n RETURNS real\n LANGUAGE c\n STABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$show_limit$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "show_trgm",
+    "definition": "CREATE OR REPLACE FUNCTION public.show_trgm(text)\n RETURNS text[]\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$show_trgm$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "similarity",
+    "definition": "CREATE OR REPLACE FUNCTION public.similarity(text, text)\n RETURNS real\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$similarity$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "similarity_op",
+    "definition": "CREATE OR REPLACE FUNCTION public.similarity_op(text, text)\n RETURNS boolean\n LANGUAGE c\n STABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$similarity_op$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "word_similarity",
+    "definition": "CREATE OR REPLACE FUNCTION public.word_similarity(text, text)\n RETURNS real\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$word_similarity$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "word_similarity_op",
+    "definition": "CREATE OR REPLACE FUNCTION public.word_similarity_op(text, text)\n RETURNS boolean\n LANGUAGE c\n STABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$word_similarity_op$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gtrgm_distance",
+    "definition": "CREATE OR REPLACE FUNCTION public.gtrgm_distance(internal, text, smallint, oid, internal)\n RETURNS double precision\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$gtrgm_distance$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gtrgm_compress",
+    "definition": "CREATE OR REPLACE FUNCTION public.gtrgm_compress(internal)\n RETURNS internal\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$gtrgm_compress$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gtrgm_decompress",
+    "definition": "CREATE OR REPLACE FUNCTION public.gtrgm_decompress(internal)\n RETURNS internal\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$gtrgm_decompress$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gtrgm_penalty",
+    "definition": "CREATE OR REPLACE FUNCTION public.gtrgm_penalty(internal, internal, internal)\n RETURNS internal\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$gtrgm_penalty$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gtrgm_picksplit",
+    "definition": "CREATE OR REPLACE FUNCTION public.gtrgm_picksplit(internal, internal)\n RETURNS internal\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$gtrgm_picksplit$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "inventory_overview",
+    "definition": "CREATE OR REPLACE FUNCTION public.inventory_overview()\n RETURNS json\n LANGUAGE plpgsql\n STABLE\nAS $function$\r\nDECLARE v JSON;\r\nBEGIN\r\n  WITH pending AS (\r\n    SELECT oi.product_id, o.branch_id, SUM(oi.qty)::int AS qty,\r\n           COUNT(DISTINCT o.id)::int AS order_count\r\n    FROM order_items oi\r\n    JOIN orders o ON o.id = oi.order_id\r\n    WHERE o.status NOT IN ('completed','cancelled')\r\n    GROUP BY oi.product_id, o.branch_id\r\n  )\r\n  SELECT json_build_object(\r\n    'stock_by_product_branch',\r\n      (SELECT COALESCE(json_agg(row_to_json(s)), '[]'::json)\r\n         FROM (SELECT product_id, branch_id, qty FROM stock) s),\r\n    'pending_order_summaries',\r\n      (SELECT COALESCE(json_agg(row_to_json(p)), '[]'::json) FROM pending p)\r\n  ) INTO v;\r\n  RETURN v;\r\nEND$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gtrgm_union",
+    "definition": "CREATE OR REPLACE FUNCTION public.gtrgm_union(internal, internal)\n RETURNS gtrgm\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$gtrgm_union$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gtrgm_same",
+    "definition": "CREATE OR REPLACE FUNCTION public.gtrgm_same(gtrgm, gtrgm, internal)\n RETURNS internal\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$gtrgm_same$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gin_extract_value_trgm",
+    "definition": "CREATE OR REPLACE FUNCTION public.gin_extract_value_trgm(text, internal)\n RETURNS internal\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$gin_extract_value_trgm$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gin_extract_query_trgm",
+    "definition": "CREATE OR REPLACE FUNCTION public.gin_extract_query_trgm(text, internal, smallint, internal, internal, internal, internal)\n RETURNS internal\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$gin_extract_query_trgm$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gin_trgm_consistent",
+    "definition": "CREATE OR REPLACE FUNCTION public.gin_trgm_consistent(internal, smallint, text, integer, internal, internal, internal, internal)\n RETURNS boolean\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$gin_trgm_consistent$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gin_trgm_triconsistent",
+    "definition": "CREATE OR REPLACE FUNCTION public.gin_trgm_triconsistent(internal, smallint, text, integer, internal, internal, internal)\n RETURNS \"char\"\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$gin_trgm_triconsistent$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "strict_word_similarity",
+    "definition": "CREATE OR REPLACE FUNCTION public.strict_word_similarity(text, text)\n RETURNS real\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$strict_word_similarity$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "strict_word_similarity_op",
+    "definition": "CREATE OR REPLACE FUNCTION public.strict_word_similarity_op(text, text)\n RETURNS boolean\n LANGUAGE c\n STABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$strict_word_similarity_op$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "strict_word_similarity_commutator_op",
+    "definition": "CREATE OR REPLACE FUNCTION public.strict_word_similarity_commutator_op(text, text)\n RETURNS boolean\n LANGUAGE c\n STABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$strict_word_similarity_commutator_op$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "strict_word_similarity_dist_op",
+    "definition": "CREATE OR REPLACE FUNCTION public.strict_word_similarity_dist_op(text, text)\n RETURNS real\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$strict_word_similarity_dist_op$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "strict_word_similarity_dist_commutator_op",
+    "definition": "CREATE OR REPLACE FUNCTION public.strict_word_similarity_dist_commutator_op(text, text)\n RETURNS real\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pg_trgm', $function$strict_word_similarity_dist_commutator_op$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "gtrgm_options",
+    "definition": "CREATE OR REPLACE FUNCTION public.gtrgm_options(internal)\n RETURNS void\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE\nAS '$libdir/pg_trgm', $function$gtrgm_options$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "search_customers_page",
+    "definition": "CREATE OR REPLACE FUNCTION public.search_customers_page(p_search text DEFAULT NULL::text, p_group text DEFAULT NULL::text, p_debt_filter text DEFAULT 'all'::text, p_sort text DEFAULT 'date'::text, p_limit integer DEFAULT 20, p_offset integer DEFAULT 0)\n RETURNS TABLE(id text, name text, phone text, email text, address text, ward text, district text, province text, group_name text, customer_type text, company_name text, debt numeric, debt_adjustment numeric, total_buy numeric, total_paid numeric, total_paid_back numeric, computed_debt numeric, display_debt numeric, created_at timestamp with time zone, filtered_count bigint)\n LANGUAGE plpgsql\n STABLE\nAS $function$\r\nDECLARE\r\n  v_search text := NULLIF(trim(coalesce(p_search,'')),'');\r\nBEGIN\r\n  RETURN QUERY\r\n  WITH base AS (\r\n    SELECT c.*\r\n    FROM customers c\r\n    WHERE\r\n      (v_search IS NULL\r\n        OR c.name  ILIKE '%'||v_search||'%'\r\n        OR c.phone ILIKE '%'||v_search||'%'\r\n        OR c.email ILIKE '%'||v_search||'%')\r\n      AND (p_group IS NULL OR p_group = '' OR c.group_name = p_group)\r\n  ),\r\n  agg AS (\r\n    SELECT\r\n      b.id,\r\n      COALESCE((\r\n        SELECT SUM(o.total) FROM orders o\r\n        WHERE o.customer_id = b.id AND o.status = 'completed'\r\n      ), 0)::numeric AS total_buy,\r\n      COALESCE((\r\n        SELECT SUM(v.amount) FROM cash_vouchers v\r\n        WHERE v.payer_customer_id = b.id\r\n          AND v.type = 'thu'\r\n          AND (v.status IS NULL OR v.status <> 'cancelled')\r\n      ), 0)::numeric AS total_paid,\r\n      COALESCE((\r\n        SELECT SUM(v.amount) FROM cash_vouchers v\r\n        WHERE v.receiver_customer_id = b.id\r\n          AND v.type = 'chi'\r\n          AND (v.status IS NULL OR v.status <> 'cancelled')\r\n      ), 0)::numeric AS total_paid_back\r\n    FROM base b\r\n  ),\r\n  enriched AS (\r\n    SELECT\r\n      b.id, b.name, b.phone, b.email, b.address, b.ward, b.district, b.province,\r\n      b.group_name, b.customer_type, b.company_name,\r\n      b.debt, COALESCE(b.debt_adjustment, 0) AS debt_adjustment,\r\n      a.total_buy, a.total_paid, a.total_paid_back,\r\n      (a.total_buy - a.total_paid + a.total_paid_back) AS computed_debt,\r\n      (a.total_buy - a.total_paid + a.total_paid_back + COALESCE(b.debt_adjustment,0)) AS display_debt,\r\n      b.created_at\r\n    FROM base b\r\n    JOIN agg a ON a.id = b.id\r\n  ),\r\n  filtered AS (\r\n    SELECT * FROM enriched e\r\n    WHERE\r\n      (p_debt_filter = 'all')\r\n      OR (p_debt_filter = 'debt'    AND e.display_debt > 0)\r\n      OR (p_debt_filter = 'no_debt' AND e.display_debt <= 0)\r\n  ),\r\n  total AS ( SELECT COUNT(*)::bigint AS c FROM filtered )\r\n  SELECT\r\n    f.id, f.name, f.phone, f.email, f.address, f.ward, f.district, f.province,\r\n    f.group_name, f.customer_type, f.company_name,\r\n    f.debt, f.debt_adjustment,\r\n    f.total_buy, f.total_paid, f.total_paid_back,\r\n    f.computed_debt, f.display_debt,\r\n    f.created_at,\r\n    (SELECT c FROM total) AS filtered_count\r\n  FROM filtered f\r\n  ORDER BY\r\n    CASE WHEN p_sort = 'name'           THEN f.name        END ASC  NULLS LAST,\r\n    CASE WHEN p_sort = 'debt_desc'      THEN f.display_debt END DESC NULLS LAST,\r\n    CASE WHEN p_sort = 'debt_asc'       THEN f.display_debt END ASC  NULLS LAST,\r\n    CASE WHEN p_sort = 'total_buy_desc' THEN f.total_buy   END DESC NULLS LAST,\r\n    CASE WHEN p_sort = 'total_buy_asc'  THEN f.total_buy   END ASC  NULLS LAST,\r\n    CASE WHEN p_sort NOT IN ('name','debt_desc','debt_asc','total_buy_desc','total_buy_asc')\r\n         THEN f.created_at END DESC NULLS LAST\r\n  LIMIT p_limit OFFSET p_offset;\r\nEND;\r\n$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "unaccent",
+    "definition": "CREATE OR REPLACE FUNCTION public.unaccent(regdictionary, text)\n RETURNS text\n LANGUAGE c\n STABLE PARALLEL SAFE STRICT\nAS '$libdir/unaccent', $function$unaccent_dict$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "unaccent",
+    "definition": "CREATE OR REPLACE FUNCTION public.unaccent(text)\n RETURNS text\n LANGUAGE c\n STABLE PARALLEL SAFE STRICT\nAS '$libdir/unaccent', $function$unaccent_dict$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "unaccent_init",
+    "definition": "CREATE OR REPLACE FUNCTION public.unaccent_init(internal)\n RETURNS internal\n LANGUAGE c\n PARALLEL SAFE\nAS '$libdir/unaccent', $function$unaccent_init$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "unaccent_lexize",
+    "definition": "CREATE OR REPLACE FUNCTION public.unaccent_lexize(internal, internal, internal, internal)\n RETURNS internal\n LANGUAGE c\n PARALLEL SAFE\nAS '$libdir/unaccent', $function$unaccent_lexize$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "customer_stats",
+    "definition": "CREATE OR REPLACE FUNCTION public.customer_stats()\n RETURNS TABLE(total_all_customers bigint, total_all_debt numeric, total_debtor_count bigint, total_sales numeric)\n LANGUAGE sql\n STABLE\nAS $function$\r\n  WITH per AS (\r\n    SELECT\r\n      c.id,\r\n      COALESCE(c.debt_adjustment, 0) AS adj,\r\n      COALESCE((SELECT SUM(o.total) FROM orders o\r\n                WHERE o.customer_id = c.id AND o.status = 'completed'), 0) AS total_buy,\r\n      COALESCE((SELECT SUM(v.amount) FROM cash_vouchers v\r\n                WHERE v.payer_customer_id = c.id AND v.type='thu'\r\n                  AND (v.status IS NULL OR v.status<>'cancelled')), 0) AS total_paid,\r\n      COALESCE((SELECT SUM(v.amount) FROM cash_vouchers v\r\n                WHERE v.receiver_customer_id = c.id AND v.type='chi'\r\n                  AND (v.status IS NULL OR v.status<>'cancelled')), 0) AS total_paid_back\r\n    FROM customers c\r\n  ),\r\n  per2 AS (\r\n    SELECT id, (total_buy - total_paid + total_paid_back + adj) AS display_debt, total_buy\r\n    FROM per\r\n  )\r\n  SELECT\r\n    (SELECT COUNT(*)::bigint FROM customers)                                   AS total_all_customers,\r\n    COALESCE((SELECT SUM(display_debt) FROM per2 WHERE display_debt > 0), 0)   AS total_all_debt,\r\n    (SELECT COUNT(*)::bigint FROM per2 WHERE display_debt > 0)                 AS total_debtor_count,\r\n    COALESCE((SELECT SUM(total_buy) FROM per2), 0)                             AS total_sales;\r\n$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "next_voucher_code",
+    "definition": "CREATE OR REPLACE FUNCTION public.next_voucher_code(p_type text)\n RETURNS text\n LANGUAGE plpgsql\nAS $function$\r\nDECLARE n BIGINT;\r\nBEGIN\r\n  IF p_type = 'thu' THEN\r\n    n := nextval('voucher_seq_thu');\r\n    RETURN 'PT' || LPAD(n::text, 6, '0');\r\n  ELSIF p_type = 'chi' THEN\r\n    n := nextval('voucher_seq_chi');\r\n    RETURN 'PC' || LPAD(n::text, 6, '0');\r\n  ELSE\r\n    RAISE EXCEPTION 'invalid voucher type: %', p_type;\r\n  END IF;\r\nEND$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "next_order_code",
+    "definition": "CREATE OR REPLACE FUNCTION public.next_order_code()\n RETURNS text\n LANGUAGE sql\nAS $function$ SELECT 'HD' || LPAD(nextval('order_seq')::text, 6, '0') $function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "bulk_apply_stock_delta",
+    "definition": "CREATE OR REPLACE FUNCTION public.bulk_apply_stock_delta(p_branch text, p_deltas jsonb)\n RETURNS void\n LANGUAGE plpgsql\nAS $function$\r\nBEGIN\r\n  INSERT INTO stock (product_id, branch_id, qty)\r\n  SELECT\r\n    (elem->>'product_id')::text,\r\n    p_branch,\r\n    GREATEST(0, (elem->>'qty')::int)\r\n  FROM jsonb_array_elements(p_deltas) AS elem\r\n  ON CONFLICT (product_id, branch_id) DO UPDATE\r\n    SET qty = GREATEST(0, stock.qty + EXCLUDED.qty);\r\nEND$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "recalc_customer_debt",
+    "definition": "CREATE OR REPLACE FUNCTION public.recalc_customer_debt(p_customer_id text)\n RETURNS numeric\n LANGUAGE plpgsql\nAS $function$\r\nDECLARE\r\n  v_total_buy       NUMERIC := 0;\r\n  v_total_paid      NUMERIC := 0;\r\n  v_total_paid_back NUMERIC := 0;\r\n  v_adjustment      NUMERIC := 0;\r\n  v_new_debt        NUMERIC;\r\nBEGIN\r\n  SELECT COALESCE(SUM(total), 0) INTO v_total_buy\r\n    FROM orders WHERE customer_id = p_customer_id AND status = 'completed';\r\n\r\n  SELECT COALESCE(SUM(amount), 0) INTO v_total_paid\r\n    FROM cash_vouchers\r\n   WHERE payer_customer_id = p_customer_id AND type = 'thu' AND status <> 'cancelled';\r\n\r\n  SELECT COALESCE(SUM(amount), 0) INTO v_total_paid_back\r\n    FROM cash_vouchers\r\n   WHERE receiver_customer_id = p_customer_id AND type = 'chi' AND status <> 'cancelled';\r\n\r\n  SELECT COALESCE(debt_adjustment, 0) INTO v_adjustment\r\n    FROM customers WHERE id = p_customer_id;\r\n\r\n  v_new_debt := v_total_buy - v_total_paid + v_total_paid_back + v_adjustment;\r\n\r\n  UPDATE customers SET debt = v_new_debt WHERE id = p_customer_id;\r\n  RETURN v_new_debt;\r\nEND$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "search_orders_page",
+    "definition": "CREATE OR REPLACE FUNCTION public.search_orders_page(p_search text DEFAULT NULL::text, p_status text DEFAULT NULL::text, p_branch text DEFAULT NULL::text, p_employee text DEFAULT NULL::text, p_customer text DEFAULT NULL::text, p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date, p_sort text DEFAULT 'date'::text, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0)\n RETURNS TABLE(id text, code text, status text, customer_id text, customer_name text, customer_phone text, branch_id text, branch_name text, employee_id text, employee_name text, subtotal numeric, discount numeric, total numeric, deposit numeric, paid numeric, payment_method text, note text, created_at timestamp with time zone, completed_at timestamp with time zone, item_count integer, filtered_count bigint)\n LANGUAGE plpgsql\n STABLE\nAS $function$\r\nDECLARE v_total BIGINT;\r\nBEGIN\r\n  -- Đếm trước (1 lần) để gắn vào mọi dòng → client biết tổng để pagination.\r\n  SELECT COUNT(*) INTO v_total\r\n  FROM orders o\r\n  LEFT JOIN customers c ON c.id = o.customer_id\r\n  WHERE (p_status   IS NULL OR o.status = p_status)\r\n    AND (p_branch   IS NULL OR o.branch_id = p_branch)\r\n    AND (p_employee IS NULL OR o.employee_id = p_employee)\r\n    AND (p_customer IS NULL OR o.customer_id = p_customer)\r\n    AND (p_from     IS NULL OR o.created_at >= p_from)\r\n    AND (p_to       IS NULL OR o.created_at <  (p_to + INTERVAL '1 day'))\r\n    AND (\r\n      p_search IS NULL OR p_search = '' OR\r\n      o.code  ILIKE '%' || p_search || '%' OR\r\n      c.name  ILIKE '%' || p_search || '%' OR\r\n      c.phone ILIKE '%' || p_search || '%'\r\n    );\r\n\r\n  RETURN QUERY\r\n  SELECT\r\n    o.id, o.code, o.status,\r\n    o.customer_id, c.name, c.phone,\r\n    o.branch_id, b.name,\r\n    o.employee_id, u.full_name,\r\n    o.subtotal, o.discount, o.total, o.deposit, o.paid,\r\n    o.payment_method, o.note,\r\n    o.created_at, o.completed_at,\r\n    COALESCE(ic.item_count, 0)::int,\r\n    v_total\r\n  FROM orders o\r\n  LEFT JOIN customers c ON c.id = o.customer_id\r\n  LEFT JOIN branches  b ON b.id = o.branch_id\r\n  LEFT JOIN users     u ON u.id = o.employee_id\r\n  LEFT JOIN LATERAL (\r\n    SELECT COUNT(*) AS item_count FROM order_items oi WHERE oi.order_id = o.id\r\n  ) ic ON TRUE\r\n  WHERE (p_status   IS NULL OR o.status = p_status)\r\n    AND (p_branch   IS NULL OR o.branch_id = p_branch)\r\n    AND (p_employee IS NULL OR o.employee_id = p_employee)\r\n    AND (p_customer IS NULL OR o.customer_id = p_customer)\r\n    AND (p_from     IS NULL OR o.created_at >= p_from)\r\n    AND (p_to       IS NULL OR o.created_at <  (p_to + INTERVAL '1 day'))\r\n    AND (\r\n      p_search IS NULL OR p_search = '' OR\r\n      o.code  ILIKE '%' || p_search || '%' OR\r\n      c.name  ILIKE '%' || p_search || '%' OR\r\n      c.phone ILIKE '%' || p_search || '%'\r\n    )\r\n  ORDER BY\r\n    CASE WHEN p_sort = 'total' THEN o.total END DESC NULLS LAST,\r\n    CASE WHEN p_sort = 'code'  THEN o.code  END ASC  NULLS LAST,\r\n    CASE WHEN p_sort = 'date' OR p_sort IS NULL\r\n         THEN COALESCE(o.completed_at, o.created_at)\r\n    END DESC NULLS LAST\r\n  LIMIT p_limit OFFSET p_offset;\r\nEND$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "search_products_page",
+    "definition": "CREATE OR REPLACE FUNCTION public.search_products_page(p_search text DEFAULT NULL::text, p_category text DEFAULT NULL::text, p_brand text DEFAULT NULL::text, p_sort text DEFAULT 'name'::text, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0)\n RETURNS TABLE(id text, sku text, name text, category_id text, brand_id text, power text, color text, blade_size text, image_url text, description text, cost_price numeric, sale_price numeric, min_stock integer, tech_fee numeric, total_stock bigint, filtered_count bigint)\n LANGUAGE plpgsql\n STABLE\nAS $function$\r\nDECLARE v_total BIGINT;\r\nBEGIN\r\n  SELECT COUNT(*) INTO v_total\r\n  FROM products p\r\n  WHERE (p_category IS NULL OR p.category_id = p_category)\r\n    AND (p_brand    IS NULL OR p.brand_id    = p_brand)\r\n    AND (p_search IS NULL OR p_search = '' OR\r\n         p.name ILIKE '%' || p_search || '%' OR\r\n         p.sku  ILIKE '%' || p_search || '%');\r\n\r\n  RETURN QUERY\r\n  SELECT\r\n    p.id, p.sku, p.name, p.category_id, p.brand_id,\r\n    p.power, p.color, p.blade_size, p.image_url, p.description,\r\n    p.cost_price, p.sale_price, p.min_stock, p.tech_fee,\r\n    COALESCE(s.total_stock, 0),\r\n    v_total\r\n  FROM products p\r\n  LEFT JOIN LATERAL (\r\n    SELECT SUM(qty)::bigint AS total_stock FROM stock WHERE product_id = p.id\r\n  ) s ON TRUE\r\n  WHERE (p_category IS NULL OR p.category_id = p_category)\r\n    AND (p_brand    IS NULL OR p.brand_id    = p_brand)\r\n    AND (p_search IS NULL OR p_search = '' OR\r\n         p.name ILIKE '%' || p_search || '%' OR\r\n         p.sku  ILIKE '%' || p_search || '%')\r\n  ORDER BY\r\n    CASE WHEN p_sort = 'sku'   THEN p.sku END ASC,\r\n    CASE WHEN p_sort = 'price' THEN p.sale_price END DESC,\r\n    CASE WHEN p_sort = 'name' OR p_sort IS NULL THEN p.name END ASC\r\n  LIMIT p_limit OFFSET p_offset;\r\nEND$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "search_cash_page",
+    "definition": "CREATE OR REPLACE FUNCTION public.search_cash_page(p_search text DEFAULT NULL::text, p_type text DEFAULT NULL::text, p_fund text DEFAULT NULL::text, p_branch text DEFAULT NULL::text, p_status text DEFAULT NULL::text, p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0)\n RETURNS TABLE(id text, code text, type text, fund_type text, branch_id text, amount numeric, voucher_type_id text, from_kind text, from_id text, from_name text, to_kind text, to_id text, to_name text, payer_customer_id text, payer_customer_name text, receiver_customer_id text, receiver_customer_name text, collector_user_id text, payer_user_id text, note text, accounting boolean, status text, created_by text, created_at timestamp with time zone, filtered_count bigint)\n LANGUAGE plpgsql\n STABLE\nAS $function$\r\nDECLARE v_total BIGINT;\r\nBEGIN\r\n  SELECT COUNT(*) INTO v_total\r\n  FROM cash_vouchers v\r\n  LEFT JOIN customers cp ON cp.id = v.payer_customer_id\r\n  LEFT JOIN customers cr ON cr.id = v.receiver_customer_id\r\n  WHERE (p_type   IS NULL OR v.type      = p_type)\r\n    AND (p_fund   IS NULL OR v.fund_type = p_fund)\r\n    AND (p_branch IS NULL OR v.branch_id = p_branch)\r\n    AND (p_status IS NULL OR v.status    = p_status)\r\n    AND (p_from   IS NULL OR v.created_at >= p_from)\r\n    AND (p_to     IS NULL OR v.created_at <  (p_to + INTERVAL '1 day'))\r\n    AND (p_search IS NULL OR p_search = '' OR\r\n         v.code ILIKE '%' || p_search || '%' OR\r\n         v.note ILIKE '%' || p_search || '%' OR\r\n         cp.name ILIKE '%' || p_search || '%' OR\r\n         cr.name ILIKE '%' || p_search || '%');\r\n\r\n  RETURN QUERY\r\n  SELECT\r\n    v.id, v.code, v.type, v.fund_type, v.branch_id,\r\n    v.amount, v.voucher_type_id,\r\n    v.from_kind, v.from_id, v.from_name,\r\n    v.to_kind,   v.to_id,   v.to_name,\r\n    v.payer_customer_id, cp.name,\r\n    v.receiver_customer_id, cr.name,\r\n    v.collector_user_id, v.payer_user_id,\r\n    v.note, v.accounting, v.status,\r\n    v.created_by, v.created_at,\r\n    v_total\r\n  FROM cash_vouchers v\r\n  LEFT JOIN customers cp ON cp.id = v.payer_customer_id\r\n  LEFT JOIN customers cr ON cr.id = v.receiver_customer_id\r\n  WHERE (p_type   IS NULL OR v.type      = p_type)\r\n    AND (p_fund   IS NULL OR v.fund_type = p_fund)\r\n    AND (p_branch IS NULL OR v.branch_id = p_branch)\r\n    AND (p_status IS NULL OR v.status    = p_status)\r\n    AND (p_from   IS NULL OR v.created_at >= p_from)\r\n    AND (p_to     IS NULL OR v.created_at <  (p_to + INTERVAL '1 day'))\r\n    AND (p_search IS NULL OR p_search = '' OR\r\n         v.code ILIKE '%' || p_search || '%' OR\r\n         v.note ILIKE '%' || p_search || '%' OR\r\n         cp.name ILIKE '%' || p_search || '%' OR\r\n         cr.name ILIKE '%' || p_search || '%')\r\n  ORDER BY v.created_at DESC\r\n  LIMIT p_limit OFFSET p_offset;\r\nEND$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "search_schedules_page",
+    "definition": "CREATE OR REPLACE FUNCTION public.search_schedules_page(p_search text DEFAULT NULL::text, p_status text DEFAULT NULL::text, p_type text DEFAULT NULL::text, p_branch text DEFAULT NULL::text, p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date, p_limit integer DEFAULT 100, p_offset integer DEFAULT 0)\n RETURNS TABLE(id text, title text, type text, status text, scheduled_date date, scheduled_time text, customer_id text, customer_name text, customer_phone text, branch_id text, branch_name text, order_id text, order_code text, address text, note text, work_type_id text, created_by text, assigned_by text, created_at timestamp with time zone, assignee_ids text[], filtered_count bigint)\n LANGUAGE plpgsql\n STABLE\nAS $function$\r\nDECLARE v_total BIGINT;\r\nBEGIN\r\n  SELECT COUNT(*) INTO v_total\r\n  FROM schedules s\r\n  LEFT JOIN customers c ON c.id = s.customer_id\r\n  WHERE (p_status IS NULL OR s.status = p_status)\r\n    AND (p_type   IS NULL OR s.type   = p_type)\r\n    AND (p_branch IS NULL OR s.branch_id = p_branch)\r\n    AND (p_from   IS NULL OR s.scheduled_date >= p_from)\r\n    AND (p_to     IS NULL OR s.scheduled_date <= p_to)\r\n    AND (p_search IS NULL OR p_search = '' OR\r\n         s.title ILIKE '%' || p_search || '%' OR\r\n         c.name  ILIKE '%' || p_search || '%' OR\r\n         c.phone ILIKE '%' || p_search || '%');\r\n\r\n  RETURN QUERY\r\n  SELECT\r\n    s.id, s.title, s.type, s.status,\r\n    s.scheduled_date, s.scheduled_time,\r\n    s.customer_id, c.name, c.phone,\r\n    s.branch_id, b.name,\r\n    s.order_id, o.code,\r\n    s.address, s.note, s.work_type_id,\r\n    s.created_by, s.assigned_by, s.created_at,\r\n    COALESCE((SELECT array_agg(a.user_id) FROM schedule_assignments a WHERE a.schedule_id = s.id), '{}'),\r\n    v_total\r\n  FROM schedules s\r\n  LEFT JOIN customers c ON c.id = s.customer_id\r\n  LEFT JOIN branches  b ON b.id = s.branch_id\r\n  LEFT JOIN orders    o ON o.id = s.order_id\r\n  WHERE (p_status IS NULL OR s.status = p_status)\r\n    AND (p_type   IS NULL OR s.type   = p_type)\r\n    AND (p_branch IS NULL OR s.branch_id = p_branch)\r\n    AND (p_from   IS NULL OR s.scheduled_date >= p_from)\r\n    AND (p_to     IS NULL OR s.scheduled_date <= p_to)\r\n    AND (p_search IS NULL OR p_search = '' OR\r\n         s.title ILIKE '%' || p_search || '%' OR\r\n         c.name  ILIKE '%' || p_search || '%' OR\r\n         c.phone ILIKE '%' || p_search || '%')\r\n  ORDER BY s.scheduled_date DESC, s.scheduled_time DESC NULLS LAST\r\n  LIMIT p_limit OFFSET p_offset;\r\nEND$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "autocomplete_customers",
+    "definition": "CREATE OR REPLACE FUNCTION public.autocomplete_customers(p_q text, p_limit integer DEFAULT 20)\n RETURNS TABLE(id text, name text, phone text, debt numeric)\n LANGUAGE sql\n STABLE\nAS $function$\r\n  SELECT id, name, phone, debt\r\n  FROM customers\r\n  WHERE p_q IS NULL OR p_q = '' OR\r\n        name  ILIKE '%' || p_q || '%' OR\r\n        phone ILIKE '%' || p_q || '%'\r\n  ORDER BY\r\n    CASE WHEN p_q IS NOT NULL AND name ILIKE p_q || '%' THEN 0 ELSE 1 END,\r\n    name\r\n  LIMIT p_limit;\r\n$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "autocomplete_products",
+    "definition": "CREATE OR REPLACE FUNCTION public.autocomplete_products(p_q text, p_branch text DEFAULT NULL::text, p_limit integer DEFAULT 20)\n RETURNS TABLE(id text, sku text, name text, sale_price numeric, stock_qty bigint)\n LANGUAGE sql\n STABLE\nAS $function$\r\n  SELECT p.id, p.sku, p.name, p.sale_price,\r\n         COALESCE((SELECT SUM(qty) FROM stock s\r\n                   WHERE s.product_id = p.id\r\n                     AND (p_branch IS NULL OR s.branch_id = p_branch)), 0)::bigint\r\n  FROM products p\r\n  WHERE p_q IS NULL OR p_q = '' OR\r\n        p.name ILIKE '%' || p_q || '%' OR\r\n        p.sku  ILIKE '%' || p_q || '%'\r\n  ORDER BY\r\n    CASE WHEN p_q IS NOT NULL AND p.name ILIKE p_q || '%' THEN 0 ELSE 1 END,\r\n    p.name\r\n  LIMIT p_limit;\r\n$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "report_dashboard",
+    "definition": "CREATE OR REPLACE FUNCTION public.report_dashboard(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date, p_branch text DEFAULT NULL::text)\n RETURNS json\n LANGUAGE plpgsql\n STABLE\nAS $function$\r\nDECLARE\r\n  v_from DATE := COALESCE(p_from, (CURRENT_DATE - INTERVAL '30 days')::date);\r\n  v_to   DATE := COALESCE(p_to,   CURRENT_DATE);\r\n  v_result JSON;\r\nBEGIN\r\n  WITH completed AS (\r\n    SELECT o.* FROM orders o\r\n    WHERE o.status = 'completed'\r\n      AND o.created_at >= v_from\r\n      AND o.created_at <  (v_to + INTERVAL '1 day')\r\n      AND (p_branch IS NULL OR o.branch_id = p_branch)\r\n  ),\r\n  by_day AS (\r\n    SELECT to_char(date_trunc('day', created_at AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'MM-DD') AS d,\r\n           SUM(total)::numeric AS revenue\r\n    FROM completed GROUP BY 1 ORDER BY 1\r\n  ),\r\n  top_prod AS (\r\n    SELECT p.name, SUM(oi.qty)::int AS qty\r\n    FROM order_items oi\r\n    JOIN completed o ON o.id = oi.order_id\r\n    JOIN products  p ON p.id = oi.product_id\r\n    GROUP BY p.name ORDER BY qty DESC LIMIT 10\r\n  ),\r\n  by_branch AS (\r\n    SELECT b.name, COALESCE(SUM(c.total),0)::numeric AS revenue, COUNT(c.id)::int AS orders\r\n    FROM branches b\r\n    LEFT JOIN completed c ON c.branch_id = b.id\r\n    GROUP BY b.name ORDER BY revenue DESC\r\n  ),\r\n  by_employee AS (\r\n    SELECT u.full_name AS name, COALESCE(SUM(c.total),0)::numeric AS revenue\r\n    FROM users u\r\n    LEFT JOIN completed c ON c.employee_id = u.id\r\n    GROUP BY u.full_name ORDER BY revenue DESC\r\n  ),\r\n  low_stock AS (\r\n    SELECT p.name, p.sku, COALESCE(SUM(s.qty),0)::int AS qty, p.min_stock AS min\r\n    FROM products p\r\n    LEFT JOIN stock s ON s.product_id = p.id\r\n    GROUP BY p.id, p.name, p.sku, p.min_stock\r\n    HAVING COALESCE(SUM(s.qty),0) <= p.min_stock\r\n    ORDER BY qty ASC LIMIT 20\r\n  ),\r\n  debtors AS (\r\n    SELECT id, name, phone, debt FROM customers\r\n    WHERE debt > 0 ORDER BY debt DESC LIMIT 20\r\n  ),\r\n  totals AS (\r\n    SELECT\r\n      (SELECT COALESCE(SUM(total),0) FROM completed)             AS total_revenue,\r\n      (SELECT COUNT(*)               FROM completed)             AS total_orders,\r\n      (SELECT COALESCE(SUM(debt),0)  FROM customers WHERE debt>0) AS total_debt,\r\n      (SELECT COUNT(*)               FROM products)              AS product_count,\r\n      (SELECT COUNT(*)               FROM customers)             AS customer_count\r\n  )\r\n  SELECT json_build_object(\r\n    'totalRevenue',  (SELECT total_revenue FROM totals),\r\n    'totalOrders',   (SELECT total_orders  FROM totals),\r\n    'totalDebt',     (SELECT total_debt    FROM totals),\r\n    'productCount',  (SELECT product_count FROM totals),\r\n    'customerCount', (SELECT customer_count FROM totals),\r\n    'days',          (SELECT COALESCE(json_agg(row_to_json(by_day)), '[]'::json)      FROM by_day),\r\n    'topProducts',   (SELECT COALESCE(json_agg(row_to_json(top_prod)), '[]'::json)    FROM top_prod),\r\n    'byBranch',      (SELECT COALESCE(json_agg(row_to_json(by_branch)), '[]'::json)   FROM by_branch),\r\n    'byEmployee',    (SELECT COALESCE(json_agg(row_to_json(by_employee)), '[]'::json) FROM by_employee),\r\n    'lowStock',      (SELECT COALESCE(json_agg(row_to_json(low_stock)), '[]'::json)   FROM low_stock),\r\n    'debtors',       (SELECT COALESCE(json_agg(row_to_json(debtors)), '[]'::json)     FROM debtors)\r\n  ) INTO v_result;\r\n\r\n  RETURN v_result;\r\nEND$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "search_orders_page",
+    "definition": "CREATE OR REPLACE FUNCTION public.search_orders_page(p_search text DEFAULT NULL::text, p_status text DEFAULT NULL::text, p_branch text DEFAULT NULL::text, p_tab text DEFAULT 'orders'::text, p_branch_ids text[] DEFAULT NULL::text[], p_sort text DEFAULT 'newest'::text, p_limit integer DEFAULT 20, p_offset integer DEFAULT 0)\n RETURNS TABLE(id text, code text, status text, created_at timestamp with time zone, completed_at timestamp with time zone, total numeric, customer_id text, customer_name text, branch_id text, branch_name text, schedule_count bigint, filtered_count bigint)\n LANGUAGE sql\n STABLE\nAS $function$\r\n  WITH base AS (\r\n    SELECT\r\n      o.id,\r\n      o.code,\r\n      o.status,\r\n      o.created_at,\r\n      o.completed_at,\r\n      o.total,\r\n      o.customer_id,\r\n      c.name AS customer_name,\r\n      o.branch_id,\r\n      b.name AS branch_name,\r\n      -- Ngày dùng để sort: GIỮ NGUYÊN logic client — đơn hoàn tất dùng completed_at,\r\n      -- còn lại dùng created_at.\r\n      (CASE WHEN o.status = 'completed' AND o.completed_at IS NOT NULL\r\n            THEN o.completed_at ELSE o.created_at END) AS sort_date\r\n    FROM orders o\r\n    LEFT JOIN customers c ON c.id = o.customer_id\r\n    LEFT JOIN branches  b ON b.id = o.branch_id\r\n    WHERE\r\n      (p_branch_ids IS NULL OR o.branch_id = ANY (p_branch_ids))\r\n      AND (CASE WHEN p_tab = 'reserved'\r\n                THEN o.status = 'reserved'\r\n                ELSE o.status IS DISTINCT FROM 'reserved' END)\r\n      AND (p_status IS NULL OR p_status = '' OR o.status = p_status)\r\n      AND (p_branch IS NULL OR p_branch = '' OR o.branch_id = p_branch)\r\n      AND (\r\n        p_search IS NULL OR p_search = ''\r\n        OR o.code  ILIKE '%' || p_search || '%'\r\n        OR c.name  ILIKE '%' || p_search || '%'\r\n      )\r\n  ),\r\n  counted AS (SELECT COUNT(*)::BIGINT AS n FROM base)\r\n  SELECT\r\n    base.id,\r\n    base.code,\r\n    base.status,\r\n    base.created_at,\r\n    base.completed_at,\r\n    base.total,\r\n    base.customer_id,\r\n    base.customer_name,\r\n    base.branch_id,\r\n    base.branch_name,\r\n    (SELECT COUNT(*)::BIGINT FROM schedules s WHERE s.order_id = base.id) AS schedule_count,\r\n    (SELECT n FROM counted) AS filtered_count\r\n  FROM base\r\n  ORDER BY\r\n    CASE WHEN p_sort = 'total_desc' THEN base.total END DESC NULLS LAST,\r\n    CASE WHEN p_sort = 'total_asc'  THEN base.total END ASC  NULLS LAST,\r\n    CASE WHEN p_sort = 'oldest'     THEN base.sort_date END ASC,\r\n    -- mặc định + 'newest' + giá trị lạ: mới nhất trước\r\n    CASE WHEN p_sort NOT IN ('total_desc','total_asc','oldest')\r\n         THEN base.sort_date END DESC\r\n  LIMIT  GREATEST(p_limit, 1)\r\n  OFFSET GREATEST(p_offset, 0);\r\n$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "orders_stats",
+    "definition": "CREATE OR REPLACE FUNCTION public.orders_stats(p_branch_ids text[] DEFAULT NULL::text[])\n RETURNS TABLE(reserved_count bigint, total_orders bigint)\n LANGUAGE sql\n STABLE\nAS $function$\r\n  SELECT\r\n    COUNT(*) FILTER (WHERE status = 'reserved')::BIGINT AS reserved_count,\r\n    COUNT(*)::BIGINT                                    AS total_orders\r\n  FROM orders\r\n  WHERE p_branch_ids IS NULL OR branch_id = ANY (p_branch_ids);\r\n$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "search_products_page",
+    "definition": "CREATE OR REPLACE FUNCTION public.search_products_page(p_search text DEFAULT NULL::text, p_category text DEFAULT NULL::text, p_brand text DEFAULT NULL::text, p_limit integer DEFAULT 20, p_offset integer DEFAULT 0)\n RETURNS TABLE(id text, sku text, name text, category_id text, brand_id text, cost_price numeric, sale_price numeric, min_stock integer, image_url text, total_stock numeric, stock_by_branch jsonb, filtered_count bigint)\n LANGUAGE sql\n STABLE\nAS $function$\r\n  WITH prod AS (\r\n    SELECT p.id, p.sku, p.name, p.category_id, p.brand_id,\r\n           p.cost_price, p.sale_price, p.min_stock, p.image_url\r\n    FROM products p\r\n    WHERE (p_search IS NULL OR p_search = ''\r\n           OR p.name ILIKE '%' || p_search || '%'\r\n           OR p.sku  ILIKE '%' || p_search || '%')\r\n      AND (p_category IS NULL OR p_category = '' OR p.category_id = p_category)\r\n      AND (p_brand    IS NULL OR p_brand    = '' OR p.brand_id    = p_brand)\r\n  ),\r\n  counted AS (SELECT COUNT(*)::BIGINT AS n FROM prod),\r\n  page AS (\r\n    SELECT * FROM prod\r\n    ORDER BY name ASC\r\n    LIMIT GREATEST(p_limit, 1) OFFSET GREATEST(p_offset, 0)\r\n  )\r\n  SELECT\r\n    page.id, page.sku, page.name, page.category_id, page.brand_id,\r\n    page.cost_price, page.sale_price, page.min_stock, page.image_url,\r\n    COALESCE(st.total_stock, 0)                AS total_stock,\r\n    COALESCE(st.stock_by_branch, '[]'::JSONB)  AS stock_by_branch,\r\n    (SELECT n FROM counted)                    AS filtered_count\r\n  FROM page\r\n  LEFT JOIN LATERAL (\r\n    SELECT SUM(s.qty) AS total_stock,\r\n           jsonb_agg(jsonb_build_object('branch_id', s.branch_id, 'qty', s.qty)) AS stock_by_branch\r\n    FROM stock s\r\n    WHERE s.product_id = page.id\r\n  ) st ON TRUE\r\n  ORDER BY page.name ASC;\r\n$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "products_stats",
+    "definition": "CREATE OR REPLACE FUNCTION public.products_stats()\n RETURNS jsonb\n LANGUAGE sql\n STABLE\nAS $function$\r\n  SELECT jsonb_build_object(\r\n    'total_products', (SELECT COUNT(*) FROM products),\r\n    'low_stock_count', (\r\n      SELECT COUNT(*) FROM products p\r\n      WHERE COALESCE((SELECT SUM(s.qty) FROM stock s WHERE s.product_id = p.id), 0) <= p.min_stock\r\n    ),\r\n    'categories', COALESCE(\r\n      (SELECT jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name) ORDER BY c.name) FROM categories c),\r\n      '[]'::JSONB),\r\n    'brands', COALESCE(\r\n      (SELECT jsonb_agg(jsonb_build_object('id', b.id, 'name', b.name) ORDER BY b.name) FROM brands b),\r\n      '[]'::JSONB),\r\n    'branches', COALESCE(\r\n      (SELECT jsonb_agg(jsonb_build_object('id', br.id, 'name', br.name) ORDER BY br.name) FROM branches br),\r\n      '[]'::JSONB)\r\n  );\r\n$function$\n"
+  },
+  {
+    "schema_name": "public",
+    "function_name": "search_inventory_page",
+    "definition": "CREATE OR REPLACE FUNCTION public.search_inventory_page(p_search text DEFAULT NULL::text, p_branch text DEFAULT NULL::text, p_sort text DEFAULT 'name'::text, p_limit integer DEFAULT 20, p_offset integer DEFAULT 0)\n RETURNS TABLE(id text, sku text, name text, min_stock integer, total_stock numeric, total_pending numeric, total_pending_orders bigint, branches jsonb, filtered_count bigint)\n LANGUAGE sql\n STABLE\nAS $function$\r\n  WITH scope_branches AS (\r\n    SELECT b.id, b.name\r\n    FROM branches b\r\n    WHERE p_branch IS NULL OR p_branch = '' OR b.id = p_branch\r\n  ),\r\n  prod AS (\r\n    SELECT p.id, p.sku, p.name, p.min_stock\r\n    FROM products p\r\n    WHERE p_search IS NULL OR p_search = ''\r\n       OR p.name ILIKE '%' || p_search || '%'\r\n       OR p.sku  ILIKE '%' || p_search || '%'\r\n  ),\r\n  prod_stock AS (\r\n    SELECT p.id AS product_id,\r\n           COALESCE(SUM(s.qty), 0)::NUMERIC AS total_stock\r\n    FROM prod p\r\n    CROSS JOIN scope_branches sb\r\n    LEFT JOIN stock s ON s.product_id = p.id AND s.branch_id = sb.id\r\n    GROUP BY p.id\r\n  ),\r\n  counted AS (SELECT COUNT(*)::BIGINT AS n FROM prod),\r\n  page AS (\r\n    SELECT p.id, p.sku, p.name, p.min_stock, ps.total_stock\r\n    FROM prod p\r\n    JOIN prod_stock ps ON ps.product_id = p.id\r\n    ORDER BY\r\n      CASE WHEN p_sort = 'name'     THEN p.name         END ASC,\r\n      CASE WHEN p_sort = 'sku'      THEN p.sku          END ASC,\r\n      CASE WHEN p_sort = 'stock_asc' THEN ps.total_stock END ASC,\r\n      CASE WHEN p_sort NOT IN ('name','sku','stock_asc') THEN ps.total_stock END DESC,\r\n      p.name ASC\r\n    LIMIT  GREATEST(p_limit, 1)\r\n    OFFSET GREATEST(p_offset, 0)\r\n  )\r\n  SELECT\r\n    page.id,\r\n    page.sku,\r\n    page.name,\r\n    page.min_stock,\r\n    page.total_stock,\r\n    COALESCE(pend.total_pending, 0)        AS total_pending,\r\n    COALESCE(pend.total_pending_orders, 0) AS total_pending_orders,\r\n    br.branches,\r\n    (SELECT n FROM counted)                AS filtered_count\r\n  FROM page\r\n  LEFT JOIN LATERAL (\r\n    SELECT jsonb_agg(\r\n             jsonb_build_object(\r\n               'branch_id',      sb.id,\r\n               'branch_name',    sb.name,\r\n               'stock',          COALESCE(s.qty, 0),\r\n               'pending_qty',    COALESCE(pp.qty, 0),\r\n               'pending_orders', COALESCE(pp.order_count, 0)\r\n             )\r\n             ORDER BY sb.name\r\n           ) AS branches\r\n    FROM scope_branches sb\r\n    LEFT JOIN stock s ON s.product_id = page.id AND s.branch_id = sb.id\r\n    LEFT JOIN (\r\n      SELECT o.branch_id,\r\n             SUM(oi.qty)          AS qty,\r\n             COUNT(DISTINCT o.id) AS order_count\r\n      FROM order_items oi\r\n      JOIN orders o ON o.id = oi.order_id\r\n      WHERE oi.product_id = page.id\r\n        AND o.status IN ('reserved','draft')   -- FIX: whitelist thay blacklist\r\n      GROUP BY o.branch_id\r\n    ) pp ON pp.branch_id = sb.id\r\n  ) br ON TRUE\r\n  LEFT JOIN LATERAL (\r\n    SELECT SUM(oi.qty)          AS total_pending,\r\n           COUNT(DISTINCT o.id) AS total_pending_orders\r\n    FROM order_items oi\r\n    JOIN orders o ON o.id = oi.order_id\r\n    WHERE oi.product_id = page.id\r\n      AND o.status IN ('reserved','draft')     -- FIX: whitelist thay blacklist\r\n      AND (p_branch IS NULL OR p_branch = '' OR o.branch_id = p_branch)\r\n  ) pend ON TRUE\r\n  ORDER BY\r\n    CASE WHEN p_sort = 'name'      THEN page.name        END ASC,\r\n    CASE WHEN p_sort = 'sku'       THEN page.sku         END ASC,\r\n    CASE WHEN p_sort = 'stock_asc' THEN page.total_stock END ASC,\r\n    CASE WHEN p_sort NOT IN ('name','sku','stock_asc') THEN page.total_stock END DESC,\r\n    page.name ASC;\r\n$function$\n"
+  }
+]
