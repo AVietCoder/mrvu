@@ -75,13 +75,33 @@ type PendingOrderSummary = {
   order_count: number;
 };
 
+/**
+ * FIX: Chỉ các đơn THỰC SỰ đang chờ xử lý (chưa hoàn thành, chưa hủy, chưa trả hàng)
+ * mới được tính vào cột "đang đặt hàng" trên màn hình kho.
+ *
+ * Trước đây filter chỉ loại trừ "completed" và "cancelled", dẫn đến:
+ *   - Đơn "returned"  → vẫn bị đếm vào pending  ❌
+ *   - Đơn đã hoàn thành nhưng kho chưa trừ đúng → hiển thị sai số đặt hàng ❌
+ *
+ * Danh sách trạng thái "đang hoạt động" (cần giữ tồn kho):
+ *   - "reserved"  : đơn đặt, đã cọc hoặc chưa thanh toán
+ *   - "draft"     : đơn nháp
+ * Các trạng thái KHÔNG tính pending:
+ *   - "completed"           : đơn hoàn thành → kho đã bị trừ bởi applyCompletedOrderSideEffects
+ *   - "cancelled"           : đơn hủy
+ *   - "returned"            : đơn trả hàng → kho đã được hoàn lại bởi adjustStock
+ *   - "partially_returned"  : đơn trả một phần (nếu có trong tương lai)
+ */
+const ACTIVE_ORDER_STATUSES = new Set(["reserved", "draft"]);
+
 function buildPendingOrderSummaries(
   orders: { id: string; branch_id?: string | null; status: string }[],
   items: { order_id: string; product_id: string; qty: number }[],
 ): PendingOrderSummary[] {
+  // FIX: dùng whitelist thay vì blacklist để tránh bỏ sót trạng thái mới
   const activeOrderIds = new Set(
     orders
-      .filter((order) => order.status !== "completed" && order.status !== "cancelled")
+      .filter((order) => ACTIVE_ORDER_STATUSES.has(order.status))
       .map((order) => order.id),
   );
 
@@ -180,6 +200,9 @@ export const listInventory = createServerFn({ method: "GET" }).handler(async () 
     // stock_transfers có thể vượt 1000 dòng → fetchAllRows để không mất phiếu cũ.
     fetchAllRows("stock_transfers", { orderBy: "created_at", ascending: false }),
     fetchAllRows("stock_transfer_items"),
+    // FIX: chỉ tải đơn có trạng thái active để giảm dữ liệu thừa
+    // Lưu ý: fetchAllRows không hỗ trợ `in` filter trực tiếp nên vẫn tải tất cả
+    // nhưng buildPendingOrderSummaries sẽ lọc đúng bằng ACTIVE_ORDER_STATUSES
     fetchAllRows("orders", { select: "id, branch_id, status", orderBy: "created_at", ascending: false }),
     fetchAllRows("order_items", { select: "order_id, product_id, qty" }),
   ]);
