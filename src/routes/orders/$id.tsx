@@ -316,11 +316,6 @@ function OrderDetailPage() {
 
       toast.success("Đã cập nhật đơn hàng");
       setEditing(false);
-
-      navigate({
-        to: "/orders",
-        replace: true,
-      });
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi lưu");
     } finally {
@@ -416,7 +411,6 @@ function OrderDetailPage() {
 
       toast.success(`Đã tạo phiếu trả hàng ${result.code}`);
       setReturnOpen(false);
-      navigate({ to: "/orders", replace: true });
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi tạo phiếu trả hàng");
     } finally {
@@ -486,7 +480,6 @@ function OrderDetailPage() {
         toast.success("Đã hoàn tất đơn " + order.code);
       }
       setPayOpen(false);
-      navigate({ to: "/orders", replace: true });
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi hoàn tất đơn");
     } finally {
@@ -507,11 +500,6 @@ function OrderDetailPage() {
       await refetch();
 
       toast.success("Đã hủy đơn " + order.code);
-
-      navigate({
-        to: "/orders",
-        replace: true,
-      });
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi hủy đơn");
     } finally {

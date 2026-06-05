@@ -190,7 +190,7 @@ function CustomerDetailPage() {
   const payBackFn = useServerFn(payCustomerDebt);
   const getSettingsFn = useServerFn(getSettings);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["customer-detail", id],
     enabled: !!id,
     queryFn: () => getCustomer({ data: { id: id! } }),
@@ -343,8 +343,9 @@ function CustomerDetailPage() {
 
       toast.success("Đã cập nhật khách hàng!");
       setEditOpen(false);
-      qc.invalidateQueries({ queryKey: ["customer-detail", id] });
-      qc.invalidateQueries({ queryKey: ["customers"] });
+      await qc.invalidateQueries({ queryKey: ["customer-detail", id] });
+      await qc.invalidateQueries({ queryKey: ["customers"] });
+      await refetch();
     } catch (err: any) {
       toast.error(err?.message ?? "Lỗi");
     } finally {
@@ -397,8 +398,9 @@ function CustomerDetailPage() {
 
       toast.success(`Đã tạo phiếu thu ${result.code} — Còn nợ: ${fmt(result.new_debt)}`);
       setPayOpen(false);
-      qc.invalidateQueries({ queryKey: ["customer-detail", id] });
-      qc.invalidateQueries({ queryKey: ["customers"] });
+      await qc.invalidateQueries({ queryKey: ["customer-detail", id] });
+      await qc.invalidateQueries({ queryKey: ["customers"] });
+      await refetch();
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi tạo phiếu thu");
     } finally {
@@ -456,8 +458,9 @@ function CustomerDetailPage() {
       });
       toast.success(`Đã tạo phiếu chi ${result.code} — Còn nợ: ${fmt(result.new_debt)}`);
       setPayBackOpen(false);
-      qc.invalidateQueries({ queryKey: ["customer-detail", id] });
-      qc.invalidateQueries({ queryKey: ["customers"] });
+      await qc.invalidateQueries({ queryKey: ["customer-detail", id] });
+      await qc.invalidateQueries({ queryKey: ["customers"] });
+      await refetch();
     } catch (e: any) {
       toast.error(e?.message ?? "Lỗi tạo phiếu chi");
     } finally {

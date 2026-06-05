@@ -364,9 +364,8 @@ async function refreshQuery(queryKey: readonly unknown[]) {
     workDifficultiesById,
   ]);
 
-  const [attPickedDate, setAttPickedDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
-  const attFrom = attPickedDate.slice(0, 7) + "-01";
-  const attTo = attPickedDate;
+  const [attFrom, setAttFrom] = useState<string>(() => new Date().toISOString().slice(0, 7) + "-01");
+  const [attTo, setAttTo] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [attDetail, setAttDetail] = useState<any>(null);
   const { data: attData, isLoading: attLoading, refetch: refetchAttendance } = useQuery({
     queryKey: ["attendance", attFrom, attTo],
@@ -890,11 +889,25 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                   <div className="text-xs text-muted-foreground">Chỉ tính các lịch đã <b>duyệt / đang làm / hoàn thành</b>. Điểm = (1 loại hình + N tính chất) ÷ số NV. Tiền cũng chia đều.</div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <span>Chọn ngày:</span>
-                    <input type="date" value={attPickedDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setAttPickedDate(e.target.value)} className="h-9 rounded-md border bg-background px-2 text-sm" />
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground flex-wrap">
+                    <span>Từ ngày</span>
+                    <input
+                      type="date"
+                      value={attFrom}
+                      max={attTo || undefined}
+                      onChange={(e) => setAttFrom(e.target.value)}
+                      className="h-9 rounded-md border bg-background px-2 text-sm"
+                    />
+                    <span>đến ngày</span>
+                    <input
+                      type="date"
+                      value={attTo}
+                      min={attFrom || undefined}
+                      max={new Date().toISOString().slice(0, 10)}
+                      onChange={(e) => setAttTo(e.target.value)}
+                      className="h-9 rounded-md border bg-background px-2 text-sm"
+                    />
                   </div>
-                  <div className="text-xs text-muted-foreground">({attFrom} → {attTo})</div>
                   <Button size="sm" variant="outline" onClick={() => refetchAttendance()}>Làm mới</Button>
                 </div>
               </div>
@@ -905,7 +918,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                   </thead>
                   <tbody>
                     {attLoading && <tr><td colSpan={7} className="py-10 text-center text-muted-foreground"><Loader2 className="inline h-4 w-4 mr-1 animate-spin" /> Đang tải…</td></tr>}
-                    {!attLoading && (attData?.rows ?? []).length === 0 && <tr><td colSpan={7} className="py-10 text-center text-muted-foreground">Không có dữ liệu chấm công trong tháng</td></tr>}
+                    {!attLoading && (attData?.rows ?? []).length === 0 && <tr><td colSpan={7} className="py-10 text-center text-muted-foreground">Không có dữ liệu chấm công trong khoảng đã chọn</td></tr>}
                     {(attData?.rows ?? []).filter((r: any) => isTech && !canApprove && !isAdmin ? r.user_id === user?.id : true).map((r: any) => (
                       <tr key={r.user_id} className="border-b last:border-0 hover:bg-muted/30">
                         <td className="py-2 pr-3"><div className="font-medium">{r.full_name}</div><div className="text-xs text-muted-foreground">{r.username}</div></td>
@@ -1265,7 +1278,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
               </DialogHeader>
               <div className="px-4 flex-1">
                 <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                  <div className="rounded-xl border p-3 bg-card shadow-sm"><div className="text-xs text-muted-foreground">Tháng</div><div className="font-semibold text-lg">{attData?.month}</div></div>
+                  <div className="rounded-xl border p-3 bg-card shadow-sm"><div className="text-xs text-muted-foreground">Khoảng</div><div className="font-semibold text-sm">{attFrom} → {attTo}</div></div>
                   <div className="rounded-xl border p-3 bg-card shadow-sm"><div className="text-xs text-muted-foreground">Số lịch</div><div className="font-semibold text-lg">{attDetail.schedule_count}</div></div>
                   <div className="rounded-xl border p-3 bg-card shadow-sm"><div className="text-xs text-muted-foreground">Tổng điểm</div><div className="font-semibold text-lg">{(attDetail.type_points + attDetail.diff_points).toFixed(2)}</div></div>
                   <div className="rounded-xl border p-3 bg-green-50 border-green-200 shadow-sm"><div className="text-xs text-green-700">Tổng tiền</div><div className="font-semibold text-green-700 text-lg">{fmtMoney(attDetail.total_money)}</div></div>
