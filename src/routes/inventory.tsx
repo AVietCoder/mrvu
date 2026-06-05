@@ -1252,7 +1252,6 @@ function Page() {
                 <th className="px-4 py-3 text-left">Sản phẩm</th>
                 <th className="px-4 py-3 text-left">Luồng kho</th>
                 <th className="px-4 py-3 text-right">SL</th>
-                <th className="px-4 py-3 text-left">Ghi chú</th>
                 <th className="px-4 py-3 text-center w-[80px]">Chi tiết</th>
               </tr>
             </thead>
@@ -1347,7 +1346,6 @@ function Page() {
                     </td>
                     <td className="px-4 py-3 text-xs">{flowLabel}</td>
                     <td className="px-4 py-3 text-right font-medium">{m.qty}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{m.note || "—"}</td>
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => { setDetailEntry(m); setDetailOpen(true); }}
