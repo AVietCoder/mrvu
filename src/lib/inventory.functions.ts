@@ -162,19 +162,34 @@ export const searchInventoryPage = createServerFn({ method: "GET" }).handler(
 
 // Dữ liệu phụ trợ (KHÔNG kèm toàn bộ stock/orders): chi nhánh, sản phẩm gọn cho
 // ô chọn ở phiếu nhập/chuyển, 100 lượt nhập-xuất gần nhất, và phiếu chuyển ĐANG CHỜ.
+// Bổ sung: 100 đơn bán hàng hoàn thành (completed) gần nhất để hiển thị trong lịch sử xuất kho.
 export const getInventoryRefs = createServerFn({ method: "GET" }).handler(
   async () => {
-    const [products, branches, movements, transfers] = await Promise.all([
+    const [products, branches, movements, transfers, completedOrders] = await Promise.all([
       fetchAllRows("products", { select: "id, name, sku", orderBy: "name" }),
       fetchRows("branches", { orderBy: "name" }),
       fetchRows("stock_movements", { orderBy: "created_at", ascending: false, limit: 100 }),
       fetchRows("stock_transfers", { eq: { status: "pending" }, orderBy: "created_at", ascending: false }),
+      fetchRows("orders", {
+        eq: { status: "completed" },
+        select: "id, code, branch_id, status, total, customer_id, completed_at, created_at, note",
+        orderBy: "completed_at",
+        ascending: false,
+        limit: 100,
+      }),
     ]);
     const transferIds = (transfers ?? []).map((t: any) => t.id);
     const transfer_items = transferIds.length
       ? await fetchRows("stock_transfer_items", { eq: { transfer_id: transferIds } })
       : [];
-    return { products, branches, movements, transfers, transfer_items };
+
+    // Lấy order_items cho các đơn hoàn thành để hiển thị chi tiết
+    const completedOrderIds = (completedOrders ?? []).map((o: any) => o.id);
+    const completed_order_items = completedOrderIds.length
+      ? await fetchRows("order_items", { eq: { order_id: completedOrderIds }, select: "order_id, product_id, qty, unit_price, discount, total" })
+      : [];
+
+    return { products, branches, movements, transfers, transfer_items, completed_orders: completedOrders ?? [], completed_order_items };
   },
 );
 

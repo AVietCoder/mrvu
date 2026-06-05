@@ -53,6 +53,8 @@ import {
   Pencil,
   Check,
   X,
+  Eye,
+  ShoppingBag,
 } from "lucide-react";
 
 import { toast } from "sonner";
@@ -323,25 +325,71 @@ function Page() {
   const historyMovements = useMemo(() => {
     const movements = (data?.movements ?? []) as any[];
 
-    if (isAdmin) return movements;
+    // Xây dựng "bản ghi xuất kho" ảo từ các đơn bán hàng đã hoàn thành
+    const completedOrders = (data?.completed_orders ?? []) as any[];
+    const completedOrderItems = (data?.completed_order_items ?? []) as any[];
 
-    return movements.filter((m: any) => {
+    // Nhóm order_items theo order_id để có thể tra cứu nhanh
+    const itemsByOrder = new Map<string, any[]>();
+    for (const item of completedOrderItems) {
+      const list = itemsByOrder.get(item.order_id) ?? [];
+      list.push(item);
+      itemsByOrder.set(item.order_id, list);
+    }
+
+    // Mỗi đơn hoàn thành → 1 bản ghi "sale" tổng hợp (gộp tất cả sản phẩm)
+    const saleEntries = completedOrders.map((order: any) => ({
+      id: `sale__${order.id}`,
+      type: "sale" as const,
+      order_id: order.id,
+      order_code: order.code,
+      from_branch: order.branch_id,
+      to_branch: null,
+      product_id: null, // đơn bán có nhiều sản phẩm, không lọc theo 1 product_id
+      qty: (itemsByOrder.get(order.id) ?? []).reduce((s: number, i: any) => s + Number(i.qty || 0), 0),
+      note: order.note || null,
+      created_at: order.completed_at || order.created_at,
+      total: order.total,
+      customer_id: order.customer_id,
+      items: itemsByOrder.get(order.id) ?? [],
+    }));
+
+    const allEntries = [
+      ...movements.map((m: any) => ({ ...m, order_id: null, order_code: null, items: [] })),
+      ...saleEntries,
+    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    if (isAdmin) return allEntries;
+
+    return allEntries.filter((m: any) => {
       const fromOk = m.from_branch ? allowedBranchSet.has(m.from_branch) : false;
       const toOk = m.to_branch ? allowedBranchSet.has(m.to_branch) : false;
       return fromOk || toOk;
     });
-  }, [data?.movements, isAdmin, allowedBranchSet]);
+  }, [data?.movements, data?.completed_orders, data?.completed_order_items, isAdmin, allowedBranchSet]);
 
   // ── Bộ lọc lịch sử kho ───────────────────────────────────────────────
-  const [histFilterType, setHistFilterType] = useState<"" | "in" | "transfer">("");
+  const [histFilterType, setHistFilterType] = useState<"" | "in" | "out" | "transfer" | "sale">("");
   const [histFilterProduct, setHistFilterProduct] = useState("");
   const [histFilterFrom, setHistFilterFrom] = useState("");
   const [histFilterTo, setHistFilterTo] = useState("");
 
+  // ── Chi tiết bản ghi lịch sử kho (popup xem thôi) ───────────────────
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailEntry, setDetailEntry] = useState<any>(null);
+
   const filteredHistoryMovements = useMemo(() => {
     return historyMovements.filter((m: any) => {
       if (histFilterType && m.type !== histFilterType) return false;
-      if (histFilterProduct && m.product_id !== histFilterProduct) return false;
+      // Lọc theo sản phẩm: đơn bán (sale) có nhiều SP, check trong items[]
+      if (histFilterProduct) {
+        if (m.type === "sale") {
+          const hasProduct = (m.items ?? []).some((i: any) => i.product_id === histFilterProduct);
+          if (!hasProduct) return false;
+        } else {
+          if (m.product_id !== histFilterProduct) return false;
+        }
+      }
       if (histFilterFrom) {
         const mDate = new Date(m.created_at);
         const fromDate = new Date(histFilterFrom);
@@ -1142,10 +1190,12 @@ function Page() {
           <select
             className="h-8 rounded-md border bg-background px-2 text-sm"
             value={histFilterType}
-            onChange={(e) => setHistFilterType(e.target.value as "" | "in" | "transfer")}
+            onChange={(e) => setHistFilterType(e.target.value as "" | "in" | "out" | "transfer" | "sale")}
           >
             <option value="">Tất cả loại</option>
             <option value="in">Nhập kho</option>
+            <option value="out">Xuất kho (Admin)</option>
+            <option value="sale">Đơn bán hàng</option>
             <option value="transfer">Chuyển kho</option>
           </select>
 
@@ -1203,6 +1253,7 @@ function Page() {
                 <th className="px-4 py-3 text-left">Luồng kho</th>
                 <th className="px-4 py-3 text-right">SL</th>
                 <th className="px-4 py-3 text-left">Ghi chú</th>
+                <th className="px-4 py-3 text-center w-[80px]">Chi tiết</th>
               </tr>
             </thead>
 
@@ -1216,8 +1267,24 @@ function Page() {
                   ? (branches.find((b) => b.id === m.to_branch)?.name ?? m.to_branch)
                   : null;
 
+                // Đơn bán hàng (sale): nhiều sản phẩm, hiển thị gộp
+                const isSale = m.type === "sale";
+                const saleItems = isSale ? (m.items ?? []) : [];
+                const saleProductNames = isSale
+                  ? saleItems.slice(0, 2).map((i: any) => {
+                      const p = products.find((x) => x.id === i.product_id);
+                      return p?.name ?? "—";
+                    })
+                  : [];
+
                 let flowLabel: React.ReactNode = "—";
-                if (m.type === "in" && toName) {
+                if (isSale && fromName) {
+                  flowLabel = (
+                    <span>
+                      Xuất khỏi <b>{fromName}</b>
+                    </span>
+                  );
+                } else if (m.type === "in" && toName) {
                   flowLabel = (
                     <span>
                       Nhập vào <b>{toName}</b>
@@ -1247,27 +1314,56 @@ function Page() {
                         className={`rounded-full px-2 py-1 text-xs font-medium ${
                           m.type === "in"
                             ? "bg-green-100 text-green-700"
-                            : m.type === "out"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-blue-100 text-blue-700"
+                            : m.type === "sale"
+                              ? "bg-orange-100 text-orange-700"
+                              : m.type === "out"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-blue-100 text-blue-700"
                         }`}
                       >
-                        {m.type === "in" ? "Nhập" : m.type === "out" ? "Xuất" : "Chuyển"}
+                        {m.type === "in" ? "Nhập" : m.type === "out" ? "Xuất" : m.type === "sale" ? "Bán hàng" : "Chuyển"}
                       </span>
+                      {isSale && m.order_code && (
+                        <div className="mt-1 text-xs text-muted-foreground font-mono">#{m.order_code}</div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-medium">{product?.name || "—"}</div>
-                      <div className="text-xs text-muted-foreground">{product?.sku}</div>
+                      {isSale ? (
+                        <div>
+                          <div className="font-medium text-sm">
+                            {saleProductNames.join(", ")}
+                            {saleItems.length > 2 && (
+                              <span className="text-muted-foreground"> +{saleItems.length - 2} SP</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground">{saleItems.length} mặt hàng</div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="font-medium">{product?.name || "—"}</div>
+                          <div className="text-xs text-muted-foreground">{product?.sku}</div>
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-xs">{flowLabel}</td>
                     <td className="px-4 py-3 text-right font-medium">{m.qty}</td>
                     <td className="px-4 py-3 text-muted-foreground">{m.note || "—"}</td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => { setDetailEntry(m); setDetailOpen(true); }}
+                        className="inline-flex items-center gap-1 rounded-lg border bg-background px-2 py-1 text-xs text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors"
+                        title="Xem chi tiết"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        Xem
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
               {filteredHistoryMovements.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-sm">
                     {histFilterType || histFilterProduct || histFilterFrom || histFilterTo
                       ? "Không có bản ghi nào khớp với bộ lọc."
                       : "Chưa có lịch sử kho."}
@@ -2418,6 +2514,160 @@ function Page() {
               )}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Detail popup: xem chi tiết lịch sử kho / đơn bán hàng ──────── */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-lg rounded-2xl p-0 overflow-hidden flex flex-col max-h-[90vh]">
+          {detailEntry && (() => {
+            const isSale = detailEntry.type === "sale";
+            const fromName = detailEntry.from_branch
+              ? (branches.find((b: any) => b.id === detailEntry.from_branch)?.name ?? detailEntry.from_branch)
+              : null;
+            const toName = detailEntry.to_branch
+              ? (branches.find((b: any) => b.id === detailEntry.to_branch)?.name ?? detailEntry.to_branch)
+              : null;
+            const product = products.find((p) => p.id === detailEntry.product_id);
+
+            const typeColor = isSale
+              ? "from-orange-50 to-orange-50/30"
+              : detailEntry.type === "in"
+                ? "from-green-50 to-green-50/30"
+                : detailEntry.type === "out"
+                  ? "from-red-50 to-red-50/30"
+                  : "from-blue-50 to-blue-50/30";
+
+            const typeLabel = isSale ? "Đơn bán hàng" : detailEntry.type === "in" ? "Nhập kho" : detailEntry.type === "out" ? "Xuất kho" : "Chuyển kho";
+            const TypeIcon = isSale ? ShoppingBag : detailEntry.type === "in" ? ArrowDownToLine : detailEntry.type === "out" ? ArrowDownToLine : Repeat;
+
+            return (
+              <>
+                {/* Header */}
+                <div className={`bg-gradient-to-r ${typeColor} border-b px-5 py-4 shrink-0`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`h-9 w-9 rounded-full flex items-center justify-center ${
+                      isSale ? "bg-orange-100 text-orange-700"
+                      : detailEntry.type === "in" ? "bg-green-100 text-green-700"
+                      : detailEntry.type === "out" ? "bg-red-100 text-red-700"
+                      : "bg-blue-100 text-blue-700"
+                    }`}>
+                      <TypeIcon className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-base leading-tight">{typeLabel}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(detailEntry.created_at).toLocaleString("vi-VN")}
+                      </div>
+                    </div>
+                    {isSale && detailEntry.order_code && (
+                      <span className="ml-auto font-mono text-sm bg-white/70 border rounded-lg px-2 py-1">
+                        #{detailEntry.order_code}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Luồng kho */}
+                  <div className="mt-3 flex items-center gap-2 bg-white/70 rounded-xl px-3 py-2 border text-sm">
+                    {fromName && (
+                      <>
+                        <span className="text-muted-foreground bg-muted/40 rounded-lg px-2 py-0.5">{fromName}</span>
+                      </>
+                    )}
+                    {fromName && toName && (
+                      <svg className="h-4 w-4 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                    )}
+                    {toName && (
+                      <span className="text-primary font-semibold bg-primary/8 rounded-lg px-2 py-0.5">{toName}</span>
+                    )}
+                    <span className="ml-auto font-semibold text-base">{detailEntry.qty} SP</span>
+                  </div>
+                </div>
+
+                {/* Body */}
+                <div className="flex-1 overflow-auto px-5 py-4">
+                  {isSale ? (
+                    /* Đơn bán hàng: danh sách sản phẩm */
+                    <>
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                        Sản phẩm trong đơn
+                      </div>
+                      <div className="space-y-1.5">
+                        {(detailEntry.items ?? []).map((item: any, idx: number) => {
+                          const p = products.find((x) => x.id === item.product_id);
+                          const lineTotal = Number(item.total || 0);
+                          return (
+                            <div key={idx} className="flex items-center gap-2 bg-muted/20 rounded-xl border px-3 py-2">
+                              <div className="h-6 w-6 rounded-md bg-orange-100 flex items-center justify-center text-xs font-bold text-orange-700 shrink-0">
+                                {idx + 1}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{p?.name ?? item.product_id}</div>
+                                <div className="text-xs text-muted-foreground">{p?.sku}</div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <div className="text-sm font-semibold">×{item.qty}</div>
+                                {lineTotal > 0 && (
+                                  <div className="text-xs text-muted-foreground">{formatMoney(lineTotal)}đ</div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {detailEntry.total > 0 && (
+                        <div className="mt-3 flex items-center justify-between rounded-xl bg-orange-50 border border-orange-100 px-4 py-2.5">
+                          <span className="text-sm text-muted-foreground">Tổng đơn hàng</span>
+                          <span className="font-bold text-orange-700 text-base">{formatMoney(detailEntry.total)}đ</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* Nhập / Xuất / Chuyển kho thông thường */
+                    <div className="space-y-3">
+                      <div className="rounded-xl border bg-muted/20 px-4 py-3">
+                        <div className="text-xs text-muted-foreground mb-1">Sản phẩm</div>
+                        <div className="font-semibold">{product?.name ?? "—"}</div>
+                        {product?.sku && <div className="text-xs text-muted-foreground font-mono">{product.sku}</div>}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-xl border bg-muted/20 px-4 py-3">
+                          <div className="text-xs text-muted-foreground mb-1">Số lượng</div>
+                          <div className="font-bold text-xl">{detailEntry.qty}</div>
+                        </div>
+                        {detailEntry.unit_cost > 0 && (
+                          <div className="rounded-xl border bg-muted/20 px-4 py-3">
+                            <div className="text-xs text-muted-foreground mb-1">Đơn giá</div>
+                            <div className="font-semibold">{formatMoney(detailEntry.unit_cost)}đ</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Ghi chú */}
+                  {detailEntry.note && (
+                    <div className="mt-3 rounded-xl border bg-muted/20 px-4 py-3">
+                      <div className="text-xs text-muted-foreground mb-1">Ghi chú</div>
+                      <div className="text-sm">{detailEntry.note}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="border-t bg-muted/10 px-5 py-3 flex justify-end shrink-0">
+                  <button
+                    onClick={() => setDetailOpen(false)}
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </AppShell>
