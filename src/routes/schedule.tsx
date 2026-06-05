@@ -344,7 +344,8 @@ async function refreshQuery(queryKey: readonly unknown[]) {
       const d = workDifficultiesById.get(did);
       return sum + Number(d?.bonus || 0) * Math.max(1, diffQty[did] ?? 1);
     }, 0);
-    const diffBonus = diffLineSum * numPeople;
+    // Tính chất CV KHÔNG nhân theo số người: tiền = bonus × số lượng (sản phẩm), rồi chia đều theo NV.
+    const diffBonus = diffLineSum;
     const sharedBonus = techFees.filter((tf) => !tf.user_id).reduce((sum, tf) => sum + tf.qty * tf.unit_fee, 0);
     const perUserBonus: Record<string, number> = {};
     for (const tf of techFees.filter((tf) => tf.user_id)) {
@@ -436,7 +437,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
       const wdiff = (data?.work_difficulties ?? []).find((w: any) => w.id === d.difficulty_id);
       return sum + (wdiff?.bonus ?? 0) * Math.max(1, Number(d.qty ?? 1));
     }, 0);
-    const diffBonus = diffBonusPerTask * numPeople;
+    const diffBonus = diffBonusPerTask;
     const workType = schedule?.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === schedule.work_type_id) : null;
     const workTypePrice = Number(workType?.price || 0) * Math.max(1, Number(schedule?.work_type_qty ?? 1));
     const totalPool = bonusTotal + diffBonus + workTypePrice;
@@ -1108,7 +1109,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                 <Label className="font-medium">Tính chất công việc (chấm công)</Label>
                 <div className="flex items-center gap-3 text-xs font-medium text-muted-foreground"><span>Số lượng</span><span>Thành tiền</span></div>
               </div>
-              <div className="text-xs text-muted-foreground mb-1">Có thể tick nhiều. Mỗi tính chất = 1 điểm chia đều theo số NV. Tiền nhân theo số lượng.</div>
+              <div className="text-xs text-muted-foreground mb-1">Có thể tick nhiều. Mỗi tính chất = 1 điểm chia đều theo số NV. Tiền nhân theo số lượng (sản phẩm), rồi chia đều theo số NV (không nhân số người).</div>
               <div className="mt-1 rounded-md border divide-y">
                 {(data?.work_difficulties ?? []).map((d: any) => {
                   const checked = assignedDiffs.includes(d.id);
@@ -1134,7 +1135,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
               {approveSummary && (
                 <div className="rounded-md bg-muted/50 p-2 text-sm space-y-1 mt-1">
                   <div className="flex justify-between text-xs text-muted-foreground"><span>Loại hình công việc: {approveSummary.workType?.name ?? "—"}{approveSummary.workType && approveSummary.wtQty > 1 ? ` × ${approveSummary.wtQty}` : ""}</span><span>{fmtMoney(approveSummary.workTypeTotal)}</span></div>
-                  <div className="flex justify-between text-xs text-muted-foreground"><span>Tính chất CV × {approveSummary.numPeople} người</span><span>{fmtMoney(approveSummary.diffBonus)}</span></div>
+                  <div className="flex justify-between text-xs text-muted-foreground"><span>Tính chất công việc</span><span>{fmtMoney(approveSummary.diffBonus)}</span></div>
                   <div className="flex justify-between text-xs text-muted-foreground"><span>Thu nhập chia đều</span><span>{fmtMoney(approveSummary.sharedBonus)}</span></div>
                   {Object.keys(approveSummary.perUserBonus).length > 0 && <div className="flex justify-between text-xs text-muted-foreground"><span>Thu nhập riêng (tổng)</span><span>{fmtMoney(Object.values(approveSummary.perUserBonus).reduce((a, b) => a + b, 0))}</span></div>}
                   <div className="border-t pt-1 space-y-0.5">
@@ -1313,11 +1314,11 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                             </td>
                             <td className="px-3 text-xs">{cust?.name ?? "—"}</td>
                             <td className="px-3 text-xs">
-                              {ln.work_type ? <span className="rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5">{ln.work_type.name} ({fmtMoney(ln.work_type.price)})</span> : <span className="text-muted-foreground">—</span>}
+                              {ln.work_type ? <span className="rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5">{ln.work_type.name} ({fmtMoney(ln.work_type.price)}{(ln.work_type.qty ?? 1) > 1 ? ` × ${ln.work_type.qty} = ${fmtMoney(ln.work_type.price * ln.work_type.qty)}` : ""})</span> : <span className="text-muted-foreground">—</span>}
                             </td>
                             <td className="px-3 text-xs">
                               <div className="flex flex-wrap gap-1">
-                                {ln.difficulties.map((d: any) => <span key={d.id} className="rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5">{d.name} (+{fmtMoney(d.bonus)})</span>)}
+                                {ln.difficulties.map((d: any) => <span key={d.id} className="rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5">{d.name} (+{fmtMoney(d.bonus)}{(d.qty ?? 1) > 1 ? ` × ${d.qty} = +${fmtMoney(d.bonus * d.qty)}` : ""})</span>)}
                                 {(ln.extra_income ?? []).map((f: any, fi: number) => <span key={`tn-${fi}`} className="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5">{f.product_id || "Thu nhập"} (+{fmtMoney(f.amount)})</span>)}
                                 {ln.difficulties.length === 0 && (ln.extra_income ?? []).length === 0 && <span className="text-muted-foreground">—</span>}
                               </div>
@@ -1366,13 +1367,13 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                             <div className="flex justify-between items-center gap-2">
                               <span className="text-muted-foreground text-xs whitespace-nowrap">Loại hình</span>
                               <div className="text-right">
-                                {ln.work_type ? <span className="inline-block rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[11px] font-medium">{ln.work_type.name} ({fmtMoney(ln.work_type.price)})</span> : <span className="text-xs text-muted-foreground">—</span>}
+                                {ln.work_type ? <span className="inline-block rounded-full bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 text-[11px] font-medium">{ln.work_type.name} ({fmtMoney(ln.work_type.price)}{(ln.work_type.qty ?? 1) > 1 ? ` × ${ln.work_type.qty} = ${fmtMoney(ln.work_type.price * ln.work_type.qty)}` : ""})</span> : <span className="text-xs text-muted-foreground">—</span>}
                               </div>
                             </div>
                             <div>
                               <span className="text-muted-foreground text-xs block mb-1.5">Tính chất & Thu nhập khác</span>
                               <div className="flex flex-wrap gap-1">
-                                {ln.difficulties.map((d: any) => <span key={d.id} className="rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[11px] font-medium">{d.name} (+{fmtMoney(d.bonus)})</span>)}
+                                {ln.difficulties.map((d: any) => <span key={d.id} className="rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 text-[11px] font-medium">{d.name} (+{fmtMoney(d.bonus)}{(d.qty ?? 1) > 1 ? ` × ${d.qty} = +${fmtMoney(d.bonus * d.qty)}` : ""})</span>)}
                                 {(ln.extra_income ?? []).map((f: any, fi: number) => <span key={`tn-${fi}`} className="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[11px] font-medium">{f.product_id || "Thu nhập"} (+{fmtMoney(f.amount)})</span>)}
                                 {ln.difficulties.length === 0 && (ln.extra_income ?? []).length === 0 && <span className="text-[11px] text-muted-foreground">—</span>}
                               </div>
@@ -1461,7 +1462,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                     const wtQty = Math.max(1, Number(s.work_type_qty ?? 1));
                     const bonusTotal = fees.reduce((sum: number, f: any) => sum + f.qty * f.unit_fee, 0);
                     const diffBonusPerTask = diffIds.reduce((sum: number, d: any) => { const wd = data?.work_difficulties.find((w: any) => w.id === d.difficulty_id); return sum + (wd?.bonus ?? 0) * Math.max(1, Number(d.qty ?? 1)); }, 0);
-                    const diffBonus = diffBonusPerTask * numPeople;
+                    const diffBonus = diffBonusPerTask;
                     const workType = s.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === s.work_type_id) : null;
                     const workTypeLabel = workType?.name ?? "—";
                     const workTypePrice = Number(workType?.price || 0) * wtQty;
@@ -1478,7 +1479,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                         {diffIds.map((d: any) => {
                           const wd = data?.work_difficulties.find((w: any) => w.id === d.difficulty_id);
                           const q = Math.max(1, Number(d.qty ?? 1));
-                          return wd ? <div key={d.difficulty_id} className="flex justify-between text-sm rounded border px-3 py-2"><span>{wd.name}{q > 1 ? ` × ${q}` : ""} × {numPeople} người</span><span className="font-medium text-green-600">+{fmtMoney(wd.bonus * q * numPeople)}</span></div> : null;
+                          return wd ? <div key={d.difficulty_id} className="flex justify-between text-sm rounded border px-3 py-2"><span>{wd.name}{q > 1 ? ` × ${q}` : ""}</span><span className="font-medium text-green-600">+{fmtMoney(wd.bonus * q)}</span></div> : null;
                         })}
                         <div className="flex justify-between font-semibold text-sm rounded border border-green-200 bg-green-50 px-3 py-2"><span>Tiền công / người ({numPeople} người)</span><span className="text-green-700">{fmtMoney(perPerson)}</span></div>
                       </div>
