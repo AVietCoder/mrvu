@@ -277,7 +277,7 @@ body{
         <div class="shop-meta">
           ${ss?.address ? `${esc(branchAddress || ss.address)}<br>` : (branchAddress ? `${esc(branchAddress)}<br>` : "")}
           ${(branchPhone || ss?.phone) ? `ĐT: ${esc(branchPhone || ss.phone)}` : ""}${(branchPhone || ss?.phone) && ss?.email ? "&nbsp;·&nbsp;" : ""}${ss?.email ? `Email: ${esc(ss.email)}` : ""}
-          ${ss?.tax_code ? `<br>MST: ${esc(ss.tax_code)}` : ""}
+
         </div>
       </div>
     </div>
