@@ -190,6 +190,8 @@ function printOrderSlip({
       custPhone: custObj?.phone,
       custAddress,
       branchName: branchObj?.name,
+      branchAddress: branchObj?.address,
+      branchPhone: branchObj?.phone,
       empName: empObj?.name,
       items,
       products: data?.products ?? [],

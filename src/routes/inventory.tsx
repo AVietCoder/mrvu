@@ -2105,6 +2105,17 @@ function Page() {
                         const _showWarranty = _tpl.showWarranty !== false;
                         const _tplWarranty = _showWarranty ? ((_tpl.warranty ?? (type === "transfer" ? "Hàng hoá đã được kiểm tra đầy đủ trước khi bàn giao. Người nhận ký xác nhận chịu trách nhiệm sau khi nhận hàng." : "Hàng hoá được kiểm tra đầy đủ trước khi nhập kho. Mọi khiếu nại vui lòng phản hồi trong vòng 24 giờ.")).replace("{Ten_Cua_Hang}", _siteName)) : "";
 
+                        // Resolve chi nhánh hiện tại để lấy địa chỉ & SĐT
+                        // Admin dùng siteSettings; nhân viên dùng thông tin chi nhánh đang chọn
+                        const _activeBranchId = type === "in" ? inBranch : type === "out" ? outBranch : transferFrom;
+                        const _activeBranchObj = branches.find((b: any) => b.id === _activeBranchId);
+                        const _printAddress = isAdmin
+                          ? (siteSettings?.address ?? "")
+                          : (_activeBranchObj?.address ?? siteSettings?.address ?? "");
+                        const _printPhone = isAdmin
+                          ? (siteSettings?.phone ?? "")
+                          : (_activeBranchObj?.phone ?? siteSettings?.phone ?? "");
+
                         const printWindow =
                           window.open("", "_blank");
 
@@ -2213,8 +2224,8 @@ function Page() {
                                   Mã phiếu #${Date.now()
                                     .toString()
                                     .slice(-6)}
-                                  ${siteSettings?.phone ? ` &nbsp;|&nbsp; ĐT: ${siteSettings.phone}` : ""}
-                                  ${siteSettings?.address ? ` &nbsp;|&nbsp; ${siteSettings.address}` : ""}
+                                  ${_printPhone ? ` &nbsp;|&nbsp; ĐT: ${_printPhone}` : ""}
+                                  ${_printAddress ? ` &nbsp;|&nbsp; ${_printAddress}` : ""}
                                 </div>
                               </div>
 

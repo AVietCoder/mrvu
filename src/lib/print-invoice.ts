@@ -20,6 +20,10 @@ export interface BuildInvoiceArgs {
   custPhone?: string;
   custAddress?: string;
   branchName?: string;
+  /** Địa chỉ chi nhánh — nếu truyền vào sẽ ưu tiên hiển thị thay cho địa chỉ trong cài đặt admin */
+  branchAddress?: string;
+  /** Số điện thoại chi nhánh — nếu truyền vào sẽ ưu tiên hiển thị thay cho SĐT trong cài đặt admin */
+  branchPhone?: string;
   empName?: string;
   items?: any[];
   products?: any[];
@@ -75,6 +79,8 @@ export function buildInvoiceHtml({
   custPhone,
   custAddress,
   branchName,
+  branchAddress,
+  branchPhone,
   empName,
   items,
   products,
@@ -269,8 +275,8 @@ body{
       <div>
         <div class="shop-name">${esc(_site)}</div>
         <div class="shop-meta">
-          ${ss?.address ? `${esc(ss.address)}<br>` : ""}
-          ${ss?.phone ? `ĐT: ${esc(ss.phone)}` : ""}${ss?.phone && ss?.email ? "&nbsp;·&nbsp;" : ""}${ss?.email ? `Email: ${esc(ss.email)}` : ""}
+          ${ss?.address ? `${esc(branchAddress || ss.address)}<br>` : (branchAddress ? `${esc(branchAddress)}<br>` : "")}
+          ${(branchPhone || ss?.phone) ? `ĐT: ${esc(branchPhone || ss.phone)}` : ""}${(branchPhone || ss?.phone) && ss?.email ? "&nbsp;·&nbsp;" : ""}${ss?.email ? `Email: ${esc(ss.email)}` : ""}
           ${ss?.tax_code ? `<br>MST: ${esc(ss.tax_code)}` : ""}
         </div>
       </div>

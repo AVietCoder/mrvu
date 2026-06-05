@@ -582,7 +582,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
     const _tpl  = (() => { try { return JSON.parse((ss as any)?.print_templates || "{}").order_invoice ?? {}; } catch { return {}; } })();
     const pw = window.open("", "_blank");
     if (!pw) return;
-    pw.document.write(buildInvoiceHtml({ order: linkedOrder, custName: custObj?.name, custPhone: custObj?.phone, custAddress, branchName: branchObj?.name, empName, items, products: data?.products ?? [], moneyFmt, ss, tplOverride: _tpl }));
+    pw.document.write(buildInvoiceHtml({ order: linkedOrder, custName: custObj?.name, custPhone: custObj?.phone, custAddress, branchName: branchObj?.name, branchAddress: branchObj?.address, branchPhone: branchObj?.phone, empName, items, products: data?.products ?? [], moneyFmt, ss, tplOverride: _tpl }));
     pw.document.close();
     setTimeout(() => pw.print(), 300);
   }

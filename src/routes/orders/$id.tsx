@@ -538,6 +538,8 @@ function OrderDetailPage() {
         custPhone: custObj?.phone,
         custAddress,
         branchName: branchObj?.name,
+        branchAddress: branchObj?.address,
+        branchPhone: branchObj?.phone,
         empName: empObj?.name,
         items: orderItems,
         products: data?.products ?? [],
