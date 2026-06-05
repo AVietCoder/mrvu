@@ -980,7 +980,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
               value={createForm.order_id}
               onChange={(v) => pickOrder(v)}
               emptyLabel="— Không liên kết —"
-              placeholder="Tìm mã đơn, tên khách, số điện thoại..."
+              placeholder="Tìm mã đơn, tên khách, SĐT, sản phẩm..."
               fetchOptions={async (q) => {
                 const r = await searchOrdersFn({ data: { q, limit: 30 } });
                 const custMap = new Map((r.customers ?? []).map((c: any) => [c.id, c]));
@@ -1188,7 +1188,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                 value={editForm.order_id}
                 onChange={(v) => setEditForm({ ...editForm, order_id: v })}
                 emptyLabel="— Không liên kết —"
-                placeholder="Tìm mã đơn, tên khách, số điện thoại..."
+                placeholder="Tìm mã đơn, tên khách, SĐT, sản phẩm..."
                 fetchOptions={async (q) => {
                   const r = await searchOrdersFn({ data: { q, limit: 30 } });
                   const custMap = new Map((r.customers ?? []).map((c: any) => [c.id, c]));

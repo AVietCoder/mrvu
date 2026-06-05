@@ -503,8 +503,9 @@ export const searchOrdersForSchedule = createServerFn({ method: "GET" })
       if (error) throw new Error(error.message);
       orderRows = rows ?? [];
     } else {
-      // If query looks like a phone or name, search customers first
+      // Search customers by name/phone, and products by name
       let customerIds: string[] = [];
+      let orderIdsFromProduct: string[] = [];
       if (q) {
         const { data: custs } = await supabase
           .from("customers")
@@ -512,6 +513,22 @@ export const searchOrdersForSchedule = createServerFn({ method: "GET" })
           .or(`name.ilike.%${q}%,phone.ilike.%${q}%`)
           .limit(50);
         customerIds = (custs ?? []).map((c: any) => c.id);
+
+        // Search by product name → get order_ids
+        const { data: prods } = await supabase
+          .from("products")
+          .select("id")
+          .ilike("name", `%${q}%`)
+          .limit(50);
+        if ((prods ?? []).length > 0) {
+          const prodIds = (prods ?? []).map((p: any) => p.id);
+          const { data: items } = await supabase
+            .from("order_items")
+            .select("order_id")
+            .in("product_id", prodIds)
+            .limit(100);
+          orderIdsFromProduct = Array.from(new Set((items ?? []).map((i: any) => i.order_id)));
+        }
       }
 
       let query = supabase
@@ -523,6 +540,7 @@ export const searchOrdersForSchedule = createServerFn({ method: "GET" })
       if (q) {
         const orClauses = [`code.ilike.%${q}%`];
         if (customerIds.length) orClauses.push(`customer_id.in.(${customerIds.join(",")})`);
+        if (orderIdsFromProduct.length) orClauses.push(`id.in.(${orderIdsFromProduct.join(",")})`);
         query = query.or(orClauses.join(","));
       }
 

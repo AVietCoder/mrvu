@@ -1704,7 +1704,7 @@ function Page() {
         <SearchFilter
           search={search}
           onSearch={handleSearch}
-          placeholder="Tìm mã đơn, khách hàng..."
+          placeholder="Tìm mã đơn, tên khách, SĐT, sản phẩm..."
           sortOptions={[
             { value: "newest", label: "Mới nhất" },
             { value: "oldest", label: "Cũ nhất" },

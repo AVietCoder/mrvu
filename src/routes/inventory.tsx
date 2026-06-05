@@ -332,6 +332,31 @@ function Page() {
     });
   }, [data?.movements, isAdmin, allowedBranchSet]);
 
+  // ── Bộ lọc lịch sử kho ───────────────────────────────────────────────
+  const [histFilterType, setHistFilterType] = useState<"" | "in" | "transfer">("");
+  const [histFilterProduct, setHistFilterProduct] = useState("");
+  const [histFilterFrom, setHistFilterFrom] = useState("");
+  const [histFilterTo, setHistFilterTo] = useState("");
+
+  const filteredHistoryMovements = useMemo(() => {
+    return historyMovements.filter((m: any) => {
+      if (histFilterType && m.type !== histFilterType) return false;
+      if (histFilterProduct && m.product_id !== histFilterProduct) return false;
+      if (histFilterFrom) {
+        const mDate = new Date(m.created_at);
+        const fromDate = new Date(histFilterFrom);
+        if (mDate < fromDate) return false;
+      }
+      if (histFilterTo) {
+        const mDate = new Date(m.created_at);
+        const toDate = new Date(histFilterTo);
+        toDate.setHours(23, 59, 59, 999);
+        if (mDate > toDate) return false;
+      }
+      return true;
+    });
+  }, [historyMovements, histFilterType, histFilterProduct, histFilterFrom, histFilterTo]);
+
   function startAction(
     t: "in" | "transfer"
   ) {
@@ -1107,11 +1132,66 @@ function Page() {
       />
 
       <Card className="mb-6">
-        <div className="mb-4 flex items-center gap-2">
-          <History className="h-4 w-4" />
-          <div className="font-medium">
-            Lịch sử kho
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 mr-2">
+            <History className="h-4 w-4" />
+            <div className="font-medium">Lịch sử kho</div>
           </div>
+
+          {/* Lọc theo loại */}
+          <select
+            className="h-8 rounded-md border bg-background px-2 text-sm"
+            value={histFilterType}
+            onChange={(e) => setHistFilterType(e.target.value as "" | "in" | "transfer")}
+          >
+            <option value="">Tất cả loại</option>
+            <option value="in">Nhập kho</option>
+            <option value="transfer">Chuyển kho</option>
+          </select>
+
+          {/* Lọc theo sản phẩm */}
+          <select
+            className="h-8 rounded-md border bg-background px-2 text-sm max-w-[200px]"
+            value={histFilterProduct}
+            onChange={(e) => setHistFilterProduct(e.target.value)}
+          >
+            <option value="">Tất cả sản phẩm</option>
+            {products.map((p: any) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+
+          {/* Lọc từ ngày */}
+          <input
+            type="date"
+            className="h-8 rounded-md border bg-background px-2 text-sm"
+            value={histFilterFrom}
+            onChange={(e) => setHistFilterFrom(e.target.value)}
+            title="Từ ngày"
+          />
+          <span className="text-muted-foreground text-xs">–</span>
+          {/* Lọc đến ngày */}
+          <input
+            type="date"
+            className="h-8 rounded-md border bg-background px-2 text-sm"
+            value={histFilterTo}
+            onChange={(e) => setHistFilterTo(e.target.value)}
+            title="Đến ngày"
+          />
+
+          {/* Nút xóa lọc */}
+          {(histFilterType || histFilterProduct || histFilterFrom || histFilterTo) && (
+            <button
+              className="h-8 px-2 text-xs rounded-md border bg-muted hover:bg-muted/70 text-muted-foreground"
+              onClick={() => { setHistFilterType(""); setHistFilterProduct(""); setHistFilterFrom(""); setHistFilterTo(""); }}
+            >
+              Xóa lọc
+            </button>
+          )}
+
+          <span className="ml-auto text-xs text-muted-foreground">
+            {filteredHistoryMovements.length} / {historyMovements.length} bản ghi
+          </span>
         </div>
 
         <div className="max-h-[420px] overflow-auto rounded-xl border">
@@ -1128,7 +1208,7 @@ function Page() {
             </thead>
 
             <tbody>
-              {historyMovements.map((m: any) => {
+              {filteredHistoryMovements.map((m: any) => {
                 const product = products.find((p) => p.id === m.product_id);
                 const fromName = m.from_branch
                   ? (branches.find((b) => b.id === m.from_branch)?.name ?? m.from_branch)
@@ -1186,6 +1266,15 @@ function Page() {
                   </tr>
                 );
               })}
+              {filteredHistoryMovements.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                    {histFilterType || histFilterProduct || histFilterFrom || histFilterTo
+                      ? "Không có bản ghi nào khớp với bộ lọc."
+                      : "Chưa có lịch sử kho."}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

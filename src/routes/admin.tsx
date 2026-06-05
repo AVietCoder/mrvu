@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 import { getSettings, updateSettings } from "@/lib/settings.functions";
+import { buildInvoiceHtml } from "@/lib/print-invoice";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -585,97 +586,62 @@ function AdminPage() {
 
                 {/* RIGHT: live preview — matches actual print output */}
                 {previewTpl && (
-                  <div className="rounded-xl border bg-white shadow overflow-auto" style={{minHeight:420, fontFamily:"'Segoe UI',Tahoma,Arial,sans-serif", fontSize:"12.5px", color:"#1a1a2e", WebkitFontSmoothing:"antialiased"}}>
+                  <div className="rounded-xl border bg-white shadow overflow-hidden" style={{minHeight:420}}>
                     {key !== "email_order" ? (
-                      <>
-                        {/* Header */}
-                        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",padding:"16px 20px 12px",borderBottom:"2px solid #111"}}>
-                          <div>
-                            {logoUrl && <img src={logoUrl} alt="" style={{height:44,objectFit:"contain",marginBottom:4,display:"block"}} />}
-                            <div style={{fontSize:15,fontWeight:700,color:"#111"}}>{siteName || "Tên cửa hàng"}</div>
-                            <div style={{fontSize:10,color:"#6b7280",lineHeight:1.7}}>
-                              {address && <div>{address}</div>}
-                              {phone && <span>ĐT: {phone}</span>}
-                              {phone && email && <span> &nbsp;|&nbsp; </span>}
-                              {email && <span>Email: {email}</span>}
-                              {taxCode && <div>MST: {taxCode}</div>}
-                            </div>
-                          </div>
-                          <div style={{textAlign:"right"}}>
-                            <div style={{fontSize:14,fontWeight:800,textTransform:"uppercase",lineHeight:1.2}}>
-                              {(getTplField(key,"header")||TEMPLATE_DEFAULTS[key].header).replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
-                            </div>
-                            <div style={{fontSize:10,color:"#6b7280",marginTop:5,lineHeight:1.8}}>
-                              <div><strong>Mã phiếu:</strong> HD000001</div>
-                              <div><strong>Ngày:</strong> {new Date().toLocaleDateString("vi-VN")}</div>
-                            </div>
-                          </div>
-                        </div>
-                        {/* Info grid */}
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 20px",padding:"10px 20px",background:"#f9fafb",borderBottom:"1px solid #e5e7eb",fontSize:11}}>
-                          <div><span style={{color:"#6b7280",textTransform:"uppercase",fontSize:9.5,letterSpacing:"0.3px"}}>Khách hàng</span><div style={{fontWeight:600}}>Nguyễn Văn A — 0909 123 456</div></div>
-                          <div><span style={{color:"#6b7280",textTransform:"uppercase",fontSize:9.5}}>Chi nhánh</span><div style={{fontWeight:600}}>Cửa hàng chính</div></div>
-                          <div><span style={{color:"#6b7280",textTransform:"uppercase",fontSize:9.5}}>Nhân viên</span><div style={{fontWeight:600}}>Nhân viên A</div></div>
-                          <div><span style={{color:"#6b7280",textTransform:"uppercase",fontSize:9.5}}>Hình thức TT</span><div style={{fontWeight:600}}>Tiền mặt</div></div>
-                        </div>
-                        {/* Table */}
-                        <div style={{padding:"10px 20px"}}>
-                          <table style={{width:"100%",borderCollapse:"collapse",marginBottom:10}}>
-                            <thead><tr style={{background:"#111",color:"#fff"}}>
-                              <th style={{padding:"7px 6px",fontSize:11,width:30,textAlign:"center"}}>STT</th>
-                              <th style={{padding:"7px 6px",fontSize:11}}>Sản phẩm</th>
-                              <th style={{padding:"7px 6px",fontSize:11,width:40,textAlign:"center"}}>SL</th>
-                              <th style={{padding:"7px 6px",fontSize:11,width:100,textAlign:"right"}}>Đơn giá</th>
-                              <th style={{padding:"7px 6px",fontSize:11,width:110,textAlign:"right"}}>Thành tiền</th>
-                            </tr></thead>
-                            <tbody>
-                              <tr><td style={{padding:"6px",borderBottom:"1px solid #e5e7eb",textAlign:"center"}}>1</td><td style={{padding:"6px",borderBottom:"1px solid #e5e7eb"}}>Quạt trần MR.VŨ 120cm</td><td style={{padding:"6px",borderBottom:"1px solid #e5e7eb",textAlign:"center"}}>2</td><td style={{padding:"6px",borderBottom:"1px solid #e5e7eb",textAlign:"right"}}>1.800.000</td><td style={{padding:"6px",borderBottom:"1px solid #e5e7eb",textAlign:"right",fontWeight:600}}>3.600.000</td></tr>
-                              <tr><td style={{padding:"6px",textAlign:"center"}}>2</td><td style={{padding:"6px"}}>Quạt đứng MR.VŨ Pro</td><td style={{padding:"6px",textAlign:"center"}}>1</td><td style={{padding:"6px",textAlign:"right"}}>950.000</td><td style={{padding:"6px",textAlign:"right",fontWeight:600}}>950.000</td></tr>
-                            </tbody>
-                          </table>
-                          {/* Totals */}
-                          <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
-                            <div style={{minWidth:220,border:"1px solid #e5e7eb",borderRadius:5,overflow:"hidden"}}>
-                              <div style={{display:"flex",justifyContent:"space-between",padding:"5px 12px",fontSize:11,borderBottom:"1px solid #f3f4f6"}}><span>Tổng cộng</span><span style={{fontWeight:700}}>4.550.000 ₫</span></div>
-                              <div style={{display:"flex",justifyContent:"space-between",padding:"6px 12px",fontSize:13,fontWeight:700,background:"#111",color:"#fff"}}><span>Khách cần trả</span><span>4.550.000 ₫</span></div>
-                            </div>
-                          </div>
-                          {/* Checklist — only for order_invoice */}
-                          {key === "order_invoice" && (
-                            <div style={{border:"1px solid #e5e7eb",borderRadius:5,padding:"8px 12px",marginBottom:10,fontSize:11}}>
-                              <div style={{fontWeight:700,marginBottom:6}}>Xác nhận bàn giao:</div>
-                              {["Đã giao hàng đúng mẫu và đầy đủ phụ kiện","Đã lắp đặt hoàn thiện, quạt chạy ổn định","Đã hướng dẫn sử dụng và bảo quản","Đã thanh toán đúng số tiền trên phiếu"].map(item => (
-                                <div key={item} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-                                  <span style={{width:11,height:11,border:"1.5px solid #9ca3af",borderRadius:2,display:"inline-block",flexShrink:0}} />
-                                  <span>{item}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {/* Signatures */}
-                          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,textAlign:"center",fontSize:10,borderTop:"1px solid #e5e7eb",paddingTop:8,marginBottom:10}}>
-                            {["Kỹ thuật","Nhân viên","Khách hàng","Thủ kho"].map(r => (
-                              <div key={r}>
-                                <div style={{fontWeight:700,marginBottom:2}}>{r}</div>
-                                <div style={{color:"#9ca3af",marginBottom:28}}>(Ký, ghi rõ họ tên)</div>
-                                <div style={{borderTop:"1px dashed #d1d5db",paddingTop:3,color:"#d1d5db"}}>___________</div>
-                              </div>
-                            ))}
-                          </div>
-                          {/* Warranty */}
-                          {getTplField(key,"showWarranty") && (getTplField(key,"warranty")||TEMPLATE_DEFAULTS[key].warranty) && (
-                            <div style={{padding:"8px 12px",background:"#f5f5f5",border:"1px solid #ccc",borderLeft:"4px solid #111",borderRadius:5,fontSize:10,fontWeight:700,textTransform:"uppercase",lineHeight:1.7,color:"#111",marginBottom:8}}>
-                              {(getTplField(key,"warranty")||TEMPLATE_DEFAULTS[key].warranty).replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
-                            </div>
-                          )}
-                          {/* Footer */}
-                          {(getTplField(key,"footer")||TEMPLATE_DEFAULTS[key].footer) && (
-                            <div style={{textAlign:"center",fontSize:11,color:"#9ca3af",borderTop:"1px solid #f3f4f6",paddingTop:8,paddingBottom:8}}>
-                              {(getTplField(key,"footer")||TEMPLATE_DEFAULTS[key].footer).replace("{Ten_Cua_Hang}", siteName||"Mr.Vũ")}
-                            </div>
-                          )}
-                        </div>
-                      </>
+                      /* ── Xem trước phiếu in thực tế — dùng buildInvoiceHtml để đồng bộ 100% ── */
+                      <iframe
+                        title={`preview-${key}`}
+                        style={{width:"100%",minHeight:420,border:"none",display:"block"}}
+                        srcDoc={buildInvoiceHtml({
+                          order: {
+                            code: "HD000001",
+                            created_at: new Date().toISOString(),
+                            status: key === "order_invoice" ? "completed" : "draft",
+                            payment_method: "tien_mat",
+                            subtotal: 4550000,
+                            discount: 0,
+                            discount_type: "fixed",
+                            discount_pct: 0,
+                            vat_rate: 0,
+                            vat_amount: 0,
+                            total: 4550000,
+                            deposit: 0,
+                            paid: 0,
+                            note: "",
+                          },
+                          custName: "Nguyễn Văn A",
+                          custPhone: "0909 123 456",
+                          custAddress: "",
+                          branchName: "Cửa hàng chính",
+                          empName: "Nhân viên A",
+                          items: [
+                            { product_id: "__p1", qty: 2, unit_price: 1800000, discount: 0 },
+                            { product_id: "__p2", qty: 1, unit_price: 950000,  discount: 0 },
+                          ],
+                          products: [
+                            { id: "__p1", name: "Quạt trần MR.VŨ 120cm" },
+                            { id: "__p2", name: "Quạt đứng MR.VŨ Pro" },
+                          ],
+                          moneyFmt: (n) => new Intl.NumberFormat("vi-VN").format(n) + " ₫",
+                          ss: {
+                            site_name: siteName || "Mr.Vũ",
+                            logo_url: logoUrl || "",
+                            address,
+                            phone,
+                            email,
+                            tax_code: taxCode,
+                            primary_color: primaryColor,
+                            print_templates: JSON.stringify(printTpl),
+                          },
+                          tplOverride: {
+                            header:      getTplField(key, "header")      || TEMPLATE_DEFAULTS[key].header,
+                            footer:      getTplField(key, "footer")      || TEMPLATE_DEFAULTS[key].footer,
+                            warranty:    getTplField(key, "warranty")    || TEMPLATE_DEFAULTS[key].warranty,
+                            showWarranty: getTplField(key, "showWarranty") !== "" ? getTplField(key, "showWarranty") : TEMPLATE_DEFAULTS[key].showWarranty,
+                          },
+                          docLabel: key === "import_slip" ? "Phiếu nhập kho" : key === "transfer_slip" ? "Phiếu chuyển kho" : "Hóa đơn bán hàng",
+                        })}
+                      />
                     ) : (
                       /* Email preview */
                       <div style={{padding:20}}>
