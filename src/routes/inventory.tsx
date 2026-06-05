@@ -1150,16 +1150,15 @@ function Page() {
           </select>
 
           {/* Lọc theo sản phẩm */}
-          <select
-            className="h-8 rounded-md border bg-background px-2 text-sm max-w-[200px]"
-            value={histFilterProduct}
-            onChange={(e) => setHistFilterProduct(e.target.value)}
-          >
-            <option value="">Tất cả sản phẩm</option>
-            {products.map((p: any) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+          <div className="w-48">
+            <SearchableSelect
+              value={histFilterProduct}
+              onChange={(v) => setHistFilterProduct(v)}
+              emptyLabel="Tất cả sản phẩm"
+              placeholder="Tìm sản phẩm..."
+              options={products.map((p: any) => ({ value: p.id, label: p.name, sub: p.sku ?? undefined }))}
+            />
+          </div>
 
           {/* Lọc từ ngày */}
           <input
