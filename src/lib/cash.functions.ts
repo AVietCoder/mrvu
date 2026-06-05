@@ -64,6 +64,7 @@ export const searchCashPage = createServerFn({ method: "GET" }).handler(
     const fund = data?.fund ?? "all";
     const filterBranch = data?.filterBranch ?? "";
     const filterType = data?.filterType ?? "";
+    const filterVoucherType = data?.filterVoucherType ?? ""; // lọc theo DANH MỤC thu/chi (cash_voucher_types)
     const filterBank = data?.filterBank ?? "";
     const search = (data?.search ?? "").toLowerCase();
     const canViewAll = !!data?.canViewAll;
@@ -153,6 +154,7 @@ export const searchCashPage = createServerFn({ method: "GET" }).handler(
       const matchAccess =
         canViewAll || branchIds.length === 0 || bIds.some((id) => branchIds.includes(id));
       const matchType = !filterType || v.type === filterType;
+      const matchVoucherType = !filterVoucherType || v.voucher_type_id === filterVoucherType;
       const matchBank = !filterBank || (v.note ?? "").includes(filterBank);
       const sides = voucherSides(v);
       const matchSearch =
@@ -161,7 +163,7 @@ export const searchCashPage = createServerFn({ method: "GET" }).handler(
         sides.a?.toLowerCase().includes(search) ||
         sides.b?.toLowerCase().includes(search) ||
         v.note?.toLowerCase().includes(search);
-      return matchFund && matchBranch && matchAccess && matchType && matchBank && matchSearch;
+      return matchFund && matchBranch && matchAccess && matchType && matchVoucherType && matchBank && matchSearch;
     });
 
     const totalFiltered = filtered.length;

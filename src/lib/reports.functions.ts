@@ -21,7 +21,7 @@ function normalizeDate(value: any): string {
 
 export const getReports = createServerFn({ method: "GET" }).handler(async () => {
   const [orders, orderItems, products, customers, branches, users, stock] = await Promise.all([
-    fetchAllRows<any>("orders", { select: "id, status, total, created_at, branch_id, employee_id, customer_id" }),
+    fetchAllRows<any>("orders", { select: "id, status, total, created_at, completed_at, branch_id, employee_id, customer_id" }),
     fetchAllRows<any>("order_items", { select: "order_id, product_id, qty, unit_price" }),
     fetchAllRows<any>("products", { select: "id, name, sku, min_stock" }),
     fetchAllRows<any>("customers", { select: "id, name, phone, debt" }),

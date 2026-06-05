@@ -147,7 +147,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
   const [approving, setApproving] = useState(false);
   const [expandedAttLines, setExpandedAttLines] = useState<string[]>([]);
 
-  const { data } = useQuery({ queryKey: ["schedules"], queryFn: () => listFn() });
+  const { data } = useQuery({ queryKey: ["schedules"], queryFn: () => listFn(), staleTime: 60_000, gcTime: 10 * 60_000 });
   const { data: diffData } = useQuery({ queryKey: ["work-difficulties"], queryFn: () => listDiff() });
   const { data: wtData } = useQuery({ queryKey: ["work-types"], queryFn: () => listWT() });
   const { data: siteSettings } = useQuery({ queryKey: ["site_settings"], queryFn: () => getSettingsFn() });

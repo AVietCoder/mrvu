@@ -325,6 +325,12 @@ function Page() {
   const [sortBy, setSortBy] = useState("newest");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterBranch, setFilterBranch] = useState("");
+  // ✨ Bộ lọc mới: khách hàng, nhân viên (chỉ admin), khoảng ngày.
+  // Ngày lọc: đơn hoàn tất theo ngày hoàn tất, còn lại theo ngày tạo (xử lý ở RPC).
+  const [filterCustomer, setFilterCustomer] = useState("");
+  const [filterEmployee, setFilterEmployee] = useState("");
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
 
   // Phạm vi chi nhánh theo quyền: NV không phải admin chỉ thấy chi nhánh được gán.
   // GIỮ NGUYÊN logic cũ (trước đây lọc ở client trong allOrders).
@@ -348,6 +354,10 @@ function Page() {
       sortBy,
       filterStatus,
       filterBranch,
+      filterCustomer,
+      filterEmployee,
+      filterFrom,
+      filterTo,
       branchScope,
     ],
     queryFn: () =>
@@ -361,6 +371,11 @@ function Page() {
           tab: activeTab,
           sortBy,
           branchIds: branchScope,
+          customer: filterCustomer,
+          // Chỉ admin được lọc theo nhân viên.
+          employee: isAdmin ? filterEmployee : "",
+          fromDate: filterFrom,
+          toDate: filterTo,
         },
       }),
     placeholderData: (prev) => prev,
@@ -379,7 +394,7 @@ function Page() {
   // Đổi tab/tìm kiếm/sort/bộ lọc → quay về trang 1.
   useEffect(() => {
     setPage(1);
-  }, [activeTab, debouncedSearch, sortBy, filterStatus, filterBranch]);
+  }, [activeTab, debouncedSearch, sortBy, filterStatus, filterBranch, filterCustomer, filterEmployee, filterFrom, filterTo]);
 
   // Khách đang chọn — resolve gọn (1 dòng) để dựng tiêu đề/địa chỉ lịch tự động.
   // Không còn tải toàn bộ danh sách khách về client.
@@ -1699,7 +1714,7 @@ function Page() {
           sortValue={sortBy}
           onSort={handleSort}
           filterSlot={
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {activeTab === "orders" && (
 <select
   className="h-9 rounded-md border bg-background px-2 text-sm"
@@ -1731,6 +1746,78 @@ function Page() {
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
+
+              {/* Lọc theo khách hàng */}
+              <div className="w-full sm:w-44">
+                <AsyncSearchableSelect
+                  value={filterCustomer}
+                  onChange={(v) => { setFilterCustomer(v); setPage(1); }}
+                  emptyLabel="Tất cả khách"
+                  placeholder="Lọc khách hàng..."
+                  fetchOptions={async (q) => {
+                    const r = await listCustomersFn({ data: { search: q, page: 1, pageSize: 20 } });
+                    return (r?.customers ?? []).map((c: any) => ({
+                      value: c.id, label: c.name, sub: c.phone ?? undefined,
+                    }));
+                  }}
+                  resolveSelected={async (idv) => {
+                    const c = await custLiteFn({ data: { id: idv } });
+                    return c ? { value: c.id, label: c.name, sub: c.phone ?? undefined } : null;
+                  }}
+                />
+              </div>
+
+              {/* Lọc theo nhân viên — CHỈ admin */}
+              {isAdmin && (
+                <div className="w-full sm:w-40">
+                  <SearchableSelect
+                    value={filterEmployee}
+                    onChange={(v) => { setFilterEmployee(v); setPage(1); }}
+                    emptyLabel="Tất cả NV"
+                    placeholder="Lọc nhân viên..."
+                    options={(stats?.employees ?? []).map((e: any) => ({ value: e.id, label: e.name }))}
+                  />
+                </div>
+              )}
+
+              {/* Lọc theo khoảng ngày (đơn hoàn tất: ngày HT; còn lại: ngày tạo) */}
+              <div className="flex items-center gap-1">
+                <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <input
+                  type="date"
+                  className="h-9 w-[140px] rounded-md border bg-background px-2 text-sm"
+                  value={filterFrom}
+                  max={filterTo || undefined}
+                  onChange={(e) => { setFilterFrom(e.target.value); setPage(1); }}
+                  aria-label="Từ ngày"
+                />
+                <span className="text-xs text-muted-foreground">→</span>
+                <input
+                  type="date"
+                  className="h-9 w-[140px] rounded-md border bg-background px-2 text-sm"
+                  value={filterTo}
+                  min={filterFrom || undefined}
+                  onChange={(e) => { setFilterTo(e.target.value); setPage(1); }}
+                  aria-label="Đến ngày"
+                />
+              </div>
+
+              {(filterCustomer || (isAdmin && filterEmployee) || filterFrom || filterTo) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 text-xs text-muted-foreground"
+                  onClick={() => {
+                    setFilterCustomer("");
+                    setFilterEmployee("");
+                    setFilterFrom("");
+                    setFilterTo("");
+                    setPage(1);
+                  }}
+                >
+                  <X className="h-3.5 w-3.5 mr-1" /> Xóa lọc
+                </Button>
+              )}
             </div>
           }
           total={totalFiltered}

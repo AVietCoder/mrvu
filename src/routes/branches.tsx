@@ -74,7 +74,7 @@ function Page() {
         </table>
       </Card>
 
-      <Card>
+      {/* <Card>
         <div className="font-medium mb-3">So sánh hiệu quả kinh doanh</div>
         <table className="w-full text-sm">
           <thead className="text-left text-muted-foreground border-b"><tr><th className="py-2">Chi nhánh</th><th className="text-right">Số đơn</th><th className="text-right">Doanh thu</th></tr></thead>
@@ -84,7 +84,7 @@ function Page() {
             ))}
           </tbody>
         </table>
-      </Card>
+      </Card> */}
     </AppShell>
   );
 }

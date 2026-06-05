@@ -90,6 +90,8 @@ function Page() {
     queryKey: ["reports-full"],
     queryFn: () => fn(),
     enabled: !!canView,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
   });
 
   const [fromDate, setFromDate] = useState(daysAgoStr(29));
@@ -165,7 +167,11 @@ function Page() {
     let totalRevenue = 0;
 
     allOrders.forEach((o: any) => {
-      const d = fmtDate(o.created_at);
+      // Ngày tính báo cáo: đơn hoàn tất theo NGÀY HOÀN TẤT (completed_at),
+      // các đơn khác theo ngày tạo. Khớp với bộ lọc đơn hàng.
+      const d = (o.status === "completed" && o.completed_at)
+        ? fmtDate(o.completed_at)
+        : fmtDate(o.created_at);
       if (d >= from && d <= to) {
         filteredOrders.push(o);
         ordersByStatus[o.status] = (ordersByStatus[o.status] ?? 0) + 1;
@@ -347,7 +353,7 @@ function Page() {
         <div className="space-y-5">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatBox icon={<TrendingUp className="h-5 w-5" />} label="Doanh thu" value={moneyFmt(totalRevenue)} sub={`${totalCompletedOrders} đơn hoàn tất`} color="text-green-600" />
-            <StatBox icon={<ShoppingBag className="h-5 w-5" />} label="Tổng đơn" value={totalAllOrders} sub={`Hoàn tất: ${totalCompletedOrders}`} color="text-blue-600" />
+            <StatBox icon={<ShoppingBag className="h-5 w-5" />} label="Đơn hoàn tất" value={totalCompletedOrders} sub={`Tổng đơn trong kỳ: ${totalAllOrders}`} color="text-blue-600" />
             <StatBox icon={<CreditCard className="h-5 w-5" />} label="Giá trị TB/đơn" value={moneyFmt(avgOrderValue)} sub="Đơn hoàn tất" color="text-purple-600" />
             <StatBox icon={<Users className="h-5 w-5" />} label="KH mới" value={newCustomers} sub="Trong kỳ" color="text-orange-600" />
           </div>

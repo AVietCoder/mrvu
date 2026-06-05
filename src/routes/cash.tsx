@@ -432,6 +432,7 @@ function Page() {
   // quả lọc giữ nguyên — chỉ giảm số lần quét danh sách phiếu khi dữ liệu lớn.
   const debouncedSearch = useDebouncedValue(search, 250);
   const [filterType, setFilterType] = useState<"" | "thu" | "chi">("");
+  const [filterVoucherType, setFilterVoucherType] = useState<string>(""); // lọc theo danh mục thu/chi
   const [filterBank, setFilterBank] = useState<string>("");  // lọc theo STK ngân hàng (note chứa số TK)
   // ⚡ Phân trang phía client để KHÔNG render hàng nghìn dòng cùng lúc (gây đơ
   // trình duyệt). Tổng thu/chi/số dư vẫn tính trên TOÀN BỘ tập đã lọc ở memo
@@ -456,7 +457,7 @@ function Page() {
   // Trang phiếu + số liệu (thu/chi/số dư) tính ở SERVER theo bộ lọc hiện tại.
   // Đổi bộ lọc/trang → đổi query key → chỉ tải đúng 1 trang.
   const { data: cashData, isLoading: cashLoading } = useQuery({
-    queryKey: ["cash", "page", page, fund, filterBranch, filterType, filterBank, debouncedSearch, canViewAll, (user?.branch_ids ?? []).join(",")],
+    queryKey: ["cash", "page", page, fund, filterBranch, filterType, filterVoucherType, filterBank, debouncedSearch, canViewAll, (user?.branch_ids ?? []).join(",")],
     queryFn: () =>
       cashFn({
         data: {
@@ -465,6 +466,7 @@ function Page() {
           fund,
           filterBranch,
           filterType,
+          filterVoucherType,
           filterBank,
           search: debouncedSearch,
           canViewAll: !!canViewAll,
@@ -573,7 +575,7 @@ function Page() {
   // Reset về trang 1 mỗi khi đổi bộ lọc/tìm kiếm để không bị kẹt ở trang trống.
   useEffect(() => {
     setPage(1);
-  }, [fund, filterBranch, filterType, filterBank, search]);
+  }, [fund, filterBranch, filterType, filterVoucherType, filterBank, search]);
 
 
 
@@ -869,11 +871,35 @@ function Page() {
           <select
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={filterType}
-            onChange={(e) => setFilterType(e.target.value as any)}
+            onChange={(e) => {
+              const v = e.target.value as "" | "thu" | "chi";
+              setFilterType(v);
+              // Nếu danh mục đang chọn không thuộc loại mới → bỏ chọn danh mục.
+              if (v && filterVoucherType) {
+                const t = voucherTypes.find((x: any) => x.id === filterVoucherType);
+                if (t && t.kind !== v) setFilterVoucherType("");
+              }
+            }}
           >
             <option value="">Tất cả loại</option>
             <option value="thu">Phiếu thu</option>
             <option value="chi">Phiếu chi</option>
+          </select>
+
+          {/* Lọc theo DANH MỤC thu/chi (cash_voucher_types) */}
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm max-w-[200px]"
+            value={filterVoucherType}
+            onChange={(e) => setFilterVoucherType(e.target.value)}
+          >
+            <option value="">Tất cả danh mục</option>
+            {voucherTypes
+              .filter((t: any) => !filterType || t.kind === filterType)
+              .map((t: any) => (
+                <option key={t.id} value={t.id}>
+                  {t.kind === "thu" ? "Thu" : "Chi"}: {t.name}
+                </option>
+              ))}
           </select>
 
           {/* Lọc theo tài khoản ngân hàng — chỉ hiện khi tab Ngân hàng */}

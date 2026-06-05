@@ -550,6 +550,10 @@ interface SearchOrdersArgs {
   tab?: "orders" | "reserved";
   branchIds?: string[] | null;
   sortBy?: string;
+  customer?: string;
+  employee?: string;
+  fromDate?: string;
+  toDate?: string;
 }
 
 export const searchOrdersPage = createServerFn({ method: "GET" }).handler(
@@ -565,6 +569,10 @@ export const searchOrdersPage = createServerFn({ method: "GET" }).handler(
       p_tab: data?.tab || "orders",
       p_branch_ids:
         data?.branchIds && data.branchIds.length ? data.branchIds : null,
+      p_employee: data?.employee || null,
+      p_customer: data?.customer || null,
+      p_from: data?.fromDate || null,
+      p_to: data?.toDate || null,
       p_sort: data?.sortBy || "newest",
       p_limit: pageSize,
       p_offset: offset,
@@ -582,12 +590,13 @@ export const searchOrdersPage = createServerFn({ method: "GET" }).handler(
 
 export const getOrderStats = createServerFn({ method: "GET" }).handler(
   async ({ data }: { data: { branchIds?: string[] | null } | undefined }) => {
-    const [statsRes, branches] = await Promise.all([
+    const [statsRes, branches, users] = await Promise.all([
       supabase.rpc("orders_stats", {
         p_branch_ids:
           data?.branchIds && data.branchIds.length ? data.branchIds : null,
       }),
       fetchRows("branches", { orderBy: "name" }),
+      fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
     ]);
     if (statsRes.error) throw new Error(statsRes.error.message);
     const r = statsRes.data;
@@ -596,6 +605,7 @@ export const getOrderStats = createServerFn({ method: "GET" }).handler(
       reservedCount: Number(row.reserved_count ?? 0),
       totalOrders: Number(row.total_orders ?? 0),
       branches: branches ?? [],
+      employees: ((users ?? []) as any[]).map((u: any) => ({ id: u.id, name: u.full_name })),
     };
   },
 );
