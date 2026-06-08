@@ -205,10 +205,12 @@ function Page() {
     const filteredItems = allItems.filter((i: any) => completedIds.has(i.order_id));
 
     const daily: { date: string; revenue: number; orders: number }[] = [];
-    const start = new Date(from + "T00:00:00+07:00");
-    const end = new Date(to + "T23:59:59+07:00");
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const key = dtf.format(d);
+    // Tạo series ngày hiệu quả hơn bằng cách đếm milliseconds thay vì tạo Date mới mỗi vòng
+    const msPerDay = 86_400_000;
+    const startMs = new Date(from + "T00:00:00+07:00").getTime();
+    const endMs = new Date(to + "T23:59:59+07:00").getTime();
+    for (let ms = startMs; ms <= endMs; ms += msPerDay) {
+      const key = dtf.format(new Date(ms));
       const dayStats = dailyMap.get(key) || { revenue: 0, orders: 0 };
       daily.push({
         date: key.slice(5),
@@ -234,11 +236,11 @@ function Page() {
     }).filter((e: any) => e.orders > 0).sort((a: any, b: any) => b.revenue - a.revenue);
 
     const products: any[] = (data as any)._rawProducts ?? [];
-    const productMap = new Map(products.map((p: any) => [p.id, p]));
+    const productMap = new Map<string, any>(products.map((p: any) => [String(p.id), p]));
     const qtyMap = new Map<string, { qty: number; revenue: number }>();
     filteredItems.forEach((i: any) => {
-      const cur = qtyMap.get(i.product_id) ?? { qty: 0, revenue: 0 };
-      qtyMap.set(i.product_id, { qty: cur.qty + Number(i.qty || 0), revenue: cur.revenue + Number(i.qty || 0) * Number(i.unit_price || 0) });
+      const cur = qtyMap.get(String(i.product_id)) ?? { qty: 0, revenue: 0 };
+      qtyMap.set(String(i.product_id), { qty: cur.qty + Number(i.qty || 0), revenue: cur.revenue + Number(i.qty || 0) * Number(i.unit_price || 0) });
     });
     const topProducts = [...qtyMap.entries()]
       .map(([pid, v]) => ({ name: (productMap.get(pid) as any)?.name ?? pid, ...v }))
