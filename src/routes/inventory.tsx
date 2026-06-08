@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useMemo, useState } from "react";
@@ -1323,7 +1323,14 @@ function Page() {
                         {m.type === "in" ? "Nhập" : m.type === "out" ? "Xuất" : m.type === "sale" ? "Bán hàng" : "Chuyển"}
                       </span>
                       {isSale && m.order_code && (
-                        <div className="mt-1 text-xs text-muted-foreground font-mono">#{m.order_code}</div>
+                        <Link
+                          to="/orders/$id"
+                          params={{ id: String(m.order_id) }}
+                          className="mt-1 inline-block text-xs font-mono text-primary hover:underline underline-offset-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          #{m.order_code}
+                        </Link>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -2570,9 +2577,13 @@ function Page() {
                       </div>
                     </div>
                     {isSale && detailEntry.order_code && (
-                      <span className="ml-auto font-mono text-sm bg-white/70 border rounded-lg px-2 py-1">
+                      <Link
+                        to="/orders/$id"
+                        params={{ id: String(detailEntry.order_id) }}
+                        className="ml-auto font-mono text-sm bg-white/70 border rounded-lg px-2 py-1 text-primary hover:underline underline-offset-2 hover:border-primary/40 transition-colors"
+                      >
                         #{detailEntry.order_code}
-                      </span>
+                      </Link>
                     )}
                   </div>
 
