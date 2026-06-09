@@ -781,7 +781,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                 return [ "📋 Nội dung đơn hàng:", "", `• Tiêu đề: ${s.title}`, `• Công việc: ${SCHEDULE_TYPES.find((t) => t.value === s.type)?.label ?? s.type}`, workType ? `• Loại hình công việc: ${workType.name}` : null, `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`, customer ? `• Khách hàng: ${customer.name}${customer.phone ? " — " + customer.phone : ""}` : null, s.address ? `• Địa chỉ: ${s.address}` : null, ...orderItemLines, assigner ? `• Người giao việc: ${assigner.full_name}` : null, creator ? `• Người tạo lịch: ${creator.full_name}` : null, assignees.length > 0 ? `• Người thực hiện:` : null, ...assigneeLines, s.note ? `• Ghi chú: ${s.note}` : null, `• Trạng thái: ${STATUS_LABELS[s.status]?.label ?? s.status}`].filter((v) => v !== null).join("\n");
               }
               return (
-                <Card key={s.id}>
+                <div key={s.id} className="rounded-xl border bg-card p-5 shadow-sm cursor-pointer hover:border-primary/40 hover:bg-muted/20 transition-colors" onClick={() => setViewSchedule(s)}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1"><div className="font-medium leading-snug break-words">{s.title}</div><div className="mt-1 text-xs text-muted-foreground">{s.scheduled_date?.slice(0,10)} {s.scheduled_time ?? ""}</div></div>
                     <div className="flex flex-col items-end gap-1 shrink-0"><span className={`text-[11px] rounded-full px-2 py-0.5 ${status?.color}`}>{status?.label}</span></div>
@@ -794,7 +794,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                     {assigner && <div className="text-muted-foreground">Giao việc: <span className="text-foreground">{assigner.full_name}</span></div>}
                     {isTech && <div className="font-semibold text-green-600">Tiền công: {techPay ? fmtMoney(techPay) : "—"}</div>}
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
                     <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(buildMsgContent(s)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}>{copied ? <><Check className="h-3 w-3 mr-1 text-green-600" /> Đã copy!</> : <><Copy className="h-3 w-3 mr-1" /> Copy tin nhắn</>}</Button>
                     {canApprove && s.status === "pending" && <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openApprove(s); }}>Duyệt</Button>}
                     {canApprove && s.status === "approved" && <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleStatus(s.id, "in_progress"); }}>Bắt đầu</Button>}
@@ -804,7 +804,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                     {(isAdmin || (canCreate && s.created_by === user?.id)) && !["done","cancelled"].includes(s.status) && <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openEdit(s); }}><Pencil className="h-3 w-3 mr-1" /> Sửa TT</Button>}
                     {(isAdmin || (canCreate && s.created_by === user?.id)) && !["done","cancelled"].includes(s.status) && <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}><Trash2 className="h-3 w-3 text-destructive" /></Button>}
                   </div>
-                </Card>
+                </div>
               );
             })}
             {pagedSchedules.length === 0 && <div className="py-10 text-center text-sm text-muted-foreground">Không có lịch nào</div>}

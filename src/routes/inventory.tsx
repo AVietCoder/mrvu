@@ -354,8 +354,27 @@ function Page() {
       items: itemsByOrder.get(order.id) ?? [],
     }));
 
+    // Xây dựng map transfer_id → note từ data.transfers để tra cứu ghi chú thực
+    const transfers = (data?.transfers ?? []) as any[];
+    const transferNoteMap = new Map<string, string | null>();
+    for (const t of transfers) {
+      transferNoteMap.set(t.id, t.note ?? null);
+    }
+
     const allEntries = [
-      ...movements.map((m: any) => ({ ...m, order_id: null, order_code: null, items: [] })),
+      ...movements.map((m: any) => {
+        let realNote = m.note;
+        // Với movement loại transfer, note được set = "Phiếu chuyển kho {transfer_id}"
+        // → cần lấy note thực từ stock_transfers
+        if (m.type === "transfer" && typeof m.note === "string") {
+          const prefix = "Phiếu chuyển kho ";
+          if (m.note.startsWith(prefix)) {
+            const tid = m.note.slice(prefix.length).trim();
+            realNote = transferNoteMap.has(tid) ? transferNoteMap.get(tid) : null;
+          }
+        }
+        return { ...m, order_id: null, order_code: null, items: [], note: realNote };
+      }),
       ...saleEntries,
     ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
@@ -366,7 +385,7 @@ function Page() {
       const toOk = m.to_branch ? allowedBranchSet.has(m.to_branch) : false;
       return fromOk || toOk;
     });
-  }, [data?.movements, data?.completed_orders, data?.completed_order_items, isAdmin, allowedBranchSet]);
+  }, [data?.movements, data?.completed_orders, data?.completed_order_items, data?.transfers, isAdmin, allowedBranchSet]);
 
   // ── Bộ lọc lịch sử kho ───────────────────────────────────────────────
   const [histFilterType, setHistFilterType] = useState<"" | "in" | "out" | "transfer" | "sale">("");
