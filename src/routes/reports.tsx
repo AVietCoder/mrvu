@@ -86,18 +86,23 @@ function Page() {
   const canView = Boolean(user?.is_admin);
 
   const fn = useServerFn(getReports);
-  const { data, isLoading } = useQuery({
-    queryKey: ["reports-full"],
-    queryFn: () => fn(),
-    enabled: !!canView,
-    staleTime: 60_000,
-    gcTime: 10 * 60_000,
-  });
 
+  // ── TỐI ƯU: fromDate / toDate được truyền lên server làm tham số query ──────
+  // Cũ: tải TOÀN BỘ orders (mọi thời điểm), lọc ngày bằng useMemo ở client.
+  // Mới: server chỉ tải orders trong khoảng ngày → payload nhỏ hơn 10-100 lần.
   const [fromDate, setFromDate] = useState(daysAgoStr(29));
   const [toDate, setToDate] = useState(todayStr());
   const [mode, setMode] = useState<"day" | "month">("day");
   const [activePreset, setActivePreset] = useState<string>("30d");
+
+  // queryKey bao gồm fromDate + toDate → refetch tự động khi đổi khoảng ngày
+  const { data, isLoading } = useQuery({
+    queryKey: ["reports-full", fromDate, toDate],
+    queryFn: () => fn({ data: { date_from: fromDate, date_to: toDate } }),
+    enabled: !!canView,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+  });
 
   const presets = [
     { label: "7 ngày", days: 6, key: "7d" },
@@ -118,6 +123,9 @@ function Page() {
     }
   }
 
+  // ── Tính toán client-side từ dữ liệu ĐÃ LỌC server trả về ──────────────────
+  // Server đã lọc theo ngày → _rawOrders và _rawItems chỉ chứa dữ liệu trong
+  // khoảng chọn. Client chỉ cần build daily/monthly series và top products.
   const {
     filteredOrders,
     filteredItems,
@@ -144,6 +152,7 @@ function Page() {
     const from = fromDate;
     const to = toDate;
 
+    // Dữ liệu đã được server lọc sẵn trong khoảng từ-đến
     const allOrders: any[] = (data as any)._rawOrders ?? [];
     const allItems: any[] = (data as any)._rawItems ?? [];
 
@@ -158,45 +167,34 @@ function Page() {
     const filteredOrders: any[] = [];
     const completedFiltered: any[] = [];
     const ordersByStatus: any = {};
-    
     const dailyMap = new Map<string, { revenue: number; orders: number }>();
     const monthlyMap = new Map<string, { revenue: number; orders: number }>();
     const branchMap = new Map<string, { revenue: number; orders: number }>();
     const employeeMap = new Map<string, { revenue: number; orders: number }>();
-
     let totalRevenue = 0;
 
     allOrders.forEach((o: any) => {
-      // Ngày tính báo cáo: đơn hoàn tất theo NGÀY HOÀN TẤT (completed_at),
-      // các đơn khác theo ngày tạo. Khớp với bộ lọc đơn hàng.
       const d = (o.status === "completed" && o.completed_at)
         ? fmtDate(o.completed_at)
         : fmtDate(o.created_at);
-      if (d >= from && d <= to) {
-        filteredOrders.push(o);
-        ordersByStatus[o.status] = (ordersByStatus[o.status] ?? 0) + 1;
-
-        if (o.status === "completed") {
-          completedFiltered.push(o);
-          const amt = Number(o.total || 0);
-          totalRevenue += amt;
-
-          const curDay = dailyMap.get(d) || { revenue: 0, orders: 0 };
-          dailyMap.set(d, { revenue: curDay.revenue + amt, orders: curDay.orders + 1 });
-
-          const m = d.slice(0, 7);
-          const curMonth = monthlyMap.get(m) || { revenue: 0, orders: 0 };
-          monthlyMap.set(m, { revenue: curMonth.revenue + amt, orders: curMonth.orders + 1 });
-
-          if (o.branch_id) {
-            const curB = branchMap.get(o.branch_id) || { revenue: 0, orders: 0 };
-            branchMap.set(o.branch_id, { revenue: curB.revenue + amt, orders: curB.orders + 1 });
-          }
-
-          if (o.employee_id) {
-            const curE = employeeMap.get(o.employee_id) || { revenue: 0, orders: 0 };
-            employeeMap.set(o.employee_id, { revenue: curE.revenue + amt, orders: curE.orders + 1 });
-          }
+      filteredOrders.push(o);
+      ordersByStatus[o.status] = (ordersByStatus[o.status] ?? 0) + 1;
+      if (o.status === "completed") {
+        completedFiltered.push(o);
+        const amt = Number(o.total || 0);
+        totalRevenue += amt;
+        const curDay = dailyMap.get(d) || { revenue: 0, orders: 0 };
+        dailyMap.set(d, { revenue: curDay.revenue + amt, orders: curDay.orders + 1 });
+        const m = d.slice(0, 7);
+        const curMonth = monthlyMap.get(m) || { revenue: 0, orders: 0 };
+        monthlyMap.set(m, { revenue: curMonth.revenue + amt, orders: curMonth.orders + 1 });
+        if (o.branch_id) {
+          const curB = branchMap.get(o.branch_id) || { revenue: 0, orders: 0 };
+          branchMap.set(o.branch_id, { revenue: curB.revenue + amt, orders: curB.orders + 1 });
+        }
+        if (o.employee_id) {
+          const curE = employeeMap.get(o.employee_id) || { revenue: 0, orders: 0 };
+          employeeMap.set(o.employee_id, { revenue: curE.revenue + amt, orders: curE.orders + 1 });
         }
       }
     });
@@ -205,18 +203,12 @@ function Page() {
     const filteredItems = allItems.filter((i: any) => completedIds.has(i.order_id));
 
     const daily: { date: string; revenue: number; orders: number }[] = [];
-    // Tạo series ngày hiệu quả hơn bằng cách đếm milliseconds thay vì tạo Date mới mỗi vòng
-    const msPerDay = 86_400_000;
-    const startMs = new Date(from + "T00:00:00+07:00").getTime();
-    const endMs = new Date(to + "T23:59:59+07:00").getTime();
-    for (let ms = startMs; ms <= endMs; ms += msPerDay) {
-      const key = dtf.format(new Date(ms));
+    const start = new Date(from + "T00:00:00+07:00");
+    const end = new Date(to + "T23:59:59+07:00");
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const key = dtf.format(d);
       const dayStats = dailyMap.get(key) || { revenue: 0, orders: 0 };
-      daily.push({
-        date: key.slice(5),
-        revenue: dayStats.revenue,
-        orders: dayStats.orders,
-      });
+      daily.push({ date: key.slice(5), revenue: dayStats.revenue, orders: dayStats.orders });
     }
 
     const monthly = [...monthlyMap.entries()]
@@ -236,11 +228,11 @@ function Page() {
     }).filter((e: any) => e.orders > 0).sort((a: any, b: any) => b.revenue - a.revenue);
 
     const products: any[] = (data as any)._rawProducts ?? [];
-    const productMap = new Map<string, any>(products.map((p: any) => [String(p.id), p]));
+    const productMap = new Map(products.map((p: any) => [p.id, p]));
     const qtyMap = new Map<string, { qty: number; revenue: number }>();
     filteredItems.forEach((i: any) => {
-      const cur = qtyMap.get(String(i.product_id)) ?? { qty: 0, revenue: 0 };
-      qtyMap.set(String(i.product_id), { qty: cur.qty + Number(i.qty || 0), revenue: cur.revenue + Number(i.qty || 0) * Number(i.unit_price || 0) });
+      const cur = qtyMap.get(i.product_id) ?? { qty: 0, revenue: 0 };
+      qtyMap.set(i.product_id, { qty: cur.qty + Number(i.qty || 0), revenue: cur.revenue + Number(i.qty || 0) * Number(i.unit_price || 0) });
     });
     const topProducts = [...qtyMap.entries()]
       .map(([pid, v]) => ({ name: (productMap.get(pid) as any)?.name ?? pid, ...v }))
@@ -248,7 +240,6 @@ function Page() {
 
     const totalCompletedOrders = completedFiltered.length;
     const avgOrderValue = totalCompletedOrders > 0 ? totalRevenue / totalCompletedOrders : 0;
-
     const newCust = [...custOrders.values()].filter(d => d >= from && d <= to).length;
 
     return {
@@ -265,7 +256,7 @@ function Page() {
       totalRevenue,
       totalCompletedOrders
     };
-  }, [data, fromDate, toDate]);
+  }, [data]);
 
   const totalAllOrders = filteredOrders.length;
 

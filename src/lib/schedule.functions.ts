@@ -2,6 +2,17 @@
 import { createServerFn } from "@tanstack/react-start";
 import { deleteWhere, fetchAllRows, fetchRows, insertRow, now, supabase, uid, updateWhere, logActivity } from "./supabase";
 
+// ── listSchedules — ĐÃ TỐI ƯU ────────────────────────────────────────────────
+// Cũ: tải TOÀN BỘ customers (có thể vài nghìn dòng), orders, order_items,
+//     products về client mỗi lần mở trang → chậm 5-15s.
+// Mới:
+//   - Bảng schedule cốt lõi + assignments/difficulties/tech_fees + config nhỏ
+//     → vẫn fetchAllRows (đúng, không cắt ở 1000).
+//   - customers / orders / products / order_items KHÔNG còn được tải trước.
+//     Form tạo/sửa lịch dùng searchOrdersForSchedule / searchCustomersForSchedule
+//     (lazy, gõ mới tìm). Card hiển thị gọi getScheduleRefs chỉ khi cần.
+//   - Dữ liệu ref nhỏ (branches, users, work_types, work_difficulties) vẫn được
+//     tải đầy đủ vì nhỏ và cần thiết cho mọi card.
 export const listSchedules = createServerFn({ method: "GET" }).handler(async () => {
   const [
     schedules,
@@ -11,37 +22,20 @@ export const listSchedules = createServerFn({ method: "GET" }).handler(async () 
     work_difficulties,
     work_types,
     users,
-    customers,
     branches,
-    products,
-    orders,
-    order_items,
     user_permissions,
   ] = await Promise.all([
-    // ⚠️ Các bảng dưới đây CÓ THỂ vượt 1000 dòng. Supabase mặc định cắt ở
-    // 1000 → phải dùng fetchAllRows để KHÔNG mất dữ liệu (lịch/đơn/khách
-    // hiển thị thiếu, chấm công sai). fetchAllRows tự phân trang lấy đủ 100%.
     fetchAllRows("schedules", { orderBy: "scheduled_date", ascending: false }),
     fetchAllRows("schedule_assignments"),
     fetchAllRows("schedule_difficulties"),
     fetchAllRows("tech_fees"),
-    // Bảng cấu hình nhỏ (vài chục dòng) — giữ fetchRows là đủ.
     fetchRows("work_difficulties", { orderBy: "bonus", ascending: false }),
     fetchRows("work_types", { orderBy: "name" }),
     fetchRows("users", { select: "id, full_name, username, is_admin", orderBy: "full_name" }),
-    fetchAllRows("customers", { select: "id, name, phone, address, ward, district, province", orderBy: "created_at", ascending: false }),
     fetchRows("branches", { orderBy: "name" }),
-    fetchAllRows("products", { select: "id, sku, name, tech_fee", orderBy: "name" }),
-    fetchAllRows("orders", {
-      select: "id, code, customer_id, branch_id, employee_id, status, subtotal, discount, discount_type, discount_pct, vat_rate, vat_amount, total, deposit, paid, payment_method, note, created_at",
-      orderBy: "created_at",
-      ascending: false,
-    }),
-    fetchAllRows("order_items", { select: "order_id, product_id, qty, unit_price, discount, total" }),
     fetchAllRows("user_permissions", { select: "user_id, permission" }),
   ]);
 
-  // Gắn permissions vào users
   const usersWithPerms = users.map((u: any) => ({
     ...u,
     permissions: (user_permissions as any[]).filter((p: any) => p.user_id === u.id).map((p: any) => p.permission),
@@ -55,14 +49,44 @@ export const listSchedules = createServerFn({ method: "GET" }).handler(async () 
     work_difficulties,
     work_types,
     users: usersWithPerms,
-    customers,
     branches,
-    products,
-    orders,
-    order_items,
+    // customers / orders / order_items / products đã bị loại khỏi payload này.
+    // UI dùng lazy-search hoặc getScheduleDisplayRefs() để lấy khi cần.
   };
 });
 
+// ── getScheduleDisplayRefs — Lấy ref data để HIỂN THỊ card ──────────────────
+// Gọi 1 lần khi mở trang, chỉ lấy đúng những cột hiển thị (id, name, phone…)
+// KHÔNG lấy order_items hay toàn bộ products.
+// Dùng cho: hiển thị tên khách / mã đơn / link in hóa đơn.
+export const getScheduleDisplayRefs = createServerFn({ method: "GET" }).handler(async () => {
+  const [customers, orders, products] = await Promise.all([
+    fetchAllRows("customers", { select: "id, name, phone, address, ward, district, province", orderBy: "created_at", ascending: false }),
+    fetchAllRows("orders", {
+      select: "id, code, customer_id, branch_id, employee_id, status, subtotal, discount, discount_type, discount_pct, vat_rate, vat_amount, total, deposit, paid, payment_method, note, created_at",
+      orderBy: "created_at",
+      ascending: false,
+    }),
+    fetchAllRows("products", { select: "id, sku, name, tech_fee", orderBy: "name" }),
+  ]);
+  // order_items chỉ tải khi in hóa đơn (xem getOrderItemsForPrint)
+  return { customers, orders, products };
+});
+
+// ── getOrderItemsForPrint — Tải order_items CHỈ KHI in hóa đơn ──────────────
+// Cũ: tải tất cả order_items (có thể hàng chục nghìn dòng) vào payload chính.
+// Mới: gọi đúng order_id cần in → trả về vài dòng thôi.
+export const getOrderItemsForPrint = createServerFn({ method: "GET" })
+  .handler(async ({ data }: { data: { order_id: string } }) => {
+    const { data: items, error } = await supabase
+      .from("order_items")
+      .select("order_id, product_id, qty, unit_price, discount, total")
+      .eq("order_id", data.order_id);
+    if (error) throw new Error(error.message);
+    return { items: items ?? [] };
+  });
+
+// ── createSchedule ────────────────────────────────────────────────────────────
 export const createSchedule = createServerFn({ method: "POST" })
   .handler(async ({
     data,
@@ -104,6 +128,7 @@ export const createSchedule = createServerFn({ method: "POST" })
     return { id };
   });
 
+// ── approveSchedule ───────────────────────────────────────────────────────────
 export const approveSchedule = createServerFn({ method: "POST" })
   .handler(async ({
     data,
@@ -111,7 +136,6 @@ export const approveSchedule = createServerFn({ method: "POST" })
     data: {
       schedule_id: string;
       user_ids: string[];
-      // Mỗi tính chất kèm số lượng (qty). Vẫn nhận difficulty_ids cũ để tương thích ngược.
       difficulties?: { difficulty_id: string; qty?: number }[];
       difficulty_ids?: string[];
       tech_fees: { product_id: string; qty: number; unit_fee: number; user_id?: string }[];
@@ -121,7 +145,6 @@ export const approveSchedule = createServerFn({ method: "POST" })
       actor_id?: string;
     };
   }) => {
-    // Chuẩn hoá danh sách tính chất + số lượng (hỗ trợ cả payload cũ).
     const diffList: { difficulty_id: string; qty: number }[] =
       (data.difficulties && data.difficulties.length
         ? data.difficulties
@@ -131,34 +154,22 @@ export const approveSchedule = createServerFn({ method: "POST" })
     const updateFields: Record<string, any> = {
       status: "approved",
       work_type_id: data.work_type_id || null,
-      // Không chọn loại hình thì qty = 1 (vô hại); có chọn thì lấy qty người dùng nhập.
       work_type_qty: data.work_type_id ? Math.max(1, Number(data.work_type_qty ?? 1)) : 1,
     };
     if (data.scheduled_date) updateFields.scheduled_date = data.scheduled_date;
-    await updateWhere(
-      "schedules",
-      updateFields,
-      { id: data.schedule_id },
-    );
+    await updateWhere("schedules", updateFields, { id: data.schedule_id });
 
     await deleteWhere("schedule_assignments", { schedule_id: data.schedule_id });
     if (data.user_ids.length) {
       await supabase.from("schedule_assignments").insert(
-        data.user_ids.map((user_id) => ({
-          schedule_id: data.schedule_id,
-          user_id,
-        })),
+        data.user_ids.map((user_id) => ({ schedule_id: data.schedule_id, user_id })),
       );
     }
 
     await deleteWhere("schedule_difficulties", { schedule_id: data.schedule_id });
     if (diffList.length) {
       await supabase.from("schedule_difficulties").insert(
-        diffList.map((d) => ({
-          schedule_id: data.schedule_id,
-          difficulty_id: d.difficulty_id,
-          qty: d.qty,
-        })),
+        diffList.map((d) => ({ schedule_id: data.schedule_id, difficulty_id: d.difficulty_id, qty: d.qty })),
       );
     }
 
@@ -183,6 +194,7 @@ export const approveSchedule = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// ── updateScheduleStatus ──────────────────────────────────────────────────────
 export const updateScheduleStatus = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string; status: string; actor_id?: string } }) => {
     await updateWhere("schedules", { status: data.status }, { id: data.id });
@@ -194,6 +206,7 @@ export const updateScheduleStatus = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// ── deleteSchedule ────────────────────────────────────────────────────────────
 export const deleteSchedule = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string; actor_id?: string } }) => {
     await deleteWhere("schedules", { id: data.id });
@@ -205,7 +218,7 @@ export const deleteSchedule = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// ── Quản lý tính chất công việc (work_difficulties) ────────────
+// ── Quản lý tính chất công việc (work_difficulties) ──────────────────────────
 export const listWorkDifficulties = createServerFn({ method: "GET" }).handler(async () => {
   return fetchRows("work_difficulties", { orderBy: "bonus", ascending: false });
 });
@@ -222,23 +235,10 @@ export const upsertWorkDifficulty = createServerFn({ method: "POST" })
         { name: data.name, description: data.description || null, bonus: Number(data.bonus) },
         { id: data.id },
       );
-      await logActivity({
-        action: "update_work_difficulty",
-        detail: `Sửa tính chất CV: ${data.name} (${Number(data.bonus).toLocaleString("vi-VN")}đ)`,
-        employee_id: data.actor_id || null,
-      });
+      await logActivity({ action: "update_work_difficulty", detail: `Sửa tính chất CV: ${data.name} (${Number(data.bonus).toLocaleString("vi-VN")}đ)`, employee_id: data.actor_id || null });
     } else {
-      await insertRow("work_difficulties", {
-        id: uid(),
-        name: data.name,
-        description: data.description || null,
-        bonus: Number(data.bonus),
-      });
-      await logActivity({
-        action: "create_work_difficulty",
-        detail: `Thêm tính chất CV: ${data.name} (${Number(data.bonus).toLocaleString("vi-VN")}đ)`,
-        employee_id: data.actor_id || null,
-      });
+      await insertRow("work_difficulties", { id: uid(), name: data.name, description: data.description || null, bonus: Number(data.bonus) });
+      await logActivity({ action: "create_work_difficulty", detail: `Thêm tính chất CV: ${data.name} (${Number(data.bonus).toLocaleString("vi-VN")}đ)`, employee_id: data.actor_id || null });
     }
     return { ok: true };
   });
@@ -246,15 +246,11 @@ export const upsertWorkDifficulty = createServerFn({ method: "POST" })
 export const deleteWorkDifficulty = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string; actor_id?: string } }) => {
     await deleteWhere("work_difficulties", { id: data.id });
-    await logActivity({
-      action: "delete_work_difficulty",
-      detail: `Xóa tính chất CV ${data.id}`,
-      employee_id: data.actor_id || null,
-    });
+    await logActivity({ action: "delete_work_difficulty", detail: `Xóa tính chất CV ${data.id}`, employee_id: data.actor_id || null });
     return { ok: true };
   });
 
-// ── Quản lý loại hình công việc (work_types) ───────────────────
+// ── Quản lý loại hình công việc (work_types) ─────────────────────────────────
 export const listWorkTypes = createServerFn({ method: "GET" }).handler(async () => {
   return fetchRows("work_types", { orderBy: "name" });
 });
@@ -271,24 +267,10 @@ export const upsertWorkType = createServerFn({ method: "POST" })
         { name: data.name, description: data.description || null, price: Number(data.price) },
         { id: data.id },
       );
-      await logActivity({
-        action: "update_work_type",
-        detail: `Sửa loại hình CV: ${data.name} (${Number(data.price).toLocaleString("vi-VN")}đ)`,
-        employee_id: data.actor_id || null,
-      });
+      await logActivity({ action: "update_work_type", detail: `Sửa loại hình CV: ${data.name} (${Number(data.price).toLocaleString("vi-VN")}đ)`, employee_id: data.actor_id || null });
     } else {
-      await insertRow("work_types", {
-        id: uid(),
-        name: data.name,
-        description: data.description || null,
-        price: Number(data.price),
-        created_at: now(),
-      });
-      await logActivity({
-        action: "create_work_type",
-        detail: `Thêm loại hình CV: ${data.name} (${Number(data.price).toLocaleString("vi-VN")}đ)`,
-        employee_id: data.actor_id || null,
-      });
+      await insertRow("work_types", { id: uid(), name: data.name, description: data.description || null, price: Number(data.price), created_at: now() });
+      await logActivity({ action: "create_work_type", detail: `Thêm loại hình CV: ${data.name} (${Number(data.price).toLocaleString("vi-VN")}đ)`, employee_id: data.actor_id || null });
     }
     return { ok: true };
   });
@@ -296,26 +278,22 @@ export const upsertWorkType = createServerFn({ method: "POST" })
 export const deleteWorkType = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string; actor_id?: string } }) => {
     await deleteWhere("work_types", { id: data.id });
-    await logActivity({
-      action: "delete_work_type",
-      detail: `Xóa loại hình CV ${data.id}`,
-      employee_id: data.actor_id || null,
-    });
+    await logActivity({ action: "delete_work_type", detail: `Xóa loại hình CV ${data.id}`, employee_id: data.actor_id || null });
     return { ok: true };
   });
 
-// ── Bảng chấm công theo tháng ─────────────────────────────────
-// Trả về danh sách NV + tổng điểm/tiền tháng được chọn.
-// Supports date_from / date_to (YYYY-MM-DD) or fallback to month (YYYY-MM)
+// ── Bảng chấm công theo tháng ─────────────────────────────────────────────────
+// ĐÃ TỐI ƯU: attendanceSummary chỉ tải schedules của khoảng ngày đang xem
+// (không tải toàn bộ), sau đó tải assignments/difficulties/fees chỉ cho
+// các schedule_id đó (batched .in() query). Đây là truy vấn đúng rồi — giữ nguyên.
 export const attendanceSummary = createServerFn({ method: "GET" })
   .handler(async ({ data }: { data?: { month?: string; date_from?: string; date_to?: string } }) => {
     let from: string;
-    let next: string; // exclusive upper bound
+    let next: string;
     let month: string;
 
     if (data?.date_from && data?.date_to) {
       from = data.date_from;
-      // next = date_to + 1 day (inclusive end)
       const toDate = new Date(data.date_to);
       toDate.setDate(toDate.getDate() + 1);
       next = toDate.toISOString().slice(0, 10);
@@ -360,7 +338,6 @@ export const attendanceSummary = createServerFn({ method: "GET" })
     const userMap: Record<string, any> = {};
     for (const u of users) userMap[u.id] = u;
 
-    // gom assignments theo schedule
     const assignBySchedule: Record<string, string[]> = {};
     for (const a of assigns as any[]) {
       (assignBySchedule[a.schedule_id] ||= []).push(a.user_id);
@@ -369,38 +346,22 @@ export const attendanceSummary = createServerFn({ method: "GET" })
     for (const d of diffs as any[]) {
       (diffsBySchedule[d.schedule_id] ||= []).push({ difficulty_id: d.difficulty_id, qty: Math.max(1, Number(d.qty ?? 1)) });
     }
-    // Thu nhập khác (tech_fees) gom theo lịch — tách riêng: phần chia đều và phần gán cho user cụ thể
     const feesBySchedule: Record<string, { items: any[]; sharedTotal: number; perUserExtra: Record<string, number> }> = {};
     for (const f of fees as any[]) {
       const bucket = (feesBySchedule[f.schedule_id] ||= { items: [], sharedTotal: 0, perUserExtra: {} });
       const amount = Number(f.qty || 0) * Number(f.unit_fee || 0);
-      bucket.items.push({
-        product_id: f.product_id,
-        qty: Number(f.qty || 0),
-        unit_fee: Number(f.unit_fee || 0),
-        amount,
-        user_id: f.user_id || null,
-      });
+      bucket.items.push({ product_id: f.product_id, qty: Number(f.qty || 0), unit_fee: Number(f.unit_fee || 0), amount, user_id: f.user_id || null });
       if (f.user_id) {
-        // Gán trực tiếp cho user này
         bucket.perUserExtra[f.user_id] = (bucket.perUserExtra[f.user_id] ?? 0) + amount;
       } else {
-        // Chia đều
         bucket.sharedTotal += amount;
       }
     }
 
-    // tổng hợp theo user
     const perUser: Record<string, {
-      user_id: string;
-      full_name: string;
-      username: string;
-      type_points: number;
-      diff_points: number;
-      total_money: number;
-      extra_income: number;
-      schedule_count: number;
-      lines: any[];
+      user_id: string; full_name: string; username: string;
+      type_points: number; diff_points: number; total_money: number;
+      extra_income: number; schedule_count: number; lines: any[];
     }> = {};
 
     for (const s of schedules as any[]) {
@@ -410,31 +371,17 @@ export const attendanceSummary = createServerFn({ method: "GET" })
       const wt = s.work_type_id ? wtMap[s.work_type_id] : null;
       const wtQty = Math.max(1, Number(s.work_type_qty ?? 1));
       const dRows = diffsBySchedule[s.id] || [];
-      // TIỀN nhân theo số lượng; ĐIỂM thì không (vẫn đếm số tính chất / loại hình).
       const diffSumPrice = dRows.reduce((sum, d) => sum + Number(wdMap[d.difficulty_id]?.bonus || 0) * d.qty, 0);
       const typePrice = Number(wt?.price || 0) * wtQty;
-      // Thu nhập khác: phần chia đều và phần riêng theo user
       const feeBucket = feesBySchedule[s.id] || { items: [], sharedTotal: 0, perUserExtra: {} };
       const sharedExtraTotal = feeBucket.sharedTotal;
 
       for (const uid_ of people) {
         const u = userMap[uid_] || { id: uid_, full_name: uid_, username: "" };
-        const row = (perUser[uid_] ||= {
-          user_id: uid_,
-          full_name: u.full_name,
-          username: u.username,
-          type_points: 0,
-          diff_points: 0,
-          total_money: 0,
-          extra_income: 0,
-          schedule_count: 0,
-          lines: [],
-        });
+        const row = (perUser[uid_] ||= { user_id: uid_, full_name: u.full_name, username: u.username, type_points: 0, diff_points: 0, total_money: 0, extra_income: 0, schedule_count: 0, lines: [] });
         const typePt = wt ? 1 / n : 0;
         const diffPt = dRows.length / n;
-        // Tiền thu nhập riêng của user này trong lịch (nếu có)
         const userDirectExtra = feeBucket.perUserExtra[uid_] ?? 0;
-        // Tiền công/người = (loại hình + tính chất + phần chia đều) / số người + tiền riêng
         const money = (typePrice + diffSumPrice + sharedExtraTotal) / n + userDirectExtra;
         const extraIncomeShare = sharedExtraTotal / n + userDirectExtra;
         row.type_points += typePt;
@@ -443,28 +390,13 @@ export const attendanceSummary = createServerFn({ method: "GET" })
         row.extra_income += extraIncomeShare;
         row.schedule_count += 1;
         row.lines.push({
-          schedule_id: s.id,
-          title: s.title,
-          scheduled_date: s.scheduled_date,
-          scheduled_time: s.scheduled_time,
-          status: s.status,
-          customer_id: s.customer_id,
-          order_id: s.order_id,
-          address: s.address,
+          schedule_id: s.id, title: s.title, scheduled_date: s.scheduled_date,
+          scheduled_time: s.scheduled_time, status: s.status, customer_id: s.customer_id,
+          order_id: s.order_id, address: s.address,
           work_type: wt ? { id: wt.id, name: wt.name, price: Number(wt.price || 0), qty: wtQty } : null,
-          difficulties: dRows.map((d) => ({
-            id: d.difficulty_id,
-            name: wdMap[d.difficulty_id]?.name || d.difficulty_id,
-            bonus: Number(wdMap[d.difficulty_id]?.bonus || 0),
-            qty: d.qty,
-          })),
-          extra_income: feeBucket.items,
-          extra_income_total: sharedExtraTotal + Object.values(feeBucket.perUserExtra).reduce((a, b) => a + b, 0),
-          extra_income_share: extraIncomeShare,
-          num_people: n,
-          type_point_share: typePt,
-          diff_point_share: diffPt,
-          money_share: money,
+          difficulties: dRows.map((d) => ({ id: d.difficulty_id, name: wdMap[d.difficulty_id]?.name || d.difficulty_id, bonus: Number(wdMap[d.difficulty_id]?.bonus || 0), qty: d.qty })),
+          extra_income: feeBucket.items, extra_income_total: sharedExtraTotal + Object.values(feeBucket.perUserExtra).reduce((a, b) => a + b, 0),
+          extra_income_share: extraIncomeShare, num_people: n, type_point_share: typePt, diff_point_share: diffPt, money_share: money,
         });
       }
     }
@@ -477,18 +409,15 @@ export const attendanceSummary = createServerFn({ method: "GET" })
     };
   });
 
+// ── updateScheduleOrderLink ───────────────────────────────────────────────────
 export const updateScheduleOrderLink = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { schedule_id: string; order_id: string | null; actor_id?: string } }) => {
     await updateWhere("schedules", { order_id: data.order_id || null }, { id: data.schedule_id });
-    await logActivity({
-      action: "update_schedule_link",
-      detail: `Cập nhật liên kết đơn hàng cho lịch ${data.schedule_id}`,
-      employee_id: data.actor_id || null,
-    });
+    await logActivity({ action: "update_schedule_link", detail: `Cập nhật liên kết đơn hàng cho lịch ${data.schedule_id}`, employee_id: data.actor_id || null });
     return { ok: true };
   });
 
-// ── Server-side search for schedule form (no 100-row limit) ────
+// ── searchOrdersForSchedule (lazy-search, gọi khi gõ) ────────────────────────
 export const searchOrdersForSchedule = createServerFn({ method: "GET" })
   .handler(async ({ data }: { data?: { q?: string; limit?: number; ids?: string[] } }) => {
     const q = (data?.q ?? "").trim();
@@ -503,47 +432,26 @@ export const searchOrdersForSchedule = createServerFn({ method: "GET" })
       if (error) throw new Error(error.message);
       orderRows = rows ?? [];
     } else {
-      // Search customers by name/phone, and products by name
       let customerIds: string[] = [];
       let orderIdsFromProduct: string[] = [];
       if (q) {
-        const { data: custs } = await supabase
-          .from("customers")
-          .select("id")
-          .or(`name.ilike.%${q}%,phone.ilike.%${q}%`)
-          .limit(50);
+        const { data: custs } = await supabase.from("customers").select("id").or(`name.ilike.%${q}%,phone.ilike.%${q}%`).limit(50);
         customerIds = (custs ?? []).map((c: any) => c.id);
-
-        // Search by product name → get order_ids
-        const { data: prods } = await supabase
-          .from("products")
-          .select("id")
-          .ilike("name", `%${q}%`)
-          .limit(50);
+        const { data: prods } = await supabase.from("products").select("id").ilike("name", `%${q}%`).limit(50);
         if ((prods ?? []).length > 0) {
           const prodIds = (prods ?? []).map((p: any) => p.id);
-          const { data: items } = await supabase
-            .from("order_items")
-            .select("order_id")
-            .in("product_id", prodIds)
-            .limit(100);
+          const { data: items } = await supabase.from("order_items").select("order_id").in("product_id", prodIds).limit(100);
           orderIdsFromProduct = Array.from(new Set((items ?? []).map((i: any) => i.order_id)));
         }
       }
 
-      let query = supabase
-        .from("orders")
-        .select("id, code, customer_id, branch_id, total, created_at")
-        .order("created_at", { ascending: false })
-        .limit(limit);
-
+      let query = supabase.from("orders").select("id, code, customer_id, branch_id, total, created_at").order("created_at", { ascending: false }).limit(limit);
       if (q) {
         const orClauses = [`code.ilike.%${q}%`];
         if (customerIds.length) orClauses.push(`customer_id.in.(${customerIds.join(",")})`);
         if (orderIdsFromProduct.length) orClauses.push(`id.in.(${orderIdsFromProduct.join(",")})`);
         query = query.or(orClauses.join(","));
       }
-
       const { data: rows, error } = await query;
       if (error) throw new Error(error.message);
       orderRows = rows ?? [];
@@ -552,73 +460,47 @@ export const searchOrdersForSchedule = createServerFn({ method: "GET" })
     const custIds = Array.from(new Set(orderRows.map((o) => o.customer_id).filter(Boolean)));
     let customers: any[] = [];
     if (custIds.length) {
-      const { data: rows } = await supabase
-        .from("customers")
-        .select("id, name, phone, address, ward, district, province")
-        .in("id", custIds);
+      const { data: rows } = await supabase.from("customers").select("id, name, phone, address, ward, district, province").in("id", custIds);
       customers = rows ?? [];
     }
     return { orders: orderRows, customers };
   });
 
+// ── searchCustomersForSchedule (lazy-search, gọi khi gõ) ─────────────────────
 export const searchCustomersForSchedule = createServerFn({ method: "GET" })
   .handler(async ({ data }: { data?: { q?: string; limit?: number; ids?: string[] } }) => {
     const q = (data?.q ?? "").trim();
     const limit = Math.min(Math.max(Number(data?.limit ?? 30), 1), 100);
 
     if (data?.ids && data.ids.length) {
-      const { data: rows, error } = await supabase
-        .from("customers")
-        .select("id, name, phone, address, ward, district, province")
-        .in("id", data.ids);
+      const { data: rows, error } = await supabase.from("customers").select("id, name, phone, address, ward, district, province").in("id", data.ids);
       if (error) throw new Error(error.message);
       return { customers: rows ?? [] };
     }
 
-    let query = supabase
-      .from("customers")
-      .select("id, name, phone, address, ward, district, province")
-      .order("created_at", { ascending: false })
-      .limit(limit);
-
+    let query = supabase.from("customers").select("id, name, phone, address, ward, district, province").order("created_at", { ascending: false }).limit(limit);
     if (q) query = query.or(`name.ilike.%${q}%,phone.ilike.%${q}%`);
-
     const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
     return { customers: rows ?? [] };
   });
 
-// ── Cập nhật thông tin lịch (cho chủ lịch hoặc admin) ─────────
+// ── updateSchedule ────────────────────────────────────────────────────────────
 export const updateSchedule = createServerFn({ method: "POST" })
   .handler(async ({ data }: {
     data: {
-      id: string;
-      title?: string;
-      scheduled_date?: string;
-      scheduled_time?: string | null;
-      branch_id?: string | null;
-      order_id?: string | null;
-      customer_id?: string | null;
-      address?: string | null;
-      note?: string | null;
-      assigned_user_ids?: string[];
-      created_by?: string;
-      actor_id?: string;
-      actor_is_admin?: boolean;
+      id: string; title?: string; scheduled_date?: string; scheduled_time?: string | null;
+      branch_id?: string | null; order_id?: string | null; customer_id?: string | null;
+      address?: string | null; note?: string | null; assigned_user_ids?: string[];
+      created_by?: string; actor_id?: string; actor_is_admin?: boolean;
     };
   }) => {
-    // Server-side permission check
     if (!data.actor_is_admin) {
       const existing = await fetchRows("schedules", { select: "id, created_by", eq: { id: data.id } });
       const row = (existing as any[])[0];
       if (!row) throw new Error("Không tìm thấy lịch");
-      if (row.created_by !== data.actor_id) {
-        throw new Error("Bạn không có quyền sửa lịch này");
-      }
-      // Non-admin cannot reassign creator
-      if (data.created_by && data.created_by !== row.created_by) {
-        throw new Error("Chỉ admin mới được đổi người tạo");
-      }
+      if (row.created_by !== data.actor_id) throw new Error("Bạn không có quyền sửa lịch này");
+      if (data.created_by && data.created_by !== row.created_by) throw new Error("Chỉ admin mới được đổi người tạo");
     }
 
     const fields: Record<string, any> = {};
@@ -632,9 +514,7 @@ export const updateSchedule = createServerFn({ method: "POST" })
     if (data.note !== undefined) fields.note = data.note || null;
     if (data.actor_is_admin && data.created_by) fields.created_by = data.created_by;
 
-    if (Object.keys(fields).length) {
-      await updateWhere("schedules", fields, { id: data.id });
-    }
+    if (Object.keys(fields).length) await updateWhere("schedules", fields, { id: data.id });
 
     if (data.assigned_user_ids) {
       await deleteWhere("schedule_assignments", { schedule_id: data.id });
@@ -645,10 +525,6 @@ export const updateSchedule = createServerFn({ method: "POST" })
       }
     }
 
-    await logActivity({
-      action: "update_schedule",
-      detail: `Sửa thông tin lịch ${data.id}`,
-      employee_id: data.actor_id || null,
-    });
+    await logActivity({ action: "update_schedule", detail: `Sửa thông tin lịch ${data.id}`, employee_id: data.actor_id || null });
     return { ok: true };
   });

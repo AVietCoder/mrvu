@@ -11,6 +11,8 @@ import {
   attendanceSummary,
   searchOrdersForSchedule, searchCustomersForSchedule,
   updateSchedule,
+  getScheduleDisplayRefs,
+  getOrderItemsForPrint,
 } from "@/lib/schedule.functions";
 import { buildInvoiceHtml } from "@/lib/print-invoice";
 import { getSettings } from "@/lib/settings.functions";
@@ -121,6 +123,9 @@ function Page() {
   const searchOrdersFn = useServerFn(searchOrdersForSchedule);
   const searchCustomersFn = useServerFn(searchCustomersForSchedule);
   const updateFn = useServerFn(updateSchedule);
+  // ── MỚI: tải ref data (customers/orders/products) riêng, lazy ────────────────
+  const getDisplayRefsFn = useServerFn(getScheduleDisplayRefs);
+  const getOrderItemsFn = useServerFn(getOrderItemsForPrint);
   const qc = useQueryClient();
 async function refreshQuery(queryKey: readonly unknown[]) {
   await qc.invalidateQueries({ queryKey });
@@ -148,6 +153,16 @@ async function refreshQuery(queryKey: readonly unknown[]) {
   const [expandedAttLines, setExpandedAttLines] = useState<string[]>([]);
 
   const { data } = useQuery({ queryKey: ["schedules"], queryFn: () => listFn(), staleTime: 60_000, gcTime: 10 * 60_000 });
+  // ── TỐI ƯU: ref data (customers/orders/products) tải riêng, song song ────────
+  // Cũ: listSchedules() tải tất cả trong 1 request → payload hàng MB.
+  // Mới: lịch cốt lõi tải trước, ref data tải song song với staleTime dài hơn
+  //      (ít thay đổi hơn lịch) → trang hiển thị skeleton nhanh hơn.
+  const { data: refsData } = useQuery({
+    queryKey: ["schedule-display-refs"],
+    queryFn: () => getDisplayRefsFn(),
+    staleTime: 5 * 60_000,   // ref data ổn định hơn → cache 5 phút
+    gcTime: 15 * 60_000,
+  });
   const { data: diffData } = useQuery({ queryKey: ["work-difficulties"], queryFn: () => listDiff() });
   const { data: wtData } = useQuery({ queryKey: ["work-types"], queryFn: () => listWT() });
   const { data: siteSettings } = useQuery({ queryKey: ["site_settings"], queryFn: () => getSettingsFn() });
@@ -247,9 +262,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
   const debouncedSearch = useDebouncedValue(search, 250);
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title">("newest");
   const [page, setPage] = useState(1);
-  const [calendarPage, setCalendarPage] = useState(1);
   const PAGE_SIZE = 15;
-  const CALENDAR_PAGE_SIZE = 5; // số nhóm ngày mỗi trang
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const nowTimeStr = new Date().toTimeString().slice(0, 5);
@@ -279,12 +292,12 @@ async function refreshQuery(queryKey: readonly unknown[]) {
   }
 
   function pickOrder(orderId: string) {
-    const order: any = ordersById.get(String(orderId));
+    const order: any = (refsData?.orders ?? []).find((o: any) => o.id === orderId);
     if (!order) {
       setCreateForm((f) => ({ ...f, order_id: "" }));
       return;
     }
-    const cust: any = customersById.get(String(order.customer_id));
+    const cust: any = (refsData?.customers ?? []).find((c: any) => c.id === order.customer_id);
     const addrParts = cust ? [cust.address, cust.ward, cust.district, cust.province].filter(Boolean) : [];
     setCreateForm((f) => ({
       ...f,
@@ -298,7 +311,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
   }
 
   function pickCustomer(customerId: string) {
-    const cust: any = customersById.get(String(customerId));
+    const cust: any = (refsData?.customers ?? []).find((c: any) => c.id === customerId);
     const addr = cust ? [cust.address, cust.ward, cust.district, cust.province].filter(Boolean).join(", ") : "";
     setCreateForm((f) => ({ ...f, customer_id: customerId, address: addr || f.address }));
   }
@@ -376,92 +389,11 @@ async function refreshQuery(queryKey: readonly unknown[]) {
     enabled: tab === "attendance" && (canApprove || isAdmin || isTech),
   });
 
-  // ─── Lookup Maps (O(1) thay vì O(n) find trong vòng lặp) ───────────────────
-  const customersById = useMemo(
-    () => new Map((data?.customers ?? []).map((c: any) => [String(c.id), c])),
-    [data?.customers],
-  );
-
-  // Map: schedule_id → assignment[]
-  const assignmentsBySchedule = useMemo(() => {
-    const m = new Map<string, any[]>();
-    for (const a of (data?.assignments ?? [])) {
-      const arr = m.get(String(a.schedule_id)) ?? [];
-      arr.push(a);
-      m.set(String(a.schedule_id), arr);
-    }
-    return m;
-  }, [data?.assignments]);
-
-  // Map: schedule_id → difficulty[]
-  const difficultiesBySchedule = useMemo(() => {
-    const m = new Map<string, any[]>();
-    for (const d of (data?.difficulties ?? [])) {
-      const arr = m.get(String(d.schedule_id)) ?? [];
-      arr.push(d);
-      m.set(String(d.schedule_id), arr);
-    }
-    return m;
-  }, [data?.difficulties]);
-
-  // Map: schedule_id → tech_fee[]
-  const techFeesBySchedule = useMemo(() => {
-    const m = new Map<string, any[]>();
-    for (const f of (data?.tech_fees ?? [])) {
-      const arr = m.get(String(f.schedule_id)) ?? [];
-      arr.push(f);
-      m.set(String(f.schedule_id), arr);
-    }
-    return m;
-  }, [data?.tech_fees]);
-
-  // Map: order_id → order
-  const ordersById = useMemo(
-    () => new Map((data?.orders ?? []).map((o: any) => [String(o.id), o])),
-    [data?.orders],
-  );
-
-  // Map: order_id → order_items[]
-  const orderItemsByOrder = useMemo(() => {
-    const m = new Map<string, any[]>();
-    for (const oi of (data?.order_items ?? [])) {
-      const arr = m.get(String(oi.order_id)) ?? [];
-      arr.push(oi);
-      m.set(String(oi.order_id), arr);
-    }
-    return m;
-  }, [data?.order_items]);
-
-  // Pre-compute techPay for all schedules once
-  const techPayBySchedule = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const s of (data?.schedules ?? [])) {
-      const fees = techFeesBySchedule.get(String(s.id)) ?? [];
-      const diffRows = difficultiesBySchedule.get(String(s.id)) ?? [];
-      const assignees = assignmentsBySchedule.get(String(s.id)) ?? [];
-      const numPeople = Math.max(1, assignees.length);
-      const bonusTotal = fees.reduce((sum: number, f: any) => sum + f.qty * f.unit_fee, 0);
-      const diffBonusPerTask = diffRows.reduce((sum: number, d: any) => {
-        const wdiff = workDifficultiesById.get(String(d.difficulty_id));
-        return sum + (wdiff?.bonus ?? 0) * Math.max(1, Number(d.qty ?? 1));
-      }, 0);
-      const workType = s.work_type_id ? workTypesById.get(String(s.work_type_id)) : null;
-      const workTypePrice = Number(workType?.price || 0) * Math.max(1, Number(s.work_type_qty ?? 1));
-      const totalPool = bonusTotal + diffBonusPerTask + workTypePrice;
-      m.set(String(s.id), totalPool / numPeople);
-    }
-    return m;
-  }, [data?.schedules, techFeesBySchedule, difficultiesBySchedule, assignmentsBySchedule, workDifficultiesById, workTypesById]);
-
   const mySchedules = useMemo(() => {
     let list = data?.schedules ?? [];
     if (isTech && !canApprove && user) {
-      const myIds = new Set(
-        (data?.assignments ?? [])
-          .filter((a: any) => a.user_id === user.id)
-          .map((a: any) => String(a.schedule_id)),
-      );
-      list = list.filter((s: any) => myIds.has(String(s.id)));
+      const myIds = new Set((data?.assignments ?? []).filter((a: any) => a.user_id === user.id).map((a: any) => a.schedule_id));
+      list = list.filter((s: any) => myIds.has(s.id));
     }
     if (!isAdmin && userBranchIds.size > 0) {
       list = list.filter((s: any) => {
@@ -471,8 +403,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
       });
     }
     if (branchFilterIds.length > 0) {
-      const branchSet = new Set(branchFilterIds);
-      list = list.filter((s: any) => getScheduleBranchIds(s).some((id: string) => branchSet.has(id)));
+      list = list.filter((s: any) => getScheduleBranchIds(s).some((id: string) => branchFilterIds.includes(id)));
     }
     if (filterStatus) list = list.filter((s: any) => s.status === filterStatus);
     if (filterType) list = list.filter((s: any) => s.type === filterType);
@@ -490,7 +421,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
     if (debouncedSearch.trim()) {
       const q = debouncedSearch.trim().toLowerCase();
       list = list.filter((s: any) => {
-        const cust = customersById.get(String(s.customer_id));
+        const cust = (refsData?.customers ?? []).find((c: any) => c.id === s.customer_id);
         return (
           s.title?.toLowerCase().includes(q) ||
           cust?.name?.toLowerCase().includes(q) ||
@@ -505,17 +436,27 @@ async function refreshQuery(queryKey: readonly unknown[]) {
       return sortBy === "oldest" ? da.localeCompare(db) : db.localeCompare(da);
     });
     return list;
-  }, [data?.schedules, data?.assignments, isTech, user, filterStatus, filterType, filterFrom, filterTo, debouncedSearch, sortBy, branchFilterIds, customersById, isAdmin, userBranchIds]);
+  }, [data, isTech, user, filterStatus, filterType, filterFrom, filterTo, debouncedSearch, sortBy, branchFilterIds]);
 
   const pagedSchedules = useMemo(() => mySchedules.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE), [mySchedules, page]);
   const grouped = useMemo(() => groupByDate(mySchedules), [mySchedules]);
-  const pagedGrouped = useMemo(
-    () => grouped.slice((calendarPage - 1) * CALENDAR_PAGE_SIZE, calendarPage * CALENDAR_PAGE_SIZE),
-    [grouped, calendarPage],
-  );
 
   function calcTechPay(scheduleId: string): number {
-    return techPayBySchedule.get(String(scheduleId)) ?? 0;
+    const schedule = (data?.schedules ?? []).find((s: any) => s.id === scheduleId);
+    const fees = (data?.tech_fees ?? []).filter((f: any) => f.schedule_id === scheduleId);
+    const diffRows = (data?.difficulties ?? []).filter((d: any) => d.schedule_id === scheduleId);
+    const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === scheduleId);
+    const numPeople = Math.max(1, assignees.length);
+    const bonusTotal = fees.reduce((sum: number, f: any) => sum + f.qty * f.unit_fee, 0);
+    const diffBonusPerTask = diffRows.reduce((sum: number, d: any) => {
+      const wdiff = (data?.work_difficulties ?? []).find((w: any) => w.id === d.difficulty_id);
+      return sum + (wdiff?.bonus ?? 0) * Math.max(1, Number(d.qty ?? 1));
+    }, 0);
+    const diffBonus = diffBonusPerTask;
+    const workType = schedule?.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === schedule.work_type_id) : null;
+    const workTypePrice = Number(workType?.price || 0) * Math.max(1, Number(schedule?.work_type_qty ?? 1));
+    const totalPool = bonusTotal + diffBonus + workTypePrice;
+    return totalPool / numPeople;
   }
 
   async function handleCreate() {
@@ -530,15 +471,17 @@ async function refreshQuery(queryKey: readonly unknown[]) {
       setCreateForm({ title: "", type: "install", scheduled_date: todayStr, scheduled_time: nowTimeStr, customer_id: "", branch_id: "", branch_ids: [], order_id: "", address: "", note: "" });
       await refreshQuery(["schedules"]);
       await refreshQuery(["orders"]);
+      // Ref data cũng cần refresh vì lịch mới có thể liên kết đơn/khách mới
+      qc.invalidateQueries({ queryKey: ["schedule-display-refs"] });
     } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
     finally { setCreating(false); }
   }
 
   function openApprove(s: any) {
     setApproveTarget(s);
-    const existing = (assignmentsBySchedule.get(String(s.id)) ?? []).map((a: any) => a.user_id);
-    const existingDiffRows = difficultiesBySchedule.get(String(s.id)) ?? [];
-    const existingFees = techFeesBySchedule.get(String(s.id)) ?? [];
+    const existing = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id).map((a: any) => a.user_id);
+    const existingDiffRows = (data?.difficulties ?? []).filter((d: any) => d.schedule_id === s.id);
+    const existingFees = (data?.tech_fees ?? []).filter((f: any) => f.schedule_id === s.id);
     setAssignedUsers(existing);
     setAssignedDiffs(existingDiffRows.map((d: any) => d.difficulty_id));
     const dq: Record<string, number> = {};
@@ -581,7 +524,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
 
   function openEdit(s: any) {
     setEditTarget(s);
-    const existing = (assignmentsBySchedule.get(String(s.id)) ?? []).map((a: any) => a.user_id);
+    const existing = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id).map((a: any) => a.user_id);
     setEditForm({ title: s.title ?? "", scheduled_date: (s.scheduled_date ?? "").slice(0, 10), scheduled_time: s.scheduled_time ?? "", branch_id: s.branch_id ?? "", order_id: s.order_id ?? "", customer_id: s.customer_id ?? "", address: s.address ?? "", note: s.note ?? "", assigned_user_ids: existing, created_by: s.created_by ?? "" });
     setEditOpen(true);
   }
@@ -645,19 +588,27 @@ async function refreshQuery(queryKey: readonly unknown[]) {
     );
   }
 
-  function printOrderFromSchedule(linkedOrder: any, ss?: any) {
+  // ── TỐI ƯU: in hóa đơn chỉ tải order_items của đơn cụ thể ──────────────────
+  // Cũ: order_items của TẤT CẢ đơn đã được tải sẵn trong payload → lãng phí.
+  // Mới: gọi getOrderItemsForPrint khi bấm in → chỉ tải vài dòng của đơn đó.
+  async function printOrderFromSchedule(linkedOrder: any, ss?: any) {
     if (!linkedOrder) return;
     const moneyFmt  = (n: number) => new Intl.NumberFormat("vi-VN").format(Math.round(n)) + " ₫";
-    const custObj   = customersById.get(String(linkedOrder.customer_id));
+    const custObj   = (refsData?.customers ?? []).find((c: any) => c.id === linkedOrder.customer_id);
     const branchObj = (data?.branches  ?? []).find((b: any) => b.id === linkedOrder.branch_id);
-    const empObj    = linkedOrder.employee_id ? usersById.get(String(linkedOrder.employee_id)) : usersById.get(String(linkedOrder.created_by));
+    const empObj    = linkedOrder.employee_id ? (data?.users ?? []).find((u: any) => u.id === linkedOrder.employee_id) : (data?.users ?? []).find((u: any) => u.id === linkedOrder.created_by);
     const empName   = empObj?.full_name ?? empObj?.name ?? empObj?.username ?? "—";
     const custAddress = custObj ? [custObj.address, custObj.ward, custObj.district, custObj.province].filter(Boolean).join(", ") : "";
-    const items = orderItemsByOrder.get(String(linkedOrder.id)) ?? [];
+    // Tải order_items theo đúng order_id (lazy, chỉ khi in)
+    let items: any[] = [];
+    try {
+      const result = await getOrderItemsFn({ data: { order_id: linkedOrder.id } });
+      items = result?.items ?? [];
+    } catch { items = []; }
     const _tpl  = (() => { try { return JSON.parse((ss as any)?.print_templates || "{}").order_invoice ?? {}; } catch { return {}; } })();
     const pw = window.open("", "_blank");
     if (!pw) return;
-    pw.document.write(buildInvoiceHtml({ order: linkedOrder, custName: custObj?.name, custPhone: custObj?.phone, custAddress, branchName: branchObj?.name, branchAddress: branchObj?.address, branchPhone: branchObj?.phone, empName, items, products: data?.products ?? [], moneyFmt, ss, tplOverride: _tpl }));
+    pw.document.write(buildInvoiceHtml({ order: linkedOrder, custName: custObj?.name, custPhone: custObj?.phone, custAddress, branchName: branchObj?.name, branchAddress: branchObj?.address, branchPhone: branchObj?.phone, empName, items, products: refsData?.products ?? [], moneyFmt, ss, tplOverride: _tpl }));
     pw.document.close();
     setTimeout(() => pw.print(), 300);
   }
@@ -737,7 +688,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
         <TabsContent value="calendar">
           {grouped.length === 0 && <div className="text-center py-16 text-muted-foreground">Không có lịch nào</div>}
           <div className="space-y-6">
-            {pagedGrouped.map(([date, schedules]) => (
+            {grouped.map(([date, schedules]) => (
               <div key={date}>
                 <div className="flex items-center gap-2 mb-2">
                   <CalendarDays className="h-4 w-4 text-primary" /><span className="font-semibold">{new Date(date).toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}</span><span className="text-xs bg-primary/10 text-primary rounded-full px-2 py-0.5">{schedules.length} lịch</span>
@@ -746,10 +697,10 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                   {schedules.map((s: any) => {
                     const typeInfo = SCHEDULE_TYPES.find((t) => t.value === s.type);
                     const status = STATUS_LABELS[s.status];
-                    const assignees = assignmentsBySchedule.get(String(s.id)) ?? [];
+                    const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id);
                     const techPay = isTech ? calcTechPay(s.id) : null;
-                    const customer = customersById.get(String(s.customer_id));
-                    const linkedOrder: any = s.order_id ? ordersById.get(String(s.order_id)) : null;
+                    const customer = (refsData?.customers ?? []).find((c: any) => c.id === s.customer_id);
+                    const linkedOrder: any = s.order_id ? (refsData?.orders ?? []).find((o: any) => o.id === s.order_id) : null;
                     return (
                       <Card key={s.id} className="relative h-full">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-2">
@@ -804,7 +755,6 @@ async function refreshQuery(queryKey: readonly unknown[]) {
               </div>
             ))}
           </div>
-          <Pagination page={calendarPage} pageSize={CALENDAR_PAGE_SIZE} total={grouped.length} onPageChange={setCalendarPage} label="nhóm ngày" />
         </TabsContent>
 
         <TabsContent value="list">
@@ -813,24 +763,20 @@ async function refreshQuery(queryKey: readonly unknown[]) {
             {pagedSchedules.map((s: any) => {
               const typeInfo = SCHEDULE_TYPES.find((t) => t.value === s.type);
               const status = STATUS_LABELS[s.status];
-              const assignees = assignmentsBySchedule.get(String(s.id)) ?? [];
-              const customer = customersById.get(String(s.customer_id));
+              const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id);
+              const customer = (refsData?.customers ?? []).find((c: any) => c.id === s.customer_id);
               const techPay = isTech ? calcTechPay(s.id) : null;
               const assigner = s.assigned_by ? usersById.get(String(s.assigned_by)) : null;
               const creator = s.created_by ? usersById.get(String(s.created_by)) : null;
               const branchNames = getScheduleBranchNames(s);
-              const linkedOrder: any = s.order_id ? ordersById.get(String(s.order_id)) : null;
+              const linkedOrder: any = s.order_id ? (refsData?.orders ?? []).find((o: any) => o.id === s.order_id) : null;
               function buildMsgContent(s: any) {
                 const workType = s.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === s.work_type_id) : null;
                 const assigneeLines = assignees.length > 0 ? assignees.map((a: any) => { const u = usersById.get(String(a.user_id)); return `  - ${u?.full_name ?? a.user_id}`; }) : [];
+                // Chi tiết sản phẩm không còn tải trước — hiển thị tóm tắt đơn
                 const orderItemLines: string[] = [];
                 if (linkedOrder) {
-                  const items = orderItemsByOrder.get(String(linkedOrder.id)) ?? [];
                   orderItemLines.push(`• Đơn hàng: ${linkedOrder.code} — ${fmtMoney(linkedOrder.total)}`);
-                  for (const oi of items) {
-                    const prod = (data?.products ?? []).find((p: any) => p.id === oi.product_id);
-                    orderItemLines.push(`  - ${prod?.name ?? oi.product_id} × ${oi.qty}`);
-                  }
                 }
                 return [ "📋 Nội dung đơn hàng:", "", `• Tiêu đề: ${s.title}`, `• Công việc: ${SCHEDULE_TYPES.find((t) => t.value === s.type)?.label ?? s.type}`, workType ? `• Loại hình công việc: ${workType.name}` : null, `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`, customer ? `• Khách hàng: ${customer.name}${customer.phone ? " — " + customer.phone : ""}` : null, s.address ? `• Địa chỉ: ${s.address}` : null, ...orderItemLines, assigner ? `• Người giao việc: ${assigner.full_name}` : null, creator ? `• Người tạo lịch: ${creator.full_name}` : null, assignees.length > 0 ? `• Người thực hiện:` : null, ...assigneeLines, s.note ? `• Ghi chú: ${s.note}` : null, `• Trạng thái: ${STATUS_LABELS[s.status]?.label ?? s.status}`].filter((v) => v !== null).join("\n");
               }
@@ -873,8 +819,8 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                 <tbody>
                   {pagedSchedules.map((s: any) => {
                     const status = STATUS_LABELS[s.status];
-                    const assignees = assignmentsBySchedule.get(String(s.id)) ?? [];
-                    const customer = customersById.get(String(s.customer_id));
+                    const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id);
+                    const customer = (refsData?.customers ?? []).find((c: any) => c.id === s.customer_id);
                     const techPay = isTech ? calcTechPay(s.id) : null;
                     const creator = s.created_by ? usersById.get(String(s.created_by)) : null;
                     const branchNames = getScheduleBranchNames(s);
@@ -1038,7 +984,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
               <span className="ml-auto rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs">Bạn</span>
             </div>
             {(() => {
-              const linkedOrder: any = createForm.order_id ? ordersById.get(String(createForm.order_id)) : null;
+              const linkedOrder: any = createForm.order_id ? (refsData?.orders ?? []).find((o: any) => o.id === createForm.order_id) : null;
               const seller: any = linkedOrder?.employee_id ? (data?.employees ?? []).find((e: any) => e.id === linkedOrder.employee_id) : null;
               if (!seller) return null;
               return (
@@ -1061,14 +1007,14 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                 const r = await searchOrdersFn({ data: { q, limit: 30 } });
                 const custMap = new Map((r.customers ?? []).map((c: any) => [c.id, c]));
                 return (r.orders ?? []).map((o: any) => {
-                  const c: any = custMap.get(o.customer_id) ?? (data?.customers ?? []).find((x: any) => x.id === o.customer_id);
+                  const c: any = custMap.get(o.customer_id) ?? (refsData?.customers ?? []).find((x: any) => x.id === o.customer_id);
                   return { value: o.id, label: o.code, sub: `${c?.name ?? "Khách lẻ"}${c?.phone ? ` · ${c.phone}` : ""} · ${fmtMoney(o.total)}` };
                 });
               }}
               resolveSelected={async (id) => {
-                const o = (data?.orders ?? []).find((x: any) => x.id === id);
+                const o = (refsData?.orders ?? []).find((x: any) => x.id === id);
                 if (o) {
-                  const c: any = (data?.customers ?? []).find((x: any) => x.id === o.customer_id);
+                  const c: any = (refsData?.customers ?? []).find((x: any) => x.id === o.customer_id);
                   return { value: o.id, label: o.code, sub: `${c?.name ?? "Khách lẻ"} · ${fmtMoney(o.total)}` };
                 }
                 const r = await searchOrdersFn({ data: { ids: [id] } });
@@ -1112,7 +1058,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                   return (r.customers ?? []).map((c: any) => ({ value: c.id, label: c.name, sub: c.phone ?? undefined }));
                 }}
                 resolveSelected={async (id) => {
-                  const c = (data?.customers ?? []).find((x: any) => x.id === id);
+                  const c = (refsData?.customers ?? []).find((x: any) => x.id === id);
                   if (c) return { value: c.id, label: c.name, sub: c.phone ?? undefined };
                   const r = await searchCustomersFn({ data: { ids: [id] } });
                   const x: any = r.customers?.[0];
@@ -1269,14 +1215,14 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                   const r = await searchOrdersFn({ data: { q, limit: 30 } });
                   const custMap = new Map((r.customers ?? []).map((c: any) => [c.id, c]));
                   return (r.orders ?? []).map((o: any) => {
-                    const c: any = custMap.get(o.customer_id) ?? (data?.customers ?? []).find((x: any) => x.id === o.customer_id);
+                    const c: any = custMap.get(o.customer_id) ?? (refsData?.customers ?? []).find((x: any) => x.id === o.customer_id);
                     return { value: o.id, label: o.code, sub: `${c?.name ?? "Khách lẻ"}${c?.phone ? ` · ${c.phone}` : ""} · ${fmtMoney(o.total)}` };
                   });
                 }}
                 resolveSelected={async (id) => {
-                  const o = (data?.orders ?? []).find((x: any) => x.id === id);
+                  const o = (refsData?.orders ?? []).find((x: any) => x.id === id);
                   if (o) {
-                    const c: any = (data?.customers ?? []).find((x: any) => x.id === o.customer_id);
+                    const c: any = (refsData?.customers ?? []).find((x: any) => x.id === o.customer_id);
                     return { value: o.id, label: o.code, sub: `${c?.name ?? "Khách lẻ"} · ${fmtMoney(o.total)}` };
                   }
                   const r = await searchOrdersFn({ data: { ids: [id] } });
@@ -1483,14 +1429,14 @@ async function refreshQuery(queryKey: readonly unknown[]) {
             const s = viewSchedule;
             const typeInfo = SCHEDULE_TYPES.find((t) => t.value === s.type);
             const status = STATUS_LABELS[s.status];
-            const assignees = assignmentsBySchedule.get(String(s.id)) ?? [];
-            const customer = customersById.get(String(s.customer_id));
+            const assignees = (data?.assignments ?? []).filter((a: any) => a.schedule_id === s.id);
+            const customer = (refsData?.customers ?? []).find((c: any) => c.id === s.customer_id);
             const assigner = s.assigned_by ? usersById.get(String(s.assigned_by)) : null;
             const creator = s.created_by ? usersById.get(String(s.created_by)) : null;
-            const linkedOrder: any = s.order_id ? ordersById.get(String(s.order_id)) : null;
+            const linkedOrder: any = s.order_id ? (refsData?.orders ?? []).find((o: any) => o.id === s.order_id) : null;
             const techPay = calcTechPay(s.id);
-            const fees = techFeesBySchedule.get(String(s.id)) ?? [];
-            const diffIds = difficultiesBySchedule.get(String(s.id)) ?? [];
+            const fees = (data?.tech_fees ?? []).filter((f: any) => f.schedule_id === s.id);
+            const diffIds = (data?.difficulties ?? []).filter((d: any) => d.schedule_id === s.id);
             return (
               <>
                 <DialogHeader>
@@ -1564,17 +1510,10 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                 </div>
                 {(() => {
                   const workType = s.work_type_id ? (data?.work_types ?? []).find((w: any) => w.id === s.work_type_id) : null;
+                  // Chi tiết sản phẩm không còn tải trước — hiển thị tóm tắt đơn
                   const orderItemLines: string[] = [];
                   if (linkedOrder) {
-                    const items = orderItemsByOrder.get(String(linkedOrder.id)) ?? [];
-                    if (items.length > 0) {
-                      orderItemLines.push(`• Đơn hàng: ${linkedOrder.code} — ${fmtMoney(linkedOrder.total)}`);
-                      for (const oi of items) {
-                        const prod = (data?.products ?? []).find((p: any) => p.id === oi.product_id);
-                        const pname = prod?.name ?? oi.product_id;
-                        orderItemLines.push(`  - ${pname} × ${oi.qty}`);
-                      }
-                    } else { orderItemLines.push(`• Đơn hàng: ${linkedOrder.code} — ${fmtMoney(linkedOrder.total)}`); }
+                    orderItemLines.push(`• Đơn hàng: ${linkedOrder.code} — ${fmtMoney(linkedOrder.total)}`);
                   }
                   const assigneeLines: string[] = assignees.length > 0 ? assignees.map((a: any) => { const u = usersById.get(String(a.user_id)); return `  - ${u?.full_name ?? a.user_id}`; }) : [];
                   const msgContent = [ "📋 Nội dung đơn hàng:", "", `• Tiêu đề: ${s.title}`, workType ? `• Loại hình công việc: ${workType.name}` : null, `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`, customer ? `• Khách hàng: ${customer.name}${customer.phone ? " — " + customer.phone : ""}` : null, s.address ? `• Địa chỉ: ${s.address}` : null, ...orderItemLines, assigner ? `• Người giao việc: ${assigner.full_name}` : null, creator ? `• Người tạo lịch: ${creator.full_name}` : null, assignees.length > 0 ? `• Người thực hiện:` : null, ...assigneeLines, s.note ? `• Ghi chú: ${s.note}` : null, `• Trạng thái: ${STATUS_LABELS[s.status]?.label ?? s.status}`].filter((v) => v !== null).join("\n");
