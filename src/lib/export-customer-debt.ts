@@ -228,7 +228,9 @@ export async function exportCustomerDebtToExcel(
 
   // ── Xuất buffer & tải về ──────────────────────────────────────────────────
   const buffer = await wb.xlsx.writeBuffer();
-  const blob = new Blob([buffer], {
+  // Chuẩn hoá về Uint8Array để Blob nhận đúng ở mọi bản build của exceljs.
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  const blob = new Blob([bytes], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
   const url = URL.createObjectURL(blob);
