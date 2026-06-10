@@ -53,6 +53,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^17.4.2",
     "embla-carousel-react": "^8.6.0",
+    "exceljs": "^3.4.0",
     "fs": "^0.0.1-security",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",

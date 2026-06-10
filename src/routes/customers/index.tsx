@@ -7,7 +7,9 @@ import {
   upsertCustomer,
   deleteCustomer,
   getCustomerStats,
+  exportCustomerDebts,
 } from "@/lib/customers.functions";
+import { exportCustomerDebtToExcel } from "@/lib/export-customer-debt";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 import { AppShell, Card, fmt } from "@/components/AppShell";
@@ -46,6 +48,7 @@ import {
   MapPin,
   Wallet,
   Landmark,
+  FileSpreadsheet,
 } from "lucide-react";
 
 import { toast } from "sonner";
@@ -183,6 +186,9 @@ function CustomersPage() {
   const upsert = useServerFn(upsertCustomer);
   const del = useServerFn(deleteCustomer);
   const statsFn = useServerFn(getCustomerStats);
+  const exportFn = useServerFn(exportCustomerDebts);
+
+  const [exporting, setExporting] = useState(false);
 
   const [form, setForm] = useState<FormState>(empty);
   const [open, setOpen] = useState(false);
@@ -338,6 +344,44 @@ function CustomersPage() {
     }
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      // Lấy TOÀN BỘ khách khớp bộ lọc đang xem (không giới hạn theo trang).
+      const res = await exportFn({
+        data: {
+          search: debouncedSearch,
+          group: filterGroup,
+          debtFilter: filterDebt,
+          sortBy,
+        },
+      });
+      const rows = res?.customers ?? [];
+      if (rows.length === 0) {
+        toast.warning("Không có khách hàng nào để xuất.");
+        return;
+      }
+
+      // Mô tả bộ lọc để ghi vào phụ đề file.
+      const parts: string[] = [];
+      if (filterGroup) parts.push(groupLabel[filterGroup] ?? filterGroup);
+      if (filterDebt === "debt") parts.push("Có công nợ");
+      else if (filterDebt === "no_debt") parts.push("Không nợ");
+      if (debouncedSearch) parts.push(`từ khoá "${debouncedSearch}"`);
+      const filterText = parts.length ? parts.join(", ") : "Tất cả khách";
+
+      const count = await exportCustomerDebtToExcel({
+        customers: rows,
+        filterText,
+      });
+      toast.success(`Đã xuất ${count} khách hàng ra file Excel.`);
+    } catch (err: any) {
+      toast.error(err?.message ?? "Xuất Excel thất bại");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function handleDelete(id: string, name: string) {
     if (!confirm(`Xóa khách hàng "${name}"?`)) return;
     try {
@@ -405,15 +449,31 @@ function CustomersPage() {
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <div className="font-medium">Danh sách khách hàng</div>
-          <Button
-            size="sm"
-            onClick={() => {
-              setForm(empty);
-              setOpen(true);
-            }}
-          >
-            <Plus className="mr-1 h-4 w-4" /> Thêm khách
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExport}
+              disabled={exporting || totalFilteredCount === 0}
+              title="Xuất danh sách công nợ ra file Excel (.xlsx)"
+            >
+              {exporting ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="mr-1 h-4 w-4" />
+              )}
+              {exporting ? "Đang xuất..." : "Xuất Excel công nợ"}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setForm(empty);
+                setOpen(true);
+              }}
+            >
+              <Plus className="mr-1 h-4 w-4" /> Thêm khách
+            </Button>
+          </div>
         </div>
 
         <SearchFilter

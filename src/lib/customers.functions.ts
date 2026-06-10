@@ -99,6 +99,26 @@ export const getCustomerStats = createServerFn({ method: "GET" })
     };
   });
 
+/**
+ * exportCustomerDebts — lấy TOÀN BỘ khách hàng khớp bộ lọc hiện tại (không phân
+ * trang) để xuất file Excel công nợ. Dùng lại RPC `search_customers_page` với
+ * limit lớn nên công thức công nợ GIỮ NGUYÊN, đồng nhất với bảng đang hiển thị:
+ *   display_debt = total_buy - total_paid + total_paid_back + debt_adjustment
+ */
+export const exportCustomerDebts = createServerFn({ method: "GET" })
+  .handler(async ({ data }: { data: ListCustomersArgs | undefined }) => {
+    const { data: rows, error } = await supabase.rpc("search_customers_page", {
+      p_search: data?.search ?? null,
+      p_group: data?.group || null,
+      p_debt_filter: data?.debtFilter || "all",
+      p_sort: data?.sortBy || "debt_desc",
+      p_limit: 100000, // lấy hết, không phân trang
+      p_offset: 0,
+    });
+    if (error) throw new Error(error.message);
+    return { customers: (rows ?? []) as any[] };
+  });
+
 export const upsertCustomer = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
     // ✅ Chỉ admin mới được chỉnh sửa công nợ / điều chỉnh công nợ
