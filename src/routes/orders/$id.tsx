@@ -402,6 +402,7 @@ function OrderDetailPage() {
           branch_id: order.branch_id,
           customer_id: order.customer_id || undefined,
           employee_id: order.employee_id || undefined,
+          actor_id: user?.id,
         },
       });
 

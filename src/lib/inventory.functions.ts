@@ -367,7 +367,7 @@ export const updateTransferItems = createServerFn({ method: "POST" })
 
 // Chi nhánh nhận bấm xác nhận → kho nhận tăng lên
 export const confirmTransfer = createServerFn({ method: "POST" })
-  .handler(async ({ data }: { data: { transfer_id: string } }) => {
+  .handler(async ({ data }: { data: { transfer_id: string; actor_id?: string } }) => {
     const transfer = await fetchRow<any>("stock_transfers", { eq: { id: data.transfer_id } });
     if (!transfer) throw new Error("Không tìm thấy phiếu chuyển kho");
     if (transfer.status !== "pending") throw new Error("Phiếu này đã được xử lý");
@@ -383,12 +383,12 @@ export const confirmTransfer = createServerFn({ method: "POST" })
       { status: "confirmed", confirmed_at: now() },
       { id: data.transfer_id },
     );
-    await logActivity({ action: "confirm_transfer", detail: `Xác nhận phiếu chuyển kho ${data.transfer_id}` });
+    await logActivity({ action: "confirm_transfer", detail: `Xác nhận phiếu chuyển kho ${data.transfer_id}`, employee_id: data.actor_id || transfer.created_by || null });
     return { ok: true };
   });
 
 export const cancelTransfer = createServerFn({ method: "POST" })
-  .handler(async ({ data }: { data: { transfer_id: string } }) => {
+  .handler(async ({ data }: { data: { transfer_id: string; actor_id?: string } }) => {
     const transfer = await fetchRow<any>("stock_transfers", { eq: { id: data.transfer_id } });
     if (!transfer || transfer.status !== "pending") throw new Error("Không thể hủy phiếu này");
 
@@ -399,7 +399,7 @@ export const cancelTransfer = createServerFn({ method: "POST" })
     }
 
     await updateWhere("stock_transfers", { status: "cancelled" }, { id: data.transfer_id });
-    await logActivity({ action: "cancel_transfer", detail: `Hủy phiếu chuyển kho ${data.transfer_id}` });
+    await logActivity({ action: "cancel_transfer", detail: `Hủy phiếu chuyển kho ${data.transfer_id}`, employee_id: data.actor_id || transfer.created_by || null });
     return { ok: true };
   });
 

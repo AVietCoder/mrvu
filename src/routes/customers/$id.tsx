@@ -32,6 +32,7 @@ import {
   ExternalLink,
   ShoppingBag,
   Clock,
+  RotateCcw,
   User,
   Banknote,
   Mail,
@@ -72,6 +73,7 @@ const STATUS_LABEL: Record<string, string> = {
   reserved: "Đặt hàng",
   draft: "Nháp",
   cancelled: "Hủy",
+  returned: "Trả hàng",
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -79,6 +81,7 @@ const STATUS_COLOR: Record<string, string> = {
   reserved: "bg-yellow-100 text-yellow-700",
   draft: "bg-gray-100 text-gray-700",
   cancelled: "bg-red-100 text-red-700",
+  returned: "bg-orange-100 text-orange-700",
 };
 
 const PROVINCES = [
@@ -256,8 +259,15 @@ function CustomerDetailPage() {
       : allBranches.filter((b: any) => user.branch_ids.includes(b.id));
 
   const completedOrders = customerOrders.filter((o: any) => o.status === "completed");
+  // ✅ Đơn TRẢ HÀNG (returned) là loại riêng — KHÔNG gộp vào "đang chờ / đặt hàng".
+  //    Trước đây pendingOrders gom mọi status ≠ completed & ≠ cancelled nên đơn
+  //    trả hàng (TH...) bị hiển thị nhầm ở mục "Đơn đang chờ / đặt hàng".
+  const returnedOrders = customerOrders.filter((o: any) => o.status === "returned");
   const pendingOrders = customerOrders.filter(
-    (o: any) => o.status !== "completed" && o.status !== "cancelled"
+    (o: any) =>
+      o.status !== "completed" &&
+      o.status !== "cancelled" &&
+      o.status !== "returned"
   );
   const cancelledOrders = customerOrders.filter((o: any) => o.status === "cancelled");
   const totalSpent = completedOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0);
@@ -702,6 +712,16 @@ function CustomerDetailPage() {
                 <h3 className="font-semibold">Đơn đang chờ / đặt hàng ({pendingOrders.length})</h3>
               </div>
               <OrderTable orders={pendingOrders} />
+            </Card>
+          )}
+
+          {returnedOrders.length > 0 && (
+            <Card>
+              <div className="flex items-center gap-2 mb-3">
+                <RotateCcw className="h-4 w-4 text-orange-600" />
+                <h3 className="font-semibold text-orange-700">Đơn trả hàng ({returnedOrders.length})</h3>
+              </div>
+              <OrderTable orders={returnedOrders} />
             </Card>
           )}
 

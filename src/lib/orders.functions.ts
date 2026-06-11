@@ -1361,7 +1361,11 @@ export const createReturnOrder = createServerFn({ method: "POST" })
         : `Đã trả hàng: ${returnCode}`,
     }, { id: data.original_order_id });
 
-    await logActivity({ action: "create_return", detail: `Trả hàng ${returnCode} từ đơn ${originalOrder.code}` });
+    await logActivity({
+      action: "create_return",
+      detail: `Trả hàng ${returnCode} từ đơn ${originalOrder.code}${refundedToCustomer > 0 ? ` — hoàn ${Number(refundedToCustomer).toLocaleString("vi-VN")}₫` : ""}`,
+      employee_id: data.actor_id || data.employee_id || originalOrder.employee_id || null,
+    });
 
     return { ok: true, code: returnCode, id: returnId };
   });

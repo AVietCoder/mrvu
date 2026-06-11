@@ -46,6 +46,7 @@ const ACTION_CONFIG: Record<string, { label: string; color: string; dot: string;
   cancel_order:     { label: "Huỷ đơn",          color: "bg-rose-50 text-rose-700 border-rose-200",      dot: "bg-rose-400",    group: "Đơn hàng" },
   delete_order:     { label: "Xóa đơn",          color: "bg-red-50 text-red-700 border-red-200",         dot: "bg-red-400",     group: "Đơn hàng" },
   complete_order:   { label: "HT đơn",           color: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-400", group: "Đơn hàng" },
+  create_return:    { label: "Trả hàng",         color: "bg-orange-50 text-orange-700 border-orange-200", dot: "bg-orange-400",  group: "Đơn hàng" },
   create_movement:  { label: "Nhập kho",         color: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-400", group: "Kho" },
   create_transfer:  { label: "Chuyển kho",       color: "bg-purple-50 text-purple-700 border-purple-200", dot: "bg-purple-400", group: "Kho" },
   confirm_transfer: { label: "XN chuyển kho",    color: "bg-indigo-50 text-indigo-700 border-indigo-200", dot: "bg-indigo-400", group: "Kho" },

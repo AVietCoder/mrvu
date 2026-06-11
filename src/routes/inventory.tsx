@@ -687,7 +687,7 @@ function Page() {
       // Cập nhật SL trước nếu có thay đổi
       await updateTrfItems({ data: { transfer_id: trfDetailId, items: valid } });
       // Xác nhận phiếu
-      await confirmTrf({ data: { transfer_id: trfDetailId } });
+      await confirmTrf({ data: { transfer_id: trfDetailId, actor_id: user?.id } });
       toast.success("Đã hoàn thành phiếu chuyển kho");
       setTrfDetailOpen(false);
       qc.invalidateQueries({ queryKey: ["inventory"] });
@@ -703,7 +703,7 @@ function Page() {
     if (!confirm("Hủy phiếu chuyển kho này?")) return;
     setTrfSaving(true);
     try {
-      await cancelTrf({ data: { transfer_id: trfDetailId } });
+      await cancelTrf({ data: { transfer_id: trfDetailId, actor_id: user?.id } });
       toast.success("Đã hủy phiếu");
       setTrfDetailOpen(false);
       qc.invalidateQueries({ queryKey: ["inventory"] });
