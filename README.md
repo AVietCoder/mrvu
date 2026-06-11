@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # QuatTran POS — Phần mềm quản lý bán quạt trần
 
 Phần mềm gồm đủ 7 module theo yêu cầu: **Hàng hóa, Tồn kho, Bán hàng, Khách hàng, Nhân viên, Báo cáo, Đa chi nhánh.**
