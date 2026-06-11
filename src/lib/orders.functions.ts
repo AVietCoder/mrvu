@@ -1225,7 +1225,7 @@ export const updateOrder = createServerFn({ method: "POST" })
 
 export const createReturnOrder = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
-    // data: { original_order_id, items: [{product_id, qty, unit_price, discount}], discount, refunded_to_customer, note, branch_id, customer_id, employee_id }
+    // data: { original_order_id, items: [{product_id, qty, unit_price, discount}], discount, refunded_to_customer, refund_fund_type, refund_bank_account_idx, note, branch_id, customer_id, employee_id }
     const originalRows = await fetchRows<any>("orders", {
       eq: { id: data.original_order_id },
       select: "id, code, customer_id, branch_id, employee_id, total, deposit, paid, payment_method, status",
@@ -1241,6 +1241,19 @@ export const createReturnOrder = createServerFn({ method: "POST" })
     const discount = Number(data.discount || 0);
     const total = Math.max(0, subtotal - discount);
     const refundedToCustomer = Number(data.refunded_to_customer || 0);
+
+    // Hình thức chi trả: ưu tiên từ form, fallback theo đơn gốc
+    const refundFundType: "tien_mat" | "ngan_hang" =
+      data.refund_fund_type === "ngan_hang" ? "ngan_hang" : "tien_mat";
+    const refundBankAccountIdx: number | null =
+      refundFundType === "ngan_hang" && data.refund_bank_account_idx != null
+        ? Number(data.refund_bank_account_idx)
+        : null;
+    const refundPmLabel =
+      refundFundType === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt";
+
+    // Chi nhánh nhận tiền chi = chi nhánh của đơn hàng gốc
+    const branchId = data.branch_id || originalOrder.branch_id;
 
     // Tạo mã phiếu trả hàng
     // Retry loop to avoid duplicate key race condition for return order code
@@ -1271,7 +1284,7 @@ export const createReturnOrder = createServerFn({ method: "POST" })
       id: returnId,
       code: returnCode,
       customer_id: data.customer_id || originalOrder.customer_id || null,
-      branch_id: data.branch_id || originalOrder.branch_id,
+      branch_id: branchId,
       employee_id: data.employee_id || originalOrder.employee_id || null,
       status: "returned",
       subtotal,
@@ -1279,7 +1292,8 @@ export const createReturnOrder = createServerFn({ method: "POST" })
       total,
       deposit: 0,
       paid: refundedToCustomer,
-      payment_method: originalOrder.payment_method || "tien_mat",
+      payment_method: refundFundType,
+      bank_account_idx: refundBankAccountIdx,
       note: data.note ? `[Trả hàng đơn ${originalOrder.code}] ${data.note}` : `[Trả hàng đơn ${originalOrder.code}]`,
       created_at: createdAt,
     });
@@ -1298,23 +1312,19 @@ export const createReturnOrder = createServerFn({ method: "POST" })
     }
 
     // Hoàn lại tồn kho
-    const branchId = data.branch_id || originalOrder.branch_id;
     for (const it of data.items) {
       await adjustStock(it.product_id, branchId, Number(it.qty));
     }
 
     // ── Cập nhật CÔNG NỢ + SỔ QUỸ cho khách hàng ─────────────────────────────
-    // ⚠️ ĐÃ SỬA LỖI TÍNH CÔNG NỢ KHI TRẢ HÀNG:
-    //   Trước đây trừ thủ công  debt = max(0, debt − total)  → SAI khi có hoàn
-    //   tiền cho khách (trừ dư), và không khớp với Báo cáo công nợ.
-    //   Cách đúng (áp dụng cho mọi trường hợp: đã/chưa hoàn tiền, trả 1 phần/toàn
-    //   bộ): phiếu trả hàng đã lưu status "returned" → giảm total_buy + tạo
-    //   PHIẾU CHI sổ quỹ (nếu có hoàn tiền) → rồi tính LẠI công nợ theo công thức
-    //   chuẩn  (Σ mua − Σ trả) − đã thu + đã chi trả lại + điều chỉnh.
+    // Logic đúng:
+    //   1) Công nợ sau trả hàng = debt - total (giá trị hàng trả)
+    //      + refundedToCustomer (tiền thực tế đã hoàn — tức là trừ thêm từ quỹ)
+    //   2) Phiếu chi sổ quỹ = ghi nhận tiền thực tế chi trả cho khách
+    //   3) recalculateCustomerDebt để đồng bộ lại chính xác
     const customerId = data.customer_id || originalOrder.customer_id;
 
-    // 1) Giảm "tổng mua" (total_buy) theo giá trị hàng trả — để Báo cáo công nợ
-    //    (vốn dựa trên total_buy) phản ánh đúng. Công nợ tính lại ở bước 3.
+    // 1) Giảm "tổng mua" (total_buy) theo giá trị hàng trả
     if (customerId) {
       const custRows = await fetchRows<{ total_buy: number }>("customers", {
         eq: { id: customerId },
@@ -1329,32 +1339,35 @@ export const createReturnOrder = createServerFn({ method: "POST" })
       );
     }
 
-    // 2) Tạo PHIẾU CHI trong Sổ quỹ để LƯU LẠI LỊCH SỬ dòng tiền hoàn cho khách
-    //    (chỉ khi thực tế có hoàn tiền). Phải tạo TRƯỚC bước 3 để được tính vào
-    //    "đã chi trả lại" khi tính lại công nợ.
+    // 2) Tạo PHIẾU CHI trong Sổ quỹ với hình thức chi trả được chọn từ form
+    //    Chi nhánh chi tiền = chi nhánh đơn hàng gốc
     if (refundedToCustomer > 0) {
-      const pm = originalOrder.payment_method === "ngan_hang" ? "ngan_hang" : "tien_mat";
-      await createOrderCashVoucher({
+      const voucherData: any = {
         kind: "chi",
         orderCode: returnCode,
         customerId: customerId || null,
         branchId,
         employeeId: data.employee_id || originalOrder.employee_id || null,
         amount: refundedToCustomer,
-        fundType: pm,
-        paymentMethodLabel: pm === "ngan_hang" ? "Chuyển khoản (Ngân hàng)" : "Tiền mặt",
+        fundType: refundFundType,
+        paymentMethodLabel: refundPmLabel,
         createdAt,
         noteOverride: `Hoàn tiền trả hàng ${returnCode} (đơn gốc ${originalOrder.code})`,
-      });
+      };
+      const voucher = await createOrderCashVoucher(voucherData);
+
+      // Nếu thanh toán qua ngân hàng, ghi thêm bank_account_idx vào phiếu chi
+      if (voucher?.id && refundBankAccountIdx != null) {
+        await updateWhere("cash_vouchers", { bank_account_idx: refundBankAccountIdx }, { id: voucher.id });
+      }
     }
 
-    // 3) Tính lại CÔNG NỢ về giá trị ĐÚNG (đồng bộ với Báo cáo công nợ & Sổ quỹ).
+    // 3) Tính lại CÔNG NỢ về giá trị ĐÚNG (đồng bộ với Báo cáo công nợ & Sổ quỹ)
     if (customerId) {
       await recalculateCustomerDebt(customerId);
     }
 
     // Cập nhật trạng thái đơn gốc thành partially_returned hoặc returned
-    // (đơn gốc vẫn giữ nguyên trạng thái, chỉ ghi chú)
     await updateWhere("orders", {
       note: originalOrder.note
         ? `${originalOrder.note} | Đã trả hàng: ${returnCode}`
@@ -1363,7 +1376,7 @@ export const createReturnOrder = createServerFn({ method: "POST" })
 
     await logActivity({
       action: "create_return",
-      detail: `Trả hàng ${returnCode} từ đơn ${originalOrder.code}${refundedToCustomer > 0 ? ` — hoàn ${Number(refundedToCustomer).toLocaleString("vi-VN")}₫` : ""}`,
+      detail: `Trả hàng ${returnCode} từ đơn ${originalOrder.code}${refundedToCustomer > 0 ? ` — hoàn ${Number(refundedToCustomer).toLocaleString("vi-VN")}₫ (${refundPmLabel})` : ""}`,
       employee_id: data.actor_id || data.employee_id || originalOrder.employee_id || null,
     });
 

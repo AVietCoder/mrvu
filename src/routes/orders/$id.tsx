@@ -165,6 +165,8 @@ function OrderDetailPage() {
   const [returnRefunded, setReturnRefunded] = useState("0");
   const [returnNote, setReturnNote] = useState("");
   const [submittingReturn, setSubmittingReturn] = useState(false);
+  const [returnFundType, setReturnFundType] = useState<"tien_mat" | "ngan_hang">("tien_mat");
+  const [returnBankIdx, setReturnBankIdx] = useState("");
 
   // Mở rộng xem tồn kho chi tiết theo chi nhánh cho từng sản phẩm (chế độ xem)
   const [expandedStock, setExpandedStock] = useState<Set<string>>(new Set());
@@ -377,6 +379,8 @@ function OrderDetailPage() {
     setReturnDiscount(String(order.discount ?? 0));
     setReturnRefunded("0");
     setReturnNote("");
+    setReturnFundType("tien_mat");
+    setReturnBankIdx("");
     setNeedEditRefs(true); // cần danh sách SP đầy đủ cho phiếu trả hàng
     setReturnOpen(true);
   }
@@ -398,6 +402,8 @@ function OrderDetailPage() {
           items: returnItems,
           discount: parseInput(returnDiscount),
           refunded_to_customer: parseInput(returnRefunded),
+          refund_fund_type: returnFundType,
+          refund_bank_account_idx: returnFundType === "ngan_hang" && returnBankIdx !== "" ? parseInt(returnBankIdx) : null,
           note: returnNote || undefined,
           branch_id: order.branch_id,
           customer_id: order.customer_id || undefined,
@@ -1482,6 +1488,57 @@ function OrderDetailPage() {
                 />
               </div>
             </div>
+
+            {/* Hình thức hoàn tiền — chỉ hiển thị khi có nhập tiền trả khách */}
+            {parseInput(returnRefunded) > 0 && (() => {
+              const bankListReturn: any[] = (() => { try { return JSON.parse(siteSettings?.bank_accounts || "[]"); } catch { return []; } })();
+              return (
+                <div className="rounded-lg border p-3 space-y-2">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hình thức chi trả</Label>
+                  <div className="flex gap-4 mt-1">
+                    {([{ value: "tien_mat", label: "Tiền mặt" }, { value: "ngan_hang", label: "Chuyển khoản" }] as const).map((opt) => (
+                      <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer text-sm">
+                        <input
+                          type="radio"
+                          name="return_fund_type"
+                          value={opt.value}
+                          checked={returnFundType === opt.value}
+                          onChange={() => { setReturnFundType(opt.value); setReturnBankIdx(""); }}
+                          className="accent-orange-600"
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                  {returnFundType === "ngan_hang" && bankListReturn.length > 0 && (
+                    <div>
+                      <select
+                        className="w-full h-9 rounded-md border bg-background px-2 text-sm"
+                        value={returnBankIdx}
+                        onChange={(e) => setReturnBankIdx(e.target.value)}
+                      >
+                        <option value="">— Chọn tài khoản —</option>
+                        {bankListReturn.map((ba: any, i: number) => (
+                          <option key={i} value={String(i)}>
+                            {ba.bank} - {ba.account_number} ({ba.account_name})
+                          </option>
+                        ))}
+                      </select>
+                      {returnBankIdx !== "" && (() => {
+                        const ba = bankListReturn[parseInt(returnBankIdx)];
+                        return ba ? (
+                          <div className="mt-1.5 rounded-lg border bg-orange-50 px-3 py-2 text-xs text-orange-800 space-y-0.5">
+                            <div className="font-semibold">{ba.bank}</div>
+                            <div>STK: <span className="font-mono font-bold">{ba.account_number}</span></div>
+                            <div>Chủ TK: {ba.account_name}</div>
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             <div>
               <Label>Ghi chú</Label>
