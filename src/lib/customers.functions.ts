@@ -315,9 +315,23 @@ export const getCustomerById = createServerFn({ method: "GET" })
   });
 
 export async function recalculateCustomerDebt(customerId: string): Promise<number> {
-  const [completedOrdersRows, allReceiptsRows, allPayBacksRows, customerRows] = await Promise.all([
+  const [
+    completedOrdersRows,
+    returnedOrdersRows,
+    allReceiptsRows,
+    allPayBacksRows,
+    customerRows,
+  ] = await Promise.all([
     fetchRows<{ total: number }>("orders", {
       eq: { customer_id: customerId, status: "completed" },
+      select: "total",
+    }),
+    // ✅ Đơn TRẢ HÀNG (status "returned") làm GIẢM giá trị hàng khách giữ lại,
+    //    nên phải TRỪ khỏi tổng mua khi tính công nợ. Trước đây bị bỏ sót →
+    //    công nợ bị tính DƯ đúng bằng giá trị hàng đã trả (cộng thêm phiếu chi
+    //    hoàn tiền lại càng sai). Đây là gốc rễ lỗi "tính công nợ trả hàng".
+    fetchRows<{ total: number }>("orders", {
+      eq: { customer_id: customerId, status: "returned" },
       select: "total",
     }),
     supabase
@@ -340,11 +354,13 @@ export async function recalculateCustomerDebt(customerId: string): Promise<numbe
   ]);
 
   const totalSpent = completedOrdersRows.reduce((s, o) => s + Number(o.total || 0), 0);
+  const totalReturned = returnedOrdersRows.reduce((s, o) => s + Number(o.total || 0), 0);
   const totalPaid = (allReceiptsRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
   const totalPaidBack = (allPayBacksRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
   // ✅ Giữ phần điều chỉnh thủ công của admin khi tính lại
   const adjustment = Number(customerRows[0]?.debt_adjustment) || 0;
-  const newDebt = totalSpent - totalPaid + totalPaidBack + adjustment;
+  // Công nợ = (hàng đã mua − hàng đã trả) − đã thu + đã chi trả lại + điều chỉnh
+  const newDebt = totalSpent - totalReturned - totalPaid + totalPaidBack + adjustment;
 
   await updateWhere("customers", { debt: newDebt }, { id: customerId });
   return newDebt;

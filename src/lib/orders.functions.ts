@@ -1303,23 +1303,35 @@ export const createReturnOrder = createServerFn({ method: "POST" })
       await adjustStock(it.product_id, branchId, Number(it.qty));
     }
 
-    // Cập nhật công nợ khách hàng (giảm total_buy, giảm debt)
+    // ── Cập nhật CÔNG NỢ + SỔ QUỸ cho khách hàng ─────────────────────────────
+    // ⚠️ ĐÃ SỬA LỖI TÍNH CÔNG NỢ KHI TRẢ HÀNG:
+    //   Trước đây trừ thủ công  debt = max(0, debt − total)  → SAI khi có hoàn
+    //   tiền cho khách (trừ dư), và không khớp với Báo cáo công nợ.
+    //   Cách đúng (áp dụng cho mọi trường hợp: đã/chưa hoàn tiền, trả 1 phần/toàn
+    //   bộ): phiếu trả hàng đã lưu status "returned" → giảm total_buy + tạo
+    //   PHIẾU CHI sổ quỹ (nếu có hoàn tiền) → rồi tính LẠI công nợ theo công thức
+    //   chuẩn  (Σ mua − Σ trả) − đã thu + đã chi trả lại + điều chỉnh.
     const customerId = data.customer_id || originalOrder.customer_id;
+
+    // 1) Giảm "tổng mua" (total_buy) theo giá trị hàng trả — để Báo cáo công nợ
+    //    (vốn dựa trên total_buy) phản ánh đúng. Công nợ tính lại ở bước 3.
     if (customerId) {
-      const custRows = await fetchRows<{ debt: number; total_buy: number }>("customers", {
+      const custRows = await fetchRows<{ total_buy: number }>("customers", {
         eq: { id: customerId },
-        select: "debt, total_buy",
+        select: "total_buy",
         limit: 1,
       });
-      const currentDebt = custRows[0]?.debt ?? 0;
       const currentTotalBuy = custRows[0]?.total_buy ?? 0;
-      await updateWhere("customers", {
-        total_buy: Math.max(0, currentTotalBuy - total),
-        debt: Math.max(0, currentDebt - total),
-      }, { id: customerId });
+      await updateWhere(
+        "customers",
+        { total_buy: Math.max(0, currentTotalBuy - total) },
+        { id: customerId },
+      );
     }
 
-    // Tạo phiếu chi nếu đã trả tiền cho khách
+    // 2) Tạo PHIẾU CHI trong Sổ quỹ để LƯU LẠI LỊCH SỬ dòng tiền hoàn cho khách
+    //    (chỉ khi thực tế có hoàn tiền). Phải tạo TRƯỚC bước 3 để được tính vào
+    //    "đã chi trả lại" khi tính lại công nợ.
     if (refundedToCustomer > 0) {
       const pm = originalOrder.payment_method === "ngan_hang" ? "ngan_hang" : "tien_mat";
       await createOrderCashVoucher({
@@ -1336,6 +1348,11 @@ export const createReturnOrder = createServerFn({ method: "POST" })
       });
     }
 
+    // 3) Tính lại CÔNG NỢ về giá trị ĐÚNG (đồng bộ với Báo cáo công nợ & Sổ quỹ).
+    if (customerId) {
+      await recalculateCustomerDebt(customerId);
+    }
+
     // Cập nhật trạng thái đơn gốc thành partially_returned hoặc returned
     // (đơn gốc vẫn giữ nguyên trạng thái, chỉ ghi chú)
     await updateWhere("orders", {
@@ -1348,3 +1365,196 @@ export const createReturnOrder = createServerFn({ method: "POST" })
 
     return { ok: true, code: returnCode, id: returnId };
   });
+// ════════════════════════════════════════════════════════════════════════════
+// XUẤT EXCEL — Báo cáo bán hàng theo bộ lọc đang xem ở trang "Bán hàng".
+// ────────────────────────────────────────────────────────────────────────────
+// Trả về TOÀN BỘ đơn khớp bộ lọc hiện tại (khoảng ngày + khách / nhân viên /
+// chi nhánh / trạng thái / từ khoá) kèm:
+//   • tiền đã thu (đặt cọc + thanh toán) và còn lại (công nợ đơn);
+//   • nhân viên bán; và DANH SÁCH SẢN PHẨM đã bán (gộp theo sản phẩm).
+//
+// DÙNG LẠI RPC `search_orders_page` để lấy danh sách id đơn → bảo đảm logic lọc
+// và quy ước ngày (đơn hoàn tất theo completed_at, còn lại theo created_at,
+// theo giờ VN) GIỐNG HỆT bảng đang hiển thị. Hàm CHỈ ĐỌC, KHÔNG ghi/sửa dữ
+// liệu và KHÔNG đụng tới bất kỳ RPC / tính năng nào đang có.
+// ════════════════════════════════════════════════════════════════════════════
+interface ExportSalesArgs {
+  search?: string;
+  status?: string;
+  branch?: string;
+  tab?: "orders" | "reserved";
+  branchIds?: string[] | null;
+  employee?: string;
+  customer?: string;
+  fromDate?: string;
+  toDate?: string;
+  sortBy?: string;
+}
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+export const getOrdersForExport = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data: ExportSalesArgs | undefined }) => {
+    // 1) Danh sách đơn khớp bộ lọc — dùng lại RPC (lọc/ngày y hệt UI), lấy hết.
+    const { data: rows, error } = await supabase.rpc("search_orders_page", {
+      p_search: data?.search || null,
+      p_status: data?.status || null,
+      p_branch: data?.branch || null,
+      p_tab: data?.tab || "orders",
+      p_branch_ids:
+        data?.branchIds && data.branchIds.length ? data.branchIds : null,
+      p_employee: data?.employee || null,
+      p_customer: data?.customer || null,
+      p_from: data?.fromDate || null,
+      p_to: data?.toDate || null,
+      p_sort: data?.sortBy || "newest",
+      p_limit: 100000, // lấy hết, không phân trang
+      p_offset: 0,
+    });
+    if (error) throw new Error(error.message);
+
+    const baseOrders = (rows ?? []) as any[];
+    if (baseOrders.length === 0) {
+      return {
+        orders: [],
+        products: [],
+        summary: {
+          orderCount: 0,
+          totalAmount: 0,
+          totalCollected: 0,
+          totalRemaining: 0,
+        },
+      };
+    }
+
+    const orderIds = baseOrders.map((o) => o.id);
+    const idChunks = chunkArray(orderIds, 300);
+
+    // 2) deposit / paid / employee_id của các đơn (RPC không trả các cột này).
+    const orderExtra = new Map<
+      string,
+      { deposit: number; paid: number; employee_id: string | null }
+    >();
+    for (const ids of idChunks) {
+      const part = await fetchRows<any>("orders", {
+        select: "id, deposit, paid, employee_id",
+        eq: { id: ids },
+      });
+      for (const r of part) {
+        orderExtra.set(r.id, {
+          deposit: Number(r.deposit || 0),
+          paid: Number(r.paid || 0),
+          employee_id: r.employee_id ?? null,
+        });
+      }
+    }
+
+    // 3) order_items của các đơn (dùng fetchAllRows để vượt giới hạn 1000 dòng).
+    const items: any[] = [];
+    for (const ids of idChunks) {
+      const part = await fetchAllRows<any>("order_items", {
+        select: "order_id, product_id, qty, unit_price, discount, total",
+        eq: { order_id: ids },
+      });
+      items.push(...part);
+    }
+
+    // 4) Tên + SKU sản phẩm.
+    const productIds = Array.from(
+      new Set(items.map((it) => it.product_id).filter(Boolean)),
+    );
+    const productMap = new Map<string, { sku: string; name: string }>();
+    for (const ids of chunkArray(productIds, 300)) {
+      if (ids.length === 0) continue;
+      const part = await fetchRows<any>("products", {
+        select: "id, sku, name",
+        eq: { id: ids },
+      });
+      for (const p of part)
+        productMap.set(p.id, { sku: p.sku ?? "", name: p.name ?? "" });
+    }
+
+    // 5) Tên nhân viên bán.
+    const empMap = new Map<string, string>();
+    const empIds = Array.from(
+      new Set(
+        Array.from(orderExtra.values())
+          .map((e) => e.employee_id)
+          .filter(Boolean) as string[],
+      ),
+    );
+    for (const ids of chunkArray(empIds, 300)) {
+      if (ids.length === 0) continue;
+      const us = await fetchRows<any>("users", {
+        select: "id, full_name",
+        eq: { id: ids },
+      });
+      for (const u of us) empMap.set(u.id, u.full_name ?? "");
+    }
+
+    // 6) Gộp đơn + thông tin bổ sung.
+    let totalAmount = 0,
+      totalCollected = 0,
+      totalRemaining = 0;
+    const orders = baseOrders.map((o) => {
+      const extra =
+        orderExtra.get(o.id) ?? { deposit: 0, paid: 0, employee_id: null };
+      const total = Number(o.total || 0);
+      const collected = extra.deposit + extra.paid;
+      const remaining = Math.max(0, total - collected);
+      totalAmount += total;
+      totalCollected += collected;
+      totalRemaining += remaining;
+      return {
+        id: o.id,
+        code: o.code,
+        status: o.status,
+        date: o.completed_at || o.created_at,
+        customer_name: o.customer_name ?? "",
+        branch_name: o.branch_name ?? "",
+        employee_name: extra.employee_id
+          ? empMap.get(extra.employee_id) ?? ""
+          : "",
+        total,
+        deposit: extra.deposit,
+        paid: extra.paid,
+        collected,
+        remaining,
+      };
+    });
+
+    // 7) Gộp sản phẩm đã bán (theo product_id).
+    const prodAgg = new Map<
+      string,
+      { sku: string; name: string; qty: number; revenue: number }
+    >();
+    for (const it of items) {
+      const key = it.product_id || "__unknown__";
+      const info =
+        productMap.get(it.product_id) ?? { sku: "", name: "(Không xác định)" };
+      const cur =
+        prodAgg.get(key) ?? { sku: info.sku, name: info.name, qty: 0, revenue: 0 };
+      cur.qty += Number(it.qty || 0);
+      cur.revenue += Number(it.total || 0);
+      prodAgg.set(key, cur);
+    }
+    const products = Array.from(prodAgg.values()).sort(
+      (a, b) => b.revenue - a.revenue,
+    );
+
+    return {
+      orders,
+      products,
+      summary: {
+        orderCount: orders.length,
+        totalAmount,
+        totalCollected,
+        totalRemaining,
+      },
+    };
+  },
+);

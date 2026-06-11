@@ -8,7 +8,9 @@ import {
   getOrderStats,
   getOrderFormRefs,
   createOrder,
+  getOrdersForExport,
 } from "@/lib/orders.functions";
+import { exportSalesReportToExcel } from "@/lib/export-sales-report";
 import { createSchedule, listWorkTypes } from "@/lib/schedule.functions";
 import { upsertCustomer, listCustomers, getCustomerLite } from "@/lib/customers.functions";
 import { buildInvoiceHtml } from "@/lib/print-invoice";
@@ -35,6 +37,7 @@ import {
   MapPin,
   Landmark,
   Wallet,
+  FileSpreadsheet,
 } from "lucide-react";
 import {
   Dialog,
@@ -211,6 +214,7 @@ function Page() {
   const refsFn = useServerFn(getOrderFormRefs);
   const ordersFn = useServerFn(searchOrdersPage);
   const orderStatsFn = useServerFn(getOrderStats);
+  const exportOrdersFn = useServerFn(getOrdersForExport);
   const listCustomersFn = useServerFn(listCustomers);
   const custLiteFn = useServerFn(getCustomerLite);
   const create = useServerFn(createOrder);
@@ -333,6 +337,7 @@ function Page() {
   const [filterEmployee, setFilterEmployee] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  const [exportingSales, setExportingSales] = useState(false);
 
   // Phạm vi chi nhánh theo quyền: NV không phải admin chỉ thấy chi nhánh được gán.
   // GIỮ NGUYÊN logic cũ (trước đây lọc ở client trong allOrders).
@@ -498,6 +503,82 @@ function Page() {
   function handleSort(v: string) {
     setSortBy(v);
     setPage(1);
+  }
+
+  // ── Xuất Excel: báo cáo bán hàng theo bộ lọc đang xem ─────────────────────
+  // Lấy TOÀN BỘ đơn khớp bộ lọc hiện tại (không giới hạn theo trang) rồi dựng
+  // file .xlsx gồm 2 sheet: "Đơn đã bán" (kèm tổng tiền/đã thu/còn lại) và
+  // "Sản phẩm đã bán". KHÔNG thay đổi luồng lọc/hiển thị đang có.
+  async function handleExportSales() {
+    setExportingSales(true);
+    try {
+      const res = await exportOrdersFn({
+        data: {
+          search: debouncedSearch,
+          status: activeTab === "orders" ? filterStatus : "",
+          branch: filterBranch,
+          tab: activeTab,
+          branchIds: branchScope,
+          customer: filterCustomer,
+          employee: isAdmin ? filterEmployee : "",
+          fromDate: filterFrom,
+          toDate: filterTo,
+          sortBy,
+        },
+      });
+
+      const orders = res?.orders ?? [];
+      if (orders.length === 0) {
+        toast.warning("Không có đơn hàng nào để xuất.");
+        return;
+      }
+
+      // Dựng tiêu đề + mô tả bộ lọc cho file.
+      const fmtDmy = (s: string) => {
+        const [y, m, d] = (s || "").split("-");
+        return d && m && y ? `${d}/${m}/${y}` : s;
+      };
+      let reportTitle = "BÁO CÁO BÁN HÀNG";
+      const parts: string[] = [];
+
+      if (activeTab === "reserved") parts.push("Đơn đặt hàng");
+
+      if (filterCustomer) {
+        reportTitle = "BÁO CÁO BÁN HÀNG THEO KHÁCH HÀNG";
+        const custName = orders.find((o: any) => o.customer_name)?.customer_name;
+        parts.push(`Khách: ${custName || "—"}`);
+      }
+      if (isAdmin && filterEmployee) {
+        if (!filterCustomer) reportTitle = "BÁO CÁO BÁN HÀNG THEO NHÂN VIÊN";
+        const emp = (stats?.employees ?? []).find((e: any) => e.id === filterEmployee);
+        parts.push(`NV: ${emp?.name || "—"}`);
+      }
+      if (filterFrom && filterTo) parts.push(`Từ ${fmtDmy(filterFrom)} đến ${fmtDmy(filterTo)}`);
+      else if (filterFrom) parts.push(`Từ ${fmtDmy(filterFrom)}`);
+      else if (filterTo) parts.push(`Đến ${fmtDmy(filterTo)}`);
+      if (activeTab === "orders" && filterStatus)
+        parts.push(`Trạng thái: ${STATUS_LABEL[filterStatus] ?? filterStatus}`);
+      if (filterBranch) {
+        const br = (stats?.branches ?? []).find((b: any) => b.id === filterBranch);
+        if (br) parts.push(`Chi nhánh: ${br.name}`);
+      }
+      if (debouncedSearch) parts.push(`từ khoá "${debouncedSearch}"`);
+
+      const filterText = parts.length ? parts.join(" · ") : "Tất cả đơn";
+
+      const count = await exportSalesReportToExcel({
+        orders: res.orders,
+        products: res.products ?? [],
+        summary: res.summary,
+        reportTitle,
+        filterText,
+      });
+      toast.success(`Đã xuất ${count} đơn hàng ra file Excel.`);
+    } catch (err: any) {
+      toast.error(err?.message ?? "Xuất Excel thất bại");
+    } finally {
+      setExportingSales(false);
+    }
   }
 
   function handleTab(t: "orders" | "reserved") {
@@ -1673,6 +1754,20 @@ function Page() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <Button
+          variant="outline"
+          onClick={handleExportSales}
+          disabled={exportingSales || ordersLoading}
+          title="Xuất đơn đã bán theo bộ lọc hiện tại ra file Excel (.xlsx)"
+        >
+          {exportingSales ? (
+            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+          ) : (
+            <FileSpreadsheet className="mr-1 h-4 w-4" />
+          )}
+          {exportingSales ? "Đang xuất..." : "Xuất Excel"}
+        </Button>
 
         {reservedCount > 0 && (
           <span className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-full px-3 py-1 flex items-center gap-1">
