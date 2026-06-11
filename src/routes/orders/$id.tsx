@@ -162,6 +162,7 @@ function OrderDetailPage() {
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnItems, setReturnItems] = useState<LineItem[]>([]);
   const [returnDiscount, setReturnDiscount] = useState("0");
+  const [returnRefunded, setReturnRefunded] = useState("0");
   const [returnNote, setReturnNote] = useState("");
   const [submittingReturn, setSubmittingReturn] = useState(false);
 
@@ -396,7 +397,7 @@ function OrderDetailPage() {
           original_order_id: id,
           items: returnItems,
           discount: parseInput(returnDiscount),
-          refunded_to_customer: 0,
+          refunded_to_customer: parseInput(returnRefunded),
           note: returnNote || undefined,
           branch_id: order.branch_id,
           customer_id: order.customer_id || undefined,
@@ -689,7 +690,7 @@ function OrderDetailPage() {
                     </Button>
                   )}
 
-                {isAdmin && order.status === "completed" && (
+                {canManageOrder && order.status === "completed" && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -1354,7 +1355,7 @@ function OrderDetailPage() {
               <RotateCcw className="h-5 w-5" /> Trả hàng — {order?.code}
             </DialogTitle>
             <DialogDescription>
-              Chỉnh sửa sản phẩm và số lượng cần trả. Hàng trả sẽ được hoàn lại kho.
+              Chỉnh sửa sản phẩm và số lượng cần trả. Tiền đã trả khách mặc định là 0 (chưa trả).
             </DialogDescription>
           </DialogHeader>
 
@@ -1460,14 +1461,26 @@ function OrderDetailPage() {
               </div>
             </div>
 
-            <div>
-              <Label>Giảm giá trên phiếu trả (₫)</Label>
-              <Input
-                className="mt-1"
-                value={returnDiscount}
-                onChange={(e) => setReturnDiscount(fmtInput(e.target.value))}
-                onFocus={(e) => e.target.select()}
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label>Giảm giá trên phiếu trả (₫)</Label>
+                <Input
+                  className="mt-1"
+                  value={returnDiscount}
+                  onChange={(e) => setReturnDiscount(fmtInput(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
+              <div>
+                <Label>Tiền đã trả lại khách (₫)</Label>
+                <Input
+                  className="mt-1"
+                  value={returnRefunded}
+                  onChange={(e) => setReturnRefunded(fmtInput(e.target.value))}
+                  onFocus={(e) => e.target.select()}
+                  placeholder="Mặc định 0 — chưa trả"
+                />
+              </div>
             </div>
 
             <div>
@@ -1487,8 +1500,12 @@ function OrderDetailPage() {
                 </div>
               )}
               <div className="flex justify-between font-bold text-orange-800 border-t pt-1.5">
-                <span>Giá trị hàng trả</span>
+                <span>Khách cần nhận lại</span>
                 <span>{fmt(khachCanNhanLai)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Đã trả lại khách</span>
+                <span>{fmt(parseInput(returnRefunded))}</span>
               </div>
             </div>
           </div>

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as RegisterRouteImport } from './routes/register'
+import { Route as QuickReturnRouteImport } from './routes/quick-return'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InventoryRouteImport } from './routes/inventory'
@@ -40,6 +41,11 @@ const ReportsRoute = ReportsRouteImport.update({
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QuickReturnRoute = QuickReturnRouteImport.update({
+  id: '/quick-return',
+  path: '/quick-return',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductsRoute = ProductsRouteImport.update({
@@ -124,6 +130,7 @@ export interface FileRoutesByFullPath {
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/products': typeof ProductsRoute
+  '/quick-return': typeof QuickReturnRoute
   '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/schedule': typeof ScheduleRoute
@@ -143,6 +150,7 @@ export interface FileRoutesByTo {
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/products': typeof ProductsRoute
+  '/quick-return': typeof QuickReturnRoute
   '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/schedule': typeof ScheduleRoute
@@ -163,6 +171,7 @@ export interface FileRoutesById {
   '/inventory': typeof InventoryRoute
   '/login': typeof LoginRoute
   '/products': typeof ProductsRoute
+  '/quick-return': typeof QuickReturnRoute
   '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/schedule': typeof ScheduleRoute
@@ -184,6 +193,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/login'
     | '/products'
+    | '/quick-return'
     | '/register'
     | '/reports'
     | '/schedule'
@@ -203,6 +213,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/login'
     | '/products'
+    | '/quick-return'
     | '/register'
     | '/reports'
     | '/schedule'
@@ -222,6 +233,7 @@ export interface FileRouteTypes {
     | '/inventory'
     | '/login'
     | '/products'
+    | '/quick-return'
     | '/register'
     | '/reports'
     | '/schedule'
@@ -242,6 +254,7 @@ export interface RootRouteChildren {
   InventoryRoute: typeof InventoryRoute
   LoginRoute: typeof LoginRoute
   ProductsRoute: typeof ProductsRoute
+  QuickReturnRoute: typeof QuickReturnRoute
   RegisterRoute: typeof RegisterRoute
   ReportsRoute: typeof ReportsRoute
   ScheduleRoute: typeof ScheduleRoute
@@ -272,6 +285,13 @@ declare module '@tanstack/react-router' {
       path: '/register'
       fullPath: '/register'
       preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/quick-return': {
+      id: '/quick-return'
+      path: '/quick-return'
+      fullPath: '/quick-return'
+      preLoaderRoute: typeof QuickReturnRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/products': {
@@ -386,6 +406,7 @@ const rootRouteChildren: RootRouteChildren = {
   InventoryRoute: InventoryRoute,
   LoginRoute: LoginRoute,
   ProductsRoute: ProductsRoute,
+  QuickReturnRoute: QuickReturnRoute,
   RegisterRoute: RegisterRoute,
   ReportsRoute: ReportsRoute,
   ScheduleRoute: ScheduleRoute,
