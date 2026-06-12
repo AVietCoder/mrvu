@@ -6,6 +6,7 @@ import {
   fetchAllRows,
   fetchRows,
   insertRow,
+  insertRowSafe,
   now,
   supabase,
   uid,
@@ -432,6 +433,7 @@ async function createOrderCashVoucher({
   notePrefix,
   noteOverride,
   recalcDebt = false,
+  bankAccountIdx = null,
 }: {
   kind: "thu" | "chi";
   orderCode: string;
@@ -445,6 +447,8 @@ async function createOrderCashVoucher({
   notePrefix?: string;
   noteOverride?: string;
   recalcDebt?: boolean;
+  /** Số thứ tự tài khoản ngân hàng (chỉ dùng khi fundType = "ngan_hang"). */
+  bankAccountIdx?: number | null;
 }) {
   if (!amount || amount <= 0) return null;
   const code = await nextCashCode(kind);
@@ -453,7 +457,7 @@ async function createOrderCashVoucher({
   const voucherTypeId = isThu ? await getOrderReceiptTypeId() : await getOrderRefundTypeId();
   const hasCustomer = !!customerId;
 
-  const voucher = await insertRow("cash_vouchers", {
+  const voucher = await insertRowSafe("cash_vouchers", {
     id: uid(),
     code,
     type: kind, // 'thu' | 'chi'
@@ -461,6 +465,9 @@ async function createOrderCashVoucher({
     branch_id: branchId,
     amount: Number(amount),
     voucher_type_id: voucherTypeId,
+    // Số tài khoản ngân hàng dùng cho phiếu (chỉ có ý nghĩa khi chuyển khoản).
+    // insertRowSafe sẽ tự bỏ cột này nếu DB chưa có (chưa chạy migration v6).
+    bank_account_idx: fundType === "ngan_hang" ? (bankAccountIdx ?? null) : null,
     // ── Mô hình A → B (Bên A LUÔN là chi nhánh/quỹ, Bên B là khách) ──
     from_kind: "branch",
     from_id: branchId,
@@ -1280,7 +1287,9 @@ export const createReturnOrder = createServerFn({ method: "POST" })
     const createdAt = now();
 
     // Tạo đơn trả hàng (status = "returned")
-    await insertRow("orders", {
+    // Dùng insertRowSafe: nếu DB chưa có cột bank_account_idx (chưa chạy
+    // migration v6) thì cột này tự được bỏ qua thay vì làm sập cả phiếu trả.
+    await insertRowSafe("orders", {
       id: returnId,
       code: returnCode,
       customer_id: data.customer_id || originalOrder.customer_id || null,
@@ -1316,13 +1325,21 @@ export const createReturnOrder = createServerFn({ method: "POST" })
       await adjustStock(it.product_id, branchId, Number(it.qty));
     }
 
-    // ── Cập nhật CÔNG NỢ + SỔ QUỸ cho khách hàng ─────────────────────────────
-    // Logic đúng:
-    //   1) Công nợ sau trả hàng = debt - total (giá trị hàng trả)
-    //      + refundedToCustomer (tiền thực tế đã hoàn — tức là trừ thêm từ quỹ)
-    //   2) Phiếu chi sổ quỹ = ghi nhận tiền thực tế chi trả cho khách
-    //   3) recalculateCustomerDebt để đồng bộ lại chính xác
+    // ── XỬ LÝ TIỀN HOÀN: tách làm 2 phần rõ ràng ─────────────────────────────
+    //
+    //   Khách cần nhận lại (total)        = giá trị hàng trả  (vd 6.990.000)
+    //   ├─ A) Đã trả lại khách            = refundedToCustomer (vd 5.990.000)
+    //   │      → LẬP PHIẾU CHI trong Sổ quỹ (theo đúng hình thức tiền mặt /
+    //   │        chuyển khoản đã chọn). Đây là tiền THỰC TẾ ra khỏi quỹ.
+    //   └─ B) Phần còn phải trả khách     = total - refundedToCustomer (vd 1.000.000)
+    //          → KHÔNG lập phiếu thu/chi. Phần này được TRỪ THẲNG vào CÔNG NỢ:
+    //            recalculateCustomerDebt tính debt = ... - totalReturned
+    //            + totalPaidBack ..., nên riêng nghiệp vụ trả hàng đóng góp vào
+    //            công nợ đúng bằng (−total + refundedToCustomer) = −(phần B).
+    //            ⇒ Công nợ khách giảm thêm đúng phần B (hoặc thành số âm = shop
+    //              nợ lại khách phần B), mà không sinh thêm chứng từ quỹ nào.
     const customerId = data.customer_id || originalOrder.customer_id;
+    const remainingToDebt = Math.max(0, total - refundedToCustomer); // phần B (chỉ để log)
 
     // 1) Giảm "tổng mua" (total_buy) theo giá trị hàng trả
     if (customerId) {
@@ -1339,10 +1356,11 @@ export const createReturnOrder = createServerFn({ method: "POST" })
       );
     }
 
-    // 2) Tạo PHIẾU CHI trong Sổ quỹ với hình thức chi trả được chọn từ form
-    //    Chi nhánh chi tiền = chi nhánh đơn hàng gốc
+    // 2) A) PHIẾU CHI cho phần tiền THỰC TẾ đã hoàn cho khách.
+    //    Số tài khoản ngân hàng (nếu chuyển khoản) được lưu thẳng trên phiếu chi.
+    //    Chi nhánh chi tiền = chi nhánh đơn hàng gốc.
     if (refundedToCustomer > 0) {
-      const voucherData: any = {
+      await createOrderCashVoucher({
         kind: "chi",
         orderCode: returnCode,
         customerId: customerId || null,
@@ -1351,18 +1369,15 @@ export const createReturnOrder = createServerFn({ method: "POST" })
         amount: refundedToCustomer,
         fundType: refundFundType,
         paymentMethodLabel: refundPmLabel,
+        bankAccountIdx: refundBankAccountIdx, // lưu ngay khi tạo phiếu, không cần update lại
         createdAt,
         noteOverride: `Hoàn tiền trả hàng ${returnCode} (đơn gốc ${originalOrder.code})`,
-      };
-      const voucher = await createOrderCashVoucher(voucherData);
-
-      // Nếu thanh toán qua ngân hàng, ghi thêm bank_account_idx vào phiếu chi
-      if (voucher?.id && refundBankAccountIdx != null) {
-        await updateWhere("cash_vouchers", { bank_account_idx: refundBankAccountIdx }, { id: voucher.id });
-      }
+      });
     }
 
-    // 3) Tính lại CÔNG NỢ về giá trị ĐÚNG (đồng bộ với Báo cáo công nợ & Sổ quỹ)
+    // 3) B) Tính lại CÔNG NỢ về giá trị ĐÚNG (đồng bộ Báo cáo công nợ & Sổ quỹ).
+    //    Bước này tự động đưa phần còn phải trả khách vào công nợ — KHÔNG tạo
+    //    phiếu thu/chi cho phần đó.
     if (customerId) {
       await recalculateCustomerDebt(customerId);
     }
@@ -1376,7 +1391,9 @@ export const createReturnOrder = createServerFn({ method: "POST" })
 
     await logActivity({
       action: "create_return",
-      detail: `Trả hàng ${returnCode} từ đơn ${originalOrder.code}${refundedToCustomer > 0 ? ` — hoàn ${Number(refundedToCustomer).toLocaleString("vi-VN")}₫ (${refundPmLabel})` : ""}`,
+      detail: `Trả hàng ${returnCode} từ đơn ${originalOrder.code}`
+        + (refundedToCustomer > 0 ? ` — hoàn ${Number(refundedToCustomer).toLocaleString("vi-VN")}₫ (${refundPmLabel})` : "")
+        + (remainingToDebt > 0 ? ` — ghi công nợ ${remainingToDebt.toLocaleString("vi-VN")}₫` : ""),
       employee_id: data.actor_id || data.employee_id || originalOrder.employee_id || null,
     });
 

@@ -189,6 +189,86 @@ export async function deleteWhere(table: string, eq: Record<string, FilterValue>
   if (error) throw new Error(error.message);
 }
 
+// ─── Ghi DB "an toàn lược cột" (resilient writes) ─────────────────────────
+// PostgREST trả lỗi PGRST204: "Could not find the 'X' column of 'Y' in the
+// schema cache" khi payload chứa một cột CHƯA tồn tại trong DB (thường do
+// schema chưa chạy migration, hoặc cache schema của PostgREST còn cũ). Với
+// các cột TÙY CHỌN (ví dụ: bank_account_idx), ta KHÔNG để cả luồng nghiệp vụ
+// sập chỉ vì một cột phụ — thay vào đó tự bỏ cột bị thiếu ra rồi ghi lại.
+//   • Đã chạy migration  → cột được lưu đầy đủ.
+//   • Chưa chạy migration → vẫn ghi thành công (chỉ thiếu cột phụ), không sập.
+const MISSING_COLUMN_RE = /Could not find the '([^']+)' column/i;
+
+function extractMissingColumn(err: any): string | null {
+  if (!err) return null;
+  const code = String(err.code ?? "");
+  const msg = String(err.message ?? err ?? "");
+  if (code === "PGRST204" || MISSING_COLUMN_RE.test(msg)) {
+    const m = msg.match(MISSING_COLUMN_RE);
+    return m?.[1] ?? null;
+  }
+  return null;
+}
+
+/**
+ * Như insertRow nhưng tự bỏ các cột mà DB chưa có (PGRST204) rồi thử lại.
+ * Trả về bản ghi đã chèn. Dùng cho payload có chứa cột tùy chọn.
+ */
+export async function insertRowSafe<T = any>(
+  table: string,
+  row: Record<string, any>,
+): Promise<T> {
+  const payload = { ...row };
+  // Tối đa 8 vòng để bóc dần các cột thiếu (tránh lặp vô hạn).
+  for (let i = 0; i < 8; i++) {
+    const { data, error } = await supabase
+      .from(table)
+      .insert(payload)
+      .select("*")
+      .single();
+    if (!error) return data as T;
+    const missing = extractMissingColumn(error);
+    if (missing && missing in payload) {
+      delete payload[missing];
+      continue;
+    }
+    throw new Error(error.message);
+  }
+  // Phòng hờ: thử lần cuối với payload đã bóc bớt.
+  const { data, error } = await supabase
+    .from(table)
+    .insert(payload)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as T;
+}
+
+/**
+ * Như updateWhere nhưng tự bỏ các cột DB chưa có (PGRST204) rồi thử lại.
+ * Nếu bóc hết mà KHÔNG còn cột nào để cập nhật thì coi như xong (no-op).
+ */
+export async function updateWhereSafe(
+  table: string,
+  values: Record<string, any>,
+  eq: Record<string, FilterValue>,
+): Promise<void> {
+  const payload = { ...values };
+  for (let i = 0; i < 8; i++) {
+    if (Object.keys(payload).length === 0) return; // không còn gì để ghi
+    let query = supabase.from(table).update(payload);
+    query = applyFilters(query, { eq });
+    const { error } = await query;
+    if (!error) return;
+    const missing = extractMissingColumn(error);
+    if (missing && missing in payload) {
+      delete payload[missing];
+      continue;
+    }
+    throw new Error(error.message);
+  }
+}
+
 export async function upsertRow<T = any>(
   table: string,
   row: Record<string, any>,
