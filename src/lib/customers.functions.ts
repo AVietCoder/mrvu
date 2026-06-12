@@ -350,7 +350,9 @@ export async function recalculateCustomerDebt(customerId: string): Promise<numbe
       eq: { id: customerId },
       select: "debt_adjustment",
       limit: 1,
-    }),
+    }).catch(() => [] as { debt_adjustment: number }[]),
+    // ↑ An toàn: nếu DB chưa có cột debt_adjustment thì coi điều chỉnh = 0,
+    //   KHÔNG để recalc văng lỗi (tránh kéo theo phiếu trả hàng thất bại).
   ]);
 
   const totalSpent = completedOrdersRows.reduce((s, o) => s + Number(o.total || 0), 0);
@@ -359,7 +361,14 @@ export async function recalculateCustomerDebt(customerId: string): Promise<numbe
   const totalPaidBack = (allPayBacksRows.data ?? []).reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
   // ✅ Giữ phần điều chỉnh thủ công của admin khi tính lại
   const adjustment = Number(customerRows[0]?.debt_adjustment) || 0;
-  // Công nợ = (hàng đã mua − hàng đã trả) − đã thu + đã chi trả lại + điều chỉnh
+  // ─── CÔNG THỨC CÔNG NỢ (nguồn sự thật duy nhất) ──────────────────────────
+  //   debt = (hàng đã mua − hàng đã trả) − đã thu + đã chi trả lại + điều chỉnh
+  //
+  //   Riêng nghiệp vụ TRẢ HÀNG, vì nó thêm 1 đơn "returned" (total = giá trị
+  //   hàng trả = "Khách cần nhận lại" = T) và 1 phiếu chi (= "Đã trả lại
+  //   khách" = R), nên hàm này đảm bảo:
+  //       debt_sau = debt_trước − T + R
+  //   ⇒ đúng bằng công thức: công nợ − tiền phải trả khách + tiền khách đã trả.
   const newDebt = totalSpent - totalReturned - totalPaid + totalPaidBack + adjustment;
 
   await updateWhere("customers", { debt: newDebt }, { id: customerId });

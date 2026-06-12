@@ -18,7 +18,18 @@ ALTER TABLE orders
 ALTER TABLE cash_vouchers
   ADD COLUMN IF NOT EXISTS bank_account_idx INTEGER;
 
--- 3) Bắt PostgREST nạp lại schema cache NGAY (nếu không, app vẫn có thể
+-- 3) (An toàn) Đảm bảo các cột phục vụ TÍNH CÔNG NỢ tồn tại. Hàm
+--    recalculateCustomerDebt dùng debt + debt_adjustment + total_buy. Nếu
+--    DB của bạn còn thiếu, thêm vào để công nợ sau trả hàng tính đúng:
+--        công nợ = (hàng mua − hàng trả) − đã thu + đã chi trả lại + điều chỉnh
+ALTER TABLE customers
+  ADD COLUMN IF NOT EXISTS debt            NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE customers
+  ADD COLUMN IF NOT EXISTS debt_adjustment NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE customers
+  ADD COLUMN IF NOT EXISTS total_buy       NUMERIC DEFAULT 0;
+
+-- 4) Bắt PostgREST nạp lại schema cache NGAY (nếu không, app vẫn có thể
 --    báo "schema cache" trong vài giây tới vài phút cho đến khi tự reload).
 NOTIFY pgrst, 'reload schema';
 
