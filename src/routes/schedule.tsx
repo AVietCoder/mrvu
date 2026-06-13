@@ -814,7 +814,8 @@ async function refreshQuery(queryKey: readonly unknown[]) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[720px]">
                 <thead className="text-left text-muted-foreground border-b">
-                  <tr><th className="py-2 pr-3">Tiêu đề</th><th className="pr-3">Ngày</th><th className="pr-3">Chi nhánh</th>{!isTech && !canApprove ? <th className="pr-3">Khách hàng</th> : null}<th className="pr-3">Người phụ trách</th><th className="pr-3">Người tạo</th><th className="pr-3">Trạng thái</th>{isTech && <th className="pr-3">Tiền công</th>}<th></th></tr>
+                  <tr><th className="py-2 pr-3">Tiêu đề</th><th className="pr-3">Ngày</th><th className="pr-3">Chi nhánh</th>
+                  <th className="pr-3">Khách hàng</th><th className="pr-3">Người phụ trách</th><th className="pr-3">Người tạo</th><th className="pr-3">Trạng thái</th>{isTech && <th className="pr-3">Tiền công</th>}<th></th></tr>
                 </thead>
                 <tbody>
                   {pagedSchedules.map((s: any) => {
@@ -829,7 +830,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                         <td className="py-2 pr-3 font-medium max-w-[200px] truncate">{s.title}</td>
                         <td className="pr-3 text-xs whitespace-nowrap">{s.scheduled_date?.slice(0,10)} {s.scheduled_time}</td>
                         <td className="pr-3"><div className="flex flex-wrap gap-1">{branchNames.length > 0 ? branchNames.map((name) => <span key={name} className="text-xs rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">{name}</span>) : <span className="text-xs text-muted-foreground">—</span>}</div></td>
-                        {!isTech && !canApprove ? <td className="pr-3 text-muted-foreground text-sm">{customer?.name ?? "—"}</td> : null}
+                        <td className="pr-3 text-muted-foreground text-sm">{customer?.name ?? "—"}</td>
                         <td className="pr-3"><div className="flex flex-wrap gap-1">{assignees.map((a: any) => { const u = usersById.get(String(a.user_id)); return <span key={a.user_id} className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">{u?.full_name ?? "?"}</span>; })}{assignees.length === 0 && <span className="text-xs text-muted-foreground">Chưa phân công</span>}</div></td>
                         <td className="pr-3">{creator ? <span className="text-xs bg-orange-100 text-orange-700 rounded-full px-2 py-0.5">{creator.full_name}</span> : <span className="text-xs text-muted-foreground">—</span>}</td>
                         <td className="pr-3"><span className={`text-xs rounded-full px-2 py-0.5 ${status?.color}`}>{status?.label}</span></td>
