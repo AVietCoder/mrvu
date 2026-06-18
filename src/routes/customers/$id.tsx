@@ -271,11 +271,17 @@ function CustomerDetailPage() {
   );
   const cancelledOrders = customerOrders.filter((o: any) => o.status === "cancelled");
   const totalSpent = completedOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0);
+  // ✅ Tổng giá trị hàng KHÁCH ĐÃ TRẢ LẠI (đơn status "returned"). Phải TRỪ khỏi
+  //    công nợ: khi làm thủ tục trả hàng, phần hàng trả không còn là nợ của khách.
+  //    Trước đây dòng này bị thiếu nên công nợ vẫn hiển thị nguyên giá trị đơn gốc
+  //    (vd: trả full đơn 1.200.000đ nhưng công nợ vẫn 1.200.000đ thay vì 0).
+  const totalReturned = returnedOrders.reduce((s: number, o: any) => s + Number(o.total || 0), 0);
   const totalPaid = paymentHistory.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
   const totalPaidBack = payBackHistory.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
   // debt > 0 : khách nợ công ty; debt < 0 : công ty nợ khách
-  // ✅ Phần tính từ đơn/phiếu (không gồm điều chỉnh thủ công)
-  const computedDebt = totalSpent - totalPaid + totalPaidBack;
+  // ✅ Phần tính từ đơn/phiếu (không gồm điều chỉnh thủ công) — GIỐNG HỆT công thức
+  //    server recalculateCustomerDebt: (hàng mua − hàng trả) − đã thu + đã chi trả lại
+  const computedDebt = totalSpent - totalReturned - totalPaid + totalPaidBack;
   // ✅ Điều chỉnh công nợ thủ công (chỉ admin sửa được) — cộng vào tổng hiển thị
   const manualAdjustment = Number(customer?.debt_adjustment ?? 0);
   const displayDebt = computedDebt + manualAdjustment;
