@@ -45,6 +45,24 @@ export const upsertProduct = createServerFn({ method: "POST" })
         employee_id: data.actor_id || null,
       });
     } else {
+      // 🛡️ Lưới an toàn chống tạo trùng: nếu vừa có 1 sản phẩm trùng
+      // (tên + thương hiệu + nhóm) được tạo trong ~10 giây gần đây thì coi như
+      // đây là cú submit lặp (double-submit / request gửi 2 lần) — trả về bản
+      // ghi đã có thay vì chèn thêm dòng mới.
+      const recent = await fetchRows("products", {
+        eq: {
+          name: data.name,
+          brand_id: data.brand_id || null,
+          category_id: data.category_id || null,
+        },
+        orderBy: "created_at",
+        ascending: false,
+        limit: 1,
+      });
+      const last = recent[0] as any;
+      if (last && Date.now() - new Date(last.created_at).getTime() < 10_000) {
+        return { ok: true, id: last.id, deduped: true };
+      }
       await insertRow("products", { id: uid(), ...payload, created_at: now() });
       await logActivity({
         action: "create_product",

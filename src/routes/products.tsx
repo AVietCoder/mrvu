@@ -76,6 +76,12 @@ function ProductsPage() {
   const [filterBrand, setFilterBrand] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // ⛔ Chống tạo trùng sản phẩm (double-submit). `saving` chỉ để hiển thị UI;
+  // `savingRef` là khoá ĐỒNG BỘ — vì setState bất đồng bộ nên 2 lần gọi save()
+  // trong cùng một nhịp (tap 2 lần, hoặc Enter + click) sẽ cùng đọc state cũ và
+  // lọt qua. Ref khoá ngay lập tức nên chặn triệt để.
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   const [adminOpen, setAdminOpen] = useState(false);
   const [newBrandName, setNewBrandName] = useState("");
@@ -127,6 +133,10 @@ function ProductsPage() {
     if (!form.name.trim()) return toast.error("Vui lòng nhập tên hàng");
     if (!form.category_id) return toast.error("Vui lòng chọn nhóm hàng hoá");
     if (!form.brand_id) return toast.error("Vui lòng chọn thương hiệu");
+    // ⛔ Nếu đang lưu thì bỏ qua — chặn cú submit thứ 2 gây tạo trùng.
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
       await upsert({
         data: {
@@ -144,7 +154,12 @@ function ProductsPage() {
       toast.success(form.id ? "Đã cập nhật sản phẩm" : "Đã thêm sản phẩm thành công!");
       setOpen(false);
       qc.invalidateQueries({ queryKey: ["products"] });
-    } catch (e: any) { toast.error(e?.message ?? "Lỗi lưu"); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi lưu");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   }
 
   async function remove(id: string, name: string) {
@@ -514,8 +529,10 @@ function ProductsPage() {
               </Field>
             </div>
             <DialogFooter className="mt-4">
-              <Button variant="outline" onClick={() => setOpen(false)}>Hủy</Button>
-              <Button onClick={save}>Lưu</Button>
+              <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Hủy</Button>
+              <Button onClick={save} disabled={saving}>
+                {saving ? (<><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Đang lưu...</>) : "Lưu"}
+              </Button>
             </DialogFooter>
           </div>
         </DialogContent>
