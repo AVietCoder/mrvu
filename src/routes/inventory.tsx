@@ -1184,7 +1184,7 @@ function Page() {
           </select>
 
           {/* Lọc theo sản phẩm */}
-          <div className="w-48">
+          <div className="w-full sm:w-48">
             <SearchableSelect
               value={histFilterProduct}
               onChange={(v) => { setHistFilterProduct(v); setHistPage(1); }}
@@ -1194,23 +1194,24 @@ function Page() {
             />
           </div>
 
-          {/* Lọc từ ngày */}
-          <input
-            type="date"
-            className="h-8 rounded-md border bg-background px-2 text-sm"
-            value={histFilterFrom}
-            onChange={(e) => { setHistFilterFrom(e.target.value); setHistPage(1); }}
-            title="Từ ngày"
-          />
-          <span className="text-muted-foreground text-xs">–</span>
-          {/* Lọc đến ngày */}
-          <input
-            type="date"
-            className="h-8 rounded-md border bg-background px-2 text-sm"
-            value={histFilterTo}
-            onChange={(e) => { setHistFilterTo(e.target.value); setHistPage(1); }}
-            title="Đến ngày"
-          />
+          {/* Lọc khoảng ngày — gộp thành 1 nhóm để không vỡ dòng lẻ trên mobile */}
+          <div className="flex items-center gap-1">
+            <input
+              type="date"
+              className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm"
+              value={histFilterFrom}
+              onChange={(e) => { setHistFilterFrom(e.target.value); setHistPage(1); }}
+              title="Từ ngày"
+            />
+            <span className="text-muted-foreground text-xs">–</span>
+            <input
+              type="date"
+              className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm"
+              value={histFilterTo}
+              onChange={(e) => { setHistFilterTo(e.target.value); setHistPage(1); }}
+              title="Đến ngày"
+            />
+          </div>
 
           {/* Nút xóa lọc */}
           {(histFilterType || histFilterProduct || histFilterFrom || histFilterTo) && (

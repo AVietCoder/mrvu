@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Download, ShieldOff, TrendingUp, ShoppingBag, Users, Package, CreditCard, CalendarDays, Filter, BarChart3, RefreshCw } from "lucide-react";
+import { Download, ShieldOff, TrendingUp, ShoppingBag, Users, Package, CreditCard, CalendarDays, Filter, BarChart3, RefreshCw, RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
@@ -69,12 +69,12 @@ function CustomTooltip({ active, payload, label }: any) {
 
 function StatBox({ icon, label, value, sub, color = "text-primary" }: any) {
   return (
-    <div className="rounded-xl border bg-card p-4 flex items-start gap-3">
-      <div className={`mt-0.5 ${color} bg-muted/60 rounded-lg p-2`}>{icon}</div>
-      <div>
-        <div className="text-xs text-muted-foreground uppercase tracking-wide">{label}</div>
-        <div className="text-lg font-bold mt-0.5">{value}</div>
-        {sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}
+    <div className="rounded-xl border bg-card p-3 sm:p-4 flex items-start gap-2 sm:gap-3">
+      <div className={`mt-0.5 shrink-0 ${color} bg-muted/60 rounded-lg p-2`}>{icon}</div>
+      <div className="min-w-0 flex-1">
+        <div className="text-xs text-muted-foreground uppercase tracking-wide truncate">{label}</div>
+        <div className="text-base sm:text-lg font-bold mt-0.5 break-words leading-tight">{value}</div>
+        {sub && <div className="text-xs text-muted-foreground mt-0.5 break-words leading-tight">{sub}</div>}
       </div>
     </div>
   );
@@ -138,12 +138,16 @@ function Page() {
     avgOrderValue,
     newCustomers,
     totalRevenue,
+    grossRevenue,
+    returnsTotal,
+    returnsCount,
     totalCompletedOrders
   } = useMemo(() => {
     if (!data) return {
       filteredOrders: [], filteredItems: [], dailySeries: [], monthlySeries: [],
       byBranchFiltered: [], byEmployeeFiltered: [], topProductsFiltered: [],
-      ordersByStatus: {}, avgOrderValue: 0, newCustomers: 0, totalRevenue: 0, totalCompletedOrders: 0
+      ordersByStatus: {}, avgOrderValue: 0, newCustomers: 0, totalRevenue: 0,
+      grossRevenue: 0, returnsTotal: 0, returnsCount: 0, totalCompletedOrders: 0
     };
 
     const TZ = "Asia/Ho_Chi_Minh";
@@ -152,9 +156,13 @@ function Page() {
     const from = fromDate;
     const to = toDate;
 
-    // Dữ liệu đã được server lọc sẵn trong khoảng từ-đến
+    // Dữ liệu đã được server lọc sẵn trong khoảng từ-đến.
+    //   allOrders  = đơn hoàn tất (theo completed_at) + đơn chưa hoàn tất
+    //   allReturns = phiếu trả hàng (theo ngày tạo phiếu trả) → TRỪ doanh thu
     const allOrders: any[] = (data as any)._rawOrders ?? [];
     const allItems: any[] = (data as any)._rawItems ?? [];
+    const allReturns: any[] = (data as any)._rawReturns ?? [];
+    const allReturnItems: any[] = (data as any)._rawReturnItems ?? [];
 
     const custOrders = new Map<string, string>();
     allOrders.forEach((o: any) => {
@@ -169,35 +177,64 @@ function Page() {
     const ordersByStatus: any = {};
     const dailyMap = new Map<string, { revenue: number; orders: number }>();
     const monthlyMap = new Map<string, { revenue: number; orders: number }>();
-    const branchMap = new Map<string, { revenue: number; orders: number }>();
-    const employeeMap = new Map<string, { revenue: number; orders: number }>();
-    let totalRevenue = 0;
+    const branchMap = new Map<string, { revenue: number; orders: number; returns: number }>();
+    const employeeMap = new Map<string, { revenue: number; orders: number; returns: number }>();
+    let grossRevenue = 0;
 
+    // 1) Đơn hoàn tất CỘNG doanh thu (theo ngày hoàn tất); đơn khác chỉ đếm.
     allOrders.forEach((o: any) => {
-      const d = (o.status === "completed" && o.completed_at)
-        ? fmtDate(o.completed_at)
+      const d = (o.status === "completed")
+        ? fmtDate(o.completed_at || o.created_at)
         : fmtDate(o.created_at);
       filteredOrders.push(o);
       ordersByStatus[o.status] = (ordersByStatus[o.status] ?? 0) + 1;
       if (o.status === "completed") {
         completedFiltered.push(o);
         const amt = Number(o.total || 0);
-        totalRevenue += amt;
+        grossRevenue += amt;
         const curDay = dailyMap.get(d) || { revenue: 0, orders: 0 };
         dailyMap.set(d, { revenue: curDay.revenue + amt, orders: curDay.orders + 1 });
         const m = d.slice(0, 7);
         const curMonth = monthlyMap.get(m) || { revenue: 0, orders: 0 };
         monthlyMap.set(m, { revenue: curMonth.revenue + amt, orders: curMonth.orders + 1 });
         if (o.branch_id) {
-          const curB = branchMap.get(o.branch_id) || { revenue: 0, orders: 0 };
-          branchMap.set(o.branch_id, { revenue: curB.revenue + amt, orders: curB.orders + 1 });
+          const curB = branchMap.get(o.branch_id) || { revenue: 0, orders: 0, returns: 0 };
+          curB.revenue += amt; curB.orders += 1;
+          branchMap.set(o.branch_id, curB);
         }
         if (o.employee_id) {
-          const curE = employeeMap.get(o.employee_id) || { revenue: 0, orders: 0 };
-          employeeMap.set(o.employee_id, { revenue: curE.revenue + amt, orders: curE.orders + 1 });
+          const curE = employeeMap.get(o.employee_id) || { revenue: 0, orders: 0, returns: 0 };
+          curE.revenue += amt; curE.orders += 1;
+          employeeMap.set(o.employee_id, curE);
         }
       }
     });
+
+    // 2) Phiếu trả hàng TRỪ doanh thu (theo ngày tạo phiếu trả).
+    let returnsTotal = 0;
+    allReturns.forEach((r: any) => {
+      const d = fmtDate(r.created_at);
+      const amt = Number(r.total || 0);
+      returnsTotal += amt;
+      ordersByStatus["returned"] = (ordersByStatus["returned"] ?? 0) + 1;
+      const curDay = dailyMap.get(d) || { revenue: 0, orders: 0 };
+      dailyMap.set(d, { revenue: curDay.revenue - amt, orders: curDay.orders });
+      const m = d.slice(0, 7);
+      const curMonth = monthlyMap.get(m) || { revenue: 0, orders: 0 };
+      monthlyMap.set(m, { revenue: curMonth.revenue - amt, orders: curMonth.orders });
+      if (r.branch_id) {
+        const curB = branchMap.get(r.branch_id) || { revenue: 0, orders: 0, returns: 0 };
+        curB.revenue -= amt; curB.returns += amt;
+        branchMap.set(r.branch_id, curB);
+      }
+      if (r.employee_id) {
+        const curE = employeeMap.get(r.employee_id) || { revenue: 0, orders: 0, returns: 0 };
+        curE.revenue -= amt; curE.returns += amt;
+        employeeMap.set(r.employee_id, curE);
+      }
+    });
+
+    const totalRevenue = grossRevenue - returnsTotal; // doanh thu THUẦN
 
     const completedIds = new Set(completedFiltered.map((o: any) => o.id));
     const filteredItems = allItems.filter((i: any) => completedIds.has(i.order_id));
@@ -217,16 +254,17 @@ function Page() {
 
     const branches: any[] = (data as any)._rawBranches ?? [];
     const byBranch = branches.map((b: any) => {
-      const stats = branchMap.get(b.id) || { revenue: 0, orders: 0 };
-      return { name: b.name, revenue: stats.revenue, orders: stats.orders };
-    }).filter((b: any) => b.orders > 0).sort((a: any, b: any) => b.revenue - a.revenue);
+      const stats = branchMap.get(b.id) || { revenue: 0, orders: 0, returns: 0 };
+      return { name: b.name, revenue: stats.revenue, orders: stats.orders, returns: stats.returns };
+    }).filter((b: any) => b.orders > 0 || b.returns > 0).sort((a: any, b: any) => b.revenue - a.revenue);
 
     const users: any[] = (data as any)._rawUsers ?? [];
     const byEmployee = users.map((u: any) => {
-      const stats = employeeMap.get(u.id) || { revenue: 0, orders: 0 };
-      return { name: u.full_name ?? u.name ?? "?", revenue: stats.revenue, orders: stats.orders };
-    }).filter((e: any) => e.orders > 0).sort((a: any, b: any) => b.revenue - a.revenue);
+      const stats = employeeMap.get(u.id) || { revenue: 0, orders: 0, returns: 0 };
+      return { name: u.full_name ?? u.name ?? "?", revenue: stats.revenue, orders: stats.orders, returns: stats.returns };
+    }).filter((e: any) => e.orders > 0 || e.returns > 0).sort((a: any, b: any) => b.revenue - a.revenue);
 
+    // Top sản phẩm: số lượng bán THUẦN (bán ra − trả lại)
     const products: any[] = (data as any)._rawProducts ?? [];
     const productMap = new Map(products.map((p: any) => [p.id, p]));
     const qtyMap = new Map<string, { qty: number; revenue: number }>();
@@ -234,12 +272,18 @@ function Page() {
       const cur = qtyMap.get(i.product_id) ?? { qty: 0, revenue: 0 };
       qtyMap.set(i.product_id, { qty: cur.qty + Number(i.qty || 0), revenue: cur.revenue + Number(i.qty || 0) * Number(i.unit_price || 0) });
     });
+    allReturnItems.forEach((i: any) => {
+      const cur = qtyMap.get(i.product_id) ?? { qty: 0, revenue: 0 };
+      qtyMap.set(i.product_id, { qty: cur.qty - Number(i.qty || 0), revenue: cur.revenue - Number(i.qty || 0) * Number(i.unit_price || 0) });
+    });
     const topProducts = [...qtyMap.entries()]
       .map(([pid, v]) => ({ name: (productMap.get(pid) as any)?.name ?? pid, ...v }))
+      .filter((p) => p.qty > 0)
       .sort((a, b) => b.qty - a.qty).slice(0, 8);
 
     const totalCompletedOrders = completedFiltered.length;
-    const avgOrderValue = totalCompletedOrders > 0 ? totalRevenue / totalCompletedOrders : 0;
+    // Giá trị TB/đơn = doanh thu GỘP / số đơn hoàn tất (giá trị đơn bán điển hình)
+    const avgOrderValue = totalCompletedOrders > 0 ? grossRevenue / totalCompletedOrders : 0;
     const newCust = [...custOrders.values()].filter(d => d >= from && d <= to).length;
 
     return {
@@ -254,6 +298,9 @@ function Page() {
       avgOrderValue,
       newCustomers: newCust,
       totalRevenue,
+      grossRevenue,
+      returnsTotal,
+      returnsCount: allReturns.length,
       totalCompletedOrders
     };
   }, [data]);
@@ -278,17 +325,24 @@ function Page() {
     const rows: string[] = [];
     rows.push(`Báo cáo doanh thu từ ${fromDate} đến ${toDate}`);
     rows.push("");
-    rows.push("Doanh thu theo ngày");
+    rows.push("Tổng kết");
+    rows.push(`Doanh thu gộp,${grossRevenue}`);
+    rows.push(`Hàng trả,${returnsTotal}`);
+    rows.push(`Doanh thu thuần,${totalRevenue}`);
+    rows.push(`Đơn hoàn tất,${totalCompletedOrders}`);
+    rows.push(`Số phiếu trả,${returnsCount}`);
+    rows.push("");
+    rows.push("Doanh thu thuần theo ngày (đã trừ hàng trả)");
     rows.push("Ngày,Doanh thu,Số đơn");
     dailySeries.forEach((d) => rows.push(`${d.date},${d.revenue},${d.orders}`));
     rows.push("");
-    rows.push("Top sản phẩm");
+    rows.push("Top sản phẩm (số lượng bán thuần)");
     rows.push("Sản phẩm,Số lượng");
     topProductsFiltered.forEach((p) => rows.push(`${p.name},${p.qty}`));
     rows.push("");
     rows.push("Doanh thu theo chi nhánh");
-    rows.push("Chi nhánh,Số đơn,Doanh thu");
-    byBranchFiltered.forEach((b) => rows.push(`${b.name},${b.orders},${b.revenue}`));
+    rows.push("Chi nhánh,Số đơn,Hàng trả,Doanh thu thuần");
+    byBranchFiltered.forEach((b) => rows.push(`${b.name},${b.orders},${b.returns},${b.revenue}`));
     rows.push("");
     rows.push("Công nợ");
     rows.push("Khách hàng,Công nợ");
@@ -301,7 +355,10 @@ function Page() {
   }
 
   const series = mode === "day" ? dailySeries : monthlySeries;
-  const totalRevData = byBranchFiltered.map((b: any) => ({ name: b.name, value: b.revenue }));
+  // Pie doanh thu theo chi nhánh: chặn giá trị âm (nếu hàng trả > bán trong kỳ).
+  const totalRevData = byBranchFiltered
+    .map((b: any) => ({ name: b.name, value: Math.max(0, b.revenue) }))
+    .filter((b: any) => b.value > 0);
 
   return (
     <AppShell title="Báo cáo & Thống kê">
@@ -344,10 +401,11 @@ function Page() {
         <ProgressBarLoader />
       ) : (
         <div className="space-y-5">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatBox icon={<TrendingUp className="h-5 w-5" />} label="Doanh thu" value={moneyFmt(totalRevenue)} sub={`${totalCompletedOrders} đơn hoàn tất`} color="text-green-600" />
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <StatBox icon={<TrendingUp className="h-5 w-5" />} label="Doanh thu thuần" value={moneyFmt(totalRevenue)} sub={`Gộp ${moneyFmt(grossRevenue)} − trả ${moneyFmt(returnsTotal)}`} color="text-green-600" />
+            <StatBox icon={<RotateCcw className="h-5 w-5" />} label="Hàng trả" value={moneyFmt(returnsTotal)} sub={`${returnsCount} phiếu trả`} color="text-rose-600" />
             <StatBox icon={<ShoppingBag className="h-5 w-5" />} label="Đơn hoàn tất" value={totalCompletedOrders} sub={`Tổng đơn trong kỳ: ${totalAllOrders}`} color="text-blue-600" />
-            <StatBox icon={<CreditCard className="h-5 w-5" />} label="Giá trị TB/đơn" value={moneyFmt(avgOrderValue)} sub="Đơn hoàn tất" color="text-purple-600" />
+            <StatBox icon={<CreditCard className="h-5 w-5" />} label="Giá trị TB/đơn" value={moneyFmt(avgOrderValue)} sub="Đơn hoàn tất (gộp)" color="text-purple-600" />
             <StatBox icon={<Users className="h-5 w-5" />} label="KH mới" value={newCustomers} sub="Trong kỳ" color="text-orange-600" />
           </div>
 
@@ -396,9 +454,12 @@ function Page() {
                   { key: "reserved", label: "Đặt hàng", color: "bg-yellow-400" },
                   { key: "draft", label: "Nháp", color: "bg-gray-400" },
                   { key: "cancelled", label: "Đã hủy", color: "bg-red-400" },
+                  { key: "returned", label: "Trả hàng", color: "bg-rose-500" },
                 ].map((s) => {
                   const cnt = ordersByStatus[s.key] ?? 0;
-                  const pct = totalAllOrders > 0 ? (cnt / totalAllOrders) * 100 : 0;
+                  // Mẫu số gồm cả phiếu trả để % nhất quán với danh sách bên dưới.
+                  const statusTotal = totalAllOrders + (ordersByStatus["returned"] ?? 0);
+                  const pct = statusTotal > 0 ? (cnt / statusTotal) * 100 : 0;
                   return (
                     <div key={s.key}>
                       <div className="flex justify-between text-sm mb-1">
@@ -435,23 +496,28 @@ function Page() {
                 </div>
               )}
               {byBranchFiltered.length > 0 && (
-                <table className="w-full text-sm mt-2">
-                  <thead className="text-muted-foreground border-b text-left">
-                    <tr><th className="py-1.5">Chi nhánh</th><th className="text-right">Đơn</th><th className="text-right">Doanh thu</th></tr>
-                  </thead>
-                  <tbody>
-                    {byBranchFiltered.map((b: any, i: number) => (
-                      <tr key={i} className="border-b last:border-0">
-                        <td className="py-1.5 flex items-center gap-1.5">
-                          <span className="h-2 w-2 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
-                          {b.name}
-                        </td>
-                        <td className="text-right">{b.orders}</td>
-                        <td className="text-right font-medium">{moneyFmt(b.revenue)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm mt-2 min-w-[380px]">
+                    <thead className="text-muted-foreground border-b text-left">
+                      <tr><th className="py-1.5">Chi nhánh</th><th className="text-right">Đơn</th><th className="text-right">Hàng trả</th><th className="text-right whitespace-nowrap">DT thuần</th></tr>
+                    </thead>
+                    <tbody>
+                      {byBranchFiltered.map((b: any, i: number) => (
+                        <tr key={i} className="border-b last:border-0">
+                          <td className="py-1.5">
+                            <span className="flex items-center gap-1.5">
+                              <span className="h-2 w-2 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
+                              {b.name}
+                            </span>
+                          </td>
+                          <td className="text-right">{b.orders}</td>
+                          <td className="text-right text-rose-600 whitespace-nowrap">{b.returns > 0 ? `-${moneyFmt(b.returns)}` : "—"}</td>
+                          <td className="text-right font-medium whitespace-nowrap">{moneyFmt(b.revenue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </Card>
 
@@ -472,20 +538,23 @@ function Page() {
                 </div>
               )}
               {byEmployeeFiltered.length > 0 && (
-                <table className="w-full text-sm mt-2">
-                  <thead className="text-muted-foreground border-b text-left">
-                    <tr><th className="py-1.5">Nhân viên</th><th className="text-right">Đơn</th><th className="text-right">Doanh thu</th></tr>
-                  </thead>
-                  <tbody>
-                    {byEmployeeFiltered.slice(0, 6).map((e: any, i: number) => (
-                      <tr key={i} className="border-b last:border-0">
-                        <td className="py-1.5">{e.name}</td>
-                        <td className="text-right">{e.orders}</td>
-                        <td className="text-right font-medium">{moneyFmt(e.revenue)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm mt-2 min-w-[380px]">
+                    <thead className="text-muted-foreground border-b text-left">
+                      <tr><th className="py-1.5">Nhân viên</th><th className="text-right">Đơn</th><th className="text-right">Hàng trả</th><th className="text-right whitespace-nowrap">DT thuần</th></tr>
+                    </thead>
+                    <tbody>
+                      {byEmployeeFiltered.slice(0, 6).map((e: any, i: number) => (
+                        <tr key={i} className="border-b last:border-0">
+                          <td className="py-1.5">{e.name}</td>
+                          <td className="text-right">{e.orders}</td>
+                          <td className="text-right text-rose-600 whitespace-nowrap">{e.returns > 0 ? `-${moneyFmt(e.returns)}` : "—"}</td>
+                          <td className="text-right font-medium whitespace-nowrap">{moneyFmt(e.revenue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </Card>
           </div>

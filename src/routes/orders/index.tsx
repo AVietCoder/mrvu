@@ -1806,19 +1806,21 @@ function Page() {
         )}
       </div>
 
-      <div className="flex gap-1 mb-3 border-b overflow-x-auto">
+      {/* Thanh tab: cuộn ngang riêng, KHÔNG chứa nút hành động để mọi tab luôn
+          hiển thị đầy đủ trên điện thoại. */}
+      <div className="flex gap-1 mb-3 border-b overflow-x-auto -mx-1 px-1">
         <button
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "orders" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          className={`px-3 sm:px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "orders" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           onClick={() => handleTab("orders")}
         >
-          <ShoppingBag className="h-4 w-4 inline mr-1" /> Hóa đơn bán hàng
+          <ShoppingBag className="h-4 w-4 inline mr-1" /> <span className="hidden sm:inline">Hóa đơn </span>Bán hàng
         </button>
 
         <button
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 whitespace-nowrap ${activeTab === "reserved" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          className={`px-3 sm:px-4 py-2 text-sm font-medium border-b-2 transition-colors inline-flex items-center gap-1 whitespace-nowrap ${activeTab === "reserved" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           onClick={() => handleTab("reserved")}
         >
-          <Clock className="h-4 w-4 inline mr-1" /> Đơn đặt hàng
+          <Clock className="h-4 w-4 inline mr-0.5" /> Đặt hàng
           {reservedCount > 0 && (
             <span className="text-xs bg-yellow-100 text-yellow-700 rounded-full px-1.5 py-0.5">
               {reservedCount}
@@ -1826,25 +1828,24 @@ function Page() {
           )}
         </button>
 
-        {/* ✅ Tab Trả hàng: liệt kê các phiếu trả TH… + tạo phiếu trả không cần
-            tự mò lại hóa đơn gốc */}
+        {/* ✅ Tab Trả hàng: liệt kê các phiếu trả TH… */}
         <button
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "returns" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          className={`px-3 sm:px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "returns" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           onClick={() => handleTab("returns")}
         >
           <RotateCcw className="h-4 w-4 inline mr-1" /> Trả hàng
         </button>
-
-        {activeTab === "returns" && (
-          <Button
-            size="sm"
-            className="ml-auto my-1 bg-purple-600 hover:bg-purple-700 text-white"
-            onClick={() => { setReturnPickerSearch(""); setReturnPickerOpen(true); }}
-          >
-            <RotateCcw className="h-4 w-4 mr-1" /> Tạo phiếu trả hàng
-          </Button>
-        )}
       </div>
+
+      {/* Nút tạo phiếu trả tách riêng — full-width trên điện thoại, luôn thấy */}
+      {activeTab === "returns" && (
+        <Button
+          className="mb-3 w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white"
+          onClick={() => { setReturnPickerSearch(""); setReturnPickerOpen(true); }}
+        >
+          <RotateCcw className="h-4 w-4 mr-1" /> Tạo phiếu trả hàng
+        </Button>
+      )}
 
       <Card>
         <SearchFilter

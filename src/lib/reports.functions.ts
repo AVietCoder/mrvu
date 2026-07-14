@@ -43,44 +43,88 @@ export const getReports = createServerFn({ method: "GET" })
       return localDateKey(d);
     })();
 
-    // 1. Tải orders trong khoảng ngày — server-side filter.
-    //    Phân trang theo .range() để KHÔNG bị cắt ở mốc 1000 dòng mặc định của
-    //    Supabase (trước đây kỳ báo cáo > 1000 đơn bị thiếu, doanh thu tính sai).
-    let ordersInRange: any[] = [];
-    {
+    const fromTs = fromDate + "T00:00:00+07:00";
+    const toTs = toDate + "T23:59:59+07:00";
+    const SELECT = "id, status, total, created_at, completed_at, branch_id, employee_id, customer_id";
+
+    // Phân trang qua .range() để KHÔNG bị cắt ở mốc 1000 dòng mặc định của
+    // Supabase (kỳ > 1000 đơn trước đây bị thiếu → doanh thu sai).
+    async function fetchAllPaged(build: () => any): Promise<any[]> {
       const PAGE = 1000;
       let from = 0;
+      let all: any[] = [];
       while (true) {
-        const { data: page, error: e1 } = await supabase
-          .from("orders")
-          .select("id, status, total, created_at, completed_at, branch_id, employee_id, customer_id")
-          .gte("created_at", fromDate + "T00:00:00+07:00")
-          .lte("created_at", toDate + "T23:59:59+07:00")
-          .order("created_at", { ascending: true })
-          .range(from, from + PAGE - 1);
-        if (e1) throw new Error(e1.message);
+        const { data: page, error } = await build().range(from, from + PAGE - 1);
+        if (error) throw new Error(error.message);
         const rows = page ?? [];
-        ordersInRange = ordersInRange.concat(rows);
+        all = all.concat(rows);
         if (rows.length < PAGE) break;
         from += PAGE;
       }
+      return all;
     }
 
-    // 2. Tải order_items CHỈ cho các đơn trong khoảng — không tải toàn bộ bảng
-    const orderIds = (ordersInRange ?? []).map((o: any) => o.id);
-    let orderItems: any[] = [];
-    if (orderIds.length > 0) {
-      // Supabase .in() giới hạn 1000 phần tử — batch nếu cần
+    // 1. Đơn HOÀN TẤT lọc theo NGÀY HOÀN TẤT (completed_at) — đây là điểm mấu
+    //    chốt: doanh thu ghi nhận vào ngày đơn hoàn tất, KHÔNG phải ngày tạo.
+    //    ⇒ đơn hoàn tất trong kỳ dù tạo trước kỳ vẫn được tính; đơn tạo trong kỳ
+    //    nhưng hoàn tất sau kỳ KHÔNG bị tính nhầm.
+    const completedByCompletedAt = await fetchAllPaged(() =>
+      supabase.from("orders").select(SELECT)
+        .eq("status", "completed")
+        .not("completed_at", "is", null)
+        .gte("completed_at", fromTs).lte("completed_at", toTs)
+        .order("completed_at", { ascending: true }),
+    );
+    // 1b. Đơn hoàn tất CŨ thiếu completed_at (dữ liệu legacy) → fallback ngày tạo
+    const completedNullCompleted = await fetchAllPaged(() =>
+      supabase.from("orders").select(SELECT)
+        .eq("status", "completed")
+        .is("completed_at", null)
+        .gte("created_at", fromTs).lte("created_at", toTs)
+        .order("created_at", { ascending: true }),
+    );
+    const completedOrders = [...completedByCompletedAt, ...completedNullCompleted];
+
+    // 2. Đơn CHƯA hoàn tất (đặt hàng / nháp / hủy) — lọc theo NGÀY TẠO.
+    const otherOrders = await fetchAllPaged(() =>
+      supabase.from("orders").select(SELECT)
+        .in("status", ["reserved", "draft", "cancelled"])
+        .gte("created_at", fromTs).lte("created_at", toTs)
+        .order("created_at", { ascending: true }),
+    );
+
+    // 3. Phiếu TRẢ HÀNG (status 'returned') — lọc theo NGÀY TẠO phiếu trả.
+    //    total của phiếu trả = giá trị hàng khách trả; sẽ TRỪ khỏi doanh thu.
+    const returnedOrders = await fetchAllPaged(() =>
+      supabase.from("orders").select(SELECT)
+        .eq("status", "returned")
+        .gte("created_at", fromTs).lte("created_at", toTs)
+        .order("created_at", { ascending: true }),
+    );
+
+    // _rawOrders = đơn hoàn tất + đơn chưa hoàn tất (KHÔNG gồm phiếu trả).
+    const ordersInRange: any[] = [...completedOrders, ...otherOrders];
+
+    // Tải order_items cho đơn hoàn tất (top sản phẩm) + phiếu trả (trừ bớt qty).
+    async function fetchItemsFor(ids: string[]): Promise<any[]> {
+      let items: any[] = [];
       const BATCH = 500;
-      for (let i = 0; i < orderIds.length; i += BATCH) {
+      for (let i = 0; i < ids.length; i += BATCH) {
         const { data: batch, error } = await supabase
           .from("order_items")
           .select("order_id, product_id, qty, unit_price")
-          .in("order_id", orderIds.slice(i, i + BATCH));
+          .in("order_id", ids.slice(i, i + BATCH));
         if (error) throw new Error(error.message);
-        orderItems = orderItems.concat(batch ?? []);
+        items = items.concat(batch ?? []);
       }
+      return items;
     }
+    const orderItems = completedOrders.length
+      ? await fetchItemsFor(completedOrders.map((o: any) => o.id))
+      : [];
+    const returnItems = returnedOrders.length
+      ? await fetchItemsFor(returnedOrders.map((o: any) => o.id))
+      : [];
 
     // 3. Ref data nhỏ — tải song song
     const [products, customers, branches, users, stock] = await Promise.all([
@@ -92,15 +136,23 @@ export const getReports = createServerFn({ method: "GET" })
     ]);
 
     // 4. Tính toán server-side
-    const completedOrders = (ordersInRange ?? []).filter((o: any) => o.status === "completed");
-    const totalRevenue = completedOrders.reduce((sum: number, o: any) => sum + Number(o.total || 0), 0);
+    //    Doanh thu THUẦN = tổng đơn hoàn tất − tổng phiếu trả hàng.
+    const grossRevenue = completedOrders.reduce((sum: number, o: any) => sum + Number(o.total || 0), 0);
+    const returnsTotal = returnedOrders.reduce((sum: number, o: any) => sum + Number(o.total || 0), 0);
+    const totalRevenue = grossRevenue - returnsTotal;
     const totalOrders = completedOrders.length;
+    const returnsCount = returnedOrders.length;
 
-    // Doanh thu theo ngày (14 ngày gần nhất trong khoảng)
+    // Doanh thu theo ngày (14 ngày gần nhất): đơn hoàn tất ghi theo completed_at
+    // (fallback created_at), phiếu trả TRỪ theo ngày tạo phiếu trả.
     const recentDaysMap = new Map<string, number>();
     completedOrders.forEach((o) => {
-      const k = normalizeDate(o.created_at);
+      const k = normalizeDate(o.completed_at || o.created_at);
       recentDaysMap.set(k, (recentDaysMap.get(k) || 0) + Number(o.total || 0));
+    });
+    returnedOrders.forEach((o) => {
+      const k = normalizeDate(o.created_at);
+      recentDaysMap.set(k, (recentDaysMap.get(k) || 0) - Number(o.total || 0));
     });
 
     const days: { date: string; revenue: number }[] = [];
@@ -111,7 +163,7 @@ export const getReports = createServerFn({ method: "GET" })
       days.push({ date: key.slice(5), revenue: recentDaysMap.get(key) || 0 });
     }
 
-    // Top sản phẩm
+    // Top sản phẩm (số lượng bán THUẦN = bán ra − trả lại)
     const orderMap = new Map(completedOrders.map((o: any) => [o.id, o]));
     const productMap = new Map(products.map((p: any) => [p.id, p]));
     const topQty = new Map<string, number>();
@@ -119,8 +171,12 @@ export const getReports = createServerFn({ method: "GET" })
       if (!orderMap.has(item.order_id)) continue;
       topQty.set(item.product_id, (topQty.get(item.product_id) ?? 0) + Number(item.qty || 0));
     }
+    for (const item of returnItems) {
+      topQty.set(item.product_id, (topQty.get(item.product_id) ?? 0) - Number(item.qty || 0));
+    }
     const topProducts = [...topQty.entries()]
       .map(([productId, qty]) => ({ name: productMap.get(productId)?.name ?? productId, qty }))
+      .filter((p) => p.qty > 0)
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
 
@@ -146,27 +202,48 @@ export const getReports = createServerFn({ method: "GET" })
     const productCount = products.length;
     const customerCount = customers.length;
 
-    // Theo chi nhánh / nhân viên
-    const branchOrdersMap = new Map<string, { revenue: number; orders: number }>();
+    // Theo chi nhánh / nhân viên — doanh thu THUẦN (đơn hoàn tất − hàng trả).
+    const branchOrdersMap = new Map<string, { revenue: number; orders: number; returns: number }>();
     completedOrders.forEach((o) => {
       if (!o.branch_id) return;
-      const cur = branchOrdersMap.get(o.branch_id) || { revenue: 0, orders: 0 };
-      branchOrdersMap.set(o.branch_id, { revenue: cur.revenue + Number(o.total || 0), orders: cur.orders + 1 });
+      const cur = branchOrdersMap.get(o.branch_id) || { revenue: 0, orders: 0, returns: 0 };
+      cur.revenue += Number(o.total || 0);
+      cur.orders += 1;
+      branchOrdersMap.set(o.branch_id, cur);
+    });
+    returnedOrders.forEach((o) => {
+      if (!o.branch_id) return;
+      const cur = branchOrdersMap.get(o.branch_id) || { revenue: 0, orders: 0, returns: 0 };
+      cur.revenue -= Number(o.total || 0);
+      cur.returns += Number(o.total || 0);
+      branchOrdersMap.set(o.branch_id, cur);
     });
     const byBranch = branches
       .map((b: any) => {
-        const stats = branchOrdersMap.get(b.id) || { revenue: 0, orders: 0 };
-        return { name: b.name, revenue: stats.revenue, orders: stats.orders };
+        const stats = branchOrdersMap.get(b.id) || { revenue: 0, orders: 0, returns: 0 };
+        return { name: b.name, revenue: stats.revenue, orders: stats.orders, returns: stats.returns };
       })
       .sort((a: any, b: any) => b.revenue - a.revenue);
 
-    const employeeOrdersMap = new Map<string, number>();
+    const employeeOrdersMap = new Map<string, { revenue: number; returns: number }>();
     completedOrders.forEach((o) => {
       if (!o.employee_id) return;
-      employeeOrdersMap.set(o.employee_id, (employeeOrdersMap.get(o.employee_id) || 0) + Number(o.total || 0));
+      const cur = employeeOrdersMap.get(o.employee_id) || { revenue: 0, returns: 0 };
+      cur.revenue += Number(o.total || 0);
+      employeeOrdersMap.set(o.employee_id, cur);
+    });
+    returnedOrders.forEach((o) => {
+      if (!o.employee_id) return;
+      const cur = employeeOrdersMap.get(o.employee_id) || { revenue: 0, returns: 0 };
+      cur.revenue -= Number(o.total || 0);
+      cur.returns += Number(o.total || 0);
+      employeeOrdersMap.set(o.employee_id, cur);
     });
     const byEmployee = users
-      .map((u: any) => ({ name: u.full_name, revenue: employeeOrdersMap.get(u.id) || 0 }))
+      .map((u: any) => {
+        const stats = employeeOrdersMap.get(u.id) || { revenue: 0, returns: 0 };
+        return { name: u.full_name, revenue: stats.revenue, returns: stats.returns };
+      })
       .sort((a: any, b: any) => b.revenue - a.revenue);
 
     return {
@@ -174,7 +251,10 @@ export const getReports = createServerFn({ method: "GET" })
       date_from: fromDate,
       date_to: toDate,
       // Tổng kết
-      totalRevenue,
+      totalRevenue,        // doanh thu THUẦN (đã trừ hàng trả)
+      grossRevenue,        // doanh thu gộp (chưa trừ hàng trả)
+      returnsTotal,        // tổng giá trị hàng trả trong kỳ
+      returnsCount,        // số phiếu trả hàng
       totalOrders,
       totalDebt,
       productCount,
@@ -187,8 +267,12 @@ export const getReports = createServerFn({ method: "GET" })
       byEmployee,
       // Raw data của KHOẢNG NGÀY ĐÃ LỌC (không phải toàn bộ) — dùng cho
       // biểu đồ ngày/tháng và thống kê chi tiết ở client.
+      //   _rawOrders  = đơn hoàn tất (theo completed_at) + đơn chưa hoàn tất
+      //   _rawReturns = phiếu trả hàng (theo ngày tạo phiếu trả)
       _rawOrders: ordersInRange ?? [],
+      _rawReturns: returnedOrders,
       _rawItems: orderItems,
+      _rawReturnItems: returnItems,
       _rawProducts: products,
       _rawBranches: branches,
       _rawUsers: users,
