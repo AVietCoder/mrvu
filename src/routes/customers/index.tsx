@@ -192,6 +192,8 @@ function CustomersPage() {
 
   const [form, setForm] = useState<FormState>(empty);
   const [open, setOpen] = useState(false);
+  // Chống nhấn đúp: khóa nút "Lưu thông tin" trong lúc đang gửi
+  const [saving, setSaving] = useState(false);
   const [viewId, setViewId] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
@@ -307,6 +309,8 @@ function CustomersPage() {
 
   async function handleSave(e: FormEvent) {
     e.preventDefault();
+    if (saving) return; // chống nhấn đúp tạo 2 khách hàng
+    setSaving(true);
     try {
       // ✅ form.debt = tổng công nợ muốn hiển thị. Tách phần điều chỉnh thủ công.
       const enteredTotal = Number(form.debt) || 0;
@@ -341,6 +345,8 @@ function CustomersPage() {
       qc.invalidateQueries({ queryKey: ["customers"] }); // bao gồm cả ["customers","stats"]
     } catch (err: any) {
       toast.error(err?.message ?? "Lỗi");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -911,7 +917,7 @@ function CustomersPage() {
 
             <DialogFooter className="pt-3 border-t gap-2 sm:gap-0">
               <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Hủy bỏ</Button>
-              <Button type="submit" className="px-6">Lưu thông tin</Button>
+              <Button type="submit" className="px-6" disabled={saving}>{saving ? "Đang lưu..." : "Lưu thông tin"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

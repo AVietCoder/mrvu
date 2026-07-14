@@ -15,6 +15,7 @@ import {
   cancelTransfer,
   updateTransferItems,
   adjustStockDirect,
+  searchStockHistory,
 } from "@/lib/inventory.functions";
 
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -55,6 +56,8 @@ import {
   X,
   Eye,
   ShoppingBag,
+  RotateCcw,
+  NotebookPen,
 } from "lucide-react";
 
 import { toast } from "sonner";
@@ -125,6 +128,7 @@ function Page() {
   const updateTrfItems = useServerFn(updateTransferItems);
   const getSettingsFn = useServerFn(getSettings);
   const adjustStockFn = useServerFn(adjustStockDirect);
+  const histFn = useServerFn(searchStockHistory);
 
   const qc = useQueryClient();
 
@@ -254,6 +258,10 @@ function Page() {
   const [voucherNote, setVoucherNote] =
     useState("");
 
+  // ✅ Chống nhấn đúp: khóa nút từ lúc bấm đến khi server xử lý xong.
+  //    Nhấn 2 lần liên tiếp sẽ không tạo ra 2 phiếu nữa.
+  const [submitting, setSubmitting] = useState(false);
+
   // ── KiotViet-style transfer detail dialog ────────────────────────────
   const [trfDetailOpen, setTrfDetailOpen] = useState(false);
   const [trfDetailId, setTrfDetailId] = useState<string | null>(null);
@@ -322,107 +330,48 @@ function Page() {
     );
   }, [data?.transfers, isAdmin, allowedBranchSet]);
 
-  const historyMovements = useMemo(() => {
-    const movements = (data?.movements ?? []) as any[];
-
-    // Xây dựng "bản ghi xuất kho" ảo từ các đơn bán hàng đã hoàn thành
-    const completedOrders = (data?.completed_orders ?? []) as any[];
-    const completedOrderItems = (data?.completed_order_items ?? []) as any[];
-
-    // Nhóm order_items theo order_id để có thể tra cứu nhanh
-    const itemsByOrder = new Map<string, any[]>();
-    for (const item of completedOrderItems) {
-      const list = itemsByOrder.get(item.order_id) ?? [];
-      list.push(item);
-      itemsByOrder.set(item.order_id, list);
-    }
-
-    // Mỗi đơn hoàn thành → 1 bản ghi "sale" tổng hợp (gộp tất cả sản phẩm)
-    const saleEntries = completedOrders.map((order: any) => ({
-      id: `sale__${order.id}`,
-      type: "sale" as const,
-      order_id: order.id,
-      order_code: order.code,
-      from_branch: order.branch_id,
-      to_branch: null,
-      product_id: null, // đơn bán có nhiều sản phẩm, không lọc theo 1 product_id
-      qty: (itemsByOrder.get(order.id) ?? []).reduce((s: number, i: any) => s + Number(i.qty || 0), 0),
-      note: order.note || null,
-      created_at: order.completed_at || order.created_at,
-      total: order.total,
-      customer_id: order.customer_id,
-      items: itemsByOrder.get(order.id) ?? [],
-    }));
-
-    // Xây dựng map transfer_id → note từ data.transfers để tra cứu ghi chú thực
-    const transfers = (data?.transfers ?? []) as any[];
-    const transferNoteMap = new Map<string, string | null>();
-    for (const t of transfers) {
-      transferNoteMap.set(t.id, t.note ?? null);
-    }
-
-    const allEntries = [
-      ...movements.map((m: any) => {
-        let realNote = m.note;
-        // Với movement loại transfer, note được set = "Phiếu chuyển kho {transfer_id}"
-        // → cần lấy note thực từ stock_transfers
-        if (m.type === "transfer" && typeof m.note === "string") {
-          const prefix = "Phiếu chuyển kho ";
-          if (m.note.startsWith(prefix)) {
-            const tid = m.note.slice(prefix.length).trim();
-            realNote = transferNoteMap.has(tid) ? transferNoteMap.get(tid) : null;
-          }
-        }
-        return { ...m, order_id: null, order_code: null, items: [], note: realNote };
-      }),
-      ...saleEntries,
-    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-    if (isAdmin) return allEntries;
-
-    return allEntries.filter((m: any) => {
-      const fromOk = m.from_branch ? allowedBranchSet.has(m.from_branch) : false;
-      const toOk = m.to_branch ? allowedBranchSet.has(m.to_branch) : false;
-      return fromOk || toOk;
-    });
-  }, [data?.movements, data?.completed_orders, data?.completed_order_items, data?.transfers, isAdmin, allowedBranchSet]);
-
   // ── Bộ lọc lịch sử kho ───────────────────────────────────────────────
-  const [histFilterType, setHistFilterType] = useState<"" | "in" | "out" | "transfer" | "sale">("");
+  const [histFilterType, setHistFilterType] = useState<"" | "in" | "out" | "transfer" | "sale" | "return">("");
   const [histFilterProduct, setHistFilterProduct] = useState("");
   const [histFilterFrom, setHistFilterFrom] = useState("");
   const [histFilterTo, setHistFilterTo] = useState("");
+  const [histPage, setHistPage] = useState(1);
+  const HIST_PAGE_SIZE = 50;
 
   // ── Chi tiết bản ghi lịch sử kho (popup xem thôi) ───────────────────
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailEntry, setDetailEntry] = useState<any>(null);
 
-  const filteredHistoryMovements = useMemo(() => {
-    return historyMovements.filter((m: any) => {
-      if (histFilterType && m.type !== histFilterType) return false;
-      // Lọc theo sản phẩm: đơn bán (sale) có nhiều SP, check trong items[]
-      if (histFilterProduct) {
-        if (m.type === "sale") {
-          const hasProduct = (m.items ?? []).some((i: any) => i.product_id === histFilterProduct);
-          if (!hasProduct) return false;
-        } else {
-          if (m.product_id !== histFilterProduct) return false;
-        }
-      }
-      if (histFilterFrom) {
-        const mDate = new Date(m.created_at);
-        const fromDate = new Date(histFilterFrom);
-        if (mDate < fromDate) return false;
-      }
-      if (histFilterTo) {
-        const mDate = new Date(m.created_at);
-        const toDate = new Date(histFilterTo);
-        toDate.setHours(23, 59, 59, 999);
-        if (mDate > toDate) return false;
-      }
-      return true;
-    });
-  }, [historyMovements, histFilterType, histFilterProduct, histFilterFrom, histFilterTo]);
+  // ✅ LỊCH SỬ KHO tải + lọc + phân trang PHÍA SERVER (searchStockHistory):
+  //    bộ lọc loại / sản phẩm / khoảng ngày chạy trên TOÀN BỘ dữ liệu trong DB
+  //    (trước đây chỉ lọc trong 100 bản ghi gần nhất nên tìm bản ghi cũ là mất).
+  const histBranchKey = isAdmin ? "all" : allowedBranchIds.join(",");
+  const { data: histData, isFetching: histLoading } = useQuery({
+    queryKey: [
+      "inventory", "history",
+      histPage, histFilterType, histFilterProduct, histFilterFrom, histFilterTo, histBranchKey,
+    ],
+    queryFn: () =>
+      histFn({
+        data: {
+          page: histPage,
+          pageSize: HIST_PAGE_SIZE,
+          type: histFilterType || undefined,
+          product: histFilterProduct || undefined,
+          from: histFilterFrom || undefined,
+          to: histFilterTo || undefined,
+          // NV chưa được gán chi nhánh nào → không được xem bản ghi nào
+          // (sentinel không khớp chi nhánh thật), tránh lộ toàn bộ lịch sử.
+          branchIds: isAdmin ? null : (allowedBranchIds.length ? allowedBranchIds : ["__none__"]),
+        },
+      }),
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+  });
+
+  const histEntries = (histData?.entries ?? []) as any[];
+  const histTotal = histData?.meta?.totalFiltered ?? 0;
 
   function startAction(
     t: "in" | "transfer"
@@ -523,6 +472,8 @@ function Page() {
   }, [activeItems, type]);
 
   async function submitIn() {
+    if (submitting) return;
+
     if (!validInItems.length)
       return toast.error(
         "Vui lòng chọn sản phẩm"
@@ -533,6 +484,7 @@ function Page() {
         "Chi nhánh nhập không hợp lệ"
       );
 
+    setSubmitting(true);
     try {
       await Promise.all(
         validInItems.map((item) =>
@@ -567,10 +519,14 @@ function Page() {
       toast.error(
         e?.message ?? "Có lỗi xảy ra"
       );
+    } finally {
+      setSubmitting(false);
     }
   }
 
   async function submitOut() {
+    if (submitting) return;
+
     if (!validOutItems.length)
       return toast.error(
         "Vui lòng chọn sản phẩm"
@@ -581,6 +537,7 @@ function Page() {
         "Chi nhánh xuất không hợp lệ"
       );
 
+    setSubmitting(true);
     try {
       await Promise.all(
         validOutItems.map((item) =>
@@ -615,10 +572,14 @@ function Page() {
       toast.error(
         e?.message ?? "Có lỗi xảy ra"
       );
+    } finally {
+      setSubmitting(false);
     }
   }
 
   async function submitTransfer() {
+    if (submitting) return;
+
     if (!validTransferItems.length)
       return toast.error(
         "Vui lòng chọn sản phẩm"
@@ -636,6 +597,7 @@ function Page() {
     if (transferFrom === transferTo)
       return toast.error("Chi nhánh nguồn và đích không được giống nhau");
 
+    setSubmitting(true);
     try {
       await createTrf({
         data: {
@@ -665,6 +627,8 @@ function Page() {
       toast.error(
         e?.message ?? "Có lỗi xảy ra"
       );
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -1209,20 +1173,21 @@ function Page() {
           <select
             className="h-8 rounded-md border bg-background px-2 text-sm"
             value={histFilterType}
-            onChange={(e) => setHistFilterType(e.target.value as "" | "in" | "out" | "transfer" | "sale")}
+            onChange={(e) => { setHistFilterType(e.target.value as any); setHistPage(1); }}
           >
             <option value="">Tất cả loại</option>
             <option value="in">Nhập kho</option>
             <option value="out">Xuất kho (Admin)</option>
             <option value="sale">Đơn bán hàng</option>
             <option value="transfer">Chuyển kho</option>
+            <option value="return">Trả hàng</option>
           </select>
 
           {/* Lọc theo sản phẩm */}
           <div className="w-48">
             <SearchableSelect
               value={histFilterProduct}
-              onChange={(v) => setHistFilterProduct(v)}
+              onChange={(v) => { setHistFilterProduct(v); setHistPage(1); }}
               emptyLabel="Tất cả sản phẩm"
               placeholder="Tìm sản phẩm..."
               options={products.map((p: any) => ({ value: p.id, label: p.name, sub: p.sku ?? undefined }))}
@@ -1234,7 +1199,7 @@ function Page() {
             type="date"
             className="h-8 rounded-md border bg-background px-2 text-sm"
             value={histFilterFrom}
-            onChange={(e) => setHistFilterFrom(e.target.value)}
+            onChange={(e) => { setHistFilterFrom(e.target.value); setHistPage(1); }}
             title="Từ ngày"
           />
           <span className="text-muted-foreground text-xs">–</span>
@@ -1243,7 +1208,7 @@ function Page() {
             type="date"
             className="h-8 rounded-md border bg-background px-2 text-sm"
             value={histFilterTo}
-            onChange={(e) => setHistFilterTo(e.target.value)}
+            onChange={(e) => { setHistFilterTo(e.target.value); setHistPage(1); }}
             title="Đến ngày"
           />
 
@@ -1251,14 +1216,15 @@ function Page() {
           {(histFilterType || histFilterProduct || histFilterFrom || histFilterTo) && (
             <button
               className="h-8 px-2 text-xs rounded-md border bg-muted hover:bg-muted/70 text-muted-foreground"
-              onClick={() => { setHistFilterType(""); setHistFilterProduct(""); setHistFilterFrom(""); setHistFilterTo(""); }}
+              onClick={() => { setHistFilterType(""); setHistFilterProduct(""); setHistFilterFrom(""); setHistFilterTo(""); setHistPage(1); }}
             >
               Xóa lọc
             </button>
           )}
 
-          <span className="ml-auto text-xs text-muted-foreground">
-            {filteredHistoryMovements.length} / {historyMovements.length} bản ghi
+          <span className="ml-auto text-xs text-muted-foreground flex items-center gap-2">
+            {histLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {histTotal.toLocaleString("vi-VN")} bản ghi
           </span>
         </div>
 
@@ -1276,7 +1242,7 @@ function Page() {
             </thead>
 
             <tbody>
-              {filteredHistoryMovements.map((m: any) => {
+              {histEntries.map((m: any) => {
                 const product = products.find((p) => p.id === m.product_id);
                 const fromName = m.from_branch
                   ? (branches.find((b) => b.id === m.from_branch)?.name ?? m.from_branch)
@@ -1285,21 +1251,27 @@ function Page() {
                   ? (branches.find((b) => b.id === m.to_branch)?.name ?? m.to_branch)
                   : null;
 
-                // Đơn bán hàng (sale): nhiều sản phẩm, hiển thị gộp
-                const isSale = m.type === "sale";
-                const saleItems = isSale ? (m.items ?? []) : [];
-                const saleProductNames = isSale
-                  ? saleItems.slice(0, 2).map((i: any) => {
+                // Đơn bán hàng / trả hàng: nhiều sản phẩm, hiển thị gộp
+                const isOrderEntry = m.type === "sale" || m.type === "return";
+                const orderItemsList = isOrderEntry ? (m.items ?? []) : [];
+                const orderProductNames = isOrderEntry
+                  ? orderItemsList.slice(0, 2).map((i: any) => {
                       const p = products.find((x) => x.id === i.product_id);
                       return p?.name ?? "—";
                     })
                   : [];
 
                 let flowLabel: React.ReactNode = "—";
-                if (isSale && fromName) {
+                if (m.type === "sale" && fromName) {
                   flowLabel = (
                     <span>
                       Xuất khỏi <b>{fromName}</b>
+                    </span>
+                  );
+                } else if (m.type === "return" && toName) {
+                  flowLabel = (
+                    <span>
+                      Nhập về <b>{toName}</b>
                     </span>
                   );
                 } else if (m.type === "in" && toName) {
@@ -1334,14 +1306,16 @@ function Page() {
                             ? "bg-green-100 text-green-700"
                             : m.type === "sale"
                               ? "bg-orange-100 text-orange-700"
-                              : m.type === "out"
-                                ? "bg-red-100 text-red-700"
-                                : "bg-blue-100 text-blue-700"
+                              : m.type === "return"
+                                ? "bg-purple-100 text-purple-700"
+                                : m.type === "out"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-blue-100 text-blue-700"
                         }`}
                       >
-                        {m.type === "in" ? "Nhập" : m.type === "out" ? "Xuất" : m.type === "sale" ? "Bán hàng" : "Chuyển"}
+                        {m.type === "in" ? "Nhập" : m.type === "out" ? "Xuất" : m.type === "sale" ? "Bán hàng" : m.type === "return" ? "Trả hàng" : "Chuyển"}
                       </span>
-                      {isSale && m.order_code && (
+                      {isOrderEntry && m.order_code && (
                         <Link
                           to="/orders/$id"
                           params={{ id: String(m.order_id) }}
@@ -1353,15 +1327,15 @@ function Page() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {isSale ? (
+                      {isOrderEntry ? (
                         <div>
                           <div className="font-medium text-sm">
-                            {saleProductNames.join(", ")}
-                            {saleItems.length > 2 && (
-                              <span className="text-muted-foreground"> +{saleItems.length - 2} SP</span>
+                            {orderProductNames.join(", ")}
+                            {orderItemsList.length > 2 && (
+                              <span className="text-muted-foreground"> +{orderItemsList.length - 2} SP</span>
                             )}
                           </div>
-                          <div className="text-xs text-muted-foreground">{saleItems.length} mặt hàng</div>
+                          <div className="text-xs text-muted-foreground">{orderItemsList.length} mặt hàng</div>
                         </div>
                       ) : (
                         <div>
@@ -1385,18 +1359,29 @@ function Page() {
                   </tr>
                 );
               })}
-              {filteredHistoryMovements.length === 0 && (
+              {histEntries.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-sm">
-                    {histFilterType || histFilterProduct || histFilterFrom || histFilterTo
-                      ? "Không có bản ghi nào khớp với bộ lọc."
-                      : "Chưa có lịch sử kho."}
+                    {histLoading
+                      ? "Đang tải lịch sử kho..."
+                      : histFilterType || histFilterProduct || histFilterFrom || histFilterTo
+                        ? "Không có bản ghi nào khớp với bộ lọc."
+                        : "Chưa có lịch sử kho."}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Phân trang lịch sử kho (dữ liệu đầy đủ từ server) */}
+        <Pagination
+          page={histPage}
+          pageSize={HIST_PAGE_SIZE}
+          total={histTotal}
+          onPageChange={setHistPage}
+          label="bản ghi"
+        />
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -2378,33 +2363,36 @@ function Page() {
 
                     {type === "in" && (
                       <Button
-                        onClick={
-                          submitIn
-                        }
+                        onClick={submitIn}
+                        disabled={submitting}
                       >
-                        Xác nhận nhập
+                        {submitting
+                          ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang xử lý...</>
+                          : "Xác nhận nhập"}
                       </Button>
                     )}
 
                     {type ===
                       "out" && (
                       <Button
-                        onClick={
-                          submitOut
-                        }
+                        onClick={submitOut}
+                        disabled={submitting}
                       >
-                        Xác nhận xuất
+                        {submitting
+                          ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang xử lý...</>
+                          : "Xác nhận xuất"}
                       </Button>
                     )}
 
                     {type ===
                       "transfer" && (
                       <Button
-                        onClick={
-                          submitTransfer
-                        }
+                        onClick={submitTransfer}
+                        disabled={submitting}
                       >
-                        Tạo phiếu chuyển
+                        {submitting
+                          ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang tạo phiếu...</>
+                          : "Tạo phiếu chuyển"}
                       </Button>
                     )}
                   </div>
@@ -2437,20 +2425,29 @@ function Page() {
               const fromName = branches.find((b: any) => b.id === t.from_branch)?.name ?? t.from_branch;
               const toName   = branches.find((b: any) => b.id === t.to_branch)?.name ?? t.to_branch;
               return (
-                <div className="mt-3 flex items-center gap-2 bg-white/70 rounded-xl px-3 py-2 border text-sm font-medium">
-                  <span className="text-muted-foreground bg-muted/40 rounded-lg px-2 py-0.5">{fromName}</span>
-                  <svg className="h-4 w-4 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
-                  <span className="text-primary font-semibold bg-primary/8 rounded-lg px-2 py-0.5">{toName}</span>
-                  {t.status && (
-                    <span className={`ml-auto text-xs px-2 py-0.5 rounded-full font-medium ${
-                      t.status === "pending" ? "bg-amber-100 text-amber-700" :
-                      t.status === "done" ? "bg-green-100 text-green-700" :
-                      "bg-red-100 text-red-700"
-                    }`}>
-                      {t.status === "pending" ? "Chờ xác nhận" : t.status === "done" ? "Hoàn thành" : "Đã hủy"}
-                    </span>
+                <>
+                  <div className="mt-3 flex items-center gap-2 bg-white/70 rounded-xl px-3 py-2 border text-sm font-medium">
+                    <span className="text-muted-foreground bg-muted/40 rounded-lg px-2 py-0.5">{fromName}</span>
+                    <svg className="h-4 w-4 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                    <span className="text-primary font-semibold bg-primary/8 rounded-lg px-2 py-0.5">{toName}</span>
+                    {t.status && (
+                      <span className={`ml-auto text-xs px-2 py-0.5 rounded-full font-medium ${
+                        t.status === "pending" ? "bg-amber-100 text-amber-700" :
+                        t.status === "done" ? "bg-green-100 text-green-700" :
+                        "bg-red-100 text-red-700"
+                      }`}>
+                        {t.status === "pending" ? "Chờ xác nhận" : t.status === "done" ? "Hoàn thành" : "Đã hủy"}
+                      </span>
+                    )}
+                  </div>
+                  {/* ✅ Ghi chú của phiếu chuyển — cả đầu gửi & đầu nhận đều xem được */}
+                  {t.note && (
+                    <div className="mt-2 flex items-start gap-2 bg-amber-50/80 border border-amber-200 rounded-xl px-3 py-2 text-sm">
+                      <NotebookPen className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                      <span className="text-amber-900 whitespace-pre-wrap">{t.note}</span>
+                    </div>
                   )}
-                </div>
+                </>
               );
             })()}
           </div>
@@ -2557,6 +2554,8 @@ function Page() {
         <DialogContent className="max-w-lg rounded-2xl p-0 overflow-hidden flex flex-col max-h-[90vh]">
           {detailEntry && (() => {
             const isSale = detailEntry.type === "sale";
+            const isReturn = detailEntry.type === "return";
+            const isOrderEntry = isSale || isReturn;
             const fromName = detailEntry.from_branch
               ? (branches.find((b: any) => b.id === detailEntry.from_branch)?.name ?? detailEntry.from_branch)
               : null;
@@ -2567,14 +2566,16 @@ function Page() {
 
             const typeColor = isSale
               ? "from-orange-50 to-orange-50/30"
-              : detailEntry.type === "in"
-                ? "from-green-50 to-green-50/30"
-                : detailEntry.type === "out"
-                  ? "from-red-50 to-red-50/30"
-                  : "from-blue-50 to-blue-50/30";
+              : isReturn
+                ? "from-purple-50 to-purple-50/30"
+                : detailEntry.type === "in"
+                  ? "from-green-50 to-green-50/30"
+                  : detailEntry.type === "out"
+                    ? "from-red-50 to-red-50/30"
+                    : "from-blue-50 to-blue-50/30";
 
-            const typeLabel = isSale ? "Đơn bán hàng" : detailEntry.type === "in" ? "Nhập kho" : detailEntry.type === "out" ? "Xuất kho" : "Chuyển kho";
-            const TypeIcon = isSale ? ShoppingBag : detailEntry.type === "in" ? ArrowDownToLine : detailEntry.type === "out" ? ArrowDownToLine : Repeat;
+            const typeLabel = isSale ? "Đơn bán hàng" : isReturn ? "Trả hàng" : detailEntry.type === "in" ? "Nhập kho" : detailEntry.type === "out" ? "Xuất kho" : "Chuyển kho";
+            const TypeIcon = isSale ? ShoppingBag : isReturn ? RotateCcw : detailEntry.type === "in" ? ArrowDownToLine : detailEntry.type === "out" ? ArrowDownToLine : Repeat;
 
             return (
               <>
@@ -2583,6 +2584,7 @@ function Page() {
                   <div className="flex items-center gap-3">
                     <div className={`h-9 w-9 rounded-full flex items-center justify-center ${
                       isSale ? "bg-orange-100 text-orange-700"
+                      : isReturn ? "bg-purple-100 text-purple-700"
                       : detailEntry.type === "in" ? "bg-green-100 text-green-700"
                       : detailEntry.type === "out" ? "bg-red-100 text-red-700"
                       : "bg-blue-100 text-blue-700"
@@ -2595,7 +2597,7 @@ function Page() {
                         {new Date(detailEntry.created_at).toLocaleString("vi-VN")}
                       </div>
                     </div>
-                    {isSale && detailEntry.order_code && (
+                    {isOrderEntry && detailEntry.order_code && (
                       <Link
                         to="/orders/$id"
                         params={{ id: String(detailEntry.order_id) }}
@@ -2627,11 +2629,11 @@ function Page() {
 
                 {/* Body */}
                 <div className="flex-1 overflow-auto px-5 py-4">
-                  {isSale ? (
-                    /* Đơn bán hàng: danh sách sản phẩm */
+                  {isOrderEntry ? (
+                    /* Đơn bán hàng / trả hàng: danh sách sản phẩm */
                     <>
                       <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                        Sản phẩm trong đơn
+                        {isReturn ? "Sản phẩm khách trả" : "Sản phẩm trong đơn"}
                       </div>
                       <div className="space-y-1.5">
                         {(detailEntry.items ?? []).map((item: any, idx: number) => {
@@ -2639,7 +2641,7 @@ function Page() {
                           const lineTotal = Number(item.total || 0);
                           return (
                             <div key={idx} className="flex items-center gap-2 bg-muted/20 rounded-xl border px-3 py-2">
-                              <div className="h-6 w-6 rounded-md bg-orange-100 flex items-center justify-center text-xs font-bold text-orange-700 shrink-0">
+                              <div className={`h-6 w-6 rounded-md flex items-center justify-center text-xs font-bold shrink-0 ${isReturn ? "bg-purple-100 text-purple-700" : "bg-orange-100 text-orange-700"}`}>
                                 {idx + 1}
                               </div>
                               <div className="flex-1 min-w-0">
@@ -2657,9 +2659,9 @@ function Page() {
                         })}
                       </div>
                       {detailEntry.total > 0 && (
-                        <div className="mt-3 flex items-center justify-between rounded-xl bg-orange-50 border border-orange-100 px-4 py-2.5">
-                          <span className="text-sm text-muted-foreground">Tổng đơn hàng</span>
-                          <span className="font-bold text-orange-700 text-base">{formatMoney(detailEntry.total)}đ</span>
+                        <div className={`mt-3 flex items-center justify-between rounded-xl px-4 py-2.5 border ${isReturn ? "bg-purple-50 border-purple-100" : "bg-orange-50 border-orange-100"}`}>
+                          <span className="text-sm text-muted-foreground">{isReturn ? "Giá trị hàng trả" : "Tổng đơn hàng"}</span>
+                          <span className={`font-bold text-base ${isReturn ? "text-purple-700" : "text-orange-700"}`}>{formatMoney(detailEntry.total)}đ</span>
                         </div>
                       )}
                     </>

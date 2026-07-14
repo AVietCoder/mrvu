@@ -174,7 +174,18 @@ export const deleteCustomer = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: { id: string } }) => {
     await deleteWhere("cash_vouchers", { payer_customer_id: data.id });
     await deleteWhere("cash_vouchers", { receiver_customer_id: data.id });
-    
+
+    // Xóa order_items của các đơn thuộc khách TRƯỚC khi xóa orders.
+    // Nếu không, ràng buộc khóa ngoại order_items.order_id → orders.id sẽ chặn
+    // việc xóa (lỗi với mọi khách đã từng có đơn) và để lại order_items mồ côi.
+    const custOrders = await fetchRows<{ id: string }>("orders", {
+      eq: { customer_id: data.id },
+      select: "id",
+    });
+    for (const o of custOrders) {
+      await deleteWhere("order_items", { order_id: o.id });
+    }
+
     await deleteWhere("orders", { customer_id: data.id });
     await deleteWhere("schedules", { customer_id: data.id });
     await deleteWhere("customers", { id: data.id });

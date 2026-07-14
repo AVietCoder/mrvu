@@ -43,13 +43,28 @@ export const getReports = createServerFn({ method: "GET" })
       return localDateKey(d);
     })();
 
-    // 1. Tải orders trong khoảng ngày — server-side filter
-    const { data: ordersInRange, error: e1 } = await supabase
-      .from("orders")
-      .select("id, status, total, created_at, completed_at, branch_id, employee_id, customer_id")
-      .gte("created_at", fromDate + "T00:00:00+07:00")
-      .lte("created_at", toDate + "T23:59:59+07:00");
-    if (e1) throw new Error(e1.message);
+    // 1. Tải orders trong khoảng ngày — server-side filter.
+    //    Phân trang theo .range() để KHÔNG bị cắt ở mốc 1000 dòng mặc định của
+    //    Supabase (trước đây kỳ báo cáo > 1000 đơn bị thiếu, doanh thu tính sai).
+    let ordersInRange: any[] = [];
+    {
+      const PAGE = 1000;
+      let from = 0;
+      while (true) {
+        const { data: page, error: e1 } = await supabase
+          .from("orders")
+          .select("id, status, total, created_at, completed_at, branch_id, employee_id, customer_id")
+          .gte("created_at", fromDate + "T00:00:00+07:00")
+          .lte("created_at", toDate + "T23:59:59+07:00")
+          .order("created_at", { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (e1) throw new Error(e1.message);
+        const rows = page ?? [];
+        ordersInRange = ordersInRange.concat(rows);
+        if (rows.length < PAGE) break;
+        from += PAGE;
+      }
+    }
 
     // 2. Tải order_items CHỈ cho các đơn trong khoảng — không tải toàn bộ bảng
     const orderIds = (ordersInRange ?? []).map((o: any) => o.id);

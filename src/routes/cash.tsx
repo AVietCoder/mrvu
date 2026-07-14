@@ -146,7 +146,7 @@ function BankSection({ bankAccountIdx, setF, bankList }: {
 function EndpointPicker({
   title, fundHint, kindVal, idVal, nameVal,
   onKind, onId, onName,
-  customerOptions, staffOptions, branchOptions,
+  customerOptions, staffOptions, branchOptions, otherOptions = [],
 }: {
   title: string;
   fundHint: { sign: "+" | "-"; text: string } | null;
@@ -159,6 +159,7 @@ function EndpointPicker({
   customerOptions: any[];
   staffOptions: any[];
   branchOptions: any[];
+  otherOptions?: string[]; // ✅ gợi ý "đơn vị khác" đã từng dùng ở phiếu cũ
 }) {
   return (
     <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
@@ -211,11 +212,22 @@ function EndpointPicker({
         />
       )}
       {kindVal === "other" && (
-        <Input
-          value={nameVal}
-          onChange={(e) => onName(e.target.value)}
-          placeholder="Nhập tên đơn vị / cá nhân..."
-        />
+        <>
+          {/* ✅ Gõ để nhập mới hoặc chọn nhanh đơn vị đã từng chi (datalist) */}
+          <Input
+            value={nameVal}
+            onChange={(e) => onName(e.target.value)}
+            placeholder="Nhập tên đơn vị / cá nhân..."
+            list="cash-other-parties"
+          />
+          {otherOptions.length > 0 && (
+            <datalist id="cash-other-parties">
+              {otherOptions.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+          )}
+        </>
       )}
     </div>
   );
@@ -223,7 +235,7 @@ function EndpointPicker({
 
 // ── VoucherForm ────────────────────────────────────────────────────────────
 function VoucherForm({
-  kind, f, setF, voucherTypes, staffOptions, customerOptions, isAdmin, siteSettings, visibleBranches,
+  kind, f, setF, voucherTypes, staffOptions, customerOptions, isAdmin, siteSettings, visibleBranches, otherParties = [],
 }: {
   kind: "thu" | "chi";
   f: any;
@@ -234,6 +246,7 @@ function VoucherForm({
   isAdmin: boolean;
   siteSettings: any;
   visibleBranches: any[];
+  otherParties?: string[];
 }) {
   // ── Tính toán ổn định, không tạo lại khi gõ phím ────────────────────────
   const typeOpts = useMemo(
@@ -373,6 +386,7 @@ function VoucherForm({
           customerOptions={customerOptions}
           staffOptions={staffOptions}
           branchOptions={branchOptions}
+          otherOptions={otherParties}
         />
       </div>
 
@@ -434,6 +448,9 @@ function Page() {
   const [filterType, setFilterType] = useState<"" | "thu" | "chi">("");
   const [filterVoucherType, setFilterVoucherType] = useState<string>(""); // lọc theo danh mục thu/chi
   const [filterBank, setFilterBank] = useState<string>("");  // lọc theo STK ngân hàng (note chứa số TK)
+  // ✅ Lọc theo khoảng ngày — tìm lại phiếu thu/chi nhanh thay vì lướt cả năm
+  const [filterDateFrom, setFilterDateFrom] = useState<string>("");
+  const [filterDateTo, setFilterDateTo] = useState<string>("");
   // ⚡ Phân trang phía client để KHÔNG render hàng nghìn dòng cùng lúc (gây đơ
   // trình duyệt). Tổng thu/chi/số dư vẫn tính trên TOÀN BỘ tập đã lọc ở memo
   // riêng → số liệu tiền không bị ảnh hưởng bởi phân trang.
@@ -457,7 +474,7 @@ function Page() {
   // Trang phiếu + số liệu (thu/chi/số dư) tính ở SERVER theo bộ lọc hiện tại.
   // Đổi bộ lọc/trang → đổi query key → chỉ tải đúng 1 trang.
   const { data: cashData, isLoading: cashLoading } = useQuery({
-    queryKey: ["cash", "page", page, fund, filterBranch, filterType, filterVoucherType, filterBank, debouncedSearch, canViewAll, (user?.branch_ids ?? []).join(",")],
+    queryKey: ["cash", "page", page, fund, filterBranch, filterType, filterVoucherType, filterBank, filterDateFrom, filterDateTo, debouncedSearch, canViewAll, (user?.branch_ids ?? []).join(",")],
     queryFn: () =>
       cashFn({
         data: {
@@ -468,6 +485,8 @@ function Page() {
           filterType,
           filterVoucherType,
           filterBank,
+          dateFrom: filterDateFrom || undefined,
+          dateTo: filterDateTo || undefined,
           search: debouncedSearch,
           canViewAll: !!canViewAll,
           branchIds: user?.branch_ids ?? [],
@@ -482,6 +501,7 @@ function Page() {
   const users        = data?.users        ?? [];
   const customers    = data?.customers    ?? [];
   const voucherTypes = data?.voucherTypes ?? [];
+  const otherParties = data?.otherParties ?? []; // gợi ý "Đơn vị khác" đã từng dùng
 
   const visibleBranches = useMemo(() => {
     if (canViewAll) return branches;
@@ -575,7 +595,7 @@ function Page() {
   // Reset về trang 1 mỗi khi đổi bộ lọc/tìm kiếm để không bị kẹt ở trang trống.
   useEffect(() => {
     setPage(1);
-  }, [fund, filterBranch, filterType, filterVoucherType, filterBank, search]);
+  }, [fund, filterBranch, filterType, filterVoucherType, filterBank, filterDateFrom, filterDateTo, search]);
 
 
 
@@ -902,6 +922,34 @@ function Page() {
               ))}
           </select>
 
+          {/* ✅ Lọc theo khoảng ngày — tìm phiếu thu/chi theo ngày tháng */}
+          <div className="flex items-center gap-1">
+            <input
+              type="date"
+              className="h-9 rounded-md border bg-background px-2 text-sm"
+              value={filterDateFrom}
+              onChange={(e) => setFilterDateFrom(e.target.value)}
+              title="Từ ngày"
+            />
+            <span className="text-muted-foreground text-xs">–</span>
+            <input
+              type="date"
+              className="h-9 rounded-md border bg-background px-2 text-sm"
+              value={filterDateTo}
+              onChange={(e) => setFilterDateTo(e.target.value)}
+              title="Đến ngày"
+            />
+            {(filterDateFrom || filterDateTo) && (
+              <button
+                className="h-9 px-2 text-xs rounded-md border bg-muted hover:bg-muted/70 text-muted-foreground"
+                onClick={() => { setFilterDateFrom(""); setFilterDateTo(""); }}
+                title="Xóa lọc ngày"
+              >
+                Xóa ngày
+              </button>
+            )}
+          </div>
+
           {/* Lọc theo tài khoản ngân hàng — chỉ hiện khi tab Ngân hàng */}
           {fund === "ngan_hang" && (() => {
             const bankList: any[] = (() => {
@@ -1041,9 +1089,11 @@ function Page() {
                     <th className="px-4 py-3 text-left font-semibold">Mã phiếu</th>
                     <th className="px-4 py-3 text-left font-semibold">Thời gian</th>
                     <th className="px-4 py-3 text-left font-semibold">Loại</th>
-                    <th className="px-4 py-3 text-left font-semibold">Hình thức</th>
-                    <th className="px-4 py-3 text-left font-semibold">Chi nhánh (A)</th>
+                    {/* ✅ Bỏ "Hình thức" + "Chi nhánh (A)" (đã có tab quỹ & lọc CN);
+                        thay bằng "Loại thu/chi" + "Ghi chú" để check nhanh */}
+                    <th className="px-4 py-3 text-left font-semibold">Loại thu/chi</th>
                     <th className="px-4 py-3 text-left font-semibold">Đối tượng (B)</th>
+                    <th className="px-4 py-3 text-left font-semibold">Ghi chú</th>
                     {canViewAll && <th className="px-4 py-3 text-left font-semibold">Chi nhánh</th>}
                     <th className="px-4 py-3 text-right font-semibold">Giá trị</th>
                     <th className="px-4 py-3 text-center font-semibold w-20">Thao tác</th>
@@ -1079,17 +1129,24 @@ function Page() {
                               {isThu ? "Thu" : "Chi"}
                             </span>
                           </td>
-                          <td className="px-4 py-3">
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
-                              {v.fund_type === "tien_mat" ? <Wallet className="h-3.5 w-3.5" /> : <Landmark className="h-3.5 w-3.5 text-blue-500" />}
-                              {v.fund_type === "tien_mat" ? "Tiền mặt" : (() => {
-                                const ba = getBankAccountInfo(v);
-                                return ba ? `${ba.bank} ••${ba.account_number.slice(-4)}` : "Ngân hàng";
-                              })()}
-                            </span>
+                          {/* Loại thu/chi (danh mục) */}
+                          <td className="px-4 py-3 text-xs">
+                            {getTypeName(v.voucher_type_id) !== "—"
+                              ? getTypeName(v.voucher_type_id)
+                              : <span className="text-muted-foreground">—</span>}
                           </td>
-                          <td className="px-4 py-3 text-xs">{sides.a || <span className="text-muted-foreground">—</span>}</td>
                           <td className="px-4 py-3 text-xs">{sides.b || <span className="text-muted-foreground">—</span>}</td>
+                          {/* Ghi chú hiện thẳng trên bảng để check nhanh */}
+                          <td className="px-4 py-3 text-xs text-muted-foreground max-w-[260px]">
+                            {(() => {
+                              const displayNote = v.note
+                                ? (v.fund_type === "ngan_hang" ? v.note.split(" — ").slice(1).join(" — ") : v.note)
+                                : "";
+                              return displayNote
+                                ? <span className="line-clamp-2" title={displayNote}>{displayNote}</span>
+                                : <span>—</span>;
+                            })()}
+                          </td>
                           {canViewAll && <td className="px-4 py-3 text-xs text-muted-foreground">{voucherBranchLabel(v)}</td>}
                           <td className={`px-4 py-3 text-right font-bold tabular-nums ${isThu ? "text-green-600" : "text-red-600"}`}>
                             {isThu ? "+" : "-"}{moneyFmt(v.amount)}
@@ -1207,6 +1264,7 @@ function Page() {
             isAdmin={isAdmin}
             siteSettings={siteSettings}
             visibleBranches={visibleBranches}
+            otherParties={otherParties}
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenCreate(false)}>Hủy</Button>
@@ -1233,6 +1291,7 @@ function Page() {
             isAdmin={isAdmin}
             siteSettings={siteSettings}
             visibleBranches={visibleBranches}
+            otherParties={otherParties}
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenEdit(false)}>Hủy</Button>

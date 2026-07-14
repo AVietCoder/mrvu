@@ -146,11 +146,18 @@ export function buildInvoiceHtml({
 
   const subtotal = Number(order.subtotal ?? 0);
   const discount = Number(order.discount ?? 0);
-  const vatAmt = Number(order.vat_amount ?? 0);
   const total = Number(order.total ?? 0);
   const deposit = Number(order.deposit ?? 0);
   const paid = Number(order.paid ?? 0);
   const remaining = Math.max(0, total - deposit - paid);
+
+  // ✅ VAT: ưu tiên số đã lưu trên đơn; với đơn CŨ (tạo trước khi hệ thống lưu
+  //    cột vat_amount) tổng cộng đã bao gồm VAT nhưng vat_amount = 0 →
+  //    tự suy phần VAT từ chênh lệch: Tổng cộng − (Tạm tính − Giảm giá).
+  //    Đơn không có VAT luôn thỏa total = subtotal − discount nên chênh = 0.
+  const savedVat = Number(order.vat_amount ?? 0);
+  const derivedVat = Math.max(0, total - Math.max(0, subtotal - discount));
+  const vatAmt = savedVat > 0 ? savedVat : derivedVat;
 
   const vatRatePct = Number(order.vat_rate ?? 0) > 0
     ? Math.round(Number(order.vat_rate) * 100 * 100) / 100

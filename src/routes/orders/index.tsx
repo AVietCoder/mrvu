@@ -38,6 +38,8 @@ import {
   Landmark,
   Wallet,
   FileSpreadsheet,
+  RotateCcw,
+  Search,
 } from "lucide-react";
 import {
   Dialog,
@@ -250,8 +252,13 @@ function Page() {
   });
 
   const [submitting, setSubmitting] = useState(false);
-  const [activeTab, setActiveTab] = useState<"orders" | "reserved">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "reserved" | "returns">("orders");
   const [page, setPage] = useState(1);
+
+  // ✅ Tab "Trả hàng": dialog tìm hóa đơn gốc để tạo phiếu trả
+  const [returnPickerOpen, setReturnPickerOpen] = useState(false);
+  const [returnPickerSearch, setReturnPickerSearch] = useState("");
+  const debouncedReturnSearch = useDebouncedValue(returnPickerSearch, 250);
 
   const [receiptOrder, setReceiptOrder] = useState<any>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
@@ -373,9 +380,10 @@ function Page() {
           page,
           pageSize: PAGE_SIZE,
           search: debouncedSearch,
-          status: activeTab === "orders" ? filterStatus : "",
+          // Tab "Trả hàng" = các đơn status 'returned' (phiếu trả TH…)
+          status: activeTab === "orders" ? filterStatus : activeTab === "returns" ? "returned" : "",
           branch: filterBranch,
-          tab: activeTab,
+          tab: activeTab === "reserved" ? "reserved" : "orders",
           sortBy,
           branchIds: branchScope,
           customer: filterCustomer,
@@ -396,6 +404,27 @@ function Page() {
     queryFn: () => orderStatsFn({ data: { branchIds: branchScope } }),
     staleTime: 60_000,
     gcTime: 10 * 60_000,
+  });
+
+  // ✅ Dialog "Tạo phiếu trả hàng": tìm hóa đơn HOÀN TẤT theo mã/tên khách/SĐT
+  //    rồi nhảy thẳng vào form trả của đơn đó (?return=1).
+  const { data: returnPickerData, isFetching: returnPickerLoading } = useQuery({
+    queryKey: ["orders", "return-picker", debouncedReturnSearch, branchScope],
+    queryFn: () =>
+      ordersFn({
+        data: {
+          page: 1,
+          pageSize: 10,
+          search: debouncedReturnSearch,
+          status: "completed",
+          tab: "orders",
+          sortBy: "newest",
+          branchIds: branchScope,
+        },
+      }),
+    enabled: returnPickerOpen,
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
   });
 
   // Đổi tab/tìm kiếm/sort/bộ lọc → quay về trang 1.
@@ -515,9 +544,9 @@ function Page() {
       const res = await exportOrdersFn({
         data: {
           search: debouncedSearch,
-          status: activeTab === "orders" ? filterStatus : "",
+          status: activeTab === "orders" ? filterStatus : activeTab === "returns" ? "returned" : "",
           branch: filterBranch,
-          tab: activeTab,
+          tab: activeTab === "reserved" ? "reserved" : "orders",
           branchIds: branchScope,
           customer: filterCustomer,
           employee: isAdmin ? filterEmployee : "",
@@ -542,6 +571,7 @@ function Page() {
       const parts: string[] = [];
 
       if (activeTab === "reserved") parts.push("Đơn đặt hàng");
+      if (activeTab === "returns") parts.push("Phiếu trả hàng");
 
       if (filterCustomer) {
         reportTitle = "BÁO CÁO BÁN HÀNG THEO KHÁCH HÀNG";
@@ -581,11 +611,11 @@ function Page() {
     }
   }
 
-  function handleTab(t: "orders" | "reserved") {
+  function handleTab(t: "orders" | "reserved" | "returns") {
     handleTabExecute(t);
   }
 
-  function handleTabExecute(t: "orders" | "reserved") {
+  function handleTabExecute(t: "orders" | "reserved" | "returns") {
     setActiveTab(t);
     setPage(1);
     setSearch("");
@@ -1795,6 +1825,25 @@ function Page() {
             </span>
           )}
         </button>
+
+        {/* ✅ Tab Trả hàng: liệt kê các phiếu trả TH… + tạo phiếu trả không cần
+            tự mò lại hóa đơn gốc */}
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "returns" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          onClick={() => handleTab("returns")}
+        >
+          <RotateCcw className="h-4 w-4 inline mr-1" /> Trả hàng
+        </button>
+
+        {activeTab === "returns" && (
+          <Button
+            size="sm"
+            className="ml-auto my-1 bg-purple-600 hover:bg-purple-700 text-white"
+            onClick={() => { setReturnPickerSearch(""); setReturnPickerOpen(true); }}
+          >
+            <RotateCcw className="h-4 w-4 mr-1" /> Tạo phiếu trả hàng
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -1918,7 +1967,7 @@ function Page() {
             </div>
           }
           total={totalFiltered}
-          totalLabel={activeTab === "reserved" ? "đơn đặt hàng" : "đơn hàng"}
+          totalLabel={activeTab === "reserved" ? "đơn đặt hàng" : activeTab === "returns" ? "phiếu trả hàng" : "đơn hàng"}
         />
 
         <OrderTable rows={pagedOrders} />
@@ -1945,6 +1994,66 @@ function Page() {
           </div>
         )}
       </Card>
+
+      {/* ════ Dialog "Tạo phiếu trả hàng": tìm hóa đơn gốc → mở form trả ════ */}
+      <Dialog open={returnPickerOpen} onOpenChange={setReturnPickerOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-purple-600" /> Tạo phiếu trả hàng
+            </DialogTitle>
+            <DialogDescription>
+              Tìm hóa đơn đã xuất (theo mã đơn, tên khách hoặc SĐT) rồi chọn để vào form trả hàng.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              autoFocus
+              className="pl-8"
+              placeholder="Nhập mã đơn / tên khách / SĐT..."
+              value={returnPickerSearch}
+              onChange={(e) => setReturnPickerSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="max-h-[320px] overflow-y-auto space-y-1.5 mt-1">
+            {returnPickerLoading && (
+              <div className="py-6 text-center text-muted-foreground text-sm">
+                <Loader2 className="h-4 w-4 animate-spin inline mr-1" /> Đang tìm...
+              </div>
+            )}
+            {!returnPickerLoading && (returnPickerData?.orders ?? []).length === 0 && (
+              <div className="py-6 text-center text-muted-foreground text-sm">
+                Không tìm thấy hóa đơn hoàn tất nào.
+              </div>
+            )}
+            {(returnPickerData?.orders ?? []).map((o: any) => (
+              <button
+                key={o.id}
+                type="button"
+                className="w-full flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-left hover:border-purple-300 hover:bg-purple-50/50 transition-colors"
+                onClick={() => {
+                  setReturnPickerOpen(false);
+                  navigate({ to: "/orders/$id", params: { id: o.id }, search: { return: 1 } });
+                }}
+              >
+                <span className="font-mono text-xs font-semibold text-primary shrink-0">{o.code}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-medium truncate">{o.customer_name || "Khách lẻ"}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {new Date(o.completed_at || o.created_at).toLocaleDateString("vi-VN")}
+                    {o.branch_name ? ` · ${o.branch_name}` : ""}
+                  </span>
+                </span>
+                <span className="font-semibold text-sm shrink-0">{fmt(o.total)}</span>
+                <RotateCcw className="h-4 w-4 text-purple-500 shrink-0" />
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

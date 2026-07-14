@@ -161,37 +161,255 @@ export const searchInventoryPage = createServerFn({ method: "GET" }).handler(
 );
 
 // Dữ liệu phụ trợ (KHÔNG kèm toàn bộ stock/orders): chi nhánh, sản phẩm gọn cho
-// ô chọn ở phiếu nhập/chuyển, 100 lượt nhập-xuất gần nhất, và phiếu chuyển ĐANG CHỜ.
-// Bổ sung: 100 đơn bán hàng hoàn thành (completed) gần nhất để hiển thị trong lịch sử xuất kho.
+// ô chọn ở phiếu nhập/chuyển, và phiếu chuyển ĐANG CHỜ.
+// (Lịch sử kho đã tách sang searchStockHistory — lọc + phân trang phía server.)
 export const getInventoryRefs = createServerFn({ method: "GET" }).handler(
   async () => {
-    const [products, branches, movements, transfers, completedOrders] = await Promise.all([
+    const [products, branches, transfers] = await Promise.all([
       fetchAllRows("products", { select: "id, name, sku", orderBy: "name" }),
       fetchRows("branches", { orderBy: "name" }),
-      fetchRows("stock_movements", { orderBy: "created_at", ascending: false, limit: 100 }),
       fetchRows("stock_transfers", { eq: { status: "pending" }, orderBy: "created_at", ascending: false }),
-      fetchRows("orders", {
-        eq: { status: "completed" },
-        select: "id, code, branch_id, status, total, customer_id, completed_at, created_at, note",
-        orderBy: "completed_at",
-        ascending: false,
-        limit: 100,
-      }),
     ]);
     const transferIds = (transfers ?? []).map((t: any) => t.id);
     const transfer_items = transferIds.length
       ? await fetchRows("stock_transfer_items", { eq: { transfer_id: transferIds } })
       : [];
 
-    // Lấy order_items cho các đơn hoàn thành để hiển thị chi tiết
-    const completedOrderIds = (completedOrders ?? []).map((o: any) => o.id);
-    const completed_order_items = completedOrderIds.length
-      ? await fetchRows("order_items", { eq: { order_id: completedOrderIds }, select: "order_id, product_id, qty, unit_price, discount, total" })
-      : [];
-
-    return { products, branches, movements, transfers, transfer_items, completed_orders: completedOrders ?? [], completed_order_items };
+    return { products, branches, transfers, transfer_items };
   },
 );
+
+// ─────────────────────────────────────────────────────────────────────────
+// LỊCH SỬ KHO — lọc + phân trang PHÍA SERVER (mẫu giống searchInventoryPage).
+// Gộp 3 nguồn: stock_movements (nhập/xuất/chuyển) + đơn bán hoàn thành (sale)
+// + đơn trả hàng (return). Bộ lọc loại / sản phẩm / khoảng ngày / chi nhánh
+// chạy trên TOÀN BỘ dữ liệu trong DB nên bản ghi cũ bao nhiêu cũng tìm thấy.
+//
+// Ưu tiên RPC `search_stock_history_page` (sql_migration_v7). Nếu DB CHƯA chạy
+// migration → fallback về cách cũ (tải cửa sổ bản ghi gần nhất rồi lọc tại
+// server) để trang không sập; khi đó meta.legacy = true.
+// ─────────────────────────────────────────────────────────────────────────
+type StockHistoryArgs = {
+  page?: number;
+  pageSize?: number;
+  type?: string;      // 'in' | 'out' | 'transfer' | 'sale' | 'return' | ''
+  product?: string;   // product_id
+  from?: string;      // 'YYYY-MM-DD' (giờ VN)
+  to?: string;        // 'YYYY-MM-DD' (giờ VN)
+  branchIds?: string[] | null; // phân quyền chi nhánh; null/[] = xem tất cả
+};
+
+function isMissingFunctionError(e: any): boolean {
+  const msg = String(e?.message ?? e ?? "");
+  return /Could not find the function/i.test(msg) || /PGRST202/i.test(String(e?.code ?? msg));
+}
+
+export const searchStockHistory = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data: StockHistoryArgs | undefined }) => {
+    const page = Math.max(1, data?.page ?? 1);
+    const pageSize = Math.max(1, data?.pageSize ?? 50);
+    const offset = (page - 1) * pageSize;
+    // Khoảng ngày nhập theo giờ VN (+07:00), so sánh bằng timestamptz
+    const fromIso = data?.from ? new Date(`${data.from}T00:00:00+07:00`).toISOString() : null;
+    const toIso = data?.to ? new Date(`${data.to}T23:59:59.999+07:00`).toISOString() : null;
+    const branchIds = data?.branchIds?.length ? data.branchIds : null;
+
+    try {
+      const { data: rows, error } = await supabase.rpc("search_stock_history_page", {
+        p_type: data?.type || null,
+        p_product: data?.product || null,
+        p_from: fromIso,
+        p_to: toIso,
+        p_branches: branchIds,
+        p_limit: pageSize,
+        p_offset: offset,
+      });
+      if (error) throw new Error(error.message);
+
+      const entries = ((rows ?? []) as any[]).map((r) => ({
+        id: r.id,
+        type: r.entry_type,
+        created_at: r.created_at,
+        product_id: r.product_id,
+        qty: Number(r.qty || 0),
+        unit_cost: Number(r.unit_cost || 0),
+        from_branch: r.from_branch,
+        to_branch: r.to_branch,
+        note: r.note ?? null,
+        order_id: r.order_id,
+        order_code: r.order_code,
+        total: Number(r.total || 0),
+        customer_id: r.customer_id,
+        items: Array.isArray(r.items) ? r.items : [],
+      }));
+      const totalFiltered = entries.length && (rows as any[])[0]?.filtered_count
+        ? Number((rows as any[])[0].filtered_count)
+        : entries.length;
+      return { entries, meta: { totalFiltered, legacy: false } };
+    } catch (e: any) {
+      if (!isMissingFunctionError(e)) throw e;
+      // ── FALLBACK (chưa chạy sql_migration_v7): cửa sổ bản ghi gần nhất ──
+      return legacyStockHistory(data, page, pageSize, fromIso, toIso, branchIds);
+    }
+  },
+);
+
+const MOVEMENT_TYPES = new Set(["in", "out", "transfer"]);
+
+async function legacyStockHistory(
+  data: StockHistoryArgs | undefined,
+  page: number,
+  pageSize: number,
+  fromIso: string | null,
+  toIso: string | null,
+  branchIds: string[] | null,
+) {
+  const type = data?.type || "";
+  const product = data?.product || "";
+  const WINDOW = 300;
+
+  const wantMovements = !type || MOVEMENT_TYPES.has(type);
+  const wantSales = !type || type === "sale";
+  const wantReturns = !type || type === "return";
+
+  const [movements, completedOrders, returnedOrders] = await Promise.all([
+    wantMovements
+      ? fetchRows("stock_movements", {
+          orderBy: "created_at",
+          ascending: false,
+          limit: WINDOW,
+          eq: {
+            ...(MOVEMENT_TYPES.has(type) ? { type } : {}),
+            ...(product ? { product_id: product } : {}),
+          },
+        })
+      : Promise.resolve([]),
+    wantSales
+      ? fetchRows("orders", {
+          eq: { status: "completed" },
+          select: "id, code, branch_id, status, total, customer_id, completed_at, created_at, note",
+          orderBy: "completed_at",
+          ascending: false,
+          limit: WINDOW,
+        })
+      : Promise.resolve([]),
+    wantReturns
+      ? fetchRows("orders", {
+          eq: { status: "returned" },
+          select: "id, code, branch_id, status, total, customer_id, completed_at, created_at, note",
+          orderBy: "created_at",
+          ascending: false,
+          limit: WINDOW,
+        })
+      : Promise.resolve([]),
+  ]);
+
+  // order_items cho các đơn trong cửa sổ (chia lô để tránh URL quá dài)
+  const orderIds = [...(completedOrders as any[]), ...(returnedOrders as any[])].map((o) => o.id);
+  const orderItems: any[] = [];
+  for (let i = 0; i < orderIds.length; i += 100) {
+    const chunk = orderIds.slice(i, i + 100);
+    const rows = await fetchRows("order_items", {
+      eq: { order_id: chunk },
+      select: "order_id, product_id, qty, unit_price, total",
+    });
+    orderItems.push(...rows);
+  }
+  const itemsByOrder = new Map<string, any[]>();
+  for (const it of orderItems) {
+    const list = itemsByOrder.get(it.order_id) ?? [];
+    list.push(it);
+    itemsByOrder.set(it.order_id, list);
+  }
+
+  // Ghi chú thật của phiếu chuyển (movements chỉ lưu 'Phiếu chuyển kho <id>')
+  const transferIds = (movements as any[])
+    .filter((m) => m.type === "transfer" && typeof m.note === "string" && m.note.startsWith("Phiếu chuyển kho "))
+    .map((m) => m.note.slice("Phiếu chuyển kho ".length).trim());
+  const transferNoteMap = new Map<string, string | null>();
+  for (let i = 0; i < transferIds.length; i += 100) {
+    const chunk = transferIds.slice(i, i + 100);
+    const rows = chunk.length
+      ? await fetchRows("stock_transfers", { eq: { id: chunk }, select: "id, note" })
+      : [];
+    for (const t of rows as any[]) transferNoteMap.set(t.id, t.note ?? null);
+  }
+
+  const movementEntries = (movements as any[]).map((m) => {
+    let note = m.note ?? null;
+    if (m.type === "transfer" && typeof m.note === "string" && m.note.startsWith("Phiếu chuyển kho ")) {
+      const tid = m.note.slice("Phiếu chuyển kho ".length).trim();
+      note = transferNoteMap.has(tid) ? transferNoteMap.get(tid) : null;
+    }
+    return {
+      id: m.id,
+      type: m.type,
+      created_at: m.created_at,
+      product_id: m.product_id,
+      qty: Number(m.qty || 0),
+      unit_cost: Number(m.unit_cost || 0),
+      from_branch: m.from_branch ?? (m.type === "out" ? m.branch_id ?? null : null),
+      to_branch: m.to_branch ?? (m.type === "in" ? m.branch_id ?? null : null),
+      note,
+      order_id: null,
+      order_code: null,
+      total: 0,
+      customer_id: null,
+      items: [] as any[],
+    };
+  });
+
+  const orderEntry = (o: any, kind: "sale" | "return") => {
+    const items = itemsByOrder.get(o.id) ?? [];
+    return {
+      id: `${kind}__${o.id}`,
+      type: kind,
+      created_at: kind === "sale" ? (o.completed_at || o.created_at) : o.created_at,
+      product_id: null,
+      qty: items.reduce((s: number, i: any) => s + Number(i.qty || 0), 0),
+      unit_cost: 0,
+      from_branch: kind === "sale" ? o.branch_id : null,
+      to_branch: kind === "return" ? o.branch_id : null,
+      note: o.note ?? null,
+      order_id: o.id,
+      order_code: o.code,
+      total: Number(o.total || 0),
+      customer_id: o.customer_id,
+      items,
+    };
+  };
+
+  let entries = [
+    ...movementEntries,
+    ...(completedOrders as any[]).map((o) => orderEntry(o, "sale")),
+    ...(returnedOrders as any[]).map((o) => orderEntry(o, "return")),
+  ];
+
+  // Lọc còn lại (sản phẩm trong đơn, khoảng ngày, chi nhánh) tại server
+  entries = entries.filter((e) => {
+    if (product && e.type !== "in" && e.type !== "out" && e.type !== "transfer") {
+      if (!e.items.some((i: any) => i.product_id === product)) return false;
+    }
+    const t = new Date(e.created_at).getTime();
+    if (fromIso && t < new Date(fromIso).getTime()) return false;
+    if (toIso && t > new Date(toIso).getTime()) return false;
+    if (branchIds) {
+      const ok = (e.from_branch && branchIds.includes(e.from_branch)) ||
+        (e.to_branch && branchIds.includes(e.to_branch));
+      if (!ok) return false;
+    }
+    return true;
+  });
+
+  entries.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  const totalFiltered = entries.length;
+  const start = (page - 1) * pageSize;
+  return {
+    entries: entries.slice(start, start + pageSize),
+    meta: { totalFiltered, legacy: true },
+  };
+}
 
 // Xuất Excel tồn kho: tải toàn bộ stock CHỈ khi bấm nút (không tải lúc vào trang).
 export const getStockExport = createServerFn({ method: "GET" }).handler(

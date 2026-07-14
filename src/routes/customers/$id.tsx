@@ -45,6 +45,7 @@ import {
   Users,
   Receipt,
   Loader2,
+  NotebookPen,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -590,6 +591,17 @@ function CustomerDetailPage() {
                 </div>
               )}
             </div>
+
+            {/* ✅ Ghi chú khách hàng — hiện thẳng ở thông tin KH, không cần mở
+                form chỉnh sửa mới xem được */}
+            {customer.note && (
+              <div className="mt-3 pt-3 border-t">
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm">
+                  <NotebookPen className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+                  <span className="text-amber-900 whitespace-pre-wrap">{customer.note}</span>
+                </div>
+              </div>
+            )}
 
             {customer.customer_type === "to_chuc" && (customer.company_name || customer.tax_code) && (
               <div className="mt-3 pt-3 border-t space-y-1.5 text-sm">

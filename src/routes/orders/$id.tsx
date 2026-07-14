@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo, Fragment } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import { getOrderDetail, getOrderEditRefs, updateOrderStatus, updateOrder, createReturnOrder } from "@/lib/orders.functions";
 import { updateScheduleOrderLink } from "@/lib/schedule.functions";
 import { getSettings } from "@/lib/settings.functions";
@@ -58,6 +58,10 @@ import { SCHEDULE_TYPES } from "@/lib/types";
 
 export const Route = createFileRoute("/orders/$id")({
   head: () => ({ meta: [{ title: "Chi tiết đơn hàng — Mr.Vũ" }] }),
+  // ?return=1 → tự mở form trả hàng (đến từ nút "Tạo phiếu trả hàng" ở trang Bán hàng)
+  validateSearch: (search: Record<string, unknown>) => ({
+    return: search.return ? 1 : undefined,
+  }),
   component: OrderDetailPage,
 });
 
@@ -66,6 +70,8 @@ const STATUS_LABEL: Record<string, string> = {
   reserved: "Đặt hàng",
   draft: "Nháp",
   cancelled: "Hủy",
+  returned: "Phiếu trả hàng",
+  partially_returned: "Trả hàng 1 phần",
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -73,6 +79,8 @@ const STATUS_COLOR: Record<string, string> = {
   reserved: "bg-yellow-100 text-yellow-700",
   draft: "bg-gray-100 text-gray-700",
   cancelled: "bg-red-100 text-red-700",
+  returned: "bg-purple-100 text-purple-700",
+  partially_returned: "bg-purple-50 text-purple-600",
 };
 
 const SCHEDULE_STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -384,6 +392,18 @@ function OrderDetailPage() {
     setNeedEditRefs(true); // cần danh sách SP đầy đủ cho phiếu trả hàng
     setReturnOpen(true);
   }
+
+  // ✅ Đến từ nút "Tạo phiếu trả hàng" (tab Trả hàng, trang Bán hàng):
+  //    ?return=1 → tự mở form trả ngay khi đơn tải xong (chỉ mở 1 lần).
+  const searchParams = Route.useSearch();
+  const [autoReturnOpened, setAutoReturnOpened] = useState(false);
+  useEffect(() => {
+    if (autoReturnOpened) return;
+    if (!searchParams?.return) return;
+    if (!order || order.status !== "completed" || orderItems.length === 0) return;
+    setAutoReturnOpened(true);
+    startReturn();
+  }, [searchParams?.return, order, orderItems, autoReturnOpened]);
 
   const returnSubtotal = useMemo(
     () => returnItems.reduce((s, i) => s + i.qty * i.unit_price - i.discount, 0),

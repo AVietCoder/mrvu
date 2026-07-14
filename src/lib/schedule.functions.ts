@@ -401,6 +401,17 @@ export const attendanceSummary = createServerFn({ method: "GET" })
       }
     }
 
+    // ✅ Chi tiết chấm công: sắp xếp danh sách công việc theo NGÀY tăng dần
+    //    (đầu kỳ → cuối kỳ, cùng ngày thì theo giờ) — trước đây trả về theo
+    //    thứ tự ngẫu nhiên của truy vấn nên popup chi tiết hiển thị lộn xộn.
+    for (const row of Object.values(perUser)) {
+      row.lines.sort((a: any, b: any) => {
+        const dateCmp = String(a.scheduled_date ?? "").localeCompare(String(b.scheduled_date ?? ""));
+        if (dateCmp !== 0) return dateCmp;
+        return String(a.scheduled_time ?? "").localeCompare(String(b.scheduled_time ?? ""));
+      });
+    }
+
     return {
       month,
       rows: Object.values(perUser).sort((a, b) => b.total_money - a.total_money),

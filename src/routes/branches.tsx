@@ -32,12 +32,17 @@ function Page() {
 
   const [form, setForm] = useState<Form>(empty);
   const [open, setOpen] = useState(false);
+  // Chống nhấn đúp: khóa nút Lưu trong lúc đang gửi
+  const [saving, setSaving] = useState(false);
 
   async function save() {
+    if (saving) return;
+    setSaving(true);
     try {
       await upsert({ data: { id: form.id, name: form.name.trim(), address: form.address || undefined, phone: form.phone || undefined } });
       toast.success("Đã lưu"); setOpen(false); qc.invalidateQueries({ queryKey: ["branches"] }); qc.invalidateQueries({ queryKey: ["reports-branch"] });
     } catch (e: any) { toast.error(e?.message ?? "Lỗi"); }
+    finally { setSaving(false); }
   }
 
   return (
@@ -54,7 +59,7 @@ function Page() {
                 <div><Label>Địa chỉ</Label><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
                 <div><Label>SĐT</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
               </div>
-              <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Hủy</Button><Button onClick={save}>Lưu</Button></DialogFooter>
+              <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Hủy</Button><Button onClick={save} disabled={saving}>{saving ? "Đang lưu..." : "Lưu"}</Button></DialogFooter>
             </DialogContent>
           </Dialog>
         </div>

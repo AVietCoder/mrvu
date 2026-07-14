@@ -314,15 +314,22 @@ async function revertCompletedOrderSideEffects(order: any, lineItems: LineItem[]
 
 
 async function revertCashVouchersForOrder(orderCode: string) {
-  // Xóa tất cả phiếu thu/chi liên quan đến mã đơn hàng này
+  // Xóa các phiếu thu/chi liên quan đến mã đơn hàng này.
+  // ⚠ Trước đây lọc bằng `.like('%code%')` gây xóa NHẦM: mã đơn là tiền tố của
+  //   nhau ("HD000001" nằm trong "HD0000010") → hủy/sửa đơn HD000001 xóa luôn
+  //   phiếu của HD0000010..HD0000019 (và HD000010x...). Vì vậy sau khi truy vấn
+  //   theo LIKE, ta lọc lại trong JS: mã chỉ khớp khi đứng thành "token" (không
+  //   bị một chữ số khác dính liền ngay sau).
   const { data: vouchers } = await supabase
     .from("cash_vouchers")
     .select("id, code, note")
     .like("note", `%${orderCode}%`);
-  if (vouchers && vouchers.length > 0) {
-    for (const v of vouchers) {
-      await deleteWhere("cash_vouchers", { id: v.id }).catch(() => undefined);
-    }
+  if (!vouchers || vouchers.length === 0) return;
+  const escaped = orderCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tokenRe = new RegExp(`(^|[^0-9A-Za-z])${escaped}([^0-9]|$)`);
+  for (const v of vouchers) {
+    if (!tokenRe.test(String(v.note ?? ""))) continue;
+    await deleteWhere("cash_vouchers", { id: v.id }).catch(() => undefined);
   }
 }
 
