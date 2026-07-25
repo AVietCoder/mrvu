@@ -15,6 +15,7 @@ import { buildInvoiceHtml } from "@/lib/print-invoice";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { PageLoader } from "@/components/Spinner";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import { StockShortageDialog, type StockShortage } from "@/components/StockShortageDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -159,6 +160,10 @@ function OrderDetailPage() {
 
   const [completingOrder, setCompletingOrder] = useState(false);
   const [cancellingOrder, setCancellingOrder] = useState(false);
+
+  // Hộp thoại báo thiếu hàng khi hoàn tất đơn (thay cho toast 1 dòng khó đọc)
+  const [shortages, setShortages] = useState<StockShortage[]>([]);
+  const [shortageOpen, setShortageOpen] = useState(false);
 
   // ── Payment dialog state ──────────────────────────────────────────────────
   const [payOpen, setPayOpen] = useState(false);
@@ -454,7 +459,7 @@ function OrderDetailPage() {
     }
     const stock = data?.stock ?? [];
     const branchId = order.branch_id;
-    const shortages: string[] = [];
+    const missing: StockShortage[] = [];
 
     for (const item of orderItems) {
       const available = stock
@@ -463,12 +468,18 @@ function OrderDetailPage() {
       const needed = Number(item.qty || 0);
       if (available < needed) {
         const prod = (data?.products ?? []).find((p: any) => p.id === item.product_id);
-        shortages.push(`${prod?.name ?? item.product_id}: cần ${needed}, còn ${available}`);
+        missing.push({
+          product_name: prod?.name ?? item.product_id,
+          sku: prod?.sku ?? null,
+          needed,
+          available,
+        });
       }
     }
 
-    if (shortages.length > 0) {
-      toast.error("Không đủ hàng để hoàn tất:\n" + shortages.join(" | "), { duration: 6000 });
+    if (missing.length > 0) {
+      setShortages(missing);
+      setShortageOpen(true);
       return;
     }
 
@@ -1774,6 +1785,14 @@ function OrderDetailPage() {
           })()}
         </DialogContent>
       </Dialog>
+
+      <StockShortageDialog
+        open={shortageOpen}
+        onOpenChange={setShortageOpen}
+        shortages={shortages}
+        branchName={(data?.branches ?? []).find((b: any) => b.id === order?.branch_id)?.name}
+        orderCode={order?.code}
+      />
     </AppShell>
   );
 }

@@ -260,6 +260,60 @@ export const payCustomerDebt = createServerFn({ method: "POST" })
 
     return { ok: true, code, new_debt: newDebt };
   });
+/**
+ * findDuplicateCustomers — cảnh báo "khách này đã có rồi" khi đang nhập KH mới.
+ *
+ * Hai tiêu chí (theo yêu cầu nghiệp vụ):
+ *   1. Trùng SỐ ĐIỆN THOẠI — so theo phần chữ số, bỏ qua khoảng trắng/dấu chấm
+ *      người dùng gõ ("0912 345 678" và "0912345678" coi như một).
+ *   2. Trùng TÊN — so khớp chính xác nhưng bỏ qua hoa/thường (ilike không
+ *      wildcard), tránh việc gõ "Anh Tuấn" lại tạo thêm bản ghi thứ 2.
+ *
+ * Chỉ CẢNH BÁO, không chặn: hàm này không được gọi trong upsertCustomer.
+ * `excludeId` để lúc SỬA khách không tự báo trùng với chính nó.
+ */
+export const findDuplicateCustomers = createServerFn({ method: "GET" })
+  .handler(async ({ data }: { data: { name?: string; phone?: string; excludeId?: string } | undefined }) => {
+    const name = (data?.name ?? "").trim();
+    const phoneDigits = (data?.phone ?? "").replace(/\D/g, "");
+    const excludeId = data?.excludeId || null;
+
+    const SELECT =
+      "id, name, phone, address, ward, district, province, group_name, customer_type, company_name, debt, total_buy, created_at";
+
+    const byPhoneQuery =
+      phoneDigits.length >= 8
+        ? supabase.from("customers").select(SELECT).ilike("phone", `%${phoneDigits}%`).limit(5)
+        : Promise.resolve({ data: [] as any[] });
+
+    const byNameQuery =
+      name.length >= 2
+        ? supabase.from("customers").select(SELECT).ilike("name", name).limit(5)
+        : Promise.resolve({ data: [] as any[] });
+
+    const [byPhone, byName] = await Promise.all([byPhoneQuery, byNameQuery]);
+
+    const merged = new Map<string, any>();
+    for (const row of (byPhone as any)?.data ?? []) {
+      if (row.id === excludeId) continue;
+      merged.set(row.id, { ...row, match_phone: true, match_name: false });
+    }
+    for (const row of (byName as any)?.data ?? []) {
+      if (row.id === excludeId) continue;
+      const existing = merged.get(row.id);
+      if (existing) existing.match_name = true;
+      else merged.set(row.id, { ...row, match_phone: false, match_name: true });
+    }
+
+    // Trùng cả SĐT lẫn tên → gần như chắc chắn là cùng một người → xếp lên đầu.
+    const matches = [...merged.values()].sort(
+      (a, b) =>
+        Number(b.match_phone) + Number(b.match_name) - (Number(a.match_phone) + Number(a.match_name)),
+    );
+
+    return { matches };
+  });
+
 // Tra cứu khách hàng GỌN (cho ô chọn khách kiểu async: chỉ cần nhãn).
 export const getCustomerLite = createServerFn({ method: "GET" })
   .handler(async ({ data }: { data: { id: string } }) => {

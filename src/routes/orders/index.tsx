@@ -18,6 +18,13 @@ import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { AsyncSearchableSelect } from "@/components/AsyncSearchableSelect";
+import { StockShortageDialog, type StockShortage } from "@/components/StockShortageDialog";
+import {
+  DuplicateCustomerAlert,
+  DuplicateConfirmDialog,
+  useDuplicateCustomers,
+  type DuplicateMatch,
+} from "@/components/DuplicateCustomerAlert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +47,8 @@ import {
   FileSpreadsheet,
   RotateCcw,
   Search,
+  Zap,
+  CheckCircle2,
 } from "lucide-react";
 import {
   Dialog,
@@ -47,7 +56,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -228,6 +236,16 @@ function Page() {
   // Form tạo đơn mở/đóng — refs nặng chỉ tải khi form mở (xem dưới).
   const [open, setOpen] = useState(false);
 
+  // ⚡ Chế độ "Tạo hóa đơn nhanh": dùng CHUNG form với "Tạo đơn hàng" nhưng
+  //    đơn được lưu thẳng ở trạng thái HOÀN TẤT (trừ kho + ghi công nợ ngay),
+  //    thay vì phải Đặt hàng → vào chi tiết đơn → thanh toán → hoàn tất.
+  //    Bắt buộc có khách hàng và phải đủ tồn kho tại chi nhánh đang chọn.
+  const [quickInvoice, setQuickInvoice] = useState(false);
+
+  // Hộp thoại báo thiếu hàng (kiểm tra trước khi gửi hóa đơn nhanh lên server)
+  const [shortages, setShortages] = useState<StockShortage[]>([]);
+  const [shortageOpen, setShortageOpen] = useState(false);
+
   // Dữ liệu cho FORM tạo đơn (sản phẩm, tồn kho, NV). CHỈ tải khi mở form
   // → lúc vào trang danh sách không tốn request nào cho phần này.
   const { data } = useQuery({
@@ -284,6 +302,13 @@ function Page() {
   const [quickCustBankAccount, setQuickCustBankAccount] = useState("");
   const [quickCustDebt, setQuickCustDebt] = useState("0");
   const [savingCust, setSavingCust] = useState(false);
+  // Cảnh báo khách trùng (trùng SĐT hoặc trùng tên) — chỉ cảnh báo, không chặn
+  const [dupConfirmOpen, setDupConfirmOpen] = useState(false);
+  const { matches: custDuplicates, checking: checkingDuplicates } = useDuplicateCustomers({
+    name: quickCustName,
+    phone: quickCustPhone,
+    enabled: quickCustOpen,
+  });
 
   const [items, setItems] = useState<LineItem[]>([]);
   const [customer, setCustomer] = useState("");
@@ -316,6 +341,9 @@ function Page() {
   }, [includeVat, vatMode, vatCustomPercent, vatAmountRaw]);
   const [depositRaw, setDepositRaw] = useState("0");
   const [khachThanhToanRaw, setKhachThanhToanRaw] = useState("");  // Số tiền khách trả thực tế
+  // Người dùng đã tự gõ số tiền khách trả chưa? Nếu chưa, ô này tự bám theo
+  // "Khách cần trả" (mặc định thanh toán đủ) khi đang tạo hóa đơn nhanh.
+  const [paidTouched, setPaidTouched] = useState(false);
   const [note, setNote] = useState("");
 
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -502,6 +530,12 @@ function Page() {
 
   // Payment panel calculations
   const khachThanhToan = khachThanhToanRaw === "" ? 0 : parseInput(khachThanhToanRaw);
+
+  // Hóa đơn nhanh: mặc định khách trả đủ. Chỉ tự điền khi người dùng chưa gõ tay.
+  useEffect(() => {
+    if (!open || !quickInvoice || paidTouched) return;
+    setKhachThanhToanRaw(khachCanThanhToan > 0 ? fmtInput(String(khachCanThanhToan)) : "");
+  }, [open, quickInvoice, paidTouched, khachCanThanhToan]);
   const congNo = Math.max(0, khachCanThanhToan - khachThanhToan);    // phần tính vào công nợ
   const tienThua = Math.max(0, khachThanhToan - khachCanThanhToan);  // tiền thừa trả lại
 
@@ -631,6 +665,16 @@ function Page() {
     setQuickCustBankName(""); setQuickCustBankAccount(""); setQuickCustDebt("0");
   }
 
+  // Bấm "Lưu thông tin": còn cảnh báo trùng thì hỏi lại 1 lần rồi mới tạo.
+  function handleQuickCustSaveClick() {
+    if (!quickCustName.trim()) return toast.error("Nhập tên khách hàng");
+    if (custDuplicates.length > 0) {
+      setDupConfirmOpen(true);
+      return;
+    }
+    handleQuickCreateCustomer();
+  }
+
   async function handleQuickCreateCustomer() {
     if (!quickCustName.trim()) return toast.error("Nhập tên khách hàng");
     setSavingCust(true);
@@ -659,6 +703,7 @@ function Page() {
         },
       });
       toast.success(`Đã tạo khách hàng: ${quickCustName.trim()}`);
+      setDupConfirmOpen(false);
       setQuickCustOpen(false);
       const savedName = quickCustName.trim();
       const savedPhone = quickCustPhone.trim();
@@ -709,6 +754,7 @@ function Page() {
     setVatAmountRaw(_vp?.vatAmountRaw ?? "0");
     setDepositRaw("0");
     setKhachThanhToanRaw("");
+    setPaidTouched(false);
     setNote("");
     setCreateScheduleOnOrder(false);
     setScheduleForm({
@@ -743,8 +789,12 @@ function Page() {
       return toast.error("Vui lòng nhập tiêu đề lịch làm việc");
     }
 
-    // Nếu khách trả đủ hoặc thừa → completed; ngược lại giữ status đã chọn
-    const finalStatus = khachThanhToan >= khachCanThanhToan && khachCanThanhToan > 0
+    // ⚡ Hóa đơn nhanh: LUÔN hoàn tất, kể cả khi khách chưa trả đồng nào
+    //    (phần chưa trả tự động ghi vào công nợ khách như luồng cũ).
+    // Đơn thường: khách có trả tiền thì mới chuyển sang hoàn tất.
+    const finalStatus = quickInvoice
+      ? "completed"
+      : khachThanhToan >= khachCanThanhToan && khachCanThanhToan > 0
       ? "completed"
       : khachThanhToan > 0 && khachCanThanhToan > 0
       ? "completed"    // trả 1 phần cũng ghi completed, phần còn lại tính công nợ
@@ -754,6 +804,33 @@ function Page() {
     //    (Đơn "Đặt hàng (chưa giao)" / "Nháp" vẫn cho phép Khách lẻ — để trống khách.)
     if (finalStatus === "completed" && !customer) {
       return toast.error("Đơn hoàn tất phải có khách hàng. Vui lòng chọn khách hàng, hoặc lưu ở trạng thái Đặt hàng (chưa giao).");
+    }
+
+    // ✅ Đơn hoàn tất sẽ trừ kho ngay → kiểm tra tồn trước ở client để báo lỗi
+    //    dạng bảng dễ đọc, thay vì để server ném ra chuỗi lỗi dài một dòng.
+    if (finalStatus === "completed") {
+      const missing: StockShortage[] = [];
+      const needByProduct = new Map<string, number>();
+      for (const it of items) {
+        needByProduct.set(it.product_id, (needByProduct.get(it.product_id) ?? 0) + Number(it.qty || 0));
+      }
+      for (const [productId, needed] of needByProduct) {
+        const available = stockByProduct.get(productId) ?? 0;
+        if (available < needed) {
+          const prod = (data?.products ?? []).find((p: any) => p.id === productId);
+          missing.push({
+            product_name: prod?.name ?? productId,
+            sku: prod?.sku ?? null,
+            needed,
+            available,
+          });
+        }
+      }
+      if (missing.length > 0) {
+        setShortages(missing);
+        setShortageOpen(true);
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -796,6 +873,8 @@ function Page() {
 
       setReceiptOrder({
         ...r,
+        status: finalStatus,
+        isInvoice: quickInvoice,
         subtotal,
         discountAmt,
         vatAmt,
@@ -804,6 +883,7 @@ function Page() {
         khachCanThanhToan,
         khachThanhToan,
         congNo,
+        tienThua,
         items,
         customer,
         customerName: selectedCustomerObj?.name ?? "Khách lẻ",
@@ -818,7 +898,11 @@ function Page() {
         discountPct: useDiscountPct ? parseFloat(discountPct) || 0 : 0,
       });
 
-      toast.success("Tạo đơn " + r.code);
+      toast.success(
+        quickInvoice
+          ? `Đã xuất hóa đơn ${r.code}${congNo > 0 ? ` — Công nợ: ${fmt(congNo)}` : ""}`
+          : "Tạo đơn " + r.code,
+      );
       reset();
       setOpen(false);
       qc.invalidateQueries({ queryKey: ["orders"] });
@@ -860,7 +944,10 @@ function Page() {
                 <tr
                   key={o.id}
                   className="border-b last:border-0 hover:bg-muted/40 cursor-pointer transition-colors"
-                  onClick={() => navigate({ to: "/orders/$id", params: { id: o.id } })}
+                  // Mở tab mới: trang danh sách giữ nguyên bộ lọc/trang đang xem,
+                  // xem xong đóng tab là quay lại đúng chỗ đang làm việc.
+                  onClick={() => window.open(`/orders/${o.id}`, "_blank", "noopener,noreferrer")}
+                  title="Bấm để mở chi tiết đơn ở tab mới"
                 >
                   <td className="py-2 text-center text-xs text-muted-foreground pr-2">
                     {globalIdx}
@@ -903,8 +990,10 @@ function Page() {
                     <Link
                       to="/orders/$id"
                       params={{ id: o.id }}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-                      title="Xem chi tiết"
+                      title="Xem chi tiết ở tab mới"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
                     </Link>
@@ -928,25 +1017,47 @@ function Page() {
   return (
     <AppShell title="Bán hàng" loading={ordersLoading}>
       <div className="mb-4 flex items-center gap-3 flex-wrap">
+        <Button
+          onClick={() => {
+            setQuickInvoice(false);
+            setOpen(true);
+          }}
+        >
+          <Plus className="h-4 w-4 mr-1" />
+          Tạo đơn hàng
+        </Button>
+
+        {/* ⚡ Xuất hóa đơn thẳng (trạng thái Hoàn tất) — không phải qua bước Đặt hàng */}
+        <Button
+          className="bg-green-600 text-white hover:bg-green-700"
+          onClick={() => {
+            setQuickInvoice(true);
+            setOpen(true);
+          }}
+          title="Tạo hóa đơn bán hàng hoàn tất ngay: trừ kho, ghi doanh thu và công nợ luôn"
+        >
+          <Zap className="h-4 w-4 mr-1" />
+          Tạo hóa đơn nhanh
+        </Button>
+
         <Dialog
           open={open}
           onOpenChange={(o) => {
             setOpen(o);
             if (o) reset();
+            else setQuickInvoice(false);
           }}
         >
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-1" />
-              Tạo đơn hàng
-            </Button>
-          </DialogTrigger>
-
           <DialogContent className="w-full max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Tạo đơn hàng</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                {quickInvoice && <Zap className="h-5 w-5 text-green-600" />}
+                {quickInvoice ? "Tạo hóa đơn nhanh" : "Tạo đơn hàng"}
+              </DialogTitle>
               <DialogDescription>
-                Tạo hóa đơn bán hàng hoặc đơn đặt hàng cho khách.
+                {quickInvoice
+                  ? "Hóa đơn được lưu ngay ở trạng thái Hoàn tất: trừ tồn kho, ghi doanh thu và công nợ khách."
+                  : "Tạo hóa đơn bán hàng hoặc đơn đặt hàng cho khách."}
               </DialogDescription>
             </DialogHeader>
 
@@ -954,7 +1065,10 @@ function Page() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <Label>Khách hàng</Label>
+                    <Label>
+                      Khách hàng
+                      {quickInvoice && <span className="text-destructive"> *</span>}
+                    </Label>
                     <button
                       type="button"
                       className="flex items-center gap-0.5 text-xs text-primary hover:underline"
@@ -1015,15 +1129,23 @@ function Page() {
 
                 <div>
                   <Label>Trạng thái</Label>
-                  <SearchableSelect
-                    value={status}
-                    onChange={(v) => setStatus(v as any)}
-                    placeholder="Chọn trạng thái..."
-                    options={[
-                      { value: "reserved", label: "Đặt hàng (chưa giao)" },
-                      { value: "draft", label: "Nháp" },
-                    ]}
-                  />
+                  {quickInvoice ? (
+                    // Hóa đơn nhanh luôn là đơn Hoàn tất → không cho đổi trạng thái.
+                    <div className="mt-1 flex h-10 items-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-3 text-sm font-medium text-green-700">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Hoàn tất
+                    </div>
+                  ) : (
+                    <SearchableSelect
+                      value={status}
+                      onChange={(v) => setStatus(v as any)}
+                      placeholder="Chọn trạng thái..."
+                      options={[
+                        { value: "reserved", label: "Đặt hàng (chưa giao)" },
+                        { value: "draft", label: "Nháp" },
+                      ]}
+                    />
+                  )}
                 </div>
 
                 <div>
@@ -1451,20 +1573,84 @@ function Page() {
                 </div>
               </div>
 
-              {/* Đã bỏ khối "Khách thanh toán" ở form tạo đơn theo yêu cầu.
-                  Tạo đơn xong, việc thanh toán được thực hiện ở trang chi tiết đơn. */}
+              {/* Khối "Khách thanh toán" CHỈ hiện ở hóa đơn nhanh — vì đơn được
+                  chốt hoàn tất ngay tại đây. Với đơn thường, việc thanh toán vẫn
+                  làm ở trang chi tiết đơn như cũ. */}
+              {quickInvoice && (
+                <div className="rounded-lg border border-green-200 overflow-hidden">
+                  <div className="bg-green-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-green-800">
+                    Khách thanh toán
+                  </div>
+                  <div className="p-3 space-y-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Số tiền khách trả (₫)</Label>
+                      <Input
+                        className="mt-1 h-11 text-lg font-semibold"
+                        value={khachThanhToanRaw}
+                        onChange={(e) => {
+                          setPaidTouched(true);
+                          setKhachThanhToanRaw(fmtInput(e.target.value));
+                        }}
+                        onFocus={(e) => e.target.select()}
+                        placeholder="0"
+                      />
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          className="rounded-full border px-2.5 py-1 text-xs hover:bg-muted"
+                          onClick={() => {
+                            setPaidTouched(true);
+                            setKhachThanhToanRaw(fmtInput(String(khachCanThanhToan)));
+                          }}
+                        >
+                          Trả đủ {fmt(khachCanThanhToan)}
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-full border px-2.5 py-1 text-xs hover:bg-muted"
+                          onClick={() => {
+                            setPaidTouched(true);
+                            setKhachThanhToanRaw("");
+                          }}
+                        >
+                          Chưa trả (ghi nợ)
+                        </button>
+                      </div>
+                    </div>
+
+                    {congNo > 0 && (
+                      <div className="flex justify-between rounded-md bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive">
+                        <span>Ghi vào công nợ khách</span>
+                        <span>{fmt(congNo)}</span>
+                      </div>
+                    )}
+                    {tienThua > 0 && (
+                      <div className="flex justify-between rounded-md bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
+                        <span>Tiền thừa trả lại khách</span>
+                        <span>{fmt(tienThua)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <DialogFooter className="flex-col sm:flex-row gap-2">
                 <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
                   Hủy
                 </Button>
                 <Button
-                  className="w-full sm:w-auto font-bold text-base h-12 bg-primary text-primary-foreground"
+                  className={`w-full sm:w-auto font-bold text-base h-12 ${
+                    quickInvoice
+                      ? "bg-green-600 text-white hover:bg-green-700"
+                      : "bg-primary text-primary-foreground"
+                  }`}
                   onClick={submit}
                   disabled={submitting}
                 >
                   {submitting ? (
                     <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Đang xử lý...</>
+                  ) : quickInvoice ? (
+                    <><Zap className="h-4 w-4 mr-1.5" />Xuất hóa đơn</>
                   ) : "Tạo đơn"}
                 </Button>
               </DialogFooter>
@@ -1516,6 +1702,19 @@ function Page() {
                       value={quickCustPhone} onChange={(e) => setQuickCustPhone(e.target.value)} />
                   </div>
                 </div>
+
+                {/* Cảnh báo khách đã tồn tại (trùng SĐT hoặc trùng tên) */}
+                <DuplicateCustomerAlert
+                  matches={custDuplicates}
+                  checking={checkingDuplicates}
+                  onPick={(m: DuplicateMatch) => {
+                    setCustomer(m.id);
+                    setQuickCustOpen(false);
+                    resetQuickCustForm();
+                    toast.success(`Đã chọn khách có sẵn: ${m.name}`);
+                  }}
+                />
+
                 {quickCustType === "ca_nhan" && (
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1667,7 +1866,7 @@ function Page() {
 
               <div className="flex gap-2 justify-end pt-3 border-t">
                 <Button type="button" variant="ghost" onClick={() => setQuickCustOpen(false)}>Hủy bỏ</Button>
-                <Button type="button" className="px-6" onClick={handleQuickCreateCustomer} disabled={savingCust}>
+                <Button type="button" className="px-6" onClick={handleQuickCustSaveClick} disabled={savingCust}>
                   <UserPlus className="h-4 w-4 mr-1" />
                   {savingCust ? "Đang tạo..." : "Lưu thông tin"}
                 </Button>
@@ -1676,14 +1875,25 @@ function Page() {
           </DialogContent>
         </Dialog>
 
+        <DuplicateConfirmDialog
+          open={dupConfirmOpen}
+          onOpenChange={setDupConfirmOpen}
+          matches={custDuplicates}
+          onConfirm={handleQuickCreateCustomer}
+          saving={savingCust}
+        />
+
         <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
           <DialogContent className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-green-700 flex items-center gap-2">
-                <span className="text-xl">✅</span> Đơn hàng đã tạo thành công!
+                <span className="text-xl">✅</span>{" "}
+                {receiptOrder?.isInvoice ? "Đã xuất hóa đơn thành công!" : "Đơn hàng đã tạo thành công!"}
               </DialogTitle>
               <DialogDescription>
-                Phiếu thu dưới đây để truy thu số tiền còn nợ. In hoặc đóng để tiếp tục.
+                {receiptOrder?.isInvoice
+                  ? "Đơn đã ở trạng thái Hoàn tất, tồn kho và công nợ đã được cập nhật. In hoặc đóng để tiếp tục."
+                  : "Phiếu thu dưới đây để truy thu số tiền còn nợ. In hoặc đóng để tiếp tục."}
               </DialogDescription>
             </DialogHeader>
             {receiptOrder && (() => {
@@ -1733,9 +1943,30 @@ function Page() {
                       </div>
                     )}
                     <div className="flex justify-between font-bold text-lg pt-1 border-t text-green-700">
-                      <span>Còn phải thu</span>
+                      <span>Khách cần trả</span>
                       <span>{moneyFmt(receiptOrder.khachCanThanhToan)}</span>
                     </div>
+
+                    {receiptOrder.isInvoice && (
+                      <>
+                        <div className="flex justify-between pt-1.5 border-t">
+                          <span className="text-muted-foreground">Khách đã thanh toán</span>
+                          <span className="font-medium">{moneyFmt(receiptOrder.khachThanhToan ?? 0)}</span>
+                        </div>
+                        {receiptOrder.congNo > 0 && (
+                          <div className="flex justify-between font-semibold text-destructive">
+                            <span>Ghi vào công nợ</span>
+                            <span>{moneyFmt(receiptOrder.congNo)}</span>
+                          </div>
+                        )}
+                        {receiptOrder.tienThua > 0 && (
+                          <div className="flex justify-between font-semibold text-blue-700">
+                            <span>Tiền thừa trả khách</span>
+                            <span>{moneyFmt(receiptOrder.tienThua)}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
 
                   {receiptOrder.note && <div className="text-muted-foreground text-xs">Ghi chú: {receiptOrder.note}</div>}
@@ -2055,6 +2286,13 @@ function Page() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <StockShortageDialog
+        open={shortageOpen}
+        onOpenChange={setShortageOpen}
+        shortages={shortages}
+        branchName={(stats?.branches ?? []).find((b: any) => b.id === branch)?.name}
+      />
     </AppShell>
   );
 }

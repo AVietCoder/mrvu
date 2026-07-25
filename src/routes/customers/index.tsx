@@ -15,6 +15,11 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
 import {
+  DuplicateCustomerAlert,
+  DuplicateConfirmDialog,
+  useDuplicateCustomers,
+} from "@/components/DuplicateCustomerAlert";
+import {
   Pagination,
   DEFAULT_PAGE_SIZE,
 } from "@/components/Pagination";
@@ -200,6 +205,16 @@ function CustomersPage() {
   const [sortBy, setSortBy] = useState("date");
   const [page, setPage] = useState(1);
 
+  // ── Cảnh báo khách hàng đã tồn tại (trùng SĐT hoặc trùng tên) ──────────────
+  // Chỉ cảnh báo, không chặn: bấm Lưu vẫn tạo được sau khi xác nhận 1 lần.
+  const [dupConfirmOpen, setDupConfirmOpen] = useState(false);
+  const { matches: duplicates, checking: checkingDuplicates } = useDuplicateCustomers({
+    name: form.name,
+    phone: form.phone,
+    excludeId: form.id,
+    enabled: open,
+  });
+
   const [filterGroup, setFilterGroup] = useState("");
   const [filterDebt, setFilterDebt] = useState("all");
   const [filterTotalBuy, setFilterTotalBuy] = useState("all");
@@ -307,9 +322,19 @@ function CustomersPage() {
     setOpen(true);
   }
 
-  async function handleSave(e: FormEvent) {
+  function handleSave(e: FormEvent) {
     e.preventDefault();
     if (saving) return; // chống nhấn đúp tạo 2 khách hàng
+    // Còn cảnh báo trùng → hỏi lại 1 lần, xác nhận xong mới lưu.
+    if (duplicates.length > 0) {
+      setDupConfirmOpen(true);
+      return;
+    }
+    doSave();
+  }
+
+  async function doSave() {
+    if (saving) return;
     setSaving(true);
     try {
       // ✅ form.debt = tổng công nợ muốn hiển thị. Tách phần điều chỉnh thủ công.
@@ -340,6 +365,7 @@ function CustomersPage() {
           ? "Đã cập nhật khách hàng thành công!"
           : "Đã thêm khách hàng thành công!"
       );
+      setDupConfirmOpen(false);
       setOpen(false);
       setForm(empty);
       qc.invalidateQueries({ queryKey: ["customers"] }); // bao gồm cả ["customers","stats"]
@@ -560,8 +586,11 @@ function CustomersPage() {
                     <Link
                       to="/customers/$id"
                       params={{ id: c.id }}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="hover:text-primary hover:underline"
                       onClick={(e) => e.stopPropagation()}
+                      title="Mở hồ sơ khách hàng ở tab mới"
                     >
                       {c.name}
                     </Link>
@@ -582,10 +611,14 @@ function CustomersPage() {
   })()}
 </td>
                   <td className="text-right" onClick={(e) => e.stopPropagation()}>
+                    {/* Mở tab mới: danh sách giữ nguyên bộ lọc/trang đang xem */}
                     <Link
                       to="/customers/$id"
                       params={{ id: c.id }}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="inline-flex p-1 hover:text-blue-600"
+                      title="Xem hồ sơ khách hàng ở tab mới"
                     >
                       <Eye className="h-4 w-4" />
                     </Link>
@@ -684,6 +717,18 @@ function CustomersPage() {
                   />
                 </div>
               </div>
+
+              {/* Cảnh báo khách đã tồn tại — dò ngay trong lúc gõ tên / SĐT */}
+              <DuplicateCustomerAlert
+                matches={duplicates}
+                checking={checkingDuplicates}
+                pickLabel="Xem hồ sơ"
+                onPick={
+                  form.id
+                    ? undefined
+                    : (m) => window.open(`/customers/${m.id}`, "_blank", "noopener,noreferrer")
+                }
+              />
 
               {/* Email + Giới tính + Ngày sinh (cá nhân) */}
               {form.customer_type === "ca_nhan" && (
@@ -922,6 +967,15 @@ function CustomersPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <DuplicateConfirmDialog
+        open={dupConfirmOpen}
+        onOpenChange={setDupConfirmOpen}
+        matches={duplicates}
+        onConfirm={doSave}
+        saving={saving}
+        isEdit={!!form.id}
+      />
 
       <Dialog open={!!viewCustomer} onOpenChange={(o) => { if (!o) setViewId(null); }}>
         <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto rounded-2xl border-none p-0 shadow-2xl">
