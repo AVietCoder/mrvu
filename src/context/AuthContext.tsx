@@ -1,6 +1,12 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { AuthSession, User } from "@/lib/types";
-import { saveSession, loadSession, clearSession } from "@/lib/auth";
+import {
+  saveSession,
+  loadSession,
+  clearSession,
+  touchSession,
+  SESSION_KEY,
+} from "@/lib/auth";
 
 const ACTIVE_BRANCH_KEY = "mrvu_active_branch";
 
@@ -44,6 +50,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     saveActiveBranch(id);
     _setActiveBranchId(id);
   }
+
+  // Phiên nằm ở localStorage nên MỌI TAB dùng chung. Lắng nghe sự kiện
+  // `storage` (chỉ bắn ở các tab KHÁC) để:
+  //   • Đăng xuất ở 1 tab  → tất cả tab còn lại cũng thoát ngay.
+  //   • Đăng nhập ở 1 tab  → tab đang mở sẵn nhận phiên mới, khỏi F5.
+  // Đồng thời gia hạn phiên 1 lần lúc app khởi động (sliding expiration).
+  useEffect(() => {
+    touchSession();
+
+    function onStorage(e: StorageEvent) {
+      // key === null: trình duyệt xoá sạch storage.
+      if (e.key !== null && e.key !== SESSION_KEY) return;
+      const next = loadSession();
+      setSession(next);
+      if (!next) _setActiveBranchId(undefined);
+      else {
+        const saved = loadActiveBranch();
+        _setActiveBranchId(
+          saved && next.user.branch_ids.includes(saved) ? saved : next.user.branch_ids[0],
+        );
+      }
+    }
+
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   function login(s: AuthSession) {
     saveSession(s);
