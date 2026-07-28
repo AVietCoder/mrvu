@@ -1115,16 +1115,29 @@ function Page() {
 
                 <div>
                   <Label>Nhân viên</Label>
-                  <SearchableSelect
-                    value={employee}
-                    onChange={setEmployee}
-                    emptyLabel="---"
-                    placeholder="Tìm nhân viên..."
-                    options={(data?.employees ?? []).map((e: any) => ({
-                      value: e.id,
-                      label: e.name,
-                    }))}
-                  />
+                  {isAdmin ? (
+                    // Admin: được chọn nhân viên bất kỳ.
+                    <SearchableSelect
+                      value={employee}
+                      onChange={setEmployee}
+                      emptyLabel="---"
+                      placeholder="Tìm nhân viên..."
+                      options={(data?.employees ?? []).map((e: any) => ({
+                        value: e.id,
+                        label: e.name,
+                      }))}
+                    />
+                  ) : (
+                    // Nhân viên thường: KHÓA cố định = chính mình, không đổi được.
+                    <div
+                      className="mt-1 flex h-9 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-foreground cursor-not-allowed"
+                      title="Chỉ Admin mới được đổi nhân viên"
+                    >
+                      <span className="truncate">
+                        {user?.full_name || user?.username || "—"}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div>

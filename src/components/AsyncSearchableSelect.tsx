@@ -101,7 +101,7 @@ export function AsyncSearchableSelect({
           ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:border-ring"}
           ${open ? "border-ring ring-1 ring-ring" : "border-input"}`}
       >
-        <span className={selected || (emptyLabel && !value) ? "text-foreground" : "text-muted-foreground"}>
+        <span className={`min-w-0 flex-1 truncate text-left ${selected || (emptyLabel && !value) ? "text-foreground" : "text-muted-foreground"}`}>
           {selected ? selected.label : (emptyLabel && !value ? emptyLabel : placeholder)}
         </span>
         <div className="flex items-center gap-1 shrink-0 ml-2">
