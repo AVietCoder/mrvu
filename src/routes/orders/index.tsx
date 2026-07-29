@@ -219,7 +219,7 @@ function printOrderSlip({
 }
 
 function Page() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, activeBranchId } = useAuth();
   const navigate = useNavigate();
   const refsFn = useServerFn(getOrderFormRefs);
   const ordersFn = useServerFn(searchOrdersPage);
@@ -737,7 +737,15 @@ function Page() {
 
     setItems([]);
     setCustomer("");
-    setBranch(allowedBranches[0]?.id ?? "");
+    // Chi nhánh mặc định = chi nhánh nhân viên đã chọn lúc đăng nhập.
+    // Vẫn nhận activeBranchId khi danh sách chi nhánh chưa tải xong (allowedBranches
+    // rỗng), miễn là user có quyền ở chi nhánh đó. Không hợp lệ → chi nhánh đầu tiên.
+    const canUseActive =
+      !!activeBranchId &&
+      (allowedBranches.length === 0
+        ? isAdmin || !user || user.branch_ids.length === 0 || user.branch_ids.includes(activeBranchId)
+        : allowedBranches.some((b: any) => b.id === activeBranchId));
+    setBranch(canUseActive ? activeBranchId! : allowedBranches[0]?.id ?? "");
     setEmployee(user?.id ?? "");
     setStatus("reserved");
     setPaymentMethod("tien_mat");
