@@ -833,13 +833,18 @@ function Page() {
       }
     }
 
+    // Nhân viên thường KHÔNG đổi được ô "Nhân viên" (khóa cố định = chính mình),
+    // nên luôn ghi đúng id của họ — tránh trường hợp state chưa khởi tạo làm đơn
+    // lưu ra không có nhân viên. Admin giữ nguyên lựa chọn (kể cả bỏ trống).
+    const employeeId = (isAdmin ? employee : user?.id ?? employee) || undefined;
+
     setSubmitting(true);
     try {
       const r = await create({
         data: {
           customer_id: customer || undefined,
           branch_id: branch,
-          employee_id: employee || undefined,
+          employee_id: employeeId,
           status: finalStatus,
           payment_method: paymentMethod,
           discount: discountAmt,
@@ -889,7 +894,7 @@ function Page() {
         customerName: selectedCustomerObj?.name ?? "Khách lẻ",
         customerObj: selectedCustomerObj ?? null,
         branch,
-        employee,
+        employee: employeeId ?? "",
         paymentMethod,
         note,
         includeVat,
@@ -1020,6 +1025,7 @@ function Page() {
         <Button
           onClick={() => {
             setQuickInvoice(false);
+            reset();
             setOpen(true);
           }}
         >
@@ -1032,6 +1038,7 @@ function Page() {
           className="bg-green-600 text-white hover:bg-green-700"
           onClick={() => {
             setQuickInvoice(true);
+            reset();
             setOpen(true);
           }}
           title="Tạo hóa đơn bán hàng hoàn tất ngay: trừ kho, ghi doanh thu và công nợ luôn"
@@ -1915,8 +1922,12 @@ function Page() {
               const branchName = receiptOrder.branch
                 ? (data?.branches ?? []).find((b: any) => b.id === receiptOrder.branch)?.name ?? "—"
                 : "—";
+              // Tra tên NV theo id; nếu danh sách refs chưa có (chưa tải xong)
+              // mà đúng là người đang đăng nhập thì lấy luôn tên của họ.
               const empName = receiptOrder.employee
-                ? (data?.employees ?? []).find((e: any) => e.id === receiptOrder.employee)?.name ?? "—"
+                ? (data?.employees ?? []).find((e: any) => e.id === receiptOrder.employee)?.name ??
+                  (receiptOrder.employee === user?.id ? user?.full_name || user?.username : null) ??
+                  "—"
                 : "—";
               return (
                 <div className="space-y-4 text-sm">
