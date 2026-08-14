@@ -22,8 +22,10 @@ import { Route as BranchesRouteImport } from './routes/branches'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ZaloIndexRouteImport } from './routes/zalo/index'
 import { Route as OrdersIndexRouteImport } from './routes/orders/index'
 import { Route as CustomersIndexRouteImport } from './routes/customers/index'
+import { Route as ZaloCallbackRouteImport } from './routes/zalo/callback'
 import { Route as OrdersIdRouteImport } from './routes/orders/$id'
 import { Route as CustomersIdRouteImport } from './routes/customers/$id'
 
@@ -92,6 +94,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ZaloIndexRoute = ZaloIndexRouteImport.update({
+  id: '/zalo/',
+  path: '/zalo/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrdersIndexRoute = OrdersIndexRouteImport.update({
   id: '/orders/',
   path: '/orders/',
@@ -100,6 +107,11 @@ const OrdersIndexRoute = OrdersIndexRouteImport.update({
 const CustomersIndexRoute = CustomersIndexRouteImport.update({
   id: '/customers/',
   path: '/customers/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ZaloCallbackRoute = ZaloCallbackRouteImport.update({
+  id: '/zalo/callback',
+  path: '/zalo/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrdersIdRoute = OrdersIdRouteImport.update({
@@ -129,8 +141,10 @@ export interface FileRoutesByFullPath {
   '/schedule': typeof ScheduleRoute
   '/customers/$id': typeof CustomersIdRoute
   '/orders/$id': typeof OrdersIdRoute
+  '/zalo/callback': typeof ZaloCallbackRoute
   '/customers/': typeof CustomersIndexRoute
   '/orders/': typeof OrdersIndexRoute
+  '/zalo/': typeof ZaloIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -148,8 +162,10 @@ export interface FileRoutesByTo {
   '/schedule': typeof ScheduleRoute
   '/customers/$id': typeof CustomersIdRoute
   '/orders/$id': typeof OrdersIdRoute
+  '/zalo/callback': typeof ZaloCallbackRoute
   '/customers': typeof CustomersIndexRoute
   '/orders': typeof OrdersIndexRoute
+  '/zalo': typeof ZaloIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -168,8 +184,10 @@ export interface FileRoutesById {
   '/schedule': typeof ScheduleRoute
   '/customers/$id': typeof CustomersIdRoute
   '/orders/$id': typeof OrdersIdRoute
+  '/zalo/callback': typeof ZaloCallbackRoute
   '/customers/': typeof CustomersIndexRoute
   '/orders/': typeof OrdersIndexRoute
+  '/zalo/': typeof ZaloIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -189,8 +207,10 @@ export interface FileRouteTypes {
     | '/schedule'
     | '/customers/$id'
     | '/orders/$id'
+    | '/zalo/callback'
     | '/customers/'
     | '/orders/'
+    | '/zalo/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -208,8 +228,10 @@ export interface FileRouteTypes {
     | '/schedule'
     | '/customers/$id'
     | '/orders/$id'
+    | '/zalo/callback'
     | '/customers'
     | '/orders'
+    | '/zalo'
   id:
     | '__root__'
     | '/'
@@ -227,8 +249,10 @@ export interface FileRouteTypes {
     | '/schedule'
     | '/customers/$id'
     | '/orders/$id'
+    | '/zalo/callback'
     | '/customers/'
     | '/orders/'
+    | '/zalo/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -247,8 +271,10 @@ export interface RootRouteChildren {
   ScheduleRoute: typeof ScheduleRoute
   CustomersIdRoute: typeof CustomersIdRoute
   OrdersIdRoute: typeof OrdersIdRoute
+  ZaloCallbackRoute: typeof ZaloCallbackRoute
   CustomersIndexRoute: typeof CustomersIndexRoute
   OrdersIndexRoute: typeof OrdersIndexRoute
+  ZaloIndexRoute: typeof ZaloIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -344,6 +370,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/zalo/': {
+      id: '/zalo/'
+      path: '/zalo'
+      fullPath: '/zalo/'
+      preLoaderRoute: typeof ZaloIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/orders/': {
       id: '/orders/'
       path: '/orders'
@@ -356,6 +389,13 @@ declare module '@tanstack/react-router' {
       path: '/customers'
       fullPath: '/customers/'
       preLoaderRoute: typeof CustomersIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/zalo/callback': {
+      id: '/zalo/callback'
+      path: '/zalo/callback'
+      fullPath: '/zalo/callback'
+      preLoaderRoute: typeof ZaloCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/orders/$id': {
@@ -391,8 +431,10 @@ const rootRouteChildren: RootRouteChildren = {
   ScheduleRoute: ScheduleRoute,
   CustomersIdRoute: CustomersIdRoute,
   OrdersIdRoute: OrdersIdRoute,
+  ZaloCallbackRoute: ZaloCallbackRoute,
   CustomersIndexRoute: CustomersIndexRoute,
   OrdersIndexRoute: OrdersIndexRoute,
+  ZaloIndexRoute: ZaloIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

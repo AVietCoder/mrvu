@@ -16,6 +16,12 @@ dist-ssr
 .nitro
 *.local
 
+# Secrets — .env TỪNG BỊ COMMIT (xem sql_migration_v8_zalo_zns.sql).
+# Giữ .env.example để biết cần những biến gì, KHÔNG bao giờ commit .env.
+.env
+.env.*
+!.env.example
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars

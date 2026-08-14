@@ -1,0 +1,207 @@
+// @ts-nocheck
+import { createServerFn } from "@tanstack/react-start";
+import { createHash, randomBytes } from "node:crypto";
+import { getSupabaseAdmin } from "./zalo/admin-client";
+import { encryptToken } from "./zalo/crypto";
+import {
+  exchangeCodeForToken,
+  getTemplateInfo,
+  listTemplates,
+  loadConnection,
+} from "./zalo/client";
+import { uid, now } from "./supabase";
+
+/**
+ * Server functions cho phần kết nối Zalo OA và tra cứu template ZNS.
+ *
+ * ⚠️ GHI CHÚ VỀ PHÂN QUYỀN: codebase hiện chưa có session phía server (token
+ * đăng nhập không được verify ở đâu cả), nên các hàm này KHÔNG tự kiểm tra
+ * được người gọi là ai — giống hệt 98 server function còn lại. Khi làm Phase 0
+ * (hash mật khẩu + bảng sessions + requireAuth) thì phải bọc lại các hàm dưới
+ * đây TRƯỚC TIÊN, vì chúng đụng tới token gửi tin tốn tiền.
+ */
+
+// ─── PKCE ─────────────────────────────────────────────────────────────────
+
+function base64url(buf: Buffer): string {
+  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/**
+ * Tạo URL cho người dùng bấm vào để cấp quyền OA.
+ *
+ * code_verifier được trả về cho client giữ tạm trong sessionStorage rồi gửi
+ * lại ở bước callback. Làm vậy để khỏi thêm một bảng chỉ để giữ state sống
+ * vài chục giây. An toàn vì app_secret vẫn nằm hoàn toàn ở server — PKCE ở
+ * đây là lớp bảo vệ bổ sung, không phải lớp duy nhất.
+ */
+export const getZaloAuthUrlFn = createServerFn({ method: "GET" }).handler(async () => {
+  const appId = process.env.ZALO_APP_ID;
+  const redirectUri = process.env.ZALO_REDIRECT_URI;
+  if (!appId || !redirectUri) {
+    throw new Error("Chưa cấu hình ZALO_APP_ID / ZALO_REDIRECT_URI trong .env");
+  }
+
+  const codeVerifier = base64url(randomBytes(32));
+  const codeChallenge = base64url(createHash("sha256").update(codeVerifier).digest());
+  const state = base64url(randomBytes(16));
+
+  const url =
+    "https://oauth.zaloapp.com/v4/oa/permission?" +
+    new URLSearchParams({
+      app_id: appId,
+      redirect_uri: redirectUri,
+      code_challenge: codeChallenge,
+      state,
+    });
+
+  return { url, codeVerifier, state, redirectUri };
+});
+
+/** Đổi code lấy token và lưu kết nối. Gọi từ trang /zalo/callback. */
+export const connectZaloOaFn = createServerFn({ method: "POST" }).handler(
+  async ({ data }: { data: { code: string; codeVerifier: string; oaId?: string } }) => {
+    if (!data?.code || !data?.codeVerifier) throw new Error("Thiếu code hoặc code_verifier");
+
+    const t = await exchangeCodeForToken(data.code, data.codeVerifier);
+    const db = getSupabaseAdmin();
+
+    // OA dùng chung cho mọi chi nhánh → branch_id = NULL, chỉ giữ 1 dòng.
+    const { data: existing } = await db
+      .from("zalo_connections")
+      .select("id")
+      .is("branch_id", null)
+      .limit(1);
+
+    const row = {
+      access_token_enc: encryptToken(t.accessToken),
+      refresh_token_enc: encryptToken(t.refreshToken),
+      token_expires_at: new Date(Date.now() + t.expiresInSec * 1000).toISOString(),
+      refresh_lock_at: null,
+      status: "connected",
+      connected_at: now(),
+      last_error: null,
+    };
+
+    const prev = (existing ?? [])[0] as any;
+    if (prev) {
+      // Dùng update thẳng, KHÔNG dùng updateWhereSafe: nếu cột token chưa tồn
+      // tại thì phải nổ lỗi, không được im lặng bỏ qua.
+      const { error } = await db.from("zalo_connections").update(row).eq("id", prev.id);
+      if (error) throw new Error(error.message);
+      return { id: prev.id as string, reconnected: true };
+    }
+
+    const id = uid();
+    const { error } = await db.from("zalo_connections").insert({
+      id,
+      branch_id: null,
+      oa_id: data.oaId || "pending",
+      ...row,
+      created_at: now(),
+    });
+    if (error) throw new Error(error.message);
+    return { id, reconnected: false };
+  },
+);
+
+/** Trạng thái kết nối để hiển thị ở trang cài đặt. Không trả token ra ngoài. */
+export const getZaloStatusFn = createServerFn({ method: "GET" }).handler(async () => {
+  const conn = await loadConnection().catch(() => null);
+  if (!conn) {
+    const db = getSupabaseAdmin();
+    const { data } = await db
+      .from("zalo_connections")
+      .select("id, oa_id, oa_name, status, last_error, token_expires_at, connected_at")
+      .limit(1);
+    const any = (data ?? [])[0] as any;
+    return any
+      ? { connected: false, ...any }
+      : { connected: false, id: null, status: "disconnected" as const };
+  }
+
+  return {
+    connected: true,
+    id: conn.id,
+    oa_id: conn.oa_id,
+    oa_name: conn.oa_name,
+    status: conn.status,
+    token_expires_at: conn.token_expires_at,
+  };
+});
+
+/**
+ * Đọc danh sách template ZNS trực tiếp từ Zalo.
+ * Đây cũng là phép thử kết nối: gọi được nghĩa là token sống và OA đúng.
+ */
+export const listZaloTemplatesFn = createServerFn({ method: "GET" }).handler(async () => {
+  const conn = await loadConnection();
+  if (!conn) throw new Error("Chưa nối Zalo OA");
+  return await listTemplates(conn);
+});
+
+/**
+ * Đọc chi tiết 1 template — QUAN TRỌNG NHẤT ở bước cấu hình.
+ * Trả về đúng danh sách biến Zalo yêu cầu, để map với dữ liệu đơn hàng.
+ */
+export const getZaloTemplateInfoFn = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data: { templateId: string } }) => {
+    if (!data?.templateId) throw new Error("Thiếu templateId");
+    const conn = await loadConnection();
+    if (!conn) throw new Error("Chưa nối Zalo OA");
+    return await getTemplateInfo(conn, data.templateId);
+  },
+);
+
+/** Lưu cấu hình template + ánh xạ biến vào DB. */
+export const saveZnsTemplateFn = createServerFn({ method: "POST" }).handler(
+  async ({
+    data,
+  }: {
+    data: {
+      code: string;
+      name: string;
+      zaloTemplateId: string;
+      paramMap: Record<string, string>;
+      isActive: boolean;
+    };
+  }) => {
+    const db = getSupabaseAdmin();
+    const { data: existing } = await db
+      .from("zns_templates")
+      .select("id")
+      .eq("code", data.code)
+      .limit(1);
+
+    const row = {
+      code: data.code,
+      name: data.name,
+      zalo_template_id: data.zaloTemplateId,
+      param_map: data.paramMap,
+      is_active: data.isActive,
+    };
+
+    const prev = (existing ?? [])[0] as any;
+    if (prev) {
+      const { error } = await db.from("zns_templates").update(row).eq("id", prev.id);
+      if (error) throw new Error(error.message);
+      return { id: prev.id as string };
+    }
+
+    const id = uid();
+    const { error } = await db.from("zns_templates").insert({ id, ...row, created_at: now() });
+    if (error) throw new Error(error.message);
+    return { id };
+  },
+);
+
+/** Danh sách template đã cấu hình trong app. */
+export const listZnsTemplatesFn = createServerFn({ method: "GET" }).handler(async () => {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db
+    .from("zns_templates")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+});
