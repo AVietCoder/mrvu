@@ -65,6 +65,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "robots", content: "noindex, nofollow, noarchive, nosnippet" },
       { name: "googlebot", content: "noindex, nofollow" },
       { name: "bingbot", content: "noindex, nofollow" },
+      // Xác thực quyền sở hữu domain với Zalo Platform (bắt buộc trước khi
+      // dùng OA API). Đặt sát đầu <head> vì Zalo chỉ đọc 512KB đầu trang.
+      // Giữ nguyên, đừng xóa — gỡ ra là domain mất xác thực.
+      { name: "zalo-platform-site-verification", content: "Nzpb0DhyPJG0mT5gulLMVc3dtoUCaGL_CZGr" },
       { title: "Mr.Vũ" },
     ],
     links: [{ rel: "stylesheet", href: appCss }],

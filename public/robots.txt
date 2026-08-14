@@ -1,2 +1,6 @@
 User-agent: *
 Disallow: /
+# Mở riêng file xác thực quyền sở hữu domain của Zalo Platform.
+# Allow cụ thể hơn Disallow: / nên bot vẫn đọc được đúng file này,
+# toàn bộ phần còn lại của app vẫn bị chặn như cũ.
+Allow: /zalo_verifierNzpb0DhyPJG0mT5gulLMVc3dtoUCaGL_CZGr.html
