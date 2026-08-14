@@ -291,11 +291,47 @@ function Page() {
 
         {info && (
           <div className="border rounded-lg p-4 space-y-3">
-            <div className="text-sm">
-              <span className="text-muted-foreground">Tên mẫu: </span>
-              <strong>{info.templateName}</strong>
-              <span className="text-muted-foreground ml-3">Trạng thái: </span>
-              <strong>{info.status}</strong>
+            <div className="text-sm space-y-1">
+              <div>
+                <span className="text-muted-foreground">Tên mẫu: </span>
+                <strong>{info.templateName}</strong>
+                <span className="text-muted-foreground ml-3">Trạng thái: </span>
+                <strong className={info.status === "ENABLE" ? "text-green-700" : "text-destructive"}>
+                  {info.status}
+                </strong>
+              </div>
+              <div className="flex gap-4 flex-wrap">
+                {info.price && (
+                  <span>
+                    <span className="text-muted-foreground">Giá mỗi tin: </span>
+                    <strong>{Number(info.price).toLocaleString("vi-VN")} đ</strong>
+                  </span>
+                )}
+                {info.templateTag && (
+                  <span>
+                    <span className="text-muted-foreground">Loại tin: </span>
+                    <strong>{info.templateTag}</strong>
+                  </span>
+                )}
+                {info.previewUrl && (
+                  <a
+                    href={info.previewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary underline"
+                  >
+                    Xem thử mẫu tin
+                  </a>
+                )}
+              </div>
+              {/* Tin PROMOTION (hậu mãi) đắt hơn và bị ràng buộc chặt hơn tin
+                  giao dịch — nói rõ để không vỡ chi phí khi chạy thật. */}
+              {info.templateTag === "PROMOTION" && (
+                <div className="text-orange-600 text-xs">
+                  Đây là mẫu <strong>tin hậu mãi (PROMOTION)</strong>, không phải tin giao dịch.
+                  Giá cao hơn và Zalo giới hạn tần suất gửi chặt hơn.
+                </div>
+              )}
             </div>
 
             <div className="text-sm font-medium">Gán biến</div>

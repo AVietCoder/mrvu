@@ -205,20 +205,31 @@ async function apiGet(conn: ZaloConnection, path: string, params: Record<string,
  * biến rồi gửi sẽ bị Zalo từ chối.
  */
 export async function getTemplateInfo(conn: ZaloConnection, templateId: string) {
-  const json = await apiGet(conn, "/template/info", { template_id: templateId });
+  // Đường dẫn ĐÚNG là /template/info/v2. Bản không có /v2 trả lỗi -106
+  // "Method unsupported" với cả GET lẫn POST — đã dò trực tiếp trên API thật
+  // để xác định, đừng đổi lại.
+  const json = await apiGet(conn, "/template/info/v2", { template_id: templateId });
   if (json?.error !== 0) {
     throw new Error(`Zalo trả lỗi ${json?.error}: ${json?.message ?? "không rõ"}`);
   }
   return json.data as {
-    templateId: string;
+    templateId: number;
     templateName: string;
     status: string;
+    /** TRANSACTION | PROMOTION | OTP... — quyết định luật gửi và giá tin. */
+    templateTag?: string;
+    /** Giá mỗi tin (VNĐ), Zalo trả về dạng chuỗi. */
+    price?: string;
+    previewUrl?: string;
+    reason?: string;
+    timeout?: number;
     listParams: Array<{
       name: string;
       require: boolean;
       type: string;
       maxLength?: number;
       minLength?: number;
+      acceptNull?: boolean;
     }>;
   };
 }
