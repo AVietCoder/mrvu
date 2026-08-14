@@ -58,6 +58,31 @@ export const getZaloAuthUrlFn = createServerFn({ method: "GET" }).handler(async 
   return { url, codeVerifier, state, redirectUri };
 });
 
+/**
+ * Trả về cấu hình Zalo mà SERVER đang thực sự dùng, để trang cài đặt hiển thị.
+ *
+ * Có hàm này vì .env ở máy dev và Environment Variables trên Vercel là hai nơi
+ * khác nhau — sửa một bên rồi tưởng bên kia cũng đổi là lỗi rất hay gặp, mà
+ * triệu chứng lại là "Invalid redirect uri" chung chung. Cho hiện thẳng giá trị
+ * production để đối chiếu với chỗ đăng ký bên Zalo, khỏi đoán.
+ *
+ * KHÔNG trả app_secret hay bất kỳ khoá nào — app_id và redirect_uri không bí mật,
+ * chúng vốn nằm công khai trong URL cấp quyền.
+ */
+export const getZaloConfigFn = createServerFn({ method: "GET" }).handler(async () => {
+  const redirectUri = process.env.ZALO_REDIRECT_URI ?? null;
+  return {
+    appId: process.env.ZALO_APP_ID ?? null,
+    redirectUri,
+    // Chỉ báo có/không, không lộ giá trị.
+    hasAppSecret: Boolean(process.env.ZALO_APP_SECRET),
+    hasTokenSecret: Boolean(process.env.ZALO_TOKEN_SECRET),
+    hasServiceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    // Host suy ra từ redirect_uri — phải TRÙNG domain đã xác thực bên Zalo.
+    host: redirectUri ? (() => { try { return new URL(redirectUri).host; } catch { return null; } })() : null,
+  };
+});
+
 /** Đổi code lấy token và lưu kết nối. Gọi từ trang /zalo/callback. */
 export const connectZaloOaFn = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: { code: string; codeVerifier: string; oaId?: string } }) => {

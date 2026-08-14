@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   getZaloAuthUrlFn,
+  getZaloConfigFn,
   getZaloStatusFn,
   listZaloTemplatesFn,
   getZaloTemplateInfoFn,
@@ -41,7 +42,14 @@ function Page() {
   const infoFn = useServerFn(getZaloTemplateInfoFn);
   const saveFn = useServerFn(saveZnsTemplateFn);
   const listSavedFn = useServerFn(listZnsTemplatesFn);
+  const configFn = useServerFn(getZaloConfigFn);
   const qc = useQueryClient();
+
+  const { data: cfg } = useQuery({
+    queryKey: ["zaloConfig"],
+    queryFn: () => configFn(),
+    retry: false,
+  });
 
   const { data: status, isLoading } = useQuery({
     queryKey: ["zaloStatus"],
@@ -190,6 +198,68 @@ function Page() {
             </Button>
           </div>
         </div>
+      </Card>
+
+      {/* ── Cấu hình server đang dùng ── */}
+      <Card className="mb-6">
+        <div className="font-medium mb-1">Cấu hình server đang dùng</div>
+        <div className="text-sm text-muted-foreground mb-3">
+          Đây là giá trị <strong>server production</strong> thực sự gửi cho Zalo. Redirect URI dưới
+          đây phải trùng <em>từng ký tự</em> với chỗ đăng ký trong app Zalo, và domain của nó phải
+          nằm trong danh sách domain <strong>đã xác thực</strong>.
+        </div>
+
+        <div className="space-y-2 text-sm">
+          <div className="flex gap-2 flex-wrap items-center">
+            <span className="text-muted-foreground min-w-[110px]">Redirect URI:</span>
+            <code className="bg-muted px-2 py-1 rounded break-all">{cfg?.redirectUri ?? "— chưa cấu hình —"}</code>
+            {cfg?.redirectUri && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard?.writeText(cfg.redirectUri);
+                  toast.success("Đã copy — dán vào ô Redirect URI bên Zalo");
+                }}
+              >
+                Copy
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2 flex-wrap items-center">
+            <span className="text-muted-foreground min-w-[110px]">Domain:</span>
+            <code className="bg-muted px-2 py-1 rounded">{cfg?.host ?? "—"}</code>
+            <span className="text-xs text-muted-foreground">
+              ← domain này phải được xác thực bên Zalo (bản có <code>www</code> và không{" "}
+              <code>www</code> là hai domain khác nhau)
+            </span>
+          </div>
+          <div className="flex gap-2 flex-wrap items-center">
+            <span className="text-muted-foreground min-w-[110px]">App ID:</span>
+            <code className="bg-muted px-2 py-1 rounded">{cfg?.appId ?? "—"}</code>
+          </div>
+        </div>
+
+        {cfg && (
+          <div className="mt-3 flex gap-3 flex-wrap text-xs">
+            {[
+              ["App Secret", cfg.hasAppSecret],
+              ["Token Secret", cfg.hasTokenSecret],
+              ["Service Role Key", cfg.hasServiceRole],
+            ].map(([label, ok]) => (
+              <span
+                key={label as string}
+                className={
+                  ok
+                    ? "text-green-700 bg-green-50 px-2 py-1 rounded"
+                    : "text-destructive bg-destructive/10 px-2 py-1 rounded"
+                }
+              >
+                {ok ? "✓" : "✗"} {label}
+              </span>
+            ))}
+          </div>
+        )}
       </Card>
 
       {/* ── Cấu hình template ── */}
