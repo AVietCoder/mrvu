@@ -6,6 +6,7 @@ import { useState } from "react";
 import {
   getZaloAuthUrlFn,
   getZaloConfigFn,
+  getZaloDashboardFn,
   getZaloStatusFn,
   listZaloTemplatesFn,
   getZaloTemplateInfoFn,
@@ -45,10 +46,18 @@ function Page() {
   const configFn = useServerFn(getZaloConfigFn);
   const qc = useQueryClient();
 
+  const dashFn = useServerFn(getZaloDashboardFn);
+
   const { data: cfg } = useQuery({
     queryKey: ["zaloConfig"],
     queryFn: () => configFn(),
     retry: false,
+  });
+  const { data: dash } = useQuery({
+    queryKey: ["zaloDashboard"],
+    queryFn: () => dashFn(),
+    retry: false,
+    refetchInterval: 30_000,
   });
 
   const { data: status, isLoading } = useQuery({
@@ -134,9 +143,12 @@ function Page() {
         data: {
           code: "order_completed",
           name: info.templateName || "Thông báo mua hàng thành công",
-          zaloTemplateId: info.templateId || templateId.trim(),
+          zaloTemplateId: String(info.templateId || templateId.trim()),
           paramMap,
           isActive: true,
+          listParams: info.listParams ?? [],
+          templateTag: info.templateTag,
+          price: info.price,
         },
       });
       toast.success("Đã lưu cấu hình template");
@@ -363,6 +375,72 @@ function Page() {
           </div>
         )}
       </Card>
+
+      {/* ── Hàng đợi + lịch sử gửi ── */}
+      {dash && (
+        <Card className="mb-6">
+          <div className="font-medium mb-3">Hàng đợi gửi tin</div>
+          <div className="flex gap-2 flex-wrap mb-4 text-sm">
+            {[
+              ["Chờ gửi", dash.queue.pending, "bg-blue-50 text-blue-700"],
+              ["Đang gửi", dash.queue.sending, "bg-yellow-50 text-yellow-700"],
+              ["Thử lại", dash.queue.retrying, "bg-orange-50 text-orange-700"],
+              ["Đã gửi", dash.queue.sent, "bg-green-50 text-green-700"],
+              ["Thất bại", dash.queue.failed, "bg-destructive/10 text-destructive"],
+            ].map(([label, n, cls]) => (
+              <span key={label as string} className={`px-3 py-1.5 rounded ${cls}`}>
+                {label}: <strong>{n as number}</strong>
+              </span>
+            ))}
+          </div>
+
+          <div className="font-medium mb-2">50 tin gần nhất</div>
+          {dash.logs.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              Chưa gửi tin nào. Tin sẽ tự vào hàng đợi khi có đơn chuyển sang hoàn tất.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground border-b">
+                    <th className="py-2 pr-3">Thời điểm</th>
+                    <th className="py-2 pr-3">Đơn</th>
+                    <th className="py-2 pr-3">SĐT</th>
+                    <th className="py-2 pr-3">Trạng thái</th>
+                    <th className="py-2">Lỗi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dash.logs.map((l: any) => (
+                    <tr key={l.id} className="border-b last:border-0">
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        {new Date(l.sent_at || l.created_at).toLocaleString("vi-VN")}
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-xs">{l.order_code ?? "—"}</td>
+                      <td className="py-2 pr-3 font-mono text-xs">{l.recipient_phone}</td>
+                      <td className="py-2 pr-3">
+                        <span
+                          className={
+                            l.status === "SENT"
+                              ? "text-green-700 bg-green-50 px-2 py-0.5 rounded text-xs"
+                              : "text-destructive bg-destructive/10 px-2 py-0.5 rounded text-xs"
+                          }
+                        >
+                          {l.status === "SENT" ? "Đã gửi" : "Thất bại"}
+                        </span>
+                      </td>
+                      <td className="py-2 text-xs text-muted-foreground">
+                        {l.error_message ? `${l.error_code}: ${l.error_message}` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* ── Đã cấu hình ── */}
       {saved && saved.length > 0 && (

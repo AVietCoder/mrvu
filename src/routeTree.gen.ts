@@ -28,6 +28,7 @@ import { Route as CustomersIndexRouteImport } from './routes/customers/index'
 import { Route as ZaloCallbackRouteImport } from './routes/zalo/callback'
 import { Route as OrdersIdRouteImport } from './routes/orders/$id'
 import { Route as CustomersIdRouteImport } from './routes/customers/$id'
+import { Route as ApiJobsDrainRouteImport } from './routes/api/jobs/drain'
 
 const ScheduleRoute = ScheduleRouteImport.update({
   id: '/schedule',
@@ -124,6 +125,11 @@ const CustomersIdRoute = CustomersIdRouteImport.update({
   path: '/customers/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiJobsDrainRoute = ApiJobsDrainRouteImport.update({
+  id: '/api/jobs/drain',
+  path: '/api/jobs/drain',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -145,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/customers/': typeof CustomersIndexRoute
   '/orders/': typeof OrdersIndexRoute
   '/zalo/': typeof ZaloIndexRoute
+  '/api/jobs/drain': typeof ApiJobsDrainRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -166,6 +173,7 @@ export interface FileRoutesByTo {
   '/customers': typeof CustomersIndexRoute
   '/orders': typeof OrdersIndexRoute
   '/zalo': typeof ZaloIndexRoute
+  '/api/jobs/drain': typeof ApiJobsDrainRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -188,6 +196,7 @@ export interface FileRoutesById {
   '/customers/': typeof CustomersIndexRoute
   '/orders/': typeof OrdersIndexRoute
   '/zalo/': typeof ZaloIndexRoute
+  '/api/jobs/drain': typeof ApiJobsDrainRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -211,6 +220,7 @@ export interface FileRouteTypes {
     | '/customers/'
     | '/orders/'
     | '/zalo/'
+    | '/api/jobs/drain'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -232,6 +242,7 @@ export interface FileRouteTypes {
     | '/customers'
     | '/orders'
     | '/zalo'
+    | '/api/jobs/drain'
   id:
     | '__root__'
     | '/'
@@ -253,6 +264,7 @@ export interface FileRouteTypes {
     | '/customers/'
     | '/orders/'
     | '/zalo/'
+    | '/api/jobs/drain'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -275,6 +287,7 @@ export interface RootRouteChildren {
   CustomersIndexRoute: typeof CustomersIndexRoute
   OrdersIndexRoute: typeof OrdersIndexRoute
   ZaloIndexRoute: typeof ZaloIndexRoute
+  ApiJobsDrainRoute: typeof ApiJobsDrainRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -412,6 +425,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CustomersIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/jobs/drain': {
+      id: '/api/jobs/drain'
+      path: '/api/jobs/drain'
+      fullPath: '/api/jobs/drain'
+      preLoaderRoute: typeof ApiJobsDrainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -435,6 +455,7 @@ const rootRouteChildren: RootRouteChildren = {
   CustomersIndexRoute: CustomersIndexRoute,
   OrdersIndexRoute: OrdersIndexRoute,
   ZaloIndexRoute: ZaloIndexRoute,
+  ApiJobsDrainRoute: ApiJobsDrainRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -14,6 +14,7 @@ import {
   logActivity,
 } from "./supabase";
 import { recalculateCustomerDebt } from "./customers.functions";
+import { enqueueOrderCompletedZns } from "./zalo/enqueue";
 
 // ─── Gửi email thông báo admin ─────────────────────────────────────────────
 async function getAdminEmail(): Promise<string | null> {
@@ -889,6 +890,13 @@ export const createOrder = createServerFn({ method: "POST" })
         // Lỗi email không ảnh hưởng đơn hàng
       }
 
+      // Hóa đơn nhanh (tạo thẳng ở trạng thái hoàn tất) cũng phải nhắn khách.
+      // Đặt SÁT return: mọi bước có thể ném lỗi đã qua hết, nên không có
+      // chuyện đơn bị rollback mà job gửi tin vẫn nằm lại trong hàng đợi.
+      if (status === "completed") {
+        await enqueueOrderCompletedZns(oid);
+      }
+
       return { ok: true, code, receipt_code: receipt?.code ?? null, id: oid };
     } catch (err) {
       if (receipt?.id) {
@@ -1027,6 +1035,10 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
         // Lỗi email không ảnh hưởng việc cập nhật trạng thái
       }
       await logActivity({ action: "complete_order", detail: `Hoàn tất đơn ${currentOrder.code}`, employee_id: data.actor_id || currentOrder.employee_id || null });
+
+      // Đẩy tin ZNS "mua hàng thành công" vào hàng đợi. Hàm này tự nuốt mọi
+      // lỗi — Zalo hỏng thì đơn vẫn hoàn tất bình thường.
+      await enqueueOrderCompletedZns(currentOrder.id);
     }
 
     if (data.status === "cancelled") {
@@ -1198,6 +1210,13 @@ export const updateOrder = createServerFn({ method: "POST" })
           createdAt: now(),
           notePrefix: "Điều chỉnh giảm thu (sửa đơn)",
         });
+      }
+
+      // Sửa đơn từ trạng thái khác sang hoàn tất cũng là một lần "mua hàng
+      // thành công". Đơn vốn đã hoàn tất từ trước thì bỏ qua, tránh nhắn lại
+      // chỉ vì người dùng sửa ghi chú.
+      if (data.status === "completed" && existingStatus !== "completed") {
+        await enqueueOrderCompletedZns(data.id);
       }
 
       return { ok: true };

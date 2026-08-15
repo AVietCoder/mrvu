@@ -189,6 +189,10 @@ export const saveZnsTemplateFn = createServerFn({ method: "POST" }).handler(
       zaloTemplateId: string;
       paramMap: Record<string, string>;
       isActive: boolean;
+      /** Nguyên listParams từ Zalo — giữ maxLength để cắt chuỗi trước khi gửi. */
+      listParams?: any[];
+      templateTag?: string;
+      price?: string | number;
     };
   }) => {
     const db = getSupabaseAdmin();
@@ -204,6 +208,9 @@ export const saveZnsTemplateFn = createServerFn({ method: "POST" }).handler(
       zalo_template_id: data.zaloTemplateId,
       param_map: data.paramMap,
       is_active: data.isActive,
+      list_params: data.listParams ?? [],
+      template_tag: data.templateTag ?? null,
+      price: data.price != null ? Number(data.price) : null,
     };
 
     const prev = (existing ?? [])[0] as any;
@@ -219,6 +226,47 @@ export const saveZnsTemplateFn = createServerFn({ method: "POST" }).handler(
     return { id };
   },
 );
+
+/**
+ * Lịch sử gửi tin + tình trạng hàng đợi.
+ * Đây là chỗ duy nhất người dùng thấy được tin nào đã đi, tin nào hỏng và
+ * hỏng vì sao — nếu không có thì mọi lỗi gửi đều im lặng.
+ */
+export const getZaloDashboardFn = createServerFn({ method: "GET" }).handler(async () => {
+  const db = getSupabaseAdmin();
+
+  const [logsRes, jobsRes] = await Promise.all([
+    db
+      .from("message_logs")
+      .select("id, order_id, recipient_phone, status, error_code, error_message, sent_at, created_at, billable")
+      .order("created_at", { ascending: false })
+      .limit(50),
+    db.from("message_jobs").select("status"),
+  ]);
+
+  const jobs = (jobsRes.data ?? []) as any[];
+  const countBy = (s: string) => jobs.filter((j) => j.status === s).length;
+
+  // Ghép mã đơn để hiển thị cho người dùng hiểu, thay vì phơi id thô.
+  const logs = (logsRes.data ?? []) as any[];
+  const orderIds = [...new Set(logs.map((l) => l.order_id).filter(Boolean))];
+  const codeById = new Map<string, string>();
+  if (orderIds.length) {
+    const { data: orders } = await db.from("orders").select("id, code").in("id", orderIds);
+    for (const o of (orders ?? []) as any[]) codeById.set(o.id, o.code);
+  }
+
+  return {
+    queue: {
+      pending: countBy("PENDING"),
+      retrying: countBy("RETRYING"),
+      sending: countBy("SENDING"),
+      sent: countBy("SENT"),
+      failed: countBy("FAILED"),
+    },
+    logs: logs.map((l) => ({ ...l, order_code: l.order_id ? codeById.get(l.order_id) ?? null : null })),
+  };
+});
 
 /** Danh sách template đã cấu hình trong app. */
 export const listZnsTemplatesFn = createServerFn({ method: "GET" }).handler(async () => {
