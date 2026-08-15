@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
+import { normalizePhoneForStorage } from "./zalo/phone";
 import {
   aggregateColumn,
   countRows,
@@ -126,7 +127,10 @@ export const upsertCustomer = createServerFn({ method: "POST" })
 
     const payload: Record<string, any> = {
       name: data.name,
-      phone: data.phone || null,
+      // Nhân viên gõ "0906 249 669" vẫn được, nhưng lưu xuống thì bỏ dấu cách.
+      // Chuẩn hoá Ở SERVER để mọi lối vào đều đi qua đây: trang khách hàng,
+      // nút "Tạo mới" nhanh trong form đơn, và cả import nếu sau này có.
+      phone: normalizePhoneForStorage(data.phone),
       email: data.email || null,
       gender: data.gender || null,
       birthday: data.birthday || null,
