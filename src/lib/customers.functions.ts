@@ -320,7 +320,10 @@ export const getCustomerLite = createServerFn({ method: "GET" })
     if (!data?.id) return null;
     const rows = await fetchRows("customers", {
       eq: { id: data.id },
-      select: "id, name, phone, address, ward, district, province",
+      // zalo_opt_out_at: form tạo đơn cần biết khách có từ chối nhận tin không
+      // để khoá sẵn ô "Gửi thông báo Zalo", thay vì để nhân viên tick rồi tin
+      // bị chặn im lặng ở tầng dưới.
+      select: "id, name, phone, address, ward, district, province, zalo_opt_out_at",
       limit: 1,
     });
     return (rows?.[0] as any) ?? null;

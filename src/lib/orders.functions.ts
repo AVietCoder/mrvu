@@ -811,6 +811,15 @@ export const createOrder = createServerFn({ method: "POST" })
         completed_at: status === "completed" ? now() : null,
       });
 
+      // zalo_notify ghi RIÊNG, không nhét vào insertRow ở trên. Lý do: insertRow
+      // là bản nghiêm ngặt — nếu DB chưa chạy migration v10 thì cả câu insert
+      // hỏng, tức là KHÔNG TẠO ĐƯỢC ĐƠN NÀO. Bán hàng không được phép chết chỉ
+      // vì thiếu một cột của tính năng phụ.
+      // Chỉ ghi khi = true; NULL và false đều được hiểu là "không gửi".
+      if (data.zalo_notify === true) {
+        await updateWhere("orders", { zalo_notify: true }, { id: oid }).catch(() => undefined);
+      }
+
       for (const it of data.items) {
         const itemTotal = it.qty * it.unit_price - (it.discount || 0);
         await insertRow("order_items", {
@@ -1116,6 +1125,11 @@ export const updateOrder = createServerFn({ method: "POST" })
       payment_method: paymentMethod,
       note: data.note || null,
     };
+    // Cũng ghi riêng như lúc tạo đơn, vì cùng lý do: updateWhere nghiêm ngặt,
+    // thiếu cột là hỏng cả thao tác sửa đơn. Form sửa không gửi trường này thì
+    // giữ nguyên lựa chọn cũ — sửa ghi chú không được vô tình bật/tắt nhắn khách.
+    const zaloNotifyChange =
+      data.zalo_notify === undefined ? null : { zalo_notify: data.zalo_notify === true };
 
     if (existingStatus === "completed") {
       await revertCompletedOrderSideEffects(
@@ -1149,6 +1163,10 @@ export const updateOrder = createServerFn({ method: "POST" })
         },
         { id: data.id },
       );
+
+      if (zaloNotifyChange) {
+        await updateWhere("orders", zaloNotifyChange, { id: data.id }).catch(() => undefined);
+      }
 
       await deleteWhere("order_items", { order_id: data.id });
       for (const it of data.items) {

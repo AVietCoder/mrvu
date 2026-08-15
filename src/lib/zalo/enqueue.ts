@@ -61,12 +61,33 @@ export async function enqueueOrderCompletedZns(orderId: string): Promise<Enqueue
     // 3) Đơn + khách
     const { data: orders } = await db
       .from("orders")
-      .select("id, code, customer_id, branch_id, total, paid, deposit, created_at")
+      .select("id, code, customer_id, branch_id, total, paid, deposit, created_at, zalo_notify")
       .eq("id", orderId)
       .limit(1);
     const order = (orders ?? [])[0] as any;
     if (!order) return { queued: false, reason: "Không tìm thấy đơn" };
+
+    // ★ Quyết định nằm ở chính đơn hàng: nhân viên tick "Gửi thông báo Zalo"
+    // trên form. NULL = đơn tạo trước khi có tính năng → không gửi.
+    if (order.zalo_notify !== true) {
+      return { queued: false, reason: "Đơn không chọn gửi thông báo Zalo" };
+    }
+
     if (!order.customer_id) return { queued: false, reason: "Đơn khách lẻ, không có SĐT" };
+
+    // Ngưỡng giá trị đơn — 0 nghĩa là không chặn.
+    const { data: settingsRows } = await db
+      .from("zalo_settings")
+      .select("min_order_total")
+      .eq("id", "default")
+      .limit(1);
+    const minTotal = Number((settingsRows ?? [])[0]?.min_order_total ?? 0);
+    if (minTotal > 0 && Number(order.total || 0) < minTotal) {
+      return {
+        queued: false,
+        reason: `Đơn ${Number(order.total || 0).toLocaleString("vi-VN")}đ dưới ngưỡng ${minTotal.toLocaleString("vi-VN")}đ`,
+      };
+    }
 
     const { data: custs } = await db
       .from("customers")

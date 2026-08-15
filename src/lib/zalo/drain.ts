@@ -22,6 +22,8 @@ export interface DrainResult {
   sent: number;
   failed: number;
   retrying: number;
+  /** Bị chặn vì đang ở chế độ chạy thử. */
+  skippedTest: number;
   skipped: string[];
 }
 
@@ -32,7 +34,9 @@ function backoffMinutes(attempts: number): number {
 
 export async function drainMessageJobs(limit = BATCH): Promise<DrainResult> {
   const db = getSupabaseAdmin();
-  const result: DrainResult = { claimed: 0, sent: 0, failed: 0, retrying: 0, skipped: [] };
+  const result: DrainResult = {
+    claimed: 0, sent: 0, failed: 0, retrying: 0, skippedTest: 0, skipped: [],
+  };
 
   const { data: claimed, error } = await db.rpc("claim_message_jobs", { p_limit: limit });
   if (error) throw new Error(`Không giành được job: ${error.message}`);
@@ -40,6 +44,20 @@ export async function drainMessageJobs(limit = BATCH): Promise<DrainResult> {
   const jobs = (claimed ?? []) as any[];
   result.claimed = jobs.length;
   if (!jobs.length) return result;
+
+  // ★ CHẾ ĐỘ CHẠY THỬ — lớp chặn CUỐI CÙNG, ngay trước khi tiền ra khỏi túi.
+  // Đặt ở đây (lúc gửi) chứ không phải lúc xếp hàng, để job vẫn được tạo và
+  // anh nhìn thấy "đáng lẽ tin này đã gửi cho ai", rồi mới quyết định mở thật.
+  const { data: st } = await db
+    .from("zalo_settings")
+    .select("test_mode, test_phones")
+    .eq("id", "default")
+    .limit(1);
+  const settings = (st ?? [])[0] as any;
+  // Không đọc được cấu hình thì coi như ĐANG chạy thử. Mặc định an toàn:
+  // sự cố cấu hình không được phép biến thành một đợt nhắn tin ngoài ý muốn.
+  const testMode = settings?.test_mode !== false;
+  const testPhones: string[] = Array.isArray(settings?.test_phones) ? settings.test_phones : [];
 
   // Kết nối OA dùng chung cho cả lô — tránh giải mã + refresh token 50 lần.
   let conn: ZaloConnection | null = null;
@@ -69,6 +87,36 @@ export async function drainMessageJobs(limit = BATCH): Promise<DrainResult> {
     const payload = (job.payload ?? {}) as any;
     const templateId = String(payload.zalo_template_id ?? "");
     const templateData = (payload.template_data ?? {}) as Record<string, string>;
+
+    // Đang chạy thử mà số này không nằm trong danh sách -> KHÔNG gửi.
+    // Huỷ job (không retry) và ghi log để thấy được tin nào đã bị chặn.
+    if (testMode && !testPhones.includes(job.recipient_phone)) {
+      await db.from("message_logs").insert({
+        id: uid(),
+        job_id: job.id,
+        connection_id: job.connection_id,
+        customer_id: job.customer_id,
+        order_id: job.order_id,
+        template_id: job.template_id,
+        recipient_phone: job.recipient_phone,
+        content: JSON.stringify(templateData),
+        status: "SKIPPED",
+        billable: false,
+        error_code: "TEST_MODE",
+        error_message: "Chế độ chạy thử: số không nằm trong danh sách thử nghiệm",
+        created_at: now(),
+      });
+      await db
+        .from("message_jobs")
+        .update({
+          status: "CANCELLED",
+          locked_at: null,
+          last_error: "Chế độ chạy thử: bỏ qua",
+        })
+        .eq("id", job.id);
+      result.skippedTest++;
+      continue;
+    }
 
     let res;
     try {

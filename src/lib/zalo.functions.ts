@@ -10,6 +10,7 @@ import {
   loadConnection,
 } from "./zalo/client";
 import { uid, now } from "./supabase";
+import { normalizeVnPhone } from "./zalo/phone";
 
 /**
  * Server functions cho phần kết nối Zalo OA và tra cứu template ZNS.
@@ -263,10 +264,54 @@ export const getZaloDashboardFn = createServerFn({ method: "GET" }).handler(asyn
       sending: countBy("SENDING"),
       sent: countBy("SENT"),
       failed: countBy("FAILED"),
+      cancelled: countBy("CANCELLED"),
     },
     logs: logs.map((l) => ({ ...l, order_code: l.order_id ? codeById.get(l.order_id) ?? null : null })),
   };
 });
+
+/** Cấu hình gửi tin: chạy thử, danh sách SĐT thử, ngưỡng đơn. */
+export const getZaloSettingsFn = createServerFn({ method: "GET" }).handler(async () => {
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("zalo_settings").select("*").eq("id", "default").limit(1);
+  const row = (data ?? [])[0] as any;
+  // Chưa có dòng cấu hình -> mặc định coi như ĐANG chạy thử, không phải đang
+  // bật thật. Sai sót cấu hình không được biến thành đợt nhắn tin ngoài ý muốn.
+  return {
+    testMode: row?.test_mode !== false,
+    testPhones: Array.isArray(row?.test_phones) ? (row.test_phones as string[]) : [],
+    minOrderTotal: Number(row?.min_order_total ?? 0),
+  };
+});
+
+export const saveZaloSettingsFn = createServerFn({ method: "POST" }).handler(
+  async ({
+    data,
+  }: {
+    data: { testMode: boolean; testPhones: string[]; minOrderTotal: number };
+  }) => {
+    const db = getSupabaseAdmin();
+    // Chuẩn hoá SĐT ngay lúc lưu, để lúc gửi chỉ việc so chuỗi — tránh trường
+    // hợp nhập "0912 345 678" mà lúc gửi so với "84912345678" thành không khớp
+    // rồi tưởng chế độ chạy thử bị hỏng.
+    const phones = (data.testPhones ?? [])
+      .map((p) => normalizeVnPhone(p))
+      .filter((p): p is string => Boolean(p));
+
+    const { error } = await db
+      .from("zalo_settings")
+      .update({
+        test_mode: Boolean(data.testMode),
+        test_phones: phones,
+        min_order_total: Math.max(0, Number(data.minOrderTotal) || 0),
+        updated_at: now(),
+      })
+      .eq("id", "default");
+    if (error) throw new Error(error.message);
+
+    return { ok: true, phones };
+  },
+);
 
 /** Danh sách template đã cấu hình trong app. */
 export const listZnsTemplatesFn = createServerFn({ method: "GET" }).handler(async () => {

@@ -13,6 +13,7 @@ import {
 import { exportSalesReportToExcel } from "@/lib/export-sales-report";
 import { createSchedule, listWorkTypes } from "@/lib/schedule.functions";
 import { upsertCustomer, listCustomers, getCustomerLite } from "@/lib/customers.functions";
+import { normalizeVnPhone } from "@/lib/zalo/phone";
 import { buildInvoiceHtml } from "@/lib/print-invoice";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
@@ -49,6 +50,7 @@ import {
   Search,
   Zap,
   CheckCircle2,
+  MessageCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -348,6 +350,10 @@ function Page() {
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const nowTimeStr = new Date().toTimeString().slice(0, 5);
+  // Gửi ZNS cho khách. Mặc định TẮT — mỗi tin tốn phí, nhân viên phải chủ
+  // động tick, không để hệ thống tự nhắn thay.
+  const [zaloNotify, setZaloNotify] = useState(false);
+
   const [createScheduleOnOrder, setCreateScheduleOnOrder] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({
     title: "",
@@ -500,6 +506,25 @@ function Page() {
       }));
     }
   }, [customer, scheduleForm.work_type_id, createScheduleOnOrder, selectedCustomerObj, workTypes]);
+
+  // Vì sao KHÔNG gửi được Zalo cho đơn này. null = gửi được.
+  // Kiểm tra ngay trên form để nhân viên thấy lý do lúc bấm, chứ không phải
+  // tick xong rồi tin bị loại im lặng ở server.
+  const zaloBlockReason = useMemo(() => {
+    if (!customer) return "đơn chưa chọn khách hàng";
+    if (!selectedCustomerObj) return null; // đang tải thông tin khách
+    if (selectedCustomerObj.zalo_opt_out_at) return "khách đã từ chối nhận tin Zalo";
+    if (!normalizeVnPhone(selectedCustomerObj.phone)) {
+      return `SĐT không hợp lệ (${selectedCustomerObj.phone || "chưa có"})`;
+    }
+    return null;
+  }, [customer, selectedCustomerObj]);
+
+  // Đổi khách mà khách mới không nhận được tin thì bỏ tick luôn, tránh gửi
+  // lên server một lựa chọn đã không còn hợp lệ.
+  useEffect(() => {
+    if (zaloBlockReason) setZaloNotify(false);
+  }, [zaloBlockReason]);
 
   const discount = useDiscountPct ? 0 : parseInput(discountRaw);
   const deposit = parseInput(depositRaw);
@@ -764,6 +789,7 @@ function Page() {
     setKhachThanhToanRaw("");
     setPaidTouched(false);
     setNote("");
+    setZaloNotify(false);
     setCreateScheduleOnOrder(false);
     setScheduleForm({
       title: "",
@@ -863,6 +889,9 @@ function Page() {
           deposit,
           paid: khachThanhToan,
           note: note || undefined,
+          // Chỉ gửi true khi thật sự tick VÀ khách nhận được — không tin
+          // riêng state của checkbox, phòng trường hợp đổi khách sau khi tick.
+          zalo_notify: zaloNotify && !zaloBlockReason,
           items,
         },
       });
@@ -1494,6 +1523,40 @@ function Page() {
               <div>
                 <Label>Ghi chú đơn hàng</Label>
                 <Input className="mt-1" value={note} onChange={(e) => setNote(e.target.value)} />
+              </div>
+
+              {/* Gửi ZNS cho khách — mỗi tin tốn phí nên để nhân viên quyết
+                  định từng đơn, và chỉ bật được khi khách thật sự nhận được. */}
+              <div className="rounded-lg border overflow-hidden">
+                <label
+                  className={`flex items-center gap-2 select-none px-3 py-2.5 transition-colors ${
+                    zaloBlockReason
+                      ? "bg-muted/40 cursor-not-allowed"
+                      : "bg-green-50/60 hover:bg-green-100/60 cursor-pointer"
+                  }`}
+                >
+                  <Checkbox
+                    checked={zaloNotify && !zaloBlockReason}
+                    disabled={!!zaloBlockReason}
+                    onCheckedChange={(v) => setZaloNotify(!!v)}
+                    id="zalo-notify"
+                  />
+                  <MessageCircle
+                    className={`h-4 w-4 ${zaloBlockReason ? "text-muted-foreground" : "text-green-600"}`}
+                  />
+                  <span
+                    className={`text-sm font-medium ${
+                      zaloBlockReason ? "text-muted-foreground" : "text-green-900"
+                    }`}
+                  >
+                    Gửi thông báo Zalo cho khách khi đơn hoàn tất
+                  </span>
+                </label>
+                {zaloBlockReason && (
+                  <div className="px-3 py-2 text-xs text-muted-foreground border-t bg-muted/20">
+                    Không gửi được: {zaloBlockReason}
+                  </div>
+                )}
               </div>
 
               <div className="rounded-lg border overflow-hidden">

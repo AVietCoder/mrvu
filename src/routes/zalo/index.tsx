@@ -7,7 +7,9 @@ import {
   getZaloAuthUrlFn,
   getZaloConfigFn,
   getZaloDashboardFn,
+  getZaloSettingsFn,
   getZaloStatusFn,
+  saveZaloSettingsFn,
   listZaloTemplatesFn,
   getZaloTemplateInfoFn,
   saveZnsTemplateFn,
@@ -59,6 +61,52 @@ function Page() {
     retry: false,
     refetchInterval: 30_000,
   });
+
+  // ── Cấu hình gửi tin ────────────────────────────────────────────────────
+  const settingsFn = useServerFn(getZaloSettingsFn);
+  const saveSettingsFn = useServerFn(saveZaloSettingsFn);
+  const { data: settings } = useQuery({
+    queryKey: ["zaloSettings"],
+    queryFn: () => settingsFn(),
+    retry: false,
+  });
+
+  const [testMode, setTestMode] = useState<boolean | null>(null);
+  const [testPhonesRaw, setTestPhonesRaw] = useState<string | null>(null);
+  const [minTotalRaw, setMinTotalRaw] = useState<string | null>(null);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  // null = chưa chạm tới, lấy giá trị từ server.
+  const effTestMode = testMode ?? settings?.testMode ?? true;
+  const effPhones = testPhonesRaw ?? (settings?.testPhones ?? []).join("\n");
+  const effMinTotal = minTotalRaw ?? String(settings?.minOrderTotal ?? 0);
+
+  async function saveSettings() {
+    setSavingSettings(true);
+    try {
+      const phones = effPhones.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+      const r = await saveSettingsFn({
+        data: {
+          testMode: effTestMode,
+          testPhones: phones,
+          minOrderTotal: Number(String(effMinTotal).replace(/[^\d]/g, "")) || 0,
+        },
+      });
+      // Báo lại số đã chuẩn hoá để người dùng thấy số nào bị loại vì sai định dạng.
+      const dropped = phones.length - r.phones.length;
+      toast.success(
+        dropped > 0
+          ? `Đã lưu. ${dropped} số bị loại do sai định dạng.`
+          : "Đã lưu cấu hình gửi tin",
+      );
+      setTestPhonesRaw(r.phones.join("\n"));
+      qc.invalidateQueries({ queryKey: ["zaloSettings"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi lưu cấu hình");
+    } finally {
+      setSavingSettings(false);
+    }
+  }
 
   const { data: status, isLoading } = useQuery({
     queryKey: ["zaloStatus"],
@@ -376,6 +424,74 @@ function Page() {
         )}
       </Card>
 
+      {/* ── Cấu hình gửi tin ── */}
+      <Card className="mb-6">
+        <div className="font-medium mb-1">Ai được nhận tin</div>
+        <div className="text-sm text-muted-foreground mb-4">
+          Tin chỉ gửi cho đơn có tick <strong>"Gửi thông báo Zalo cho khách"</strong> trên form tạo
+          đơn. Không tick thì không gửi — kể cả khách có SĐT hợp lệ.
+        </div>
+
+        <div
+          className={`rounded-lg border p-3 mb-4 ${
+            effTestMode ? "bg-orange-50/60 border-orange-200" : "bg-green-50/60 border-green-200"
+          }`}
+        >
+          <label className="flex items-start gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={effTestMode}
+              onChange={(e) => setTestMode(e.target.checked)}
+            />
+            <span className="text-sm">
+              <strong>Chế độ chạy thử</strong>{" "}
+              {effTestMode ? (
+                <span className="text-orange-700">— ĐANG BẬT, khách thật chưa nhận tin nào</span>
+              ) : (
+                <span className="text-green-700 font-medium">— ĐÃ TẮT, khách thật sẽ nhận tin</span>
+              )}
+              <div className="text-muted-foreground mt-1">
+                Khi bật, hệ thống chỉ gửi tới các số liệt kê bên dưới. Mọi số khác bị huỷ và ghi log
+                rõ lý do, không tốn phí. Tắt đi là bắt đầu nhắn khách thật.
+              </div>
+            </span>
+          </label>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <Label>SĐT nhận tin khi đang chạy thử</Label>
+            <textarea
+              className="mt-1 w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+              value={effPhones}
+              onChange={(e) => setTestPhonesRaw(e.target.value)}
+              placeholder={"0912345678\n0987654321"}
+            />
+            <div className="text-xs text-muted-foreground mt-1">
+              Mỗi số một dòng. Nhập kiểu nào cũng được, hệ thống tự chuẩn hoá về dạng Zalo yêu cầu.
+            </div>
+          </div>
+
+          <div>
+            <Label>Chỉ gửi khi đơn từ (đ) trở lên</Label>
+            <Input
+              className="mt-1"
+              value={effMinTotal}
+              onChange={(e) => setMinTotalRaw(e.target.value)}
+              placeholder="0"
+            />
+            <div className="text-xs text-muted-foreground mt-1">
+              Để <strong>0</strong> nghĩa là không chặn theo giá trị đơn (đang tắt).
+            </div>
+          </div>
+
+          <Button onClick={saveSettings} disabled={savingSettings}>
+            {savingSettings ? "Đang lưu..." : "Lưu cấu hình gửi tin"}
+          </Button>
+        </div>
+      </Card>
+
       {/* ── Hàng đợi + lịch sử gửi ── */}
       {dash && (
         <Card className="mb-6">
@@ -387,6 +503,7 @@ function Page() {
               ["Thử lại", dash.queue.retrying, "bg-orange-50 text-orange-700"],
               ["Đã gửi", dash.queue.sent, "bg-green-50 text-green-700"],
               ["Thất bại", dash.queue.failed, "bg-destructive/10 text-destructive"],
+              ["Chặn do chạy thử", dash.queue.cancelled, "bg-muted text-muted-foreground"],
             ].map(([label, n, cls]) => (
               <span key={label as string} className={`px-3 py-1.5 rounded ${cls}`}>
                 {label}: <strong>{n as number}</strong>
@@ -424,10 +541,16 @@ function Page() {
                           className={
                             l.status === "SENT"
                               ? "text-green-700 bg-green-50 px-2 py-0.5 rounded text-xs"
+                              : l.status === "SKIPPED"
+                              ? "text-muted-foreground bg-muted px-2 py-0.5 rounded text-xs"
                               : "text-destructive bg-destructive/10 px-2 py-0.5 rounded text-xs"
                           }
                         >
-                          {l.status === "SENT" ? "Đã gửi" : "Thất bại"}
+                          {l.status === "SENT"
+                            ? "Đã gửi"
+                            : l.status === "SKIPPED"
+                            ? "Chạy thử — bỏ qua"
+                            : "Thất bại"}
                         </span>
                       </td>
                       <td className="py-2 text-xs text-muted-foreground">
