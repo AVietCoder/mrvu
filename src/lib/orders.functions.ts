@@ -921,7 +921,7 @@ export const createOrder = createServerFn({ method: "POST" })
   });
 
 export const updateOrderStatus = createServerFn({ method: "POST" })
-  .handler(async ({ data }: { data: { id: string; status: string; paid?: number; payment_method?: string; actor_id?: string } }) => {
+  .handler(async ({ data }: { data: { id: string; status: string; paid?: number; payment_method?: string; actor_id?: string; zalo_notify?: boolean } }) => {
     const currentRows = await fetchRows<any>("orders", {
       eq: { id: data.id },
     select: "id, code, customer_id, branch_id, employee_id, subtotal, discount, total, deposit, paid, payment_method, note, status",
@@ -974,6 +974,19 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
     // ✅ Ghi completed_at = thời điểm nhấn "Tạo hóa đơn"
     if (data.status === "completed") updateFields.completed_at = now();
     await updateWhere("orders", updateFields, { id: data.id });
+
+    // Lựa chọn "Gửi thông báo Zalo" ở màn hình Tạo hóa đơn (đơn đặt hàng ->
+    // hoàn tất). Phải ghi TRƯỚC khối completed bên dưới, vì enqueue đọc lại
+    // đơn từ DB — ghi sau thì nó vẫn thấy giá trị cũ và bỏ qua tin.
+    // Ghi riêng, có .catch(): updateWhere là bản nghiêm ngặt, thiếu cột là
+    // hỏng cả thao tác hoàn tất đơn.
+    if (data.zalo_notify !== undefined) {
+      await updateWhere(
+        "orders",
+        { zalo_notify: data.zalo_notify === true },
+        { id: data.id },
+      ).catch(() => undefined);
+    }
 
     // effectivePaid = paid mới từ UI hoặc giá trị cũ trong DB
     const effectivePaid = typeof data.paid === "number" ? data.paid : Number(currentOrder.paid || 0);

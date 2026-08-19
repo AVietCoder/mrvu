@@ -236,26 +236,50 @@ export const saveZnsTemplateFn = createServerFn({ method: "POST" }).handler(
 export const getZaloDashboardFn = createServerFn({ method: "GET" }).handler(async () => {
   const db = getSupabaseAdmin();
 
-  const [logsRes, jobsRes] = await Promise.all([
+  // MỘT DÒNG = MỘT TIN, không phải một lần thử.
+  // Trước đây liệt kê thẳng message_logs nên một tin thất bại 5 lần hiện thành
+  // 5 dòng, nhìn như 5 tin gửi cho 5 khách khác nhau. Nguồn đúng để hiển thị
+  // là message_jobs (mỗi job = một tin cho một đơn), còn logs chỉ dùng để lấy
+  // thời điểm gửi thành công.
+  const [allJobsRes, recentJobsRes] = await Promise.all([
+    db.from("message_jobs").select("status"),
     db
-      .from("message_logs")
-      .select("id, order_id, recipient_phone, status, error_code, error_message, sent_at, created_at, billable")
+      .from("message_jobs")
+      .select(
+        "id, order_id, customer_id, recipient_phone, status, attempts, max_attempts, last_error, scheduled_at, created_at",
+      )
       .order("created_at", { ascending: false })
       .limit(50),
-    db.from("message_jobs").select("status"),
   ]);
 
-  const jobs = (jobsRes.data ?? []) as any[];
-  const countBy = (s: string) => jobs.filter((j) => j.status === s).length;
+  const allJobs = (allJobsRes.data ?? []) as any[];
+  const countBy = (s: string) => allJobs.filter((j) => j.status === s).length;
 
-  // Ghép mã đơn để hiển thị cho người dùng hiểu, thay vì phơi id thô.
-  const logs = (logsRes.data ?? []) as any[];
-  const orderIds = [...new Set(logs.map((l) => l.order_id).filter(Boolean))];
-  const codeById = new Map<string, string>();
-  if (orderIds.length) {
-    const { data: orders } = await db.from("orders").select("id, code").in("id", orderIds);
-    for (const o of (orders ?? []) as any[]) codeById.set(o.id, o.code);
+  const jobs = (recentJobsRes.data ?? []) as any[];
+  const jobIds = jobs.map((j) => j.id);
+  const orderIds = [...new Set(jobs.map((j) => j.order_id).filter(Boolean))];
+  const custIds = [...new Set(jobs.map((j) => j.customer_id).filter(Boolean))];
+
+  const [logsRes, ordersRes, custsRes] = await Promise.all([
+    jobIds.length
+      ? db.from("message_logs").select("job_id, status, sent_at").in("job_id", jobIds)
+      : Promise.resolve({ data: [] as any[] }),
+    orderIds.length
+      ? db.from("orders").select("id, code, total").in("id", orderIds)
+      : Promise.resolve({ data: [] as any[] }),
+    custIds.length
+      ? db.from("customers").select("id, name").in("id", custIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+
+  const sentAtByJob = new Map<string, string>();
+  for (const l of ((logsRes as any).data ?? []) as any[]) {
+    if (l.status === "SENT" && l.sent_at) sentAtByJob.set(l.job_id, l.sent_at);
   }
+  const orderById = new Map<string, any>();
+  for (const o of ((ordersRes as any).data ?? []) as any[]) orderById.set(o.id, o);
+  const custById = new Map<string, any>();
+  for (const c of ((custsRes as any).data ?? []) as any[]) custById.set(c.id, c);
 
   return {
     queue: {
@@ -266,8 +290,55 @@ export const getZaloDashboardFn = createServerFn({ method: "GET" }).handler(asyn
       failed: countBy("FAILED"),
       cancelled: countBy("CANCELLED"),
     },
-    logs: logs.map((l) => ({ ...l, order_code: l.order_id ? codeById.get(l.order_id) ?? null : null })),
+    messages: jobs.map((j) => ({
+      id: j.id,
+      order_code: j.order_id ? orderById.get(j.order_id)?.code ?? null : null,
+      order_total: j.order_id ? Number(orderById.get(j.order_id)?.total ?? 0) : 0,
+      customer_name: j.customer_id ? custById.get(j.customer_id)?.name ?? null : null,
+      phone: j.recipient_phone,
+      status: j.status,
+      attempts: Number(j.attempts ?? 0),
+      max_attempts: Number(j.max_attempts ?? 5),
+      last_error: j.last_error,
+      // Còn phải thử lại thì cho biết lần kế tiếp vào lúc nào, thay vì để
+      // người dùng ngồi đoán hệ thống có còn chạy hay đã bỏ cuộc.
+      next_retry_at: j.status === "RETRYING" ? j.scheduled_at : null,
+      sent_at: sentAtByJob.get(j.id) ?? null,
+      created_at: j.created_at,
+    })),
   };
+});
+
+/**
+ * Đưa các tin THẤT BẠI trở lại hàng đợi.
+ *
+ * Job hết lượt thử (attempts >= max_attempts) sẽ nằm im vĩnh viễn — đúng như
+ * thiết kế, để không lặp vô hạn. Nhưng khi nguyên nhân đã được xử lý (ví dụ
+ * lỗi -136 do chưa liên kết ZBS Account), cần có cách đẩy chúng chạy lại mà
+ * không phải sửa DB bằng tay.
+ *
+ * ⚠️ Gửi lại là TỐN TIỀN THẬT. Chỉ gọi khi người dùng chủ động bấm.
+ */
+export const retryFailedZnsFn = createServerFn({ method: "POST" }).handler(async () => {
+  const db = getSupabaseAdmin();
+
+  const { data: failed } = await db.from("message_jobs").select("id").eq("status", "FAILED");
+  const ids = ((failed ?? []) as any[]).map((j) => j.id);
+  if (!ids.length) return { retried: 0 };
+
+  const { error } = await db
+    .from("message_jobs")
+    .update({
+      status: "PENDING",
+      attempts: 0,          // trả lại đủ lượt thử
+      last_error: null,
+      locked_at: null,
+      scheduled_at: now(),  // gửi ngay lượt cron kế tiếp
+    })
+    .in("id", ids);
+  if (error) throw new Error(error.message);
+
+  return { retried: ids.length };
 });
 
 /** Cấu hình gửi tin: chạy thử, danh sách SĐT thử, ngưỡng đơn. */

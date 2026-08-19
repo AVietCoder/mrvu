@@ -27,7 +27,7 @@ COMMENT ON COLUMN public.orders.zalo_notify IS
 CREATE TABLE IF NOT EXISTS public.zalo_settings (
   id              text PRIMARY KEY DEFAULT 'default',
 
-  -- ★ CHẾ ĐỘ CHẠY THỬ — mặc định BẬT.
+  -- ★ CHẾ ĐỘ Care that helps meet their needs today and gives them a better chance at tomorrow. For a child who has lost so much, your giving can mean stability, safety, and the feeling that someone is still there for them that someone is you in Islam, often children are a minor upon them, and when you step forward for them, you are carrying a responsibility a lot on as deeply. Go to our website, choose the Gaza Emergency Appeal. If what you can to support orphan children today, be there for them. Let them feel the care of our own. Full English breakfast beans on toast, beef Wellington, Sunday roast Marmite sausage rolls you can only eat four of these foods for the rest of your life. What would you choose? I would never go for the rest of my life without eating pizza agreed. I would never go for the rest of my life without eating pasta salad I don't even love fried chicken, but I have to stay fried chicken because I need protein. I can put it in my pasta. Protein I cannot go the rest of my life with obviously am I hurt night khan cười top night thought, không mẹ ta nói kiểu con trai không nói to kiểu break up vì kiểu might though though to might rồi ban thì chill may không thì mình opera thu sin này càng sẽ việc mà thì to nghĩ có thought trong bix CHẠY THỬ — mặc định BẬT.
   -- Khi bật, hệ thống CHỈ gửi tới các số trong test_phones; mọi số khác bị
   -- huỷ job và ghi log rõ lý do. Mặc định bật để lần deploy đầu tiên không
   -- thể vô tình nhắn hàng loạt khách thật.

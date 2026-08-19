@@ -9,6 +9,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useEffect, Fragment } from "react";
 import { getOrderDetail, getOrderEditRefs, updateOrderStatus, updateOrder, createReturnOrder } from "@/lib/orders.functions";
+import { normalizeVnPhone } from "@/lib/zalo/phone";
 import { updateScheduleOrderLink } from "@/lib/schedule.functions";
 import { getSettings } from "@/lib/settings.functions";
 import { buildInvoiceHtml } from "@/lib/print-invoice";
@@ -52,6 +53,7 @@ import {
   Link2,
   Link2Off,
   Loader2,
+  MessageCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -167,6 +169,9 @@ function OrderDetailPage() {
 
   // ── Payment dialog state ──────────────────────────────────────────────────
   const [payOpen, setPayOpen] = useState(false);
+  // Gửi ZNS khi bấm "Tạo hóa đơn" từ một đơn đặt hàng. Mặc định TẮT — mỗi tin
+  // tốn phí, người dùng phải chủ động tick.
+  const [payZaloNotify, setPayZaloNotify] = useState(false);
   const [payMethodTab, setPayMethodTab] = useState<"tien_mat" | "ngan_hang">("tien_mat");
   const [payAmountRaw, setPayAmountRaw] = useState("");
   const [payBankIdx, setPayBankIdx] = useState("");
@@ -488,6 +493,9 @@ function OrderDetailPage() {
     setPayAmountRaw(String(khachCan));
     setPayMethodTab(order.payment_method === "ngan_hang" ? "ngan_hang" : "tien_mat");
     setPayBankIdx("");
+    // Kế thừa lựa chọn đã tick lúc tạo đơn đặt hàng (nếu có), nhưng vẫn cho
+    // đổi trong dialog — đây là thời điểm cuối cùng trước khi tin được gửi.
+    setPayZaloNotify(order.zalo_notify === true);
     setPayOpen(true);
   }
 
@@ -504,6 +512,9 @@ function OrderDetailPage() {
           status: "completed",
           paid,
           payment_method: payMethodTab,
+          // Không tin riêng state của ô tick: khách không nhận được tin thì
+          // luôn gửi false, tránh tạo job chắc chắn sẽ hỏng.
+          zalo_notify: payZaloNotify && !zaloBlockReason,
         },
       });
 
@@ -616,6 +627,19 @@ function OrderDetailPage() {
 
   const cust = (data?.customers ?? []).find((c: any) => c.id === order.customer_id);
   const branch = (data?.branches ?? []).find((b: any) => b.id === order.branch_id);
+
+  // Vì sao KHÔNG gửi Zalo được cho đơn này. null = gửi được.
+  // Kiểm ngay trên màn hình để người dùng thấy lý do lúc bấm, thay vì tick
+  // xong rồi tin bị loại im lặng ở server.
+  const zaloBlockReason: string | null = !order.customer_id
+    ? "đơn không có khách hàng"
+    : !cust
+    ? "chưa tải được thông tin khách"
+    : cust.zalo_opt_out_at
+    ? "khách đã từ chối nhận tin Zalo"
+    : !normalizeVnPhone(cust.phone)
+    ? `SĐT không hợp lệ (${cust.phone || "chưa có"})`
+    : null;
   const emp = (data?.employees ?? []).find((e: any) => e.id === order.employee_id);
 
   return (
@@ -1765,6 +1789,40 @@ function OrderDetailPage() {
                     <span className="font-semibold">{moneyFmtLocal(paid)}</span>
                   </div>
                 )}
+
+                {/* Gửi ZNS cho khách — đây là thời điểm cuối cùng quyết định
+                    được, vì bấm THANH TOÁN là đơn hoàn tất và tin đi ngay. */}
+                <div className="rounded-lg border overflow-hidden">
+                  <label
+                    className={`flex items-center gap-2 select-none px-3 py-2.5 transition-colors ${
+                      zaloBlockReason
+                        ? "bg-muted/40 cursor-not-allowed"
+                        : "bg-green-50/60 hover:bg-green-100/60 cursor-pointer"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={payZaloNotify && !zaloBlockReason}
+                      disabled={!!zaloBlockReason}
+                      onChange={(e) => setPayZaloNotify(e.target.checked)}
+                    />
+                    <MessageCircle
+                      className={`h-4 w-4 ${zaloBlockReason ? "text-muted-foreground" : "text-green-600"}`}
+                    />
+                    <span
+                      className={`text-sm font-medium ${
+                        zaloBlockReason ? "text-muted-foreground" : "text-green-900"
+                      }`}
+                    >
+                      Gửi thông báo Zalo cho khách
+                    </span>
+                  </label>
+                  {zaloBlockReason && (
+                    <div className="px-3 py-2 text-xs text-muted-foreground border-t bg-muted/20">
+                      Không gửi được: {zaloBlockReason}
+                    </div>
+                  )}
+                </div>
 
                 <DialogFooter className="flex-col sm:flex-row gap-2 pt-1">
                   <Button variant="outline" className="w-full sm:w-auto" onClick={() => setPayOpen(false)}>

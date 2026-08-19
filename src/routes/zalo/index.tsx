@@ -9,6 +9,7 @@ import {
   getZaloDashboardFn,
   getZaloSettingsFn,
   getZaloStatusFn,
+  retryFailedZnsFn,
   saveZaloSettingsFn,
   listZaloTemplatesFn,
   getZaloTemplateInfoFn,
@@ -70,6 +71,9 @@ function Page() {
     queryFn: () => settingsFn(),
     retry: false,
   });
+
+  const retryFn = useServerFn(retryFailedZnsFn);
+  const [retrying, setRetrying] = useState(false);
 
   const [testMode, setTestMode] = useState<boolean | null>(null);
   const [testPhonesRaw, setTestPhonesRaw] = useState<string | null>(null);
@@ -495,7 +499,39 @@ function Page() {
       {/* ── Hàng đợi + lịch sử gửi ── */}
       {dash && (
         <Card className="mb-6">
-          <div className="font-medium mb-3">Hàng đợi gửi tin</div>
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+            <div className="font-medium">Hàng đợi gửi tin</div>
+            {dash.queue.failed > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={retrying}
+                onClick={async () => {
+                  // Gửi lại là tốn tiền thật -> hỏi lại trước khi làm.
+                  if (
+                    !window.confirm(
+                      `Đưa ${dash.queue.failed} tin thất bại trở lại hàng đợi và gửi lại?\n\n` +
+                        `Mỗi tin gửi thành công sẽ bị tính phí. Chỉ làm khi nguyên nhân lỗi đã được xử lý.`,
+                    )
+                  )
+                    return;
+                  setRetrying(true);
+                  try {
+                    const r = await retryFn();
+                    toast.success(`Đã đưa ${r.retried} tin trở lại hàng đợi`);
+                    qc.invalidateQueries({ queryKey: ["zaloDashboard"] });
+                  } catch (e: any) {
+                    toast.error(e?.message ?? "Lỗi");
+                  } finally {
+                    setRetrying(false);
+                  }
+                }}
+              >
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Gửi lại {dash.queue.failed} tin thất bại
+              </Button>
+            )}
+          </div>
           <div className="flex gap-2 flex-wrap mb-4 text-sm">
             {[
               ["Chờ gửi", dash.queue.pending, "bg-blue-50 text-blue-700"],
@@ -511,10 +547,15 @@ function Page() {
             ))}
           </div>
 
-          <div className="font-medium mb-2">50 tin gần nhất</div>
-          {dash.logs.length === 0 ? (
+          <div className="font-medium mb-1">50 tin gần nhất</div>
+          <div className="text-xs text-muted-foreground mb-2">
+            Mỗi dòng là một tin gửi cho một đơn. Tin thử lại nhiều lần vẫn chỉ nằm trên một dòng,
+            số lần thử ghi ở cột riêng.
+          </div>
+          {dash.messages.length === 0 ? (
             <div className="text-sm text-muted-foreground">
-              Chưa gửi tin nào. Tin sẽ tự vào hàng đợi khi có đơn chuyển sang hoàn tất.
+              Chưa có tin nào. Tin vào hàng đợi khi đơn có tick "Gửi thông báo Zalo" chuyển sang
+              hoàn tất.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -523,41 +564,63 @@ function Page() {
                   <tr className="text-left text-muted-foreground border-b">
                     <th className="py-2 pr-3">Thời điểm</th>
                     <th className="py-2 pr-3">Đơn</th>
+                    <th className="py-2 pr-3">Khách</th>
                     <th className="py-2 pr-3">SĐT</th>
                     <th className="py-2 pr-3">Trạng thái</th>
-                    <th className="py-2">Lỗi</th>
+                    <th className="py-2 pr-3">Lần thử</th>
+                    <th className="py-2">Ghi chú</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {dash.logs.map((l: any) => (
-                    <tr key={l.id} className="border-b last:border-0">
-                      <td className="py-2 pr-3 whitespace-nowrap">
-                        {new Date(l.sent_at || l.created_at).toLocaleString("vi-VN")}
-                      </td>
-                      <td className="py-2 pr-3 font-mono text-xs">{l.order_code ?? "—"}</td>
-                      <td className="py-2 pr-3 font-mono text-xs">{l.recipient_phone}</td>
-                      <td className="py-2 pr-3">
-                        <span
-                          className={
-                            l.status === "SENT"
-                              ? "text-green-700 bg-green-50 px-2 py-0.5 rounded text-xs"
-                              : l.status === "SKIPPED"
-                              ? "text-muted-foreground bg-muted px-2 py-0.5 rounded text-xs"
-                              : "text-destructive bg-destructive/10 px-2 py-0.5 rounded text-xs"
-                          }
-                        >
-                          {l.status === "SENT"
-                            ? "Đã gửi"
-                            : l.status === "SKIPPED"
-                            ? "Chạy thử — bỏ qua"
-                            : "Thất bại"}
-                        </span>
-                      </td>
-                      <td className="py-2 text-xs text-muted-foreground">
-                        {l.error_message ? `${l.error_code}: ${l.error_message}` : "—"}
-                      </td>
-                    </tr>
-                  ))}
+                  {dash.messages.map((m: any) => {
+                    const label =
+                      m.status === "SENT" ? "Đã gửi"
+                      : m.status === "FAILED" ? "Thất bại"
+                      : m.status === "RETRYING" ? "Đang thử lại"
+                      : m.status === "CANCELLED" ? "Chạy thử — bỏ qua"
+                      : m.status === "SENDING" ? "Đang gửi"
+                      : "Chờ gửi";
+                    const cls =
+                      m.status === "SENT" ? "text-green-700 bg-green-50"
+                      : m.status === "FAILED" ? "text-destructive bg-destructive/10"
+                      : m.status === "RETRYING" ? "text-orange-700 bg-orange-50"
+                      : m.status === "CANCELLED" ? "text-muted-foreground bg-muted"
+                      : "text-blue-700 bg-blue-50";
+                    return (
+                      <tr key={m.id} className="border-b last:border-0">
+                        <td className="py-2 pr-3 whitespace-nowrap">
+                          {new Date(m.sent_at || m.created_at).toLocaleString("vi-VN")}
+                        </td>
+                        <td className="py-2 pr-3 font-mono text-xs">{m.order_code ?? "—"}</td>
+                        <td className="py-2 pr-3">{m.customer_name ?? "—"}</td>
+                        <td className="py-2 pr-3 font-mono text-xs">{m.phone}</td>
+                        <td className="py-2 pr-3">
+                          <span className={`px-2 py-0.5 rounded text-xs whitespace-nowrap ${cls}`}>
+                            {label}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-3 text-xs whitespace-nowrap">
+                          {m.status === "SENT" && m.attempts <= 1
+                            ? "—"
+                            : `${m.attempts}/${m.max_attempts}`}
+                        </td>
+                        <td className="py-2 text-xs text-muted-foreground">
+                          {m.last_error ? (
+                            <>
+                              {m.last_error}
+                              {m.next_retry_at && (
+                                <div className="text-orange-600">
+                                  Thử lại lúc {new Date(m.next_retry_at).toLocaleTimeString("vi-VN")}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
