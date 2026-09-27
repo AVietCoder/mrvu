@@ -64,11 +64,22 @@ export const listProducts = createServerFn({ method: "GET" }).handler(
       } else totalStock += q;
     }
 
+    // Top 10 tồn kho nhiều nhất: chỉ hàng đang kinh doanh (không ẩn — v17), là
+    // hàng hóa chính (không phải phụ kiện đi kèm) và còn tồn. Theo chi nhánh
+    // đang lọc nếu có.
+    const topStock = products
+      .filter((p) => p.is_hidden !== true && !isAccessory(p) && Number(p.total_stock || 0) > 0)
+      .sort((a, b) => Number(b.total_stock) - Number(a.total_stock))
+      .slice(0, 10)
+      .map((p) => ({ id: p.id, sku: p.sku, name: p.name, image_url: p.image_url, total_stock: Number(p.total_stock) }));
+
     return {
       products,
       categories,
       brands,
       branches,
+      topStock,
+      hiddenCount: products.filter((p) => p.is_hidden === true).length,
       totalStock,
       accessoryStock,
       accessoryCount,
@@ -111,26 +122,29 @@ export const upsertProduct = createServerFn({ method: "POST" })
       tech_fee: Number(data.tech_fee || 0),
     };
 
-    // Cờ "tính vào tổng số hàng hóa" ghi RIÊNG sau khi lưu sản phẩm: nếu chưa
-    // chạy migration v15 (thiếu cột) thì việc lưu sản phẩm vẫn thành công.
-    const saveCountFlag = async (id: string) => {
-      if (data.count_in_total === undefined) return;
-      const flag = data.count_in_total !== false;
-      const { error } = await supabase.from("products").update({ count_in_total: flag }).eq("id", id);
-      // Chỉ báo lỗi khi người dùng thực sự bỏ tick — để mặc định (true) thì
-      // thiếu cột cũng không sao.
-      if (error && !flag) {
-        throw new Error(
-          `Đã lưu sản phẩm nhưng chưa lưu được "không tính vào tổng số hàng hóa": ${error.message}. ` +
-            "Cần chạy sql_migration_v15_product_count_flag.sql.",
-        );
+    // Các cờ ghi RIÊNG từng cột sau khi lưu sản phẩm: nếu chưa chạy migration
+    // tương ứng (thiếu cột) thì việc lưu sản phẩm vẫn thành công. Chỉ báo lỗi
+    // khi người dùng thực sự đổi khỏi giá trị mặc định.
+    const FLAGS = [
+      // [cột, giá trị mặc định, nhãn, file migration]
+      ["count_in_total", true, "không tính vào tổng số hàng hóa", "sql_migration_v15_product_count_flag.sql"],
+      ["is_hidden", false, "ẩn hàng (không kinh doanh)", "sql_migration_v17_product_hidden.sql"],
+    ] as const;
+    const saveFlags = async (id: string) => {
+      for (const [col, def, label, file] of FLAGS) {
+        if (data[col] === undefined) continue;
+        const value = Boolean(data[col]);
+        const { error } = await supabase.from("products").update({ [col]: value }).eq("id", id);
+        if (error && value !== def) {
+          throw new Error(`Đã lưu sản phẩm nhưng chưa lưu được "${label}": ${error.message}. Cần chạy ${file}.`);
+        }
       }
     };
 
     // ===== SỬA =====
     if (data.id) {
       await updateWhere("products", payload, { id: data.id });
-      await saveCountFlag(data.id);
+      await saveFlags(data.id);
       await logActivity({
         action: "update_product",
         detail: `Cập nhật sản phẩm: ${data.name}`,
@@ -183,7 +197,7 @@ export const upsertProduct = createServerFn({ method: "POST" })
       }
       // Đã chèn xong — cờ phụ kiện ghi NGOÀI khối retry để lỗi của nó không
       // bị nhầm là lỗi trùng SKU.
-      await saveCountFlag(id);
+      await saveFlags(id);
       await logActivity({
         action: "create_product",
         detail: `Thêm sản phẩm: ${data.name} (SKU ${sku})`,

@@ -32,11 +32,14 @@ type Perm = "manage_payroll" | "manage_roster";
 /**
  * Phạm vi của người thực hiện sau khi đã kiểm quyền.
  *   isAdmin   → thấy / sửa tất cả.
- *   branchIds → các chi nhánh người này được gán (bảng user_branches). Người
- *               có quyền quản lý CHỈ thao tác được trên chi nhánh / nhân viên
- *               thuộc các chi nhánh này.
+ *   branchIds → các chi nhánh người này được gán (bảng user_branches).
+ *               Lịch trực: chỉ sửa ca / nhân viên thuộc các chi nhánh này.
+ *               Bảng lương: chỉ dùng để chọn QUỸ chi nhánh khi chi lương.
+ *   userIds   → CHỈ với "Quản lý lương nhân sự": đúng những nhân viên admin đã
+ *               phân cho người này ở tab "Phân việc" (payroll_assignments, v16).
+ *               Mặc định rỗng = không quản lý lương ai.
  */
-type Scope = { actorId: string; isAdmin: boolean; branchIds: Set<string> };
+type Scope = { actorId: string; isAdmin: boolean; branchIds: Set<string>; userIds?: Set<string> };
 
 /** Kiểm quyền ở SERVER (mẫu assertCanSend của care.functions.ts) và trả phạm vi. */
 async function assertPerm(actorId: string | undefined, perm: Perm): Promise<Scope> {
@@ -58,10 +61,28 @@ async function assertPerm(actorId: string | undefined, perm: Perm): Promise<Scop
     );
   }
   const branchIds = new Set<string>(branches.map((b: any) => b.branch_id));
+  if (perm === "manage_payroll") {
+    // Lương: phạm vi là danh sách nhân viên admin phân cho, KHÔNG theo chi nhánh.
+    const { data, error } = await getSupabaseAdmin()
+      .from("payroll_assignments")
+      .select("user_id")
+      .eq("manager_id", actorId);
+    if (error) {
+      throw new Error(`${error.message}. Nếu báo "does not exist" thì chưa chạy sql_migration_v16_payroll_assignments.sql.`);
+    }
+    return { actorId, isAdmin: false, branchIds, userIds: new Set(((data ?? []) as any[]).map((r) => r.user_id)) };
+  }
   if (!branchIds.size) {
     throw new Error("Tài khoản của bạn chưa được gán chi nhánh nào — nhờ quản trị viên gán chi nhánh để quản lý.");
   }
   return { actorId, isAdmin: false, branchIds };
+}
+
+/** Chỉ admin — dùng cho tab "Phân việc". */
+async function assertAdmin(actorId: string | undefined) {
+  if (!actorId) throw new Error("Thiếu thông tin người thực hiện");
+  const rows = await fetchRows<any>("users", { eq: { id: actorId }, select: "id, is_admin", limit: 1 });
+  if (Number(rows[0]?.is_admin) !== 1) throw new Error("Chỉ quản trị viên được phân việc quản lý lương");
 }
 
 /** Chi nhánh của từng nhân viên (user_branches). */
@@ -82,12 +103,14 @@ async function userBranchMap(userIds?: string[]): Promise<Map<string, Set<string
 }
 
 /**
- * Nhân viên nằm trong phạm vi khi có ÍT NHẤT MỘT chi nhánh trùng với người
- * quản lý. Nhân viên không gắn chi nhánh nào → chỉ admin thấy (lương là dữ
- * liệu nhạy cảm, thà ẩn còn hơn lộ cho người không phụ trách).
+ * Nhân viên có nằm trong phạm vi không:
+ *   - Bảng lương (scope.userIds): đúng người admin đã phân — không liên quan chi nhánh.
+ *   - Lịch trực: có ÍT NHẤT MỘT chi nhánh trùng với người quản lý. Nhân viên
+ *     không gắn chi nhánh nào → chỉ admin.
  */
-function inScope(scope: Scope, userBranches: Set<string> | undefined): boolean {
+function inScope(scope: Scope, userBranches: Set<string> | undefined, userId?: string): boolean {
   if (scope.isAdmin) return true;
+  if (scope.userIds) return Boolean(userId && scope.userIds.has(userId));
   if (!userBranches?.size) return false;
   for (const b of userBranches) if (scope.branchIds.has(b)) return true;
   return false;
@@ -95,14 +118,21 @@ function inScope(scope: Scope, userBranches: Set<string> | undefined): boolean {
 
 async function scopedUserIds(scope: Scope, userIds: string[]): Promise<string[]> {
   if (scope.isAdmin) return userIds;
+  if (scope.userIds) return userIds.filter((u) => scope.userIds!.has(u));
   const map = await userBranchMap(userIds);
-  return userIds.filter((u) => inScope(scope, map.get(u)));
+  return userIds.filter((u) => inScope(scope, map.get(u), u));
 }
 
 async function assertUserInScope(scope: Scope, userId: string) {
   if (scope.isAdmin) return;
   const ok = await scopedUserIds(scope, [userId]);
-  if (!ok.length) throw new Error("Nhân viên này không thuộc chi nhánh bạn quản lý");
+  if (!ok.length) {
+    throw new Error(
+      scope.userIds
+        ? "Bạn chưa được admin phân quản lý lương nhân viên này"
+        : "Nhân viên này không thuộc chi nhánh bạn quản lý",
+    );
+  }
 }
 
 function assertBranchInScope(scope: Scope, branchId: string | null | undefined) {
@@ -453,8 +483,8 @@ export const deleteShiftFn = createServerFn({ method: "POST" }).handler(
 // ═══════════════════════════════════════════════════════════════════════════
 // 2) HỒ SƠ LƯƠNG
 //
-// Quyền "Quản lý lương nhân sự": chỉ thấy / sửa nhân viên có ÍT NHẤT MỘT chi
-// nhánh trùng với chi nhánh mình được gán. Admin thấy tất cả.
+// Quyền "Quản lý lương nhân sự": chỉ thấy / sửa đúng những nhân viên admin đã
+// phân cho ở tab "Phân việc" (mặc định không ai). Admin thấy tất cả.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const listPayProfilesFn = createServerFn({ method: "GET" }).handler(
@@ -473,7 +503,7 @@ export const listPayProfilesFn = createServerFn({ method: "GET" }).handler(
     const branchName = new Map(((brRes.data ?? []) as any[]).map((b) => [b.id, b.name]));
     const byUser = new Map(((profRes.data ?? []) as any[]).map((p) => [p.user_id, p]));
     return users
-      .filter((u) => inScope(scope, ubMap.get(u.id)))
+      .filter((u) => inScope(scope, ubMap.get(u.id), u.id))
       .map((u) => ({
         user_id: u.id,
         full_name: u.full_name,
@@ -581,7 +611,7 @@ async function payrollProfiles(scope: Scope) {
   if (profRes.error) throw new Error(`${profRes.error.message}. Chưa chạy sql_migration_v13_hr.sql?`);
   const userById = new Map(users.map((u) => [u.id, u]));
   return ((profRes.data ?? []) as any[])
-    .filter((p) => userById.has(p.user_id) && inScope(scope, ubMap.get(p.user_id)))
+    .filter((p) => userById.has(p.user_id) && inScope(scope, ubMap.get(p.user_id), p.user_id))
     .map((p) => ({ ...p, full_name: userById.get(p.user_id).full_name }))
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.full_name).localeCompare(String(b.full_name), "vi"));
 }
@@ -1183,5 +1213,86 @@ export const payPayrollFn = createServerFn({ method: "POST" }).handler(
       employee_id: data.actorId ?? null,
     });
     return { results };
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 4) PHÂN VIỆC — admin chỉ định người quản lý lương được quản lý ai (v16)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Danh sách người có quyền "Quản lý lương nhân sự" (không tính admin — admin
+ * luôn thấy tất cả) + toàn bộ nhân viên + các cặp đã phân.
+ */
+export const getPayrollAssignmentsFn = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data: { actorId?: string } }) => {
+    await assertAdmin(data?.actorId);
+    const db = getSupabaseAdmin();
+    const [users, adminsRes, permsRes, ubMap, brRes, profRes, asgRes] = await Promise.all([
+      activeUsers(),
+      db.from("users").select("id").eq("is_admin", 1),
+      db.from("user_permissions").select("user_id").eq("permission", "manage_payroll"),
+      userBranchMap(),
+      db.from("branches").select("id, name"),
+      db.from("pay_profiles").select("user_id, position, in_payroll"),
+      db.from("payroll_assignments").select("manager_id, user_id"),
+    ]);
+    if (asgRes.error) {
+      throw new Error(`${asgRes.error.message}. Nếu báo "does not exist" thì chưa chạy sql_migration_v16_payroll_assignments.sql.`);
+    }
+    const admins = new Set(((adminsRes.data ?? []) as any[]).map((r) => r.id));
+    const managerIds = new Set(((permsRes.data ?? []) as any[]).map((r) => r.user_id).filter((id) => !admins.has(id)));
+    const branchName = new Map(((brRes.data ?? []) as any[]).map((b) => [b.id, b.name]));
+    const profile = new Map(((profRes.data ?? []) as any[]).map((p) => [p.user_id, p]));
+    const shape = (u: any) => ({
+      id: u.id,
+      full_name: u.full_name,
+      branches: [...(ubMap.get(u.id) ?? [])].map((b) => branchName.get(b) ?? b),
+      position: profile.get(u.id)?.position ?? null,
+      in_payroll: Boolean(profile.get(u.id)?.in_payroll),
+      is_admin: admins.has(u.id),
+    });
+    return {
+      managers: users.filter((u) => managerIds.has(u.id)).map(shape),
+      staff: users.map(shape),
+      assignments: ((asgRes.data ?? []) as any[]).filter((a) => managerIds.has(a.manager_id)),
+    };
+  },
+);
+
+/** Tick / bỏ tick một hoặc nhiều nhân viên cho một người quản lý lương. */
+export const setPayrollAssignmentsFn = createServerFn({ method: "POST" }).handler(
+  async ({ data }: { data: { actorId?: string; managerId: string; userIds: string[]; assigned: boolean } }) => {
+    await assertAdmin(data?.actorId);
+    const db = getSupabaseAdmin();
+    const managerId = String(data.managerId || "");
+    const { data: perm } = await db
+      .from("user_permissions")
+      .select("user_id")
+      .eq("user_id", managerId)
+      .eq("permission", "manage_payroll")
+      .limit(1);
+    if (!perm?.length) throw new Error('Người này chưa có quyền "Quản lý lương nhân sự" — cấp quyền ở trang Nhân viên trước');
+
+    // Không tự quản lý lương của chính mình.
+    const ids = [...new Set((data.userIds ?? []).filter((u) => u && u !== managerId))];
+    if (!ids.length) return { changed: 0 };
+
+    if (data.assigned) {
+      const { error } = await db.from("payroll_assignments").upsert(
+        ids.map((user_id) => ({ manager_id: managerId, user_id, created_by: data.actorId ?? null })),
+        { onConflict: "manager_id,user_id", ignoreDuplicates: true },
+      );
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await db.from("payroll_assignments").delete().eq("manager_id", managerId).in("user_id", ids);
+      if (error) throw new Error(error.message);
+    }
+    await logActivity({
+      action: "payroll_assignment",
+      detail: `${data.assigned ? "Phân" : "Bỏ phân"} quản lý lương ${ids.length} NV cho người quản lý ${managerId}`,
+      employee_id: data.actorId ?? null,
+    });
+    return { changed: ids.length };
   },
 );

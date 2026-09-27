@@ -2,7 +2,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   getAttendanceMonthFn,
   setAttendanceFn,
@@ -14,6 +14,8 @@ import {
   payPayrollFn,
   listPayProfilesFn,
   upsertPayProfileFn,
+  getPayrollAssignmentsFn,
+  setPayrollAssignmentsFn,
 } from "@/lib/hr.functions";
 import { getSettings } from "@/lib/settings.functions";
 import { getFormOptionsFn } from "@/lib/auth.functions";
@@ -31,6 +33,7 @@ import { todayVN, formatDateVN } from "@/lib/date-vn";
 import {
   ChevronLeft, ChevronRight, Lock, Unlock, Wallet, Printer, Download, Loader2, ShieldOff, Wand2, Pencil,
   CalendarCheck, Banknote, UserCog, TrendingUp, TrendingDown, CheckCircle2, AlertTriangle, Plus, Info,
+  Network, Search, Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -58,16 +61,18 @@ const CODE_STYLE: Record<string, string> = {
 const CODE_LABEL: Record<string, string> = { X: "Làm cả ngày", N: "Nửa ngày", L: "Nghỉ có lương", K: "Nghỉ không lương" };
 
 const TABS = [
-  ["attendance", "Chấm công", CalendarCheck],
-  ["payroll", "Bảng lương", Banknote],
-  ["profiles", "Hồ sơ lương", UserCog],
+  ["attendance", "Chấm công", CalendarCheck, false],
+  ["payroll", "Bảng lương", Banknote, false],
+  ["profiles", "Hồ sơ lương", UserCog, false],
+  // Chỉ admin: chỉ định người quản lý lương được quản lý những ai.
+  ["assign", "Phân việc", Network, true],
 ] as const;
 
 function PayrollPage() {
   const { user, isAdmin } = useAuth();
   const canView = Boolean(user && (isAdmin || hasPermission(user as any, "manage_payroll")));
   const [month, setMonth] = useState(todayVN().slice(0, 7));
-  const [tab, setTab] = useState<"attendance" | "payroll" | "profiles">("attendance");
+  const [tab, setTab] = useState<"attendance" | "payroll" | "profiles" | "assign">("attendance");
   const [y, mm] = month.split("-");
 
   if (!canView) {
@@ -86,7 +91,7 @@ function PayrollPage() {
     <AppShell title="Chấm công & Bảng lương">
       <Card className="mb-4">
         <div className="flex flex-wrap items-center gap-3">
-          {tab !== "profiles" && (
+          {(tab === "attendance" || tab === "payroll") && (
             <div className="flex items-center gap-1.5">
               <Button variant="outline" size="icon" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Tháng trước"><ChevronLeft className="h-4 w-4" /></Button>
               <div className="min-w-[150px] text-center text-xl font-bold tracking-tight">Tháng {Number(mm)}/{y}</div>
@@ -97,8 +102,8 @@ function PayrollPage() {
             </div>
           )}
           <div className="flex-1" />
-          <div className="flex w-full rounded-lg border bg-muted/40 p-1 sm:w-auto">
-            {TABS.map(([k, l, Icon]) => (
+          <div className="flex w-full flex-wrap rounded-lg border bg-muted/40 p-1 sm:w-auto">
+            {TABS.filter(([, , , adminOnly]) => !adminOnly || isAdmin).map(([k, l, Icon]) => (
               <button
                 key={k}
                 className={`flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors sm:flex-none ${tab === k ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
@@ -113,6 +118,7 @@ function PayrollPage() {
       {tab === "attendance" && <AttendanceTab month={month} actorId={user?.id} />}
       {tab === "payroll" && <PayrollTab month={month} actorId={user?.id} />}
       {tab === "profiles" && <ProfilesTab actorId={user?.id} />}
+      {tab === "assign" && isAdmin && <AssignTab actorId={user?.id} />}
     </AppShell>
   );
 }
@@ -121,9 +127,17 @@ function Loading() {
   return <Card className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></Card>;
 }
 function EmptyPayroll() {
+  const { isAdmin } = useAuth();
   return (
     <Card className="py-10 text-center text-base text-muted-foreground">
-      Chưa có nhân viên nào trong bảng lương. Vào tab <strong className="text-foreground">Hồ sơ lương</strong> để thêm.
+      {isAdmin ? (
+        <>Chưa có nhân viên nào trong bảng lương. Vào tab <strong className="text-foreground">Hồ sơ lương</strong> để thêm.</>
+      ) : (
+        <>
+          Bạn chưa được phân quản lý lương nhân viên nào (hoặc họ chưa có hồ sơ lương).
+          <div className="mt-1 text-sm">Nhờ quản trị viên tick tên nhân viên cho bạn ở tab <strong className="text-foreground">Phân việc</strong>.</div>
+        </>
+      )}
     </Card>
   );
 }
@@ -470,7 +484,7 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
           <div className="mt-3 space-y-1 text-sm">
             {!data?.scopeAll && (
               <div className="flex items-start gap-1.5 text-muted-foreground">
-                <Info className="mt-0.5 h-4 w-4 shrink-0" />Bạn đang xem nhân viên thuộc các chi nhánh mình được gán. Chốt / mở lại / chi lương chỉ áp dụng cho những người này.
+                <Info className="mt-0.5 h-4 w-4 shrink-0" />Bạn đang xem những nhân viên được admin phân cho mình quản lý lương. Chốt / mở lại / chi lương chỉ áp dụng cho những người này.
               </div>
             )}
             {data?.hasSalaryVoucherType === false && (
@@ -873,7 +887,7 @@ function ProfilesTab({ actorId }: { actorId?: string }) {
           <div className="text-lg font-semibold">Hồ sơ lương nhân viên</div>
           <div className="mt-1 text-sm text-muted-foreground">
             Chỉ người có hồ sơ và bật "Có trong bảng lương" mới xuất hiện ở tab Chấm công / Bảng lương.
-            Người quản lý chỉ thấy nhân viên thuộc chi nhánh mình được gán; nhân viên chưa gán chi nhánh chỉ admin thấy.
+            Người có quyền "Quản lý lương nhân sự" chỉ thấy những nhân viên admin đã phân cho họ ở tab Phân việc.
           </div>
         </div>
         <label className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted/50">
@@ -1007,5 +1021,183 @@ function ProfilesTab({ actorId }: { actorId?: string }) {
         </DialogContent>
       </Dialog>
     </Card>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phân việc (chỉ admin): ai quản lý lương ai
+// ═══════════════════════════════════════════════════════════════════════════
+function AssignTab({ actorId }: { actorId?: string }) {
+  const qc = useQueryClient();
+  const getFn = useServerFn(getPayrollAssignmentsFn);
+  const setFn = useServerFn(setPayrollAssignmentsFn);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["payrollAssignments"],
+    queryFn: () => getFn({ data: { actorId } }),
+  });
+  const [managerId, setManagerId] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const [onlyPayroll, setOnlyPayroll] = useState(true);
+  const [pending, setPending] = useState<Set<string>>(new Set());
+
+  const managers = (data?.managers ?? []) as any[];
+  const current = managers.find((m) => m.id === managerId) ?? managers[0] ?? null;
+
+  const assigned = useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    for (const a of (data?.assignments ?? []) as any[]) (m.get(a.manager_id) ?? m.set(a.manager_id, new Set()).get(a.manager_id)).add(a.user_id);
+    return m;
+  }, [data]);
+  const mine = (current && assigned.get(current.id)) || new Set<string>();
+
+  const staff = useMemo(() => {
+    const k = q.trim().toLowerCase();
+    return ((data?.staff ?? []) as any[])
+      .filter((u) => current && u.id !== current.id && !u.is_admin)
+      .filter((u) => !onlyPayroll || u.in_payroll || mine.has(u.id))
+      .filter((u) => !k || u.full_name.toLowerCase().includes(k) || u.branches.join(" ").toLowerCase().includes(k))
+      // Người đã được phân lên đầu
+      .sort((a, b) => Number(mine.has(b.id)) - Number(mine.has(a.id)) || a.full_name.localeCompare(b.full_name, "vi"));
+  }, [data, current, q, onlyPayroll, mine]);
+
+  async function toggle(userIds: string[], on: boolean) {
+    if (!current || !userIds.length) return;
+    setPending((p) => new Set([...p, ...userIds]));
+    try {
+      await setFn({ data: { actorId, managerId: current.id, userIds, assigned: on } });
+      await qc.invalidateQueries({ queryKey: ["payrollAssignments"] });
+      qc.invalidateQueries({ queryKey: ["payroll"] });
+      qc.invalidateQueries({ queryKey: ["attendance"] });
+      qc.invalidateQueries({ queryKey: ["payProfiles"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi lưu phân việc");
+    } finally {
+      setPending((p) => {
+        const n = new Set(p);
+        userIds.forEach((u) => n.delete(u));
+        return n;
+      });
+    }
+  }
+
+  if (isLoading) return <Loading />;
+  if (error) return <Card className="text-sm text-destructive">{String((error as any).message)}</Card>;
+
+  if (!managers.length) {
+    return (
+      <Card className="py-12 text-center">
+        <Users className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+        <div className="text-base font-semibold">Chưa có ai có quyền "Quản lý lương nhân sự"</div>
+        <div className="mx-auto mt-1 max-w-lg text-sm text-muted-foreground">
+          Vào trang <strong className="text-foreground">Nhân viên</strong>, sửa tài khoản người phụ trách và tick quyền
+          "Quản lý lương nhân sự". Sau đó quay lại đây để chọn những nhân viên họ được quản lý lương.
+        </div>
+      </Card>
+    );
+  }
+
+  const visibleIds = staff.map((u) => u.id);
+  const visibleOn = visibleIds.filter((id) => mine.has(id));
+
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]">
+      {/* Người quản lý */}
+      <Card className="self-start p-0 overflow-hidden">
+        <div className="border-b px-4 py-3">
+          <div className="font-semibold">Người quản lý lương</div>
+          <div className="text-xs text-muted-foreground">Có quyền "Quản lý lương nhân sự"</div>
+        </div>
+        <div className="divide-y">
+          {managers.map((m) => {
+            const n = assigned.get(m.id)?.size ?? 0;
+            const active = current?.id === m.id;
+            return (
+              <button
+                key={m.id}
+                onClick={() => setManagerId(m.id)}
+                className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${active ? "bg-primary/10" : "hover:bg-muted/50"}`}
+              >
+                <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold ${active ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
+                  {m.full_name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className={`truncate font-medium ${active ? "text-primary" : ""}`}>{m.full_name}</div>
+                  <div className="truncate text-xs text-muted-foreground">{m.branches.join(", ") || "Chưa gán chi nhánh"}</div>
+                </div>
+                <span
+                  title="Số nhân viên được quản lý lương"
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${n ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
+                >
+                  {n}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* Nhân viên được quản lý */}
+      {current && (
+        <Card className="p-0 overflow-hidden">
+          <div className="border-b px-4 py-3">
+            <div className="text-lg font-semibold">
+              {current.full_name} <span className="font-normal text-muted-foreground">được quản lý lương của</span>{" "}
+              <span className="text-primary">{mine.size} nhân viên</span>
+            </div>
+            <div className="mt-0.5 text-sm text-muted-foreground">
+              Tick để cho phép xem / sửa lương cơ bản, hoa hồng, ngân hàng, chấm công, chốt & chi lương của nhân viên đó.
+              Mặc định không ai. Lưu ngay khi tick.
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 border-b bg-slate-50/60 px-4 py-2.5">
+            <div className="relative min-w-[200px] flex-1">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input className="pl-8" placeholder="Tìm tên, chi nhánh..." value={q} onChange={(e) => setQ(e.target.value)} />
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input type="checkbox" className="h-4 w-4" checked={onlyPayroll} onChange={(e) => setOnlyPayroll(e.target.checked)} />
+              Chỉ người có trong bảng lương
+            </label>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!visibleIds.length || visibleOn.length === visibleIds.length}
+              onClick={() => toggle(visibleIds.filter((id) => !mine.has(id)), true)}
+            >
+              Chọn tất cả ({visibleIds.length - visibleOn.length})
+            </Button>
+            <Button variant="outline" size="sm" disabled={!visibleOn.length} onClick={() => toggle(visibleOn, false)}>
+              Bỏ tất cả
+            </Button>
+          </div>
+          <div className="divide-y">
+            {staff.length === 0 && (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                Không có nhân viên phù hợp{onlyPayroll ? " — bỏ tick “Chỉ người có trong bảng lương” để xem tất cả" : ""}.
+              </div>
+            )}
+            {staff.map((u) => {
+              const on = mine.has(u.id);
+              const busy = pending.has(u.id);
+              return (
+                <label key={u.id} className={`flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-muted/40 ${on ? "bg-emerald-50/50" : ""}`}>
+                  <input type="checkbox" className="h-5 w-5 accent-primary" checked={on} disabled={busy} onChange={(e) => toggle([u.id], e.target.checked)} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 font-medium">
+                      {u.full_name}
+                      {!u.in_payroll && <span className="rounded bg-slate-100 px-1.5 text-[11px] font-normal text-slate-500">chưa có hồ sơ lương</span>}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {[u.position, u.branches.join(", ") || "Chưa gán chi nhánh"].filter(Boolean).join(" · ")}
+                    </div>
+                  </div>
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : on && <CheckCircle2 className="h-5 w-5 text-emerald-600" />}
+                </label>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+    </div>
   );
 }

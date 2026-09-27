@@ -17,7 +17,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Search, Tags, ChevronLeft, ChevronRight, Eye, Package, AlertTriangle, ImagePlus, X, Upload, Loader2, Boxes } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Tags, ChevronLeft, ChevronRight, Eye, Package, AlertTriangle, ImagePlus, X, Upload, Loader2, Boxes, EyeOff, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
@@ -37,16 +37,21 @@ type FormState = {
   image_url: string;
   /** false = phụ kiện đi kèm, không đếm vào thống kê số hàng hóa. */
   count_in_total: boolean;
+  /** true = ngừng kinh doanh: ẩn khỏi danh sách (trừ khi lọc "Cả hàng ẩn"). */
+  is_hidden: boolean;
 };
 
 const empty: FormState = {
   name: "", category_id: "", brand_id: "",
   cost_price: "0", sale_price: "0", min_stock: "0", image_url: "",
   count_in_total: true,
+  is_hidden: false,
 };
 
 /** Chưa chạy migration v15 thì cột không có (undefined) → coi là hàng chính. */
 const isAccessory = (p: any) => p?.count_in_total === false;
+/** Chưa chạy migration v17 thì cột không có → coi là đang kinh doanh. */
+const isHidden = (p: any) => p?.is_hidden === true;
 
 const PAGE_SIZE = 20;
 
@@ -90,6 +95,8 @@ function ProductsPage() {
   const [filterCategory, setFilterCategory] = useState("");
   const [filterBrand, setFilterBrand] = useState("");
   const [filterKind, setFilterKind] = useState<"" | "goods" | "accessory">("");
+  // Mặc định chỉ hàng đang kinh doanh; hàng ẩn phải chọn bộ lọc mới hiện.
+  const [filterHidden, setFilterHidden] = useState<"active" | "all" | "hidden">("active");
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // ⛔ Chống tạo trùng sản phẩm (double-submit). `saving` chỉ để hiển thị UI;
@@ -118,9 +125,10 @@ function ProductsPage() {
       const matchCat = !filterCategory || p.category_id === filterCategory;
       const matchBrand = !filterBrand || (p as any).brand_id === filterBrand;
       const matchKind = !filterKind || (filterKind === "accessory") === isAccessory(p);
-      return matchSearch && matchCat && matchBrand && matchKind;
+      const matchHidden = filterHidden === "all" || (filterHidden === "hidden") === isHidden(p);
+      return matchSearch && matchCat && matchBrand && matchKind && matchHidden;
     }),
-    [data, debouncedSearch, filterCategory, filterBrand, filterKind],
+    [data, debouncedSearch, filterCategory, filterBrand, filterKind, filterHidden],
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -145,6 +153,7 @@ function ProductsPage() {
       min_stock: String(p.min_stock),
       image_url: (p as any).image_url ?? "",
       count_in_total: !isAccessory(p),
+      is_hidden: isHidden(p),
     });
     setOpen(true);
   }
@@ -169,6 +178,7 @@ function ProductsPage() {
           min_stock: Number(form.min_stock) || 0,
           image_url: form.image_url.trim() || null,
           count_in_total: form.count_in_total,
+          is_hidden: form.is_hidden,
           actor_id: user?.id,
         },
       });
@@ -347,6 +357,50 @@ function ProductsPage() {
         </Card>
       </div>
 
+      {/* TOP 10 TỒN KHO NHIỀU NHẤT — chỉ hàng đang kinh doanh (không ẩn), là hàng
+          hóa chính (không phải phụ kiện) và còn tồn. Theo chi nhánh đang lọc. */}
+      {(data?.topStock ?? []).length > 0 && (
+        <Card className="mb-4">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-1">
+            <div className="flex items-center gap-2 font-semibold">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              Top 10 tồn kho nhiều nhất
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {filterBranch
+                ? (data?.branches ?? []).find((b: any) => b.id === filterBranch)?.name ?? "chi nhánh đã chọn"
+                : "toàn bộ kho / chi nhánh"}{" "}
+              · hàng đang kinh doanh, không gồm phụ kiện
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-x-8 gap-y-1 md:grid-cols-2">
+            {(data?.topStock ?? []).map((p: any, i: number) => {
+              const max = Number(data?.topStock?.[0]?.total_stock) || 1;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setViewId(p.id)}
+                  className="group flex items-center gap-3 rounded-md px-1.5 py-1.5 text-left hover:bg-muted/50"
+                >
+                  <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${i < 3 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-sm font-medium group-hover:text-primary">{p.name}</span>
+                      <span className="shrink-0 text-sm font-bold tabular-nums">{p.total_stock.toLocaleString("vi-VN")}</span>
+                    </div>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(4, (p.total_stock / max) * 100)}%` }} />
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       <Card>
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="relative flex-1 min-w-[200px]">
@@ -373,6 +427,12 @@ function ProductsPage() {
             <option value="">Hàng hóa + phụ kiện</option>
             <option value="goods">Chỉ hàng hóa</option>
             <option value="accessory">Chỉ phụ kiện đi kèm</option>
+          </select>
+          <select className="h-9 rounded-md border bg-background px-2 text-sm"
+            value={filterHidden} onChange={(e) => { setFilterHidden(e.target.value as any); setPage(1); }}>
+            <option value="active">Đang kinh doanh</option>
+            <option value="all">Cả hàng ẩn{data?.hiddenCount ? ` (${data.hiddenCount})` : ""}</option>
+            <option value="hidden">Chỉ hàng ẩn{data?.hiddenCount ? ` (${data.hiddenCount})` : ""}</option>
           </select>
           {/* Lọc kho: đổi luôn con số "Tổng hàng tồn" ở trên — phân biệt rõ
               tổng toàn hệ thống với tổng của một chi nhánh. */}
@@ -416,7 +476,7 @@ function ProductsPage() {
                     return (
                       <tr
                         key={p.id}
-                        className="border-b last:border-0 hover:bg-muted/30 cursor-pointer"
+                        className={`border-b last:border-0 hover:bg-muted/30 cursor-pointer ${isHidden(p) ? "opacity-60" : ""}`}
                         onClick={() => setViewId(p.id)}
                       >
                         <td className="py-2 text-muted-foreground pr-3 text-center text-xs hidden md:table-cell">{globalIdx}</td>
@@ -433,6 +493,11 @@ function ProductsPage() {
                             {isAccessory(p) && (
                               <span className="rounded-full bg-slate-100 px-2 py-px text-[11px] font-medium text-slate-600" title="Không tính vào tổng số hàng hóa">
                                 Phụ kiện đi kèm
+                              </span>
+                            )}
+                            {isHidden(p) && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-px text-[11px] font-medium text-amber-800" title="Ngừng kinh doanh — đang ẩn">
+                                <EyeOff className="h-3 w-3" />Đã ẩn
                               </span>
                             )}
                           </div>
@@ -546,6 +611,22 @@ function ProductsPage() {
                   <span className="block text-xs text-muted-foreground">
                     Bỏ tick nếu đây là <strong>phụ kiện đi kèm</strong> (điều khiển, ty, ốp…): vẫn bán và quản lý tồn kho bình thường
                     nhưng không được đếm trong thống kê số hàng hóa (Tổng hàng tồn, Tổng sản phẩm, Top sản phẩm bán, Tổng SL bán).
+                  </span>
+                </span>
+              </label>
+
+              <label className={`col-span-2 flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 hover:bg-muted/40 ${form.is_hidden ? "border-amber-300 bg-amber-50/60" : ""}`}>
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4"
+                  checked={form.is_hidden}
+                  onChange={(e) => setForm({ ...form, is_hidden: e.target.checked })}
+                />
+                <span className="text-sm">
+                  <span className="font-medium">Ẩn hàng (không kinh doanh)</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Ẩn khỏi danh sách hàng hóa và Top 10 tồn kho. Muốn xem lại: bộ lọc chọn <strong>Cả hàng ẩn</strong> hoặc <strong>Chỉ hàng ẩn</strong>.
+                    Tồn kho, đơn cũ, phiếu nhập/xuất giữ nguyên.
                   </span>
                 </span>
               </label>
@@ -704,6 +785,9 @@ function ProductsPage() {
                   Tồn tối thiểu cảnh báo: <span className="font-medium">{viewProduct.min_stock}</span>
                   {isAccessory(viewProduct) && (
                     <> · <span className="font-medium text-slate-700">Phụ kiện đi kèm — không tính vào tổng số hàng hóa</span></>
+                  )}
+                  {isHidden(viewProduct) && (
+                    <> · <span className="font-medium text-amber-800">Đã ẩn (không kinh doanh)</span></>
                   )}
                 </div>
               </div>

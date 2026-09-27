@@ -125,7 +125,7 @@ export type Permission =
   | "view_cash_all"       // Xem sổ quỹ toàn bộ chi nhánh
   | "customer_care"       // Gửi Zalo/Email chăm sóc KH (danh sách thì ai cũng xem được)
   | "manage_roster"       // Quản lý lịch trực — chỉ chi nhánh mình quản lý (xem thì ai cũng xem được)
-  | "manage_payroll";     // Quản lý lương nhân sự — chỉ NV thuộc chi nhánh mình quản lý
+  | "manage_payroll";     // Quản lý lương nhân sự — chỉ NV admin phân ở tab "Phân việc"
 
 export const ALL_PERMISSIONS: { key: Permission; label: string; desc: string }[] = [
   { key: "stock_in",          label: "Nhập kho",                  desc: "Tạo phiếu nhập hàng vào kho" },
@@ -143,7 +143,7 @@ export const ALL_PERMISSIONS: { key: Permission; label: string; desc: string }[]
   { key: "view_cash_all",     label: "Xem sổ quỹ toàn bộ",        desc: "Xem & tạo phiếu thu/chi của tất cả chi nhánh" },
   { key: "customer_care",     label: "Gửi tin chăm sóc KH",       desc: "Gửi Zalo/Email sinh nhật & nhắc bảo dưỡng (tin Zalo tốn phí)" },
   { key: "manage_roster",     label: "Quản lý lịch trực",         desc: "Xếp ca, đánh dấu nghỉ cho các chi nhánh mình được gán" },
-  { key: "manage_payroll",    label: "Quản lý lương nhân sự",     desc: "Sửa lương cơ bản, hoa hồng, ngân hàng, chấm công, chốt & chi lương — chỉ NV thuộc chi nhánh mình được gán" },
+  { key: "manage_payroll",    label: "Quản lý lương nhân sự",     desc: "Sửa lương cơ bản, hoa hồng, ngân hàng, chấm công, chốt & chi lương — chỉ những NV admin phân cho ở Bảng lương → Phân việc (mặc định không ai)" },
 ];
 
 // ── User ─────────────────────────────────────────────────────
