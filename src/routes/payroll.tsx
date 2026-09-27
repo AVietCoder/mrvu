@@ -26,6 +26,7 @@ import { useAuth } from "@/context/AuthContext";
 import { hasPermission } from "@/lib/types";
 import { useCustomerGroups } from "@/hooks/useCustomerGroups";
 import { exportPayrollExcel, printPayslips } from "@/lib/export-hr";
+import { ScrollX } from "@/components/ScrollX";
 import { todayVN, formatDateVN } from "@/lib/date-vn";
 import {
   ChevronLeft, ChevronRight, Lock, Unlock, Wallet, Printer, Download, Loader2, ShieldOff, Wand2, Pencil,
@@ -184,7 +185,7 @@ function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) 
           </Button>
         )}
       </div>
-      <div className="overflow-x-auto">
+      <ScrollX>
         <table className="text-xs border-collapse min-w-max">
           <thead>
             <tr>
@@ -231,7 +232,7 @@ function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) 
             })}
           </tbody>
         </table>
-      </div>
+      </ScrollX>
     </Card>
   );
 }
@@ -349,7 +350,12 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
             <span className="rounded bg-green-100 text-green-800 px-2 py-1">{paidCount} đã chi</span>
           </div>
           <span className="text-sm text-muted-foreground">
-            Tổng thực lĩnh <strong className="text-foreground">{money(s?.net)}đ</strong>
+            Tổng chi <strong className="text-foreground">{money(s?.payout ?? s?.net)}đ</strong>
+            {s?.negative > 0 && (
+              <span className="ml-2 text-red-600" title="Khấu trừ (tạm ứng lương, BHXH…) lớn hơn thu nhập — không chi, phần âm là số NV còn nợ">
+                · {s.negative} người thực lĩnh âm
+              </span>
+            )}
           </span>
           <div className="flex-1" />
           {draftCount > 0 && (
@@ -388,7 +394,7 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
         <Card className="text-sm text-muted-foreground">Chưa có nhân viên nào trong bảng lương. Vào tab <strong>Hồ sơ lương</strong> để thêm.</Card>
       ) : (
         <Card className="p-0 overflow-hidden">
-          <div className="overflow-x-auto">
+          <ScrollX>
             <table className="text-xs border-collapse min-w-max">
               <thead>
                 <tr className="bg-muted">
@@ -397,8 +403,7 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
                   <th className="border px-2" colSpan={4}>Lương & thời gian làm việc</th>
                   <th className="border px-2" colSpan={6}>Phụ cấp / thu nhập thêm</th>
                   <th className="border px-2" colSpan={4}>Khấu trừ</th>
-                  <th className="border px-2" rowSpan={2}>Thực lĩnh</th>
-                  <th className="border px-2" rowSpan={2}></th>
+                  <th className="sticky right-0 z-20 bg-muted border px-3 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.2)]" rowSpan={2}>Thực lĩnh</th>
                 </tr>
                 <tr className="bg-muted">
                   {["Lương CB", "Công chuẩn", "Công TT", "Lương TN", "DS kỹ thuật", "Hoa hồng", "Tăng ca (giờ ×1,5 / ×2)", "Xăng xe tỉnh", "Thưởng", "Phụ cấp", "Tạm ứng", "BHXH", "Công đoàn", "Trừ khác"].map((h) => (
@@ -411,15 +416,42 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
                   <tr key={r.user_id} className="hover:bg-muted/30">
                     <td className="border px-2 text-center">{i + 1}</td>
                     <td className="sticky left-0 z-10 bg-background border px-2 py-1">
-                      <div className="font-medium flex items-center gap-1">
-                        {r.full_name}
-                        {r.locked && <Lock className="h-3 w-3 text-orange-600" title="Đã chốt" />}
+                      <div className="flex items-start gap-1">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium flex items-center gap-1">
+                            {r.full_name}
+                            {r.locked && <Lock className="h-3 w-3 text-orange-600" title="Đã chốt" />}
+                          </div>
+                          <div className="text-muted-foreground">{r.position}</div>
+                        </div>
+                        {/* Thao tác nằm trong cột tên (dính trái) để luôn bấm được, không phải cuộn sang phải. */}
+                        <div className="flex shrink-0 items-center">
+                          {!r.locked ? (
+                            <>
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Ghi chú xăng xe / phụ cấp / trừ khác, ghi đè hoa hồng" onClick={() => setDetail({ kind: "notes", row: r })}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Chốt lương riêng người này" disabled={!!busy} onClick={() => lockRows([r.user_id])}>
+                                <Lock className="h-3.5 w-3.5" />
+                              </Button>
+                            </>
+                          ) : !r.cash_voucher_id ? (
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Mở lại để sửa" disabled={!!busy} onClick={() => unlockRows([r.user_id])}>
+                              <Unlock className="h-3.5 w-3.5 text-orange-600" />
+                            </Button>
+                          ) : null}
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="In phiếu lương" onClick={() => printPayslips([r], month, siteName)}><Printer className="h-3.5 w-3.5" /></Button>
+                        </div>
                       </div>
-                      <div className="text-muted-foreground">{r.position}</div>
                     </td>
                     <td className="border px-2 text-right">{money(r.base_salary)}</td>
                     <td className="border px-2 text-center">{r.standard_days}</td>
-                    <td className="border px-2 text-center font-medium">{r.worked_days}</td>
+                    <td className="border px-2 text-center font-medium">
+                      {r.worked_days}
+                      {r.no_attendance && !r.locked && (
+                        <div className="text-[10px] font-normal text-orange-600 whitespace-nowrap" title="Tháng này chưa chấm công ngày nào — sang tab Chấm công. Chưa trừ BHXH/công đoàn.">chưa chấm</div>
+                      )}
+                    </td>
                     <td className="border px-2 text-right">{money(r.salary_by_days)}</td>
                     <td className="border px-2 text-right">
                       {r.tech_enabled || r.snapshot ? (
@@ -455,26 +487,12 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
                     <td className="border px-2 text-right">{money(r.social_insurance)}</td>
                     <td className="border px-2 text-right">{money(r.union_fee)}</td>
                     <td className="border px-1" title={r.other_note}><MoneyInput value={r.other_deduction} disabled={r.locked} onSave={(n: number) => save(r.user_id, { other_deduction: n })} /></td>
-                    <td className="border px-2 text-right font-bold text-base whitespace-nowrap">
+                    <td
+                      className={`sticky right-0 z-10 bg-background border px-3 text-right font-bold text-base whitespace-nowrap shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.2)] ${r.net_pay < 0 ? "text-red-600" : ""}`}
+                      title={r.net_pay < 0 ? "Khấu trừ lớn hơn thu nhập — không chi lương, NV còn nợ số này" : undefined}
+                    >
                       {money(r.net_pay)}
                       {r.cash_voucher_id && !String(r.cash_voucher_id).startsWith("pending:") && <div className="text-[10px] font-normal text-green-700">đã chi</div>}
-                    </td>
-                    <td className="border px-1 whitespace-nowrap">
-                      {!r.locked ? (
-                        <>
-                          <Button size="sm" variant="ghost" title="Ghi chú xăng xe / phụ cấp / trừ khác, ghi đè hoa hồng" onClick={() => setDetail({ kind: "notes", row: r })}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button size="sm" variant="ghost" title="Chốt lương riêng người này" disabled={!!busy} onClick={() => lockRows([r.user_id])}>
-                            <Lock className="h-3.5 w-3.5" />
-                          </Button>
-                        </>
-                      ) : !r.cash_voucher_id ? (
-                        <Button size="sm" variant="ghost" title="Mở lại để sửa" disabled={!!busy} onClick={() => unlockRows([r.user_id])}>
-                          <Unlock className="h-3.5 w-3.5 text-orange-600" />
-                        </Button>
-                      ) : null}
-                      <Button size="sm" variant="ghost" title="In phiếu lương" onClick={() => printPayslips([r], month, siteName)}><Printer className="h-3.5 w-3.5" /></Button>
                     </td>
                   </tr>
                 ))}
@@ -482,17 +500,17 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
               <tfoot>
                 <tr className="bg-muted font-bold">
                   <td className="border px-2" colSpan={5}>TỔNG CHI</td>
-                  {["salary_by_days", "tech_revenue", "commission", "overtime_amount", "travel_allowance", "bonus", "extra_allowance", "advance", "social_insurance", "union_fee", "other_deduction", "net_pay"].map((k) => (
+                  {["salary_by_days", "tech_revenue", "commission", "overtime_amount", "travel_allowance", "bonus", "extra_allowance", "advance", "social_insurance", "union_fee", "other_deduction"].map((k) => (
                     <td key={k} className="border px-2 text-right">{money(rows.reduce((s2, r) => s2 + Number(r[k] || 0), 0))}</td>
                   ))}
-                  <td className="border" />
+                  <td className="sticky right-0 z-10 bg-muted border px-3 text-right shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.2)]" title="Tổng thực lĩnh (kể cả người âm)">{money(rows.reduce((s2, r) => s2 + Number(r.net_pay || 0), 0))}</td>
                 </tr>
               </tfoot>
             </table>
-          </div>
+          </ScrollX>
           <div className="px-3 py-2 text-xs text-muted-foreground border-t">
             Lương TN = Lương CB / công chuẩn × công thực tế · Tăng ca = Lương CB / công chuẩn / 8 × giờ × 1,5 (hoặc × 2) ·
-            DS kỹ thuật chỉ tính lịch đã hoàn thành · Tạm ứng tự cộng từ phiếu chi "Tạm ứng" trong Sổ quỹ ·
+            DS kỹ thuật chỉ tính lịch đã hoàn thành · Tạm ứng = phiếu chi "Chi tạm ứng lương" trong Sổ quỹ (phiếu "Tạm ứng" công tác không trừ lương) · Tháng chưa chấm công thì chưa trừ BHXH/công đoàn · Kéo chuột hoặc bấm mũi tên để xem cột bên phải ·
             {isFetching ? " đang cập nhật…" : " "}
             <button className="underline" onClick={() => refetch()}>tải lại</button>
           </div>
@@ -750,7 +768,7 @@ function ProfilesTab({ actorId }: { actorId?: string }) {
           Hiện tất cả nhân viên (để thêm người mới)
         </label>
       </div>
-      <div className="overflow-x-auto">
+      <ScrollX>
         <table className="w-full text-sm min-w-[720px]">
           <thead className="text-left text-muted-foreground border-b">
             <tr><th className="py-1.5">Nhân viên</th><th>Chi nhánh</th><th>Chức vụ</th><th className="text-right">Lương CB</th><th className="text-right">Công chuẩn</th><th>Lương DS</th><th>Hoa hồng</th><th>Ngân hàng</th><th></th></tr>
@@ -779,7 +797,7 @@ function ProfilesTab({ actorId }: { actorId?: string }) {
             })}
           </tbody>
         </table>
-      </div>
+      </ScrollX>
 
       <Dialog open={!!edit} onOpenChange={(v) => !v && setEdit(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

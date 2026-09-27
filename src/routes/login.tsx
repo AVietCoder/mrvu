@@ -240,12 +240,12 @@ function LoginPage() {
             </Button>
           </form>
 
-          <p className="text-center text-sm text-muted-foreground mt-4">
+          {/* <p className="text-center text-sm text-muted-foreground mt-4">
             Chưa có tài khoản?{" "}
             <Link to="/register" className="text-primary hover:underline font-medium">
               Đăng ký
             </Link>
-          </p>
+          </p> */}
         </div>
       </div>
     </div>

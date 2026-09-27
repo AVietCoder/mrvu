@@ -715,10 +715,12 @@ async function advanceVoucherTypes() {
   const types = (data ?? []) as any[];
   const norm = (s: string) => String(s || "").toLowerCase().normalize("NFC");
   return {
-    // "Tạm ứng", "Chi tạm ứng lương" — KHÔNG gồm "Chi Lương" (đó là trả lương)
-    advanceChi: types.filter((t) => t.kind === "chi" && norm(t.name).includes("tạm ứng")).map((t) => t.id),
-    // "Hoàn tạm ứng" — nhân viên trả lại tiền tạm ứng
-    refundThu: types.filter((t) => t.kind === "thu" && norm(t.name).includes("hoàn tạm ứng")).map((t) => t.id),
+    // CHỈ "Chi tạm ứng lương". Loại "Tạm ứng" trong sổ quỹ đang dùng cho tạm
+    // ứng CÔNG TÁC (đi tỉnh, mua vật tư…) và được quyết toán bằng "Hoàn tạm
+    // ứng" — không phải ứng trước lương nên không được trừ vào lương.
+    advanceChi: types.filter((t) => t.kind === "chi" && norm(t.name).includes("tạm ứng lương")).map((t) => t.id),
+    // "Hoàn tạm ứng lương" (nếu sau này tạo loại phiếu này).
+    refundThu: types.filter((t) => t.kind === "thu" && norm(t.name).includes("hoàn tạm ứng lương")).map((t) => t.id),
     salaryType: types.find((t) => t.kind === "chi" && norm(t.name).trim() === "chi lương") ?? null,
   };
 }
@@ -787,9 +789,12 @@ async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: 
   const profiles = allProfiles.filter((p) => !locked.has(p.user_id));
   const userIds = profiles.map((p) => p.user_id);
 
+  // Chấm công lấy cho CẢ người đã chốt — chỉ để xuất Excel (sheet BẢNG CHẤM
+  // CÔNG có công thức); số công của người đã chốt vẫn lấy từ snapshot.
+  const allIds = allProfiles.map((p) => p.user_id);
   const [attRes, itemsRes, tech, vtypes] = await Promise.all([
-    userIds.length
-      ? db.from("attendance_days").select("user_id, work_date, code").in("user_id", userIds).gte("work_date", from).lt("work_date", next)
+    allIds.length
+      ? db.from("attendance_days").select("user_id, work_date, code").in("user_id", allIds).gte("work_date", from).lt("work_date", next)
       : Promise.resolve({ data: [] }),
     period && userIds.length
       ? db.from("payroll_items").select("*").eq("period_id", period.id).in("user_id", userIds)
@@ -883,9 +888,13 @@ async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: 
     const overtime = round(hourly * (num(inp.ot_hours_15) * 1.5 + num(inp.ot_hours_20) * 2));
 
     const advance = round(advanceByUser[p.user_id]?.total ?? 0);
+    // Tháng chưa có ngày công nào (chưa chấm công / nghỉ cả tháng) thì không
+    // trừ BHXH, công đoàn cố định — tránh thực lĩnh âm vô lý (vd tháng mới
+    // chưa chấm: 0 − 630.000 BHXH). Ô ghi đè BHXH vẫn được tôn trọng.
+    const noWork = att.worked <= 0;
     const socialInsurance = inp.social_insurance_override !== null && inp.social_insurance_override !== undefined
-      ? round(inp.social_insurance_override) : round(p.social_insurance);
-    const unionFee = round(p.union_fee);
+      ? round(inp.social_insurance_override) : noWork ? 0 : round(p.social_insurance);
+    const unionFee = noWork ? 0 : round(p.union_fee);
 
     const gross = salaryByDays + techRevenue + commission + overtime
       + round(inp.travel_allowance) + round(inp.bonus) + round(inp.extra_allowance);
@@ -903,6 +912,8 @@ async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: 
       base_salary: base,
       standard_days: stdDays,
       attendance: att,
+      att_codes: codesByUser[p.user_id] ?? {},
+      no_attendance: Object.keys(codesByUser[p.user_id] ?? {}).length === 0,
       worked_days: att.worked,
       salary_by_days: salaryByDays,
       tech_revenue: techRevenue,
@@ -942,7 +953,7 @@ async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: 
   const profById = new Map(allProfiles.map((p) => [p.user_id, p]));
   const snapshots = allProfiles
     .filter((p) => locked.has(p.user_id))
-    .map((p) => rowFromSnapshot(locked.get(p.user_id), profById.get(p.user_id)));
+    .map((p) => ({ ...rowFromSnapshot(locked.get(p.user_id), profById.get(p.user_id)), att_codes: codesByUser[p.user_id] ?? {} }));
   const order = new Map(allProfiles.map((p, i) => [p.user_id, i]));
   const rows = [...computed, ...snapshots].sort((a, b) => (order.get(a.user_id) ?? 0) - (order.get(b.user_id) ?? 0));
   return { period, rows, salaryVoucherType: vtypes.salaryType };
@@ -958,6 +969,10 @@ function summarize(rows: any[]) {
     gross: rows.reduce((s, r) => s + num(r.gross), 0),
     deductions: rows.reduce((s, r) => s + num(r.deductions), 0),
     net: rows.reduce((s, r) => s + num(r.net_pay), 0),
+    // Số tiền thực sự chi ra (chỉ người thực lĩnh > 0) — người âm là đang nợ
+    // tạm ứng, không "chi âm" được.
+    payout: rows.reduce((s, r) => s + Math.max(0, num(r.net_pay)), 0),
+    negative: rows.filter((r) => num(r.net_pay) < 0).length,
   };
 }
 

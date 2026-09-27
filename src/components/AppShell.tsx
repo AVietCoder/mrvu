@@ -131,14 +131,16 @@ export function AppShell({ children, title, loading }: { children: ReactNode; ti
 
       {/* Sidebar */}
       <aside className={[
-        "fixed md:static z-30 top-0 left-0 h-full w-60 shrink-0",
+        // Cao đúng bằng màn hình và dính khi cuộn trang → menu dài tự cuộn bên
+        // trong <nav>, khối tài khoản luôn nằm ở đáy (không bị đẩy ra ngoài).
+        "fixed md:sticky z-30 top-0 left-0 h-[100dvh] w-60 shrink-0",
         "border-r bg-card flex flex-col",
         "transform transition-transform duration-200",
         sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
       ].join(" ")}>
 
         {/* Logo */}
-        <div className="flex items-center gap-2 px-5 py-5 border-b">
+        <div className="flex items-center gap-2 px-5 py-5 border-b shrink-0">
           <div
             className="h-9 w-9 rounded-lg grid place-items-center overflow-hidden shrink-0"
             style={{ backgroundColor: primaryColor ? primaryColor + "1a" : undefined }}
@@ -160,7 +162,7 @@ export function AppShell({ children, title, loading }: { children: ReactNode; ti
         </div>
 
         {/* Nav */}
-        <nav className="p-2 flex-1 overflow-y-auto">
+        <nav className="p-2 flex-1 min-h-0 overflow-y-auto overscroll-contain">
           {nav.filter(canSeeNav).map((item) => {
             const active = item.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(item.to);
             const Icon = item.icon;
@@ -203,7 +205,7 @@ export function AppShell({ children, title, loading }: { children: ReactNode; ti
 
         {/* User info */}
         {mounted && user && (
-          <div className="border-t p-3">
+          <div className="border-t p-3 shrink-0">
             <button
               className="w-full flex items-center gap-2 rounded-md px-2 py-2 hover:bg-secondary transition-colors text-left"
               onClick={() => setUserMenuOpen(!userMenuOpen)}
