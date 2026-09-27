@@ -111,10 +111,11 @@ function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) 
   const [local, setLocal] = useState<Record<string, string | null>>({});
   const [filling, setFilling] = useState(false);
 
-  const locked = Boolean(data?.locked);
+  // Khoá theo TỪNG NGƯỜI (người đã chốt lương thì hàng của họ chỉ xem).
+  const lockedCount = (data?.rows ?? []).filter((r: any) => r.locked).length;
 
-  async function cycle(userId: string, date: string, current: string | null) {
-    if (locked) return;
+  async function cycle(userId: string, date: string, current: string | null, rowLocked: boolean) {
+    if (rowLocked) return;
     const next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length];
     const key = `${userId}|${date}`;
     setLocal((p) => ({ ...p, [key]: next }));
@@ -173,9 +174,10 @@ function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) 
         ))}
         <span className="text-muted-foreground">· Bấm ô để đổi mã · Công thực tế = X + N/2 + L</span>
         <div className="flex-1" />
-        {locked ? (
-          <span className="text-orange-700 font-medium flex items-center gap-1"><Lock className="h-3.5 w-3.5" />Tháng đã chốt lương — chỉ xem</span>
-        ) : (
+        {lockedCount > 0 && (
+          <span className="text-orange-700 font-medium flex items-center gap-1"><Lock className="h-3.5 w-3.5" />{lockedCount} người đã chốt lương — hàng của họ chỉ xem</span>
+        )}
+        {lockedCount < (data?.rows?.length ?? 0) && (
           <Button size="sm" variant="outline" onClick={fillAll} disabled={filling}>
             {filling ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Wand2 className="h-4 w-4 mr-1" />}
             Điền nhanh ô trống
@@ -211,9 +213,9 @@ function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) 
                     return (
                       <td
                         key={d}
-                        onClick={() => cycle(r.user_id, d, c)}
+                        onClick={() => cycle(r.user_id, d, c, r.locked)}
                         title={r.notes?.[d] ?? ""}
-                        className={`border text-center font-bold select-none ${locked ? "" : "cursor-pointer hover:ring-1 hover:ring-primary"} ${c ? CODE_STYLE[c] : dow(d) === 0 ? "bg-amber-50/60" : ""}`}
+                        className={`border text-center font-bold select-none ${r.locked ? "opacity-70" : "cursor-pointer hover:ring-1 hover:ring-primary"} ${c ? CODE_STYLE[c] : dow(d) === 0 ? "bg-amber-50/60" : ""}`}
                       >
                         {c ?? ""}
                       </td>
@@ -276,7 +278,6 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
   const { data: settings } = useQuery({ queryKey: ["site_settings"], queryFn: () => settingsFn(), staleTime: 60_000 });
   const { data: opts } = useQuery({ queryKey: ["branches_list"], queryFn: () => optsFn(), staleTime: 300_000 });
 
-  const draft = data?.status === "draft";
   const [busy, setBusy] = useState<string | null>(null);
   const busyRef = useRef(false);
   const [detail, setDetail] = useState<null | { kind: string; row: any }>(null);
@@ -317,43 +318,51 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
   if (isLoading) return <Card className="py-10 flex justify-center"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
   if (error) return <Card className="text-sm text-destructive">{String((error as any).message)}</Card>;
 
-  const statusBadge = {
-    draft: <span className="rounded bg-muted px-2 py-0.5 text-xs">Nháp — số liệu tự cập nhật</span>,
-    locked: <span className="rounded bg-orange-100 text-orange-800 px-2 py-0.5 text-xs">Đã chốt {data?.locked_at ? formatDateVN(String(data.locked_at).slice(0, 10)) : ""}</span>,
-    paid: <span className="rounded bg-green-100 text-green-800 px-2 py-0.5 text-xs">Đã chi lương</span>,
-  }[data?.status ?? "draft"];
+  const draftCount = rows.filter((r) => !r.locked).length;
+  const lockedUnpaid = rows.filter((r) => r.locked && !r.cash_voucher_id);
+  const paidCount = s?.paid ?? 0;
+
+  async function lockRows(userIds?: string[]) {
+    const who = userIds?.length === 1 ? rows.find((r) => r.user_id === userIds[0])?.full_name : `${draftCount} người chưa chốt`;
+    if (!window.confirm(`Chốt lương tháng ${month} cho ${who}? Sau khi chốt, số liệu được giữ nguyên dù lịch/đơn/phiếu thay đổi.`)) return;
+    await run("lock", async () => {
+      const r = await lockFn({ data: { month, userIds, actorId } });
+      toast.success(`Đã chốt lương ${r.people} người`);
+      refresh();
+    });
+  }
+  async function unlockRows(userIds?: string[]) {
+    await run("unlock", async () => {
+      const r = await unlockFn({ data: { month, userIds, actorId } });
+      toast.success(`Đã mở lại ${r.unlocked} người${r.skippedPaid ? ` (bỏ qua ${r.skippedPaid} người đã chi)` : ""}`);
+      refresh();
+    });
+  }
 
   return (
     <>
       <Card className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          {statusBadge}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="rounded bg-muted px-2 py-1">{draftCount} chưa chốt</span>
+            <span className="rounded bg-orange-100 text-orange-800 px-2 py-1">{lockedUnpaid.length} đã chốt, chưa chi</span>
+            <span className="rounded bg-green-100 text-green-800 px-2 py-1">{paidCount} đã chi</span>
+          </div>
           <span className="text-sm text-muted-foreground">
-            {s?.people ?? 0} người · Tổng thực lĩnh <strong className="text-foreground">{money(s?.net)}đ</strong>
-            {data?.status !== "draft" && ` · Đã chi ${s?.paid ?? 0}/${s?.people ?? 0}`}
+            Tổng thực lĩnh <strong className="text-foreground">{money(s?.net)}đ</strong>
           </span>
           <div className="flex-1" />
-          {draft && (
-            <Button
-              onClick={() =>
-                window.confirm(`Chốt bảng lương tháng ${month}? Sau khi chốt, số liệu được giữ nguyên dù lịch/đơn/phiếu thay đổi.`) &&
-                run("lock", async () => {
-                  const r = await lockFn({ data: { month, actorId } });
-                  toast.success(`Đã chốt lương ${r.people} người`);
-                  refresh();
-                })
-              }
-              disabled={!!busy || !rows.length}
-            >
-              {busy === "lock" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Lock className="h-4 w-4 mr-1" />}Chốt lương
+          {draftCount > 0 && (
+            <Button onClick={() => lockRows()} disabled={!!busy}>
+              {busy === "lock" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Lock className="h-4 w-4 mr-1" />}Chốt lương ({draftCount})
             </Button>
           )}
-          {data?.status === "locked" && (
-            <Button variant="outline" onClick={() => run("unlock", async () => { await unlockFn({ data: { month, actorId } }); toast.success("Đã mở lại"); refresh(); })} disabled={!!busy}>
-              <Unlock className="h-4 w-4 mr-1" />Mở lại
+          {lockedUnpaid.length > 0 && (
+            <Button variant="outline" onClick={() => unlockRows()} disabled={!!busy}>
+              <Unlock className="h-4 w-4 mr-1" />Mở lại ({lockedUnpaid.length})
             </Button>
           )}
-          {data?.status !== "draft" && (s?.paid ?? 0) < (s?.people ?? 0) && (
+          {lockedUnpaid.length > 0 && (
             <Button onClick={() => { setPayResult(null); setPayOpen(true); }} disabled={!!busy}>
               <Wallet className="h-4 w-4 mr-1" />Chi lương qua Sổ quỹ
             </Button>
@@ -365,7 +374,12 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
             <Download className="h-4 w-4 mr-1" />Excel
           </Button>
         </div>
-        {draft && data?.hasSalaryVoucherType === false && (
+        {!data?.scopeAll && (
+          <div className="text-xs text-muted-foreground mt-2">
+            Bạn đang xem nhân viên thuộc các chi nhánh mình được gán. Chốt / mở lại / chi lương chỉ áp dụng cho những người này.
+          </div>
+        )}
+        {data?.hasSalaryVoucherType === false && (
           <div className="text-xs text-orange-700 mt-2">Sổ quỹ chưa có loại phiếu chi "Chi Lương" — cần tạo trước khi chi lương.</div>
         )}
       </Card>
@@ -397,7 +411,10 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
                   <tr key={r.user_id} className="hover:bg-muted/30">
                     <td className="border px-2 text-center">{i + 1}</td>
                     <td className="sticky left-0 z-10 bg-background border px-2 py-1">
-                      <div className="font-medium">{r.full_name}</div>
+                      <div className="font-medium flex items-center gap-1">
+                        {r.full_name}
+                        {r.locked && <Lock className="h-3 w-3 text-orange-600" title="Đã chốt" />}
+                      </div>
                       <div className="text-muted-foreground">{r.position}</div>
                     </td>
                     <td className="border px-2 text-right">{money(r.base_salary)}</td>
@@ -420,16 +437,16 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
                     </td>
                     <td className="border px-1">
                       <div className="flex items-center gap-1 justify-end">
-                        <MoneyInput value={r.ot_hours_15} width="w-11" decimals disabled={!draft} onSave={(n: number) => save(r.user_id, { ot_hours_15: n })} />
-                        <MoneyInput value={r.ot_hours_20} width="w-11" decimals disabled={!draft} onSave={(n: number) => save(r.user_id, { ot_hours_20: n })} />
+                        <MoneyInput value={r.ot_hours_15} width="w-11" decimals disabled={r.locked} onSave={(n: number) => save(r.user_id, { ot_hours_15: n })} />
+                        <MoneyInput value={r.ot_hours_20} width="w-11" decimals disabled={r.locked} onSave={(n: number) => save(r.user_id, { ot_hours_20: n })} />
                         <span className="w-20 text-right">{money(r.overtime_amount)}</span>
                       </div>
                     </td>
                     <td className="border px-1" title={r.travel_note}>
-                      <MoneyInput value={r.travel_allowance} disabled={!draft} onSave={(n: number) => save(r.user_id, { travel_allowance: n })} />
+                      <MoneyInput value={r.travel_allowance} disabled={r.locked} onSave={(n: number) => save(r.user_id, { travel_allowance: n })} />
                     </td>
-                    <td className="border px-1"><MoneyInput value={r.bonus} disabled={!draft} onSave={(n: number) => save(r.user_id, { bonus: n })} /></td>
-                    <td className="border px-1" title={r.extra_note}><MoneyInput value={r.extra_allowance} disabled={!draft} onSave={(n: number) => save(r.user_id, { extra_allowance: n })} /></td>
+                    <td className="border px-1"><MoneyInput value={r.bonus} disabled={r.locked} onSave={(n: number) => save(r.user_id, { bonus: n })} /></td>
+                    <td className="border px-1" title={r.extra_note}><MoneyInput value={r.extra_allowance} disabled={r.locked} onSave={(n: number) => save(r.user_id, { extra_allowance: n })} /></td>
                     <td className="border px-2 text-right">
                       {r.advance && !r.snapshot ? (
                         <button className="underline decoration-dotted hover:text-primary" onClick={() => setDetail({ kind: "advance", row: r })}>{money(r.advance)}</button>
@@ -437,17 +454,26 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
                     </td>
                     <td className="border px-2 text-right">{money(r.social_insurance)}</td>
                     <td className="border px-2 text-right">{money(r.union_fee)}</td>
-                    <td className="border px-1" title={r.other_note}><MoneyInput value={r.other_deduction} disabled={!draft} onSave={(n: number) => save(r.user_id, { other_deduction: n })} /></td>
+                    <td className="border px-1" title={r.other_note}><MoneyInput value={r.other_deduction} disabled={r.locked} onSave={(n: number) => save(r.user_id, { other_deduction: n })} /></td>
                     <td className="border px-2 text-right font-bold text-base whitespace-nowrap">
                       {money(r.net_pay)}
                       {r.cash_voucher_id && !String(r.cash_voucher_id).startsWith("pending:") && <div className="text-[10px] font-normal text-green-700">đã chi</div>}
                     </td>
                     <td className="border px-1 whitespace-nowrap">
-                      {draft && (
-                        <Button size="sm" variant="ghost" title="Ghi chú xăng xe / phụ cấp / trừ khác, ghi đè hoa hồng" onClick={() => setDetail({ kind: "notes", row: r })}>
-                          <Pencil className="h-3.5 w-3.5" />
+                      {!r.locked ? (
+                        <>
+                          <Button size="sm" variant="ghost" title="Ghi chú xăng xe / phụ cấp / trừ khác, ghi đè hoa hồng" onClick={() => setDetail({ kind: "notes", row: r })}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button size="sm" variant="ghost" title="Chốt lương riêng người này" disabled={!!busy} onClick={() => lockRows([r.user_id])}>
+                            <Lock className="h-3.5 w-3.5" />
+                          </Button>
+                        </>
+                      ) : !r.cash_voucher_id ? (
+                        <Button size="sm" variant="ghost" title="Mở lại để sửa" disabled={!!busy} onClick={() => unlockRows([r.user_id])}>
+                          <Unlock className="h-3.5 w-3.5 text-orange-600" />
                         </Button>
-                      )}
+                      ) : null}
                       <Button size="sm" variant="ghost" title="In phiếu lương" onClick={() => printPayslips([r], month, siteName)}><Printer className="h-3.5 w-3.5" /></Button>
                     </td>
                   </tr>
@@ -508,7 +534,9 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
                 <Label className="text-xs">Chi từ chi nhánh / quỹ *</Label>
                 <select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm" value={payBranch} onChange={(e) => setPayBranch(e.target.value)}>
                   <option value="">— Chọn —</option>
-                  {(opts?.branches ?? []).map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  {(opts?.branches ?? [])
+                    .filter((b: any) => data?.scopeAll || (data?.scopeBranchIds ?? []).includes(b.id))
+                    .map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
               <div>
@@ -519,8 +547,9 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
                 </div>
               </div>
               <div className="rounded bg-muted/50 p-2 text-sm">
-                Sẽ chi cho <strong>{(s?.people ?? 0) - (s?.paid ?? 0)}</strong> người, tổng{" "}
-                <strong>{money(rows.filter((r) => !r.cash_voucher_id && r.net_pay > 0).reduce((a, r) => a + r.net_pay, 0))}đ</strong>
+                Sẽ chi cho <strong>{lockedUnpaid.filter((r) => r.net_pay > 0).length}</strong> người đã chốt, tổng{" "}
+                <strong>{money(lockedUnpaid.filter((r) => r.net_pay > 0).reduce((a, r) => a + r.net_pay, 0))}đ</strong>
+                {draftCount > 0 && <div className="text-xs text-orange-700 mt-1">{draftCount} người chưa chốt sẽ không được chi.</div>}
               </div>
               <Button
                 className="w-full"
@@ -711,7 +740,10 @@ function ProfilesTab({ actorId }: { actorId?: string }) {
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div>
           <div className="font-medium">Hồ sơ lương nhân viên</div>
-          <div className="text-xs text-muted-foreground">Chỉ người có hồ sơ và bật "Có trong bảng lương" mới xuất hiện ở tab Chấm công / Bảng lương.</div>
+          <div className="text-xs text-muted-foreground">
+            Chỉ người có hồ sơ và bật "Có trong bảng lương" mới xuất hiện ở tab Chấm công / Bảng lương.
+            Người quản lý chỉ thấy nhân viên thuộc chi nhánh mình được gán; nhân viên chưa gán chi nhánh chỉ admin thấy.
+          </div>
         </div>
         <label className="text-sm flex items-center gap-1.5">
           <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
@@ -721,15 +753,16 @@ function ProfilesTab({ actorId }: { actorId?: string }) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm min-w-[720px]">
           <thead className="text-left text-muted-foreground border-b">
-            <tr><th className="py-1.5">Nhân viên</th><th>Chức vụ</th><th className="text-right">Lương CB</th><th className="text-right">Công chuẩn</th><th>Lương DS</th><th>Hoa hồng</th><th>Ngân hàng</th><th></th></tr>
+            <tr><th className="py-1.5">Nhân viên</th><th>Chi nhánh</th><th>Chức vụ</th><th className="text-right">Lương CB</th><th className="text-right">Công chuẩn</th><th>Lương DS</th><th>Hoa hồng</th><th>Ngân hàng</th><th></th></tr>
           </thead>
           <tbody>
-            {list.length === 0 && <tr><td colSpan={8} className="py-4 text-center text-muted-foreground">Chưa có ai. Tick "Hiện tất cả nhân viên" để thêm.</td></tr>}
+            {list.length === 0 && <tr><td colSpan={9} className="py-4 text-center text-muted-foreground">Chưa có ai. Tick "Hiện tất cả nhân viên" để thêm.</td></tr>}
             {list.map((u) => {
               const p = u.profile;
               return (
                 <tr key={u.user_id} className={`border-b last:border-0 ${p?.in_payroll ? "" : "text-muted-foreground"}`}>
                   <td className="py-1.5">{u.full_name}</td>
+                  <td className="text-xs text-muted-foreground max-w-[200px]">{(u.branches ?? []).join(", ") || <span className="text-orange-600">chưa gán chi nhánh</span>}</td>
                   <td>{p?.position ?? ""}</td>
                   <td className="text-right">{p ? money(p.base_salary) : ""}</td>
                   <td className="text-right">{p?.standard_days ?? ""}</td>

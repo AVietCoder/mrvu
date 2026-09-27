@@ -29,21 +29,93 @@ import { fetchAllPaged } from "./reports.functions";
 
 type Perm = "manage_payroll" | "manage_roster";
 
-/** Kiểm quyền ở SERVER (mẫu assertCanSend của care.functions.ts). */
-async function assertPerm(actorId: string | undefined, perm: Perm) {
+/**
+ * Phạm vi của người thực hiện sau khi đã kiểm quyền.
+ *   isAdmin   → thấy / sửa tất cả.
+ *   branchIds → các chi nhánh người này được gán (bảng user_branches). Người
+ *               có quyền quản lý CHỈ thao tác được trên chi nhánh / nhân viên
+ *               thuộc các chi nhánh này.
+ */
+type Scope = { actorId: string; isAdmin: boolean; branchIds: Set<string> };
+
+/** Kiểm quyền ở SERVER (mẫu assertCanSend của care.functions.ts) và trả phạm vi. */
+async function assertPerm(actorId: string | undefined, perm: Perm): Promise<Scope> {
   if (!actorId) throw new Error("Thiếu thông tin người thực hiện");
   const rows = await fetchRows<any>("users", { eq: { id: actorId }, select: "id, is_admin", limit: 1 });
   const actor = rows[0];
   if (!actor) throw new Error("Người dùng không tồn tại");
-  if (Number(actor.is_admin) === 1) return;
-  const perms = await fetchRows<any>("user_permissions", { eq: { user_id: actorId }, select: "permission" });
+  if (Number(actor.is_admin) === 1) return { actorId, isAdmin: true, branchIds: new Set() };
+
+  const [perms, branches] = await Promise.all([
+    fetchRows<any>("user_permissions", { eq: { user_id: actorId }, select: "permission" }),
+    fetchRows<any>("user_branches", { eq: { user_id: actorId }, select: "branch_id" }),
+  ]);
   if (!perms.some((p: any) => p.permission === perm)) {
     throw new Error(
       perm === "manage_payroll"
-        ? 'Bạn không có quyền "Chấm công & bảng lương"'
-        : 'Bạn không có quyền "Xếp lịch trực"',
+        ? 'Bạn không có quyền "Quản lý lương nhân sự"'
+        : 'Bạn không có quyền "Quản lý lịch trực"',
     );
   }
+  const branchIds = new Set<string>(branches.map((b: any) => b.branch_id));
+  if (!branchIds.size) {
+    throw new Error("Tài khoản của bạn chưa được gán chi nhánh nào — nhờ quản trị viên gán chi nhánh để quản lý.");
+  }
+  return { actorId, isAdmin: false, branchIds };
+}
+
+/** Chi nhánh của từng nhân viên (user_branches). */
+async function userBranchMap(userIds?: string[]): Promise<Map<string, Set<string>>> {
+  const db = getSupabaseAdmin();
+  let q = db.from("user_branches").select("user_id, branch_id");
+  if (userIds) {
+    if (!userIds.length) return new Map();
+    q = q.in("user_id", userIds);
+  }
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  const m = new Map<string, Set<string>>();
+  for (const r of (data ?? []) as any[]) {
+    (m.get(r.user_id) ?? m.set(r.user_id, new Set()).get(r.user_id)).add(r.branch_id);
+  }
+  return m;
+}
+
+/**
+ * Nhân viên nằm trong phạm vi khi có ÍT NHẤT MỘT chi nhánh trùng với người
+ * quản lý. Nhân viên không gắn chi nhánh nào → chỉ admin thấy (lương là dữ
+ * liệu nhạy cảm, thà ẩn còn hơn lộ cho người không phụ trách).
+ */
+function inScope(scope: Scope, userBranches: Set<string> | undefined): boolean {
+  if (scope.isAdmin) return true;
+  if (!userBranches?.size) return false;
+  for (const b of userBranches) if (scope.branchIds.has(b)) return true;
+  return false;
+}
+
+async function scopedUserIds(scope: Scope, userIds: string[]): Promise<string[]> {
+  if (scope.isAdmin) return userIds;
+  const map = await userBranchMap(userIds);
+  return userIds.filter((u) => inScope(scope, map.get(u)));
+}
+
+async function assertUserInScope(scope: Scope, userId: string) {
+  if (scope.isAdmin) return;
+  const ok = await scopedUserIds(scope, [userId]);
+  if (!ok.length) throw new Error("Nhân viên này không thuộc chi nhánh bạn quản lý");
+}
+
+function assertBranchInScope(scope: Scope, branchId: string | null | undefined) {
+  if (scope.isAdmin) return;
+  if (!branchId || !scope.branchIds.has(branchId)) {
+    throw new Error("Chi nhánh này không thuộc phạm vi bạn quản lý");
+  }
+}
+
+async function shiftBranch(shiftId: string): Promise<string | null> {
+  const db = getSupabaseAdmin();
+  const { data } = await db.from("duty_shifts").select("branch_id").eq("id", shiftId).limit(1);
+  return (data ?? [])[0]?.branch_id ?? null;
 }
 
 /** "2026-06" → ngày đầu, ngày đầu tháng sau, danh sách ngày trong tháng. */
@@ -74,18 +146,43 @@ async function activeUsers() {
 // 1) LỊCH TRỰC CA
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * Lịch trực theo THÁNG ({ month }) hoặc theo KHOẢNG NGÀY ({ from, to }) — xem
+ * theo tuần cần khoảng ngày vì một tuần có thể vắt qua 2 tháng.
+ * Ai cũng xem được; quyền sửa kiểm ở các hàm ghi.
+ */
 export const getRosterMonthFn = createServerFn({ method: "GET" }).handler(
-  async ({ data }: { data: { month: string } }) => {
-    const { from, next, dates, year } = monthRange(data?.month);
+  async ({ data }: { data: { month?: string; from?: string; to?: string } }) => {
+    let from: string, next: string, dates: string[], year: number;
+    if (data?.from && data?.to) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(data.from) || !/^\d{4}-\d{2}-\d{2}$/.test(data.to) || data.to < data.from) {
+        throw new Error("Khoảng ngày không hợp lệ");
+      }
+      from = data.from;
+      dates = [];
+      for (let d = data.from; d <= data.to; ) {
+        dates.push(d);
+        const [y, m, dd] = d.split("-").map(Number);
+        d = new Date(Date.UTC(y, m - 1, dd + 1)).toISOString().slice(0, 10);
+        if (dates.length > 62) throw new Error("Khoảng ngày tối đa 62 ngày");
+      }
+      const [ty, tm, td] = data.to.split("-").map(Number);
+      next = new Date(Date.UTC(ty, tm - 1, td + 1)).toISOString().slice(0, 10);
+      year = ty;
+    } else {
+      const r = monthRange(data?.month);
+      ({ from, next, dates, year } = r);
+    }
     const db = getSupabaseAdmin();
 
-    const [shiftsRes, entriesRes, yearRes, branchesRes, users] = await Promise.all([
+    const [shiftsRes, entriesRes, yearRes, branchesRes, users, ubMap] = await Promise.all([
       db.from("duty_shifts").select("*").order("sort_order"),
       db.from("duty_entries").select("*").gte("work_date", from).lt("work_date", next),
-      // Luỹ kế năm đến hết tháng đang xem — thay cho số đếm tay "VY 3", "lễ 2".
+      // Luỹ kế năm đến hết khoảng đang xem — thay cho số đếm tay "VY 3", "lễ 2".
       db.from("duty_entries").select("user_id, kind").gte("work_date", `${year}-01-01`).lt("work_date", next).in("kind", ["off", "holiday", "half_off"]),
       db.from("branches").select("id, name").order("name"),
       activeUsers(),
+      userBranchMap(),
     ]);
 
     if (shiftsRes.error) {
@@ -112,12 +209,14 @@ export const getRosterMonthFn = createServerFn({ method: "GET" }).handler(
     }
 
     return {
-      month: data.month,
+      month: data.month ?? null,
       dates,
       shifts: shiftsRes.data ?? [],
       entries,
       branches: branchesRes.data ?? [],
-      users: users.map((u) => ({ id: u.id, full_name: u.full_name })),
+      // Kèm chi nhánh của từng người để giao diện lọc được danh sách chọn
+      // theo phạm vi người quản lý (server vẫn kiểm lại khi ghi).
+      users: users.map((u) => ({ id: u.id, full_name: u.full_name, branch_ids: [...(ubMap.get(u.id) ?? [])] })),
       summary,
     };
   },
@@ -139,8 +238,11 @@ export const setRosterCellFn = createServerFn({ method: "POST" }).handler(
       actorId?: string;
     };
   }) => {
-    await assertPerm(data?.actorId, "manage_roster");
+    const scope = await assertPerm(data?.actorId, "manage_roster");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data.date))) throw new Error("Ngày không hợp lệ");
+    // Chỉ xếp được ca thuộc chi nhánh mình quản lý. Người được xếp thì có thể
+    // ở chi nhánh khác (điều người sang hỗ trợ là chuyện bình thường).
+    assertBranchInScope(scope, await shiftBranch(data.shiftId));
     const db = getSupabaseAdmin();
 
     const people = [...new Map((data.people ?? []).filter((p) => p?.user_id).map((p) => [p.user_id, p])).values()];
@@ -189,7 +291,8 @@ export const setDayOffFn = createServerFn({ method: "POST" }).handler(
   }: {
     data: { date: string; userId: string; kind: "off" | "holiday" | null; note?: string; actorId?: string };
   }) => {
-    await assertPerm(data?.actorId, "manage_roster");
+    const scope = await assertPerm(data?.actorId, "manage_roster");
+    await assertUserInScope(scope, data.userId);
     const db = getSupabaseAdmin();
 
     await db.from("duty_entries").delete().eq("work_date", data.date).eq("user_id", data.userId).is("shift_id", null);
@@ -232,7 +335,13 @@ export const copyRosterWeekFn = createServerFn({ method: "POST" }).handler(
   }: {
     data: { fromStart: string; toStart: string; branchId?: string; overwrite?: boolean; actorId?: string };
   }) => {
-    await assertPerm(data?.actorId, "manage_roster");
+    const scope = await assertPerm(data?.actorId, "manage_roster");
+    // Người quản lý chi nhánh bắt buộc chọn chi nhánh của mình — không được
+    // chép đè lịch của cả hệ thống.
+    if (!scope.isAdmin) {
+      if (!data.branchId) throw new Error("Chọn chi nhánh trước khi sao chép lịch");
+      assertBranchInScope(scope, data.branchId);
+    }
     const db = getSupabaseAdmin();
 
     const addDays = (d: string, n: number) => {
@@ -296,8 +405,12 @@ export const upsertShiftFn = createServerFn({ method: "POST" }).handler(
   }: {
     data: { id?: string; branch_id: string; name: string; start_time?: string; end_time?: string; sort_order?: number; is_active?: boolean; actorId?: string };
   }) => {
-    await assertPerm(data?.actorId, "manage_roster");
+    const scope = await assertPerm(data?.actorId, "manage_roster");
     if (!data.branch_id) throw new Error("Chọn chi nhánh");
+    assertBranchInScope(scope, data.branch_id);
+    // Sửa ca có sẵn: ca cũ cũng phải thuộc phạm vi — chặn "chuyển" ca của chi
+    // nhánh khác về chi nhánh mình.
+    if (data.id) assertBranchInScope(scope, await shiftBranch(data.id));
     const name = String(data.name ?? "").trim();
     if (!name) throw new Error("Nhập tên ca (vd 8h30-18h00)");
     const db = getSupabaseAdmin();
@@ -323,7 +436,8 @@ export const upsertShiftFn = createServerFn({ method: "POST" }).handler(
 
 export const deleteShiftFn = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: { id: string; actorId?: string } }) => {
-    await assertPerm(data?.actorId, "manage_roster");
+    const scope = await assertPerm(data?.actorId, "manage_roster");
+    assertBranchInScope(scope, await shiftBranch(data.id));
     const db = getSupabaseAdmin();
     // Xoá ca sẽ xoá lây (CASCADE) toàn bộ lịch đã xếp vào ca đó → chặn lại.
     const { count } = await db.from("duty_entries").select("id", { count: "exact", head: true }).eq("shift_id", data.id);
@@ -338,25 +452,44 @@ export const deleteShiftFn = createServerFn({ method: "POST" }).handler(
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 2) HỒ SƠ LƯƠNG
+//
+// Quyền "Quản lý lương nhân sự": chỉ thấy / sửa nhân viên có ÍT NHẤT MỘT chi
+// nhánh trùng với chi nhánh mình được gán. Admin thấy tất cả.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const listPayProfilesFn = createServerFn({ method: "GET" }).handler(
   async ({ data }: { data: { actorId?: string } }) => {
-    await assertPerm(data?.actorId, "manage_payroll");
+    const scope = await assertPerm(data?.actorId, "manage_payroll");
     const db = getSupabaseAdmin();
-    const [users, profRes] = await Promise.all([activeUsers(), db.from("pay_profiles").select("*")]);
+    const [users, profRes, ubMap, brRes] = await Promise.all([
+      activeUsers(),
+      db.from("pay_profiles").select("*"),
+      userBranchMap(),
+      db.from("branches").select("id, name"),
+    ]);
     if (profRes.error) {
       throw new Error(`${profRes.error.message}. Nếu báo "does not exist" thì chưa chạy sql_migration_v13_hr.sql.`);
     }
+    const branchName = new Map(((brRes.data ?? []) as any[]).map((b) => [b.id, b.name]));
     const byUser = new Map(((profRes.data ?? []) as any[]).map((p) => [p.user_id, p]));
-    return users.map((u) => ({ user_id: u.id, full_name: u.full_name, phone: u.phone, profile: byUser.get(u.id) ?? null }));
+    return users
+      .filter((u) => inScope(scope, ubMap.get(u.id)))
+      .map((u) => ({
+        user_id: u.id,
+        full_name: u.full_name,
+        phone: u.phone,
+        branches: [...(ubMap.get(u.id) ?? [])].map((b) => branchName.get(b) ?? b),
+        profile: byUser.get(u.id) ?? null,
+      }));
   },
 );
 
 export const upsertPayProfileFn = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: any }) => {
-    await assertPerm(data?.actorId, "manage_payroll");
+    const scope = await assertPerm(data?.actorId, "manage_payroll");
     if (!data?.user_id) throw new Error("Thiếu nhân viên");
+    await assertUserInScope(scope, data.user_id);
+
     const rate = num(data.commission_rate);
     if (rate < 0 || rate > 100) throw new Error("% hoa hồng phải từ 0 đến 100");
     if (num(data.standard_days) <= 0) throw new Error("Số công chuẩn phải lớn hơn 0");
@@ -400,12 +533,14 @@ async function getPeriod(month: string) {
   return ((data ?? [])[0] ?? null) as any;
 }
 
-async function ensureDraftPeriod(month: string) {
+/**
+ * Kỳ lương của tháng — chỉ là "thùng chứa" các dòng lương. Trạng thái chốt
+ * nằm ở TỪNG DÒNG (payroll_items.status, migration v14), không ở kỳ, vì nhiều
+ * người quản lý (theo chi nhánh) cùng làm lương một tháng.
+ */
+async function ensurePeriod(month: string) {
   const p = await getPeriod(month);
-  if (p) {
-    if (p.status !== "draft") throw new Error("Bảng lương tháng này đã CHỐT — mở lại mới sửa được");
-    return p;
-  }
+  if (p) return p;
   const db = getSupabaseAdmin();
   const row = { id: uid(), month, status: "draft", created_at: now() };
   const { error } = await db.from("payroll_periods").insert(row);
@@ -418,13 +553,35 @@ async function ensureDraftPeriod(month: string) {
   return row;
 }
 
-async function payrollProfiles() {
+/** Dòng lương đã chốt của tháng, theo user_id. */
+async function lockedItems(month: string): Promise<Map<string, any>> {
+  const period = await getPeriod(month);
+  if (!period) return new Map();
   const db = getSupabaseAdmin();
-  const [users, profRes] = await Promise.all([activeUsers(), db.from("pay_profiles").select("*").eq("in_payroll", true)]);
+  const { data, error } = await db.from("payroll_items").select("*").eq("period_id", period.id).eq("status", "locked");
+  if (error) {
+    throw new Error(`${error.message}. Nếu báo lỗi cột "status" thì chưa chạy sql_migration_v14_payroll_scope.sql.`);
+  }
+  return new Map(((data ?? []) as any[]).map((i) => [i.user_id, i]));
+}
+
+async function assertNotLocked(month: string, userId: string) {
+  const locked = await lockedItems(month);
+  if (locked.has(userId)) throw new Error("Lương tháng này của nhân viên đã CHỐT — mở lại mới sửa được");
+}
+
+/** Hồ sơ lương đang bật, CHỈ trong phạm vi người thực hiện. */
+async function payrollProfiles(scope: Scope) {
+  const db = getSupabaseAdmin();
+  const [users, profRes, ubMap] = await Promise.all([
+    activeUsers(),
+    db.from("pay_profiles").select("*").eq("in_payroll", true),
+    userBranchMap(),
+  ]);
   if (profRes.error) throw new Error(`${profRes.error.message}. Chưa chạy sql_migration_v13_hr.sql?`);
   const userById = new Map(users.map((u) => [u.id, u]));
   return ((profRes.data ?? []) as any[])
-    .filter((p) => userById.has(p.user_id))
+    .filter((p) => userById.has(p.user_id) && inScope(scope, ubMap.get(p.user_id)))
     .map((p) => ({ ...p, full_name: userById.get(p.user_id).full_name }))
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.full_name).localeCompare(String(b.full_name), "vi"));
 }
@@ -437,19 +594,22 @@ function tallyAttendance(codes: Record<string, string>) {
 
 export const getAttendanceMonthFn = createServerFn({ method: "GET" }).handler(
   async ({ data }: { data: { month: string; actorId?: string } }) => {
-    await assertPerm(data?.actorId, "manage_payroll");
+    const scope = await assertPerm(data?.actorId, "manage_payroll");
     const { from, next, dates } = monthRange(data.month);
     const db = getSupabaseAdmin();
-    const [profiles, attRes, period] = await Promise.all([
-      payrollProfiles(),
-      db.from("attendance_days").select("user_id, work_date, code, note").gte("work_date", from).lt("work_date", next),
-      getPeriod(data.month),
+    const profiles = await payrollProfiles(scope);
+    const ids = profiles.map((p) => p.user_id);
+    const [attRes, locked] = await Promise.all([
+      ids.length
+        ? db.from("attendance_days").select("user_id, work_date, code, note").in("user_id", ids).gte("work_date", from).lt("work_date", next)
+        : Promise.resolve({ data: [], error: null }),
+      lockedItems(data.month),
     ]);
-    if (attRes.error) throw new Error(attRes.error.message);
+    if ((attRes as any).error) throw new Error((attRes as any).error.message);
 
     const byUser: Record<string, Record<string, string>> = {};
     const notes: Record<string, Record<string, string>> = {};
-    for (const a of (attRes.data ?? []) as any[]) {
+    for (const a of ((attRes as any).data ?? []) as any[]) {
       (byUser[a.user_id] ||= {})[a.work_date] = a.code;
       if (a.note) (notes[a.user_id] ||= {})[a.work_date] = a.note;
     }
@@ -457,7 +617,6 @@ export const getAttendanceMonthFn = createServerFn({ method: "GET" }).handler(
     return {
       month: data.month,
       dates,
-      locked: Boolean(period && period.status !== "draft"),
       rows: profiles.map((p) => ({
         user_id: p.user_id,
         full_name: p.full_name,
@@ -466,22 +625,20 @@ export const getAttendanceMonthFn = createServerFn({ method: "GET" }).handler(
         codes: byUser[p.user_id] ?? {},
         notes: notes[p.user_id] ?? {},
         totals: tallyAttendance(byUser[p.user_id] ?? {}),
+        // Đã chốt lương → hàng chấm công của người này chỉ xem.
+        locked: locked.has(p.user_id),
       })),
     };
   },
 );
 
-async function assertMonthEditable(month: string) {
-  const p = await getPeriod(month);
-  if (p && p.status !== "draft") throw new Error("Bảng lương tháng này đã CHỐT — mở lại mới sửa chấm công được");
-}
-
 /** Đặt / xoá mã chấm công một ô. code = null → xoá. */
 export const setAttendanceFn = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: { userId: string; date: string; code: "X" | "N" | "L" | "K" | null; note?: string; actorId?: string } }) => {
-    await assertPerm(data?.actorId, "manage_payroll");
+    const scope = await assertPerm(data?.actorId, "manage_payroll");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data.date))) throw new Error("Ngày không hợp lệ");
-    await assertMonthEditable(data.date.slice(0, 7));
+    await assertUserInScope(scope, data.userId);
+    await assertNotLocked(data.date.slice(0, 7), data.userId);
     const db = getSupabaseAdmin();
     if (!data.code) {
       const { error } = await db.from("attendance_days").delete().eq("user_id", data.userId).eq("work_date", data.date);
@@ -499,8 +656,9 @@ export const setAttendanceFn = createServerFn({ method: "POST" }).handler(
 );
 
 /**
- * Điền nhanh cả hàng của một người: vd "X cho mọi ngày, CN là K".
- * onlyEmpty = true → không đè các ô đã chấm tay (nghỉ phép, nửa ngày...).
+ * Điền nhanh: vd "X cho mọi ngày thường, K cho Chủ nhật".
+ * onlyEmpty = true → không đè các ô đã chấm tay. Bỏ qua người ngoài phạm vi
+ * và người đã chốt lương.
  */
 export const fillAttendanceRowFn = createServerFn({ method: "POST" }).handler(
   async ({
@@ -508,13 +666,13 @@ export const fillAttendanceRowFn = createServerFn({ method: "POST" }).handler(
   }: {
     data: { month: string; userIds: string[]; weekdayCode: "X" | "N" | "L" | "K"; sundayCode: "X" | "N" | "L" | "K" | null; onlyEmpty?: boolean; actorId?: string };
   }) => {
-    await assertPerm(data?.actorId, "manage_payroll");
+    const scope = await assertPerm(data?.actorId, "manage_payroll");
     const { from, next, dates } = monthRange(data.month);
-    await assertMonthEditable(data.month);
     const db = getSupabaseAdmin();
 
-    const ids = (data.userIds ?? []).filter(Boolean);
-    if (!ids.length) throw new Error("Chưa chọn nhân viên");
+    const locked = await lockedItems(data.month);
+    const ids = (await scopedUserIds(scope, (data.userIds ?? []).filter(Boolean))).filter((u) => !locked.has(u));
+    if (!ids.length) throw new Error("Không có nhân viên nào điền được (ngoài phạm vi hoặc đã chốt lương)");
 
     const existing = new Set<string>();
     if (data.onlyEmpty !== false) {
@@ -565,22 +723,77 @@ async function advanceVoucherTypes() {
   };
 }
 
-/** Tính bảng lương trực tiếp từ dữ liệu gốc (dùng khi kỳ còn nháp và lúc chốt). */
-async function computePayroll(month: string) {
+/** Dòng hiển thị từ snapshot đã chốt — KHÔNG tính lại. */
+function rowFromSnapshot(i: any, p: any) {
+  return {
+    user_id: i.user_id,
+    full_name: i.full_name ?? p?.full_name,
+    position: i.position ?? p?.position,
+    area: p?.area,
+    start_label: p?.start_label,
+    bank_name: i.bank_name,
+    bank_account: i.bank_account,
+    bank_owner: p?.bank_owner,
+    base_salary: num(i.base_salary),
+    standard_days: num(i.standard_days),
+    worked_days: num(i.worked_days),
+    salary_by_days: num(i.salary_by_days),
+    tech_revenue: num(i.tech_revenue),
+    commission: num(i.commission),
+    ot_hours_15: num(i.ot_hours_15),
+    ot_hours_20: num(i.ot_hours_20),
+    overtime_amount: num(i.overtime_amount),
+    travel_allowance: num(i.travel_allowance),
+    travel_note: i.travel_note ?? "",
+    bonus: num(i.bonus),
+    extra_allowance: num(i.extra_allowance),
+    extra_note: i.extra_note ?? "",
+    advance: num(i.advance),
+    social_insurance: num(i.social_insurance),
+    union_fee: num(i.union_fee),
+    other_deduction: num(i.other_deduction),
+    other_note: i.other_note ?? "",
+    commission_override: i.commission_override ?? null,
+    gross: num(i.gross),
+    deductions: num(i.deductions),
+    net_pay: num(i.net_pay),
+    cash_voucher_id: i.cash_voucher_id ?? null,
+    tech_lines: [],
+    commission_orders: [],
+    advance_vouchers: [],
+    tech_enabled: Boolean(p?.tech_revenue),
+    commission_rate: num(p?.commission_rate),
+    locked: true,
+    locked_at: i.locked_at,
+    snapshot: true,
+  };
+}
+
+/**
+ * Tính bảng lương cho các nhân viên trong phạm vi. Người đã chốt lấy nguyên
+ * snapshot; người chưa chốt tính trực tiếp từ dữ liệu gốc.
+ * draftOnly = true → chỉ trả những người chưa chốt (dùng lúc chốt lương).
+ */
+async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: boolean }) {
   const { from, next } = monthRange(month);
   const fromTs = `${from}T00:00:00+07:00`;
   const nextTs = `${next}T00:00:00+07:00`;
   const db = getSupabaseAdmin();
 
-  const profiles = await payrollProfiles();
-  const userIds = profiles.map((p) => p.user_id);
+  const allProfiles = await payrollProfiles(scope);
   const period = await getPeriod(month);
+  const locked = await lockedItems(month);
+  // Người đã chốt không cần tính lại → bỏ khỏi các truy vấn nặng bên dưới.
+  const profiles = allProfiles.filter((p) => !locked.has(p.user_id));
+  const userIds = profiles.map((p) => p.user_id);
 
   const [attRes, itemsRes, tech, vtypes] = await Promise.all([
     userIds.length
       ? db.from("attendance_days").select("user_id, work_date, code").in("user_id", userIds).gte("work_date", from).lt("work_date", next)
       : Promise.resolve({ data: [] }),
-    period ? db.from("payroll_items").select("*").eq("period_id", period.id) : Promise.resolve({ data: [] }),
+    period && userIds.length
+      ? db.from("payroll_items").select("*").eq("period_id", period.id).in("user_id", userIds)
+      : Promise.resolve({ data: [] }),
     // Lương doanh số: CHỈ lịch đã hoàn thành (quyết định đã chốt với người dùng).
     profiles.some((p) => p.tech_revenue)
       ? computeTechPay({ from, next, statuses: ["done"] })
@@ -650,7 +863,7 @@ async function computePayroll(month: string) {
     }
   }
 
-  const rows = profiles.map((p) => {
+  const computed = profiles.map((p) => {
     const inp = inputs.get(p.user_id) ?? {};
     const att = tallyAttendance(codesByUser[p.user_id] ?? {});
     const base = num(p.base_salary);
@@ -719,56 +932,60 @@ async function computePayroll(month: string) {
       gross,
       deductions,
       net_pay: gross - deductions,
-      cash_voucher_id: inp.cash_voucher_id ?? null,
+      cash_voucher_id: null,
+      locked: false,
     };
   });
 
+  if (opts?.draftOnly) return { period, rows: computed, salaryVoucherType: vtypes.salaryType };
+
+  const profById = new Map(allProfiles.map((p) => [p.user_id, p]));
+  const snapshots = allProfiles
+    .filter((p) => locked.has(p.user_id))
+    .map((p) => rowFromSnapshot(locked.get(p.user_id), profById.get(p.user_id)));
+  const order = new Map(allProfiles.map((p, i) => [p.user_id, i]));
+  const rows = [...computed, ...snapshots].sort((a, b) => (order.get(a.user_id) ?? 0) - (order.get(b.user_id) ?? 0));
   return { period, rows, salaryVoucherType: vtypes.salaryType };
 }
+
+const isPaid = (r: any) => Boolean(r.cash_voucher_id) && !String(r.cash_voucher_id).startsWith("pending:");
 
 function summarize(rows: any[]) {
   return {
     people: rows.length,
+    locked: rows.filter((r) => r.locked).length,
+    paid: rows.filter(isPaid).length,
     gross: rows.reduce((s, r) => s + num(r.gross), 0),
     deductions: rows.reduce((s, r) => s + num(r.deductions), 0),
     net: rows.reduce((s, r) => s + num(r.net_pay), 0),
-    paid: rows.filter((r) => r.cash_voucher_id && !String(r.cash_voucher_id).startsWith("pending:")).length,
   };
 }
 
 export const getPayrollFn = createServerFn({ method: "GET" }).handler(
   async ({ data }: { data: { month: string; actorId?: string } }) => {
-    await assertPerm(data?.actorId, "manage_payroll");
+    const scope = await assertPerm(data?.actorId, "manage_payroll");
     monthRange(data.month);
-    const period = await getPeriod(data.month);
-
-    // Kỳ đã chốt: đọc NGUYÊN snapshot, không tính lại.
-    if (period && period.status !== "draft") {
-      const db = getSupabaseAdmin();
-      const { data: items, error } = await db.from("payroll_items").select("*").eq("period_id", period.id);
-      if (error) throw new Error(error.message);
-      const rows = ((items ?? []) as any[])
-        .map((i) => ({ ...i, attendance: null, tech_lines: [], commission_orders: [], advance_vouchers: [], snapshot: true }))
-        .sort((a, b) => String(a.full_name).localeCompare(String(b.full_name), "vi"));
-      return { month: data.month, status: period.status, locked_at: period.locked_at, rows, summary: summarize(rows) };
-    }
-
-    const r = await computePayroll(data.month);
+    const r = await computePayroll(data.month, scope);
     return {
       month: data.month,
-      status: "draft",
       rows: r.rows,
       summary: summarize(r.rows),
       hasSalaryVoucherType: Boolean(r.salaryVoucherType),
+      // Để giao diện nói rõ phạm vi đang xem.
+      scopeAll: scope.isAdmin,
+      scopeBranchIds: [...scope.branchIds],
     };
   },
 );
 
-/** Lưu các ô nhập tay của MỘT người. Chỉ khi kỳ còn nháp. */
+/** Lưu các ô nhập tay của MỘT người. Chỉ khi người đó chưa chốt. */
 export const savePayrollInputFn = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: { month: string; userId: string; values: Record<string, any>; actorId?: string } }) => {
-    await assertPerm(data?.actorId, "manage_payroll");
-    const period = await ensureDraftPeriod(data.month);
+    const scope = await assertPerm(data?.actorId, "manage_payroll");
+    monthRange(data.month);
+    await assertUserInScope(scope, data.userId);
+    await assertNotLocked(data.month, data.userId);
+    const period = await ensurePeriod(data.month);
 
     const patch: Record<string, any> = {};
     for (const k of INPUT_FIELDS) {
@@ -791,76 +1008,97 @@ export const savePayrollInputFn = createServerFn({ method: "POST" }).handler(
   },
 );
 
-/** Chốt lương: chụp lại toàn bộ số liệu. Sau khi chốt, sửa lịch/đơn/phiếu không làm đổi bảng. */
+/**
+ * Chốt lương: chụp lại số liệu của các nhân viên CHƯA chốt trong phạm vi
+ * (hoặc chỉ những userIds được chọn). Sau khi chốt, sửa lịch/đơn/phiếu không
+ * làm đổi dòng lương đó. Người ngoài phạm vi KHÔNG bị ảnh hưởng.
+ */
 export const lockPayrollFn = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { month: string; actorId?: string } }) => {
-    await assertPerm(data?.actorId, "manage_payroll");
-    const period = await ensureDraftPeriod(data.month);
-    const { rows } = await computePayroll(data.month);
-    if (!rows.length) throw new Error("Chưa có nhân viên nào trong bảng lương (thêm ở tab Hồ sơ lương)");
+  async ({ data }: { data: { month: string; userIds?: string[]; actorId?: string } }) => {
+    const scope = await assertPerm(data?.actorId, "manage_payroll");
+    const period = await ensurePeriod(data.month);
+    let { rows } = await computePayroll(data.month, scope, { draftOnly: true });
+    if (data.userIds?.length) rows = rows.filter((r) => data.userIds!.includes(r.user_id));
+    if (!rows.length) throw new Error("Không còn ai chưa chốt lương trong phạm vi của bạn");
 
     const db = getSupabaseAdmin();
+    const stamp = now();
     const snapshot = rows.map((r) => ({
       period_id: period.id,
       user_id: r.user_id,
-      ot_hours_15: r.ot_hours_15, ot_hours_20: r.ot_hours_20,
-      travel_allowance: r.travel_allowance, travel_note: r.travel_note || null,
-      bonus: r.bonus, extra_allowance: r.extra_allowance, extra_note: r.extra_note || null,
-      other_deduction: r.other_deduction, other_note: r.other_note || null,
+      status: "locked",
+      locked_at: stamp,
+      locked_by: data.actorId ?? null,
+      ot_hours_15: r.ot_hours_15,
+      ot_hours_20: r.ot_hours_20,
+      travel_allowance: r.travel_allowance,
+      travel_note: r.travel_note || null,
+      bonus: r.bonus,
+      extra_allowance: r.extra_allowance,
+      extra_note: r.extra_note || null,
+      other_deduction: r.other_deduction,
+      other_note: r.other_note || null,
       commission_override: r.commission_override,
-      full_name: r.full_name, position: r.position,
-      base_salary: r.base_salary, standard_days: r.standard_days, worked_days: r.worked_days,
-      salary_by_days: r.salary_by_days, tech_revenue: r.tech_revenue, commission: r.commission,
-      overtime_amount: r.overtime_amount, advance: r.advance,
-      social_insurance: r.social_insurance, union_fee: r.union_fee,
-      gross: r.gross, deductions: r.deductions, net_pay: r.net_pay,
-      bank_name: r.bank_name, bank_account: r.bank_account,
-      updated_at: now(),
+      full_name: r.full_name,
+      position: r.position,
+      base_salary: r.base_salary,
+      standard_days: r.standard_days,
+      worked_days: r.worked_days,
+      salary_by_days: r.salary_by_days,
+      tech_revenue: r.tech_revenue,
+      commission: r.commission,
+      overtime_amount: r.overtime_amount,
+      advance: r.advance,
+      social_insurance: r.social_insurance,
+      union_fee: r.union_fee,
+      gross: r.gross,
+      deductions: r.deductions,
+      net_pay: r.net_pay,
+      bank_name: r.bank_name,
+      bank_account: r.bank_account,
+      updated_at: stamp,
     }));
     const { error } = await db.from("payroll_items").upsert(snapshot, { onConflict: "period_id,user_id" });
-    if (error) throw new Error(error.message);
-
-    // Người đã có dòng nháp nhưng giờ không còn trong bảng lương → bỏ đi, để
-    // snapshot chỉ gồm đúng những người được chốt.
-    const keep = new Set(rows.map((r) => r.user_id));
-    const { data: all } = await db.from("payroll_items").select("user_id").eq("period_id", period.id);
-    const stale = ((all ?? []) as any[]).map((i) => i.user_id).filter((u) => !keep.has(u));
-    if (stale.length) await db.from("payroll_items").delete().eq("period_id", period.id).in("user_id", stale);
-
-    const { error: e2 } = await db
-      .from("payroll_periods")
-      .update({ status: "locked", locked_at: now(), locked_by: data.actorId ?? null })
-      .eq("id", period.id)
-      .eq("status", "draft");
-    if (e2) throw new Error(e2.message);
-
-    await logActivity({ action: "lock_payroll", detail: `Chốt bảng lương tháng ${data.month} (${rows.length} người)`, employee_id: data.actorId ?? null });
+    if (error) {
+      throw new Error(`${error.message}. Nếu báo lỗi cột "status" thì chưa chạy sql_migration_v14_payroll_scope.sql.`);
+    }
+    await logActivity({ action: "lock_payroll", detail: `Chốt lương tháng ${data.month} cho ${rows.length} người`, employee_id: data.actorId ?? null });
     return { ok: true, people: rows.length };
   },
 );
 
+/** Mở lại các dòng đã chốt nhưng CHƯA chi, trong phạm vi người thực hiện. */
 export const unlockPayrollFn = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { month: string; actorId?: string } }) => {
-    await assertPerm(data?.actorId, "manage_payroll");
+  async ({ data }: { data: { month: string; userIds?: string[]; actorId?: string } }) => {
+    const scope = await assertPerm(data?.actorId, "manage_payroll");
     const period = await getPeriod(data.month);
-    if (!period || period.status === "draft") return { ok: true };
-    const db = getSupabaseAdmin();
-    // Đã chi cho bất kỳ ai → không mở lại được, nếu không số trên bảng sẽ lệch
-    // với phiếu chi đã nằm trong Sổ quỹ.
-    const { count } = await db.from("payroll_items").select("user_id", { count: "exact", head: true }).eq("period_id", period.id).not("cash_voucher_id", "is", null);
-    if ((count ?? 0) > 0) {
-      throw new Error(`Đã chi lương cho ${count} người qua Sổ quỹ — không mở lại được. Huỷ phiếu chi tương ứng trước nếu cần sửa.`);
+    if (!period) return { ok: true, unlocked: 0 };
+    const locked = await lockedItems(data.month);
+    let ids = await scopedUserIds(scope, [...locked.keys()]);
+    if (data.userIds?.length) ids = ids.filter((u) => data.userIds!.includes(u));
+    // Đã chi → không mở lại, nếu không số trên bảng sẽ lệch với phiếu chi
+    // đã nằm trong Sổ quỹ.
+    const paid = ids.filter((u) => locked.get(u)?.cash_voucher_id);
+    const target = ids.filter((u) => !locked.get(u)?.cash_voucher_id);
+    if (!target.length) {
+      throw new Error(paid.length ? "Những người này đã được chi lương qua Sổ quỹ — không mở lại được" : "Không có dòng lương nào đang chốt");
     }
-    const { error } = await db.from("payroll_periods").update({ status: "draft", locked_at: null, locked_by: null }).eq("id", period.id);
+    const db = getSupabaseAdmin();
+    const { error } = await db
+      .from("payroll_items")
+      .update({ status: "draft", locked_at: null, locked_by: null })
+      .eq("period_id", period.id)
+      .in("user_id", target)
+      .is("cash_voucher_id", null);
     if (error) throw new Error(error.message);
-    await logActivity({ action: "unlock_payroll", detail: `Mở lại bảng lương tháng ${data.month}`, employee_id: data.actorId ?? null });
-    return { ok: true };
+    await logActivity({ action: "unlock_payroll", detail: `Mở lại lương tháng ${data.month} cho ${target.length} người`, employee_id: data.actorId ?? null });
+    return { ok: true, unlocked: target.length, skippedPaid: paid.length };
   },
 );
 
 /**
- * Chi lương: tạo 1 phiếu chi "Chi Lương" trong Sổ quỹ cho mỗi người có thực
- * lĩnh > 0 và CHƯA được chi.
+ * Chi lương: tạo 1 phiếu chi "Chi Lương" trong Sổ quỹ cho mỗi người ĐÃ CHỐT,
+ * thực lĩnh > 0, chưa được chi, và nằm trong phạm vi người thực hiện.
  *
  * Chống tạo trùng khi bấm 2 lần / 2 người bấm cùng lúc: trước khi tạo phiếu,
  * "giành" dòng bằng UPDATE có điều kiện cash_voucher_id IS NULL. Chỉ ai giành
@@ -868,21 +1106,30 @@ export const unlockPayrollFn = createServerFn({ method: "POST" }).handler(
  */
 export const payPayrollFn = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: { month: string; fundType: "tien_mat" | "ngan_hang"; branchId: string; actorId?: string } }) => {
-    await assertPerm(data?.actorId, "manage_payroll");
+    const scope = await assertPerm(data?.actorId, "manage_payroll");
     if (!data.branchId) throw new Error("Chọn chi nhánh / quỹ chi lương");
+    // Chỉ chi từ quỹ của chi nhánh mình quản lý.
+    assertBranchInScope(scope, data.branchId);
     const period = await getPeriod(data.month);
-    if (!period || period.status === "draft") throw new Error("Phải CHỐT lương trước khi chi");
+    if (!period) throw new Error("Tháng này chưa có bảng lương");
 
     const vtypes = await advanceVoucherTypes();
     if (!vtypes.salaryType) throw new Error('Sổ quỹ chưa có loại phiếu chi "Chi Lương" — tạo trong Sổ quỹ trước');
 
     const db = getSupabaseAdmin();
-    const { data: items, error } = await db.from("payroll_items").select("*").eq("period_id", period.id).is("cash_voucher_id", null).gt("net_pay", 0);
+    const { data: items, error } = await db
+      .from("payroll_items")
+      .select("*")
+      .eq("period_id", period.id)
+      .eq("status", "locked")
+      .is("cash_voucher_id", null)
+      .gt("net_pay", 0);
     if (error) throw new Error(error.message);
+    const allowed = new Set(await scopedUserIds(scope, ((items ?? []) as any[]).map((i) => i.user_id)));
 
     const [, mm] = data.month.split("-");
     const results: any[] = [];
-    for (const it of (items ?? []) as any[]) {
+    for (const it of ((items ?? []) as any[]).filter((i) => allowed.has(i.user_id))) {
       const token = `pending:${uid()}`;
       const { data: claimed } = await db
         .from("payroll_items")
@@ -914,16 +1161,12 @@ export const payPayrollFn = createServerFn({ method: "POST" }).handler(
       }
     }
 
-    const { count: remaining } = await db.from("payroll_items").select("user_id", { count: "exact", head: true }).eq("period_id", period.id).is("cash_voucher_id", null).gt("net_pay", 0);
-    if ((remaining ?? 0) === 0) {
-      await db.from("payroll_periods").update({ status: "paid", paid_at: now() }).eq("id", period.id);
-    }
     const ok = results.filter((r) => r.ok);
     await logActivity({
       action: "pay_payroll",
       detail: `Chi lương tháng ${data.month}: ${ok.length} phiếu, ${ok.reduce((s, r) => s + r.amount, 0).toLocaleString("vi-VN")}đ`,
       employee_id: data.actorId ?? null,
     });
-    return { results, remaining: remaining ?? 0 };
+    return { results };
   },
 );

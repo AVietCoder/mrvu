@@ -36,18 +36,21 @@ const border = { top: thin, left: thin, bottom: thin, right: thin };
 // ─── Lịch trực ─────────────────────────────────────────────────────────────
 export async function exportRosterExcel(opts: {
   month: string;
+  /** Tên sheet / tên file tuỳ chọn (vd xuất theo tuần). */
+  sheetName?: string;
+  fileName?: string;
   dates: string[];
   rows: { branch: string; shift: string; cells: Record<string, string> }[];
   offCells: Record<string, string>;
 }) {
   const wb = await newWorkbook();
   const [y, m] = opts.month.split("-");
-  const ws = wb.addWorksheet(`Tháng ${Number(m)}`, { views: [{ state: "frozen", xSplit: 2, ySplit: 1 }] });
+  const ws = wb.addWorksheet(opts.sheetName || `Tháng ${Number(m)}`, { views: [{ state: "frozen", xSplit: 2, ySplit: 1 }] });
 
   ws.addRow([
     "SHOWROOM",
     "CA TRỰC",
-    ...opts.dates.map((d) => `${WEEKDAY[dow(d)]}\n${Number(d.slice(8))}/${Number(m)}`),
+    ...opts.dates.map((d) => `${WEEKDAY[dow(d)]}\n${Number(d.slice(8))}/${Number(d.slice(5, 7))}`),
   ]);
   for (const r of opts.rows) ws.addRow([r.branch, r.shift, ...opts.dates.map((d) => r.cells[d] ?? "")]);
   ws.addRow([]);
@@ -73,7 +76,7 @@ export async function exportRosterExcel(opts: {
   });
   ws.getRow(1).height = 32;
 
-  await download(wb, `lich-truc-${y}-${m}.xlsx`);
+  await download(wb, opts.fileName || `lich-truc-${y}-${m}.xlsx`);
 }
 
 // ─── Bảng lương ────────────────────────────────────────────────────────────
