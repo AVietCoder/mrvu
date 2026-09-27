@@ -98,7 +98,6 @@ const fill = (argb: string) => ({ type: "pattern", pattern: "solid", fgColor: { 
 
 const SH_CC = "BẢNG CHẤM CÔNG";
 const SH_DT = "DOANH THU KỸ THUẬT";
-const SH_HH = "HOA HỒNG";
 const SH_TL = "TỔNG LƯƠNG";
 const SH_PL = "PHIẾU LƯƠNG";
 
@@ -116,11 +115,10 @@ function styleTable(ws: any, fromRow: number, toRow: number, toCol: number, mone
  * Xuất bảng lương thành workbook NHIỀU SHEET NỐI CÔNG THỨC như file Excel đang dùng:
  *  - BẢNG CHẤM CÔNG: mã X/N/L/K từng ngày, COUNTIF từng mã, Tổng công = X + N/2 + L
  *  - DOANH THU KỸ THUẬT: từng lịch đã hoàn thành, Thành tiền = (giá×SL + phụ phí + phụ thu chung)/số người + phụ thu riêng
- *  - HOA HỒNG: đơn của nhóm khách × % hoa hồng
  *  - TỔNG LƯƠNG: Công TT ← chấm công, Lương TN = ROUND(LCB/công chuẩn×công TT), Tăng ca, Tổng, Thực lĩnh
  *  - PHIẾU LƯƠNG: mỗi người một phiếu, mọi số lấy từ TỔNG LƯƠNG
  * Sửa một ô chấm công / tăng ca trong file thì lương tự tính lại như file cũ.
- * Người ĐÃ CHỐT: số công, doanh số, hoa hồng ghi bằng số chốt (không nối công
+ * Người ĐÃ CHỐT: số công, doanh số ghi bằng số chốt (không nối công
  * thức) để file luôn khớp đúng số đã chi.
  */
 export async function exportPayrollExcel(opts: { month: string; rows: any[] }) {
@@ -135,7 +133,6 @@ export async function exportPayrollExcel(opts: { month: string; rows: any[] }) {
   const tl = wb.addWorksheet(SH_TL, { views: [{ state: "frozen", xSplit: 2, ySplit: 3 }] });
   const cc = wb.addWorksheet(SH_CC, { views: [{ state: "frozen", xSplit: 3, ySplit: 4 }] });
   const dt = wb.addWorksheet(SH_DT);
-  const hh = wb.addWorksheet(SH_HH);
   const pl = wb.addWorksheet(SH_PL);
 
   // ── BẢNG CHẤM CÔNG ──
@@ -231,7 +228,7 @@ export async function exportPayrollExcel(opts: { month: string; rows: any[] }) {
       dr++;
     }
     const tot = dt.getRow(dr);
-    tot.getCell(1).value = "Lương doanh số";
+    tot.getCell(1).value = "DS kỹ thuật";
     dt.mergeCells(dr, 1, dr, 9);
     tot.getCell(10).value = f(`SUM(J${first}:J${dr - 1})`, lines.reduce((s: number, l: any) => s + n0(l.money_share), 0));
     tot.font = { bold: true };
@@ -242,125 +239,101 @@ export async function exportPayrollExcel(opts: { month: string; rows: any[] }) {
   if (dr === 3) dt.getCell(3, 1).value = "Không có lịch kỹ thuật đã hoàn thành trong tháng (hoặc người đã chốt lương).";
   [11, 40, 14, 11, 6, 12, 14, 9, 12, 14].forEach((w, i) => (dt.getColumn(i + 1).width = w));
 
-  // ── HOA HỒNG ──
-  hh.getCell(1, 1).value = `DOANH THU TÍNH HOA HỒNG - ${m}/${y}`;
-  hh.getCell(1, 1).font = { bold: true, size: 14 };
-  const commCell = new Map<string, string>();
-  let hr2 = 3;
-  for (const r of rows) {
-    if (!(n0(r.commission_rate) > 0) || r.snapshot) continue;
-    const orders = r.commission_orders ?? [];
-    hh.getCell(hr2, 1).value = `${r.full_name} — nhóm khách "${r.commission_group ?? ""}" — ${r.commission_rate}%`;
-    hh.getCell(hr2, 1).font = { bold: true, size: 12 };
-    hh.getCell(hr2, 1).fill = fill("FFDDEBF7");
-    hh.mergeCells(hr2, 1, hr2, 5);
-    hr2++;
-    const head = hr2;
-    ["STT", "Hoá đơn", "Khách hàng", "Ngày", "Doanh thu"].forEach((t, i) => {
-      const c = hh.getCell(hr2, i + 1); c.value = t; c.font = { bold: true }; c.fill = fill("FFF2F2F2");
-    });
-    hr2++;
-    const first = hr2;
-    orders.forEach((o: any, i: number) => {
-      const row = hh.getRow(hr2);
-      row.getCell(1).value = i + 1;
-      row.getCell(2).value = o.code;
-      row.getCell(3).value = o.customer_name;
-      row.getCell(4).value = String(o.date ?? "").slice(0, 10).split("-").reverse().join("/");
-      row.getCell(5).value = n0(o.total);
-      hr2++;
-    });
-    const sumRow = hr2;
-    hh.getCell(sumRow, 1).value = "Tổng doanh thu";
-    hh.mergeCells(sumRow, 1, sumRow, 4);
-    hh.getCell(sumRow, 5).value = orders.length ? f(`SUM(E${first}:E${sumRow - 1})`, n0(r.commission_base)) : 0;
-    hh.getCell(sumRow + 1, 1).value = "Tỷ lệ hoa hồng (%)";
-    hh.mergeCells(sumRow + 1, 1, sumRow + 1, 4);
-    hh.getCell(sumRow + 1, 5).value = n0(r.commission_rate);
-    hh.getCell(sumRow + 2, 1).value = "Hoa hồng";
-    hh.mergeCells(sumRow + 2, 1, sumRow + 2, 4);
-    hh.getCell(sumRow + 2, 5).value = f(`ROUND(E${sumRow}*E${sumRow + 1}/100,0)`, n0(r.commission_auto));
-    for (let k = sumRow; k <= sumRow + 2; k++) hh.getRow(k).font = { bold: true };
-    styleTable(hh, head, sumRow + 2, 5, [5]);
-    hh.getCell(sumRow + 1, 5).numFmt = "0.00";
-    commCell.set(r.user_id, `E${sumRow + 2}`);
-    hr2 = sumRow + 4;
-  }
-  if (hr2 === 3) hh.getCell(3, 1).value = "Không có nhân viên hưởng hoa hồng theo nhóm khách.";
-  [6, 14, 36, 12, 16].forEach((w, i) => (hh.getColumn(i + 1).width = w));
-
   // ── TỔNG LƯƠNG ──
-  const TL_HEAD = [
-    "STT", "Tên NV", "Chức vụ", "Lương cơ bản", "Số công chuẩn", "Số công thực tế", "Lương thực nhận",
-    "Lương doanh số", "Hoa hồng", "Giờ TC ×1,5", "Giờ TC ×2", "Tăng ca", "Xăng xe đi tỉnh", "Thưởng", "Phụ cấp thêm",
-    "Tổng thu nhập", "Tạm ứng", "BHXH", "Công đoàn", "Trừ khác", "Tổng khấu trừ", "Thực lĩnh", "Ngân hàng", "Số tài khoản", "Ghi chú",
-  ];
-  const TLC = TL_HEAD.length;
+  // Cột khai báo theo KHOÁ để công thức tham chiếu bằng tên (C.gross…) — thêm /
+  // bớt cột không phải sửa tay từng chữ cái.
+  const TL_COLS = [
+    ["stt", "STT", 5], ["name", "Tên NV", 26], ["pos", "Chức vụ", 12], ["base", "Lương cơ bản", 13],
+    ["std", "Số công chuẩn", 9], ["worked", "Số công thực tế", 9], ["salary", "Lương thực nhận", 13],
+    ["tech", "DS kỹ thuật", 13], ["sales", "DS bán hàng", 13], ["biz", "DS kinh doanh", 13],
+    ["ot15", "Giờ TC ×1,5", 8], ["ot20", "Giờ TC ×2", 8], ["ot", "Tăng ca", 12], ["travel", "Xăng xe đi tỉnh", 12],
+    ["bonus", "Thưởng", 12], ["extra", "Phụ cấp thêm", 12], ["gross", "Tổng thu nhập", 14],
+    ["adv", "Tạm ứng", 12], ["bhxh", "BHXH", 11], ["union", "Công đoàn", 11], ["other", "Trừ khác", 11],
+    ["ded", "Tổng khấu trừ", 13], ["net", "Thực lĩnh", 14], ["bank", "Ngân hàng", 12], ["acct", "Số tài khoản", 18], ["note", "Ghi chú", 30],
+  ] as const;
+  const CI: Record<string, number> = Object.fromEntries(TL_COLS.map(([k], i) => [k, i + 1]));
+  const L = (k: string) => colName(CI[k]);
+  const TLC = TL_COLS.length;
   tl.getCell(1, 1).value = `BẢNG LƯƠNG THÁNG ${m}/${y}`;
   tl.getCell(1, 1).font = { bold: true, size: 14 };
   tl.mergeCells(1, 1, 1, TLC);
-  // Nhóm cột như file gốc
-  const groups: [string, number, number][] = [["Lương và thời gian làm việc", 4, 7], ["Phụ cấp / thu nhập thêm", 8, 15], ["Khấu trừ", 17, 21]];
-  for (const [t, a, b] of groups) { tl.getCell(2, a).value = t; tl.mergeCells(2, a, 2, b); }
-  for (const c of [1, 2, 3, 16, 22, 23, 24, 25]) { tl.getCell(2, c).value = TL_HEAD[c - 1]; tl.mergeCells(2, c, 3, c); }
-  TL_HEAD.forEach((t, i) => { if (![1, 2, 3, 16, 22, 23, 24, 25].includes(i + 1)) tl.getCell(3, i + 1).value = t; });
+  // Nhóm cột như file gốc; các cột đứng riêng thì gộp 2 dòng tiêu đề.
+  const groups: [string, string, string][] = [
+    ["Lương và thời gian làm việc", "base", "salary"],
+    ["Phụ cấp / thu nhập thêm", "tech", "extra"],
+    ["Khấu trừ", "adv", "ded"],
+  ];
+  const grouped = new Set<number>();
+  for (const [t, a, b] of groups) {
+    tl.getCell(2, CI[a]).value = t;
+    tl.mergeCells(2, CI[a], 2, CI[b]);
+    for (let c = CI[a]; c <= CI[b]; c++) grouped.add(c);
+  }
+  TL_COLS.forEach(([, label], i) => {
+    const c = i + 1;
+    if (grouped.has(c)) tl.getCell(3, c).value = label;
+    else { tl.getCell(2, c).value = label; tl.mergeCells(2, c, 3, c); }
+  });
 
   const tlRowOf = new Map<string, number>();
   rows.forEach((r, i) => {
     const rn = 4 + i;
     tlRowOf.set(r.user_id, rn);
     const row = tl.getRow(rn);
+    const set = (k: string, v: any) => (row.getCell(CI[k]).value = v);
+    const at = (k: string) => `${L(k)}${rn}`;
     const ccRow = ccRowOf.get(r.user_id);
-    row.getCell(1).value = i + 1;
-    row.getCell(2).value = r.full_name;
-    row.getCell(3).value = r.position ?? "";
-    row.getCell(4).value = n0(r.base_salary);
-    row.getCell(5).value = n0(r.standard_days);
-    row.getCell(6).value = !r.locked && ccRow ? f(ref(SH_CC, `${colName(cT)}${ccRow}`), n0(r.worked_days)) : n0(r.worked_days);
-    row.getCell(7).value = f(`ROUND(D${rn}/E${rn}*F${rn},0)`, n0(r.salary_by_days));
+    set("stt", i + 1);
+    set("name", r.full_name);
+    set("pos", r.position ?? "");
+    set("base", n0(r.base_salary));
+    set("std", n0(r.standard_days));
+    set("worked", !r.locked && ccRow ? f(ref(SH_CC, `${colName(cT)}${ccRow}`), n0(r.worked_days)) : n0(r.worked_days));
+    set("salary", f(`ROUND(${at("base")}/${at("std")}*${at("worked")},0)`, n0(r.salary_by_days)));
     const tc = techCell.get(r.user_id);
-    row.getCell(8).value = tc ? f(`ROUND(${ref(SH_DT, tc)},0)`, n0(r.tech_revenue)) : n0(r.tech_revenue);
-    const hc = commCell.get(r.user_id);
-    const overridden = r.commission_override !== null && r.commission_override !== undefined;
-    row.getCell(9).value = hc && !overridden ? f(ref(SH_HH, hc), n0(r.commission)) : n0(r.commission);
-    row.getCell(10).value = n0(r.ot_hours_15);
-    row.getCell(11).value = n0(r.ot_hours_20);
-    row.getCell(12).value = f(`ROUND(D${rn}/E${rn}/8*(J${rn}*1.5+K${rn}*2),0)`, n0(r.overtime_amount));
-    row.getCell(13).value = n0(r.travel_allowance);
-    row.getCell(14).value = n0(r.bonus);
-    row.getCell(15).value = n0(r.extra_allowance);
-    row.getCell(16).value = f(`G${rn}+H${rn}+I${rn}+L${rn}+M${rn}+N${rn}+O${rn}`, n0(r.gross));
-    row.getCell(17).value = n0(r.advance);
-    row.getCell(18).value = n0(r.social_insurance);
-    row.getCell(19).value = n0(r.union_fee);
-    row.getCell(20).value = n0(r.other_deduction);
-    row.getCell(21).value = f(`SUM(Q${rn}:T${rn})`, n0(r.deductions));
-    row.getCell(22).value = f(`P${rn}-U${rn}`, n0(r.net_pay));
-    row.getCell(23).value = r.bank_name ?? "";
-    row.getCell(24).value = r.bank_account ? String(r.bank_account) : "";
-    row.getCell(25).value = [
+    set("tech", tc ? f(`ROUND(${ref(SH_DT, tc)},0)`, n0(r.tech_revenue)) : n0(r.tech_revenue));
+    // DS bán hàng / DS kinh doanh: tính từ tiền thực thu cả nhóm → ghi số (xem chi tiết trên app).
+    set("sales", n0(r.commission));
+    set("biz", n0(r.business_revenue));
+    set("ot15", n0(r.ot_hours_15));
+    set("ot20", n0(r.ot_hours_20));
+    set("ot", f(`ROUND(${at("base")}/${at("std")}/8*(${at("ot15")}*1.5+${at("ot20")}*2),0)`, n0(r.overtime_amount)));
+    set("travel", n0(r.travel_allowance));
+    set("bonus", n0(r.bonus));
+    set("extra", n0(r.extra_allowance));
+    set("gross", f(["salary", "tech", "sales", "biz", "ot", "travel", "bonus", "extra"].map(at).join("+"), n0(r.gross)));
+    set("adv", n0(r.advance));
+    set("bhxh", n0(r.social_insurance));
+    set("union", n0(r.union_fee));
+    set("other", n0(r.other_deduction));
+    set("ded", f(`SUM(${at("adv")}:${at("other")})`, n0(r.deductions)));
+    set("net", f(`${at("gross")}-${at("ded")}`, n0(r.net_pay)));
+    set("bank", r.bank_name ?? "");
+    set("acct", r.bank_account ? String(r.bank_account) : "");
+    set("note", [
       r.locked ? "Đã chốt" : "",
-      overridden ? "Hoa hồng nhập tay" : "",
+      r.commission_override !== null && r.commission_override !== undefined ? "DS bán hàng do admin sửa" : "",
+      r.business_override !== null && r.business_override !== undefined ? "DS kinh doanh do admin sửa" : "",
       r.travel_note ? `Xăng xe: ${r.travel_note}` : "",
       r.extra_note ? `Phụ cấp: ${r.extra_note}` : "",
       r.other_note ? `Trừ khác: ${r.other_note}` : "",
-    ].filter(Boolean).join("; ");
+    ].filter(Boolean).join("; "));
   });
   const tlFirst = 4, tlLastData = 3 + rows.length, tlSum = tlLastData + 1;
+  const MONEY_KEYS = ["base", "salary", "tech", "sales", "biz", "ot", "travel", "bonus", "extra", "gross", "adv", "bhxh", "union", "other", "ded", "net"];
   const sumRow = tl.getRow(tlSum);
-  sumRow.getCell(2).value = "TỔNG CỘNG";
-  for (const c of [7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]) {
-    const L = colName(c);
-    sumRow.getCell(c).value = rows.length ? f(`SUM(${L}${tlFirst}:${L}${tlLastData})`) : 0;
+  sumRow.getCell(CI.name).value = "TỔNG CỘNG";
+  for (const k of MONEY_KEYS.filter((k) => k !== "base")) {
+    sumRow.getCell(CI[k]).value = rows.length ? f(`SUM(${L(k)}${tlFirst}:${L(k)}${tlLastData})`) : 0;
   }
   sumRow.font = { bold: true };
   // TỔNG CHI như ô Q4 file gốc — chỉ cộng người thực lĩnh dương (người âm không chi).
   const payRow = tl.getRow(tlSum + 1);
-  payRow.getCell(2).value = "TỔNG CHI (thực lĩnh > 0)";
-  payRow.getCell(22).value = rows.length ? f(`SUMIF(V${tlFirst}:V${tlLastData},">0")`) : 0;
+  payRow.getCell(CI.name).value = "TỔNG CHI (thực lĩnh > 0)";
+  payRow.getCell(CI.net).value = rows.length ? f(`SUMIF(${L("net")}${tlFirst}:${L("net")}${tlLastData},">0")`) : 0;
   payRow.font = { bold: true, color: { argb: "FFC00000" } };
 
-  styleTable(tl, 2, tlSum + 1, TLC, [4, 7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
+  styleTable(tl, 2, tlSum + 1, TLC, MONEY_KEYS.map((k) => CI[k]));
   for (let r = 2; r <= 3; r++) {
     for (let c = 1; c <= TLC; c++) {
       const cell = tl.getCell(r, c);
@@ -370,18 +343,18 @@ export async function exportPayrollExcel(opts: { month: string; rows: any[] }) {
     }
   }
   for (let r = tlFirst; r <= tlSum + 1; r++) {
-    tl.getCell(r, 22).font = { bold: true, ...(r === tlSum + 1 ? { color: { argb: "FFC00000" } } : {}) };
-    tl.getCell(r, 24).numFmt = "@"; // STK là chuỗi, không để Excel đổi thành số khoa học
+    tl.getCell(r, CI.net).font = { bold: true, ...(r === tlSum + 1 ? { color: { argb: "FFC00000" } } : {}) };
+    tl.getCell(r, CI.acct).numFmt = "@"; // STK là chuỗi, không để Excel đổi thành số khoa học
   }
   tl.getRow(3).height = 32;
-  [5, 26, 12, 13, 9, 9, 13, 13, 12, 8, 8, 12, 12, 12, 12, 14, 12, 11, 11, 11, 13, 14, 12, 18, 30].forEach((w, i) => (tl.getColumn(i + 1).width = w));
+  TL_COLS.forEach(([, , w], i) => (tl.getColumn(i + 1).width = w));
 
   // ── PHIẾU LƯƠNG (mọi số lấy từ TỔNG LƯƠNG) ──
   [30, 14, 16, 34].forEach((w, i) => (pl.getColumn(i + 1).width = w));
   let pr = 1;
   for (const r of rows) {
     const rn = tlRowOf.get(r.user_id)!;
-    const T = (col: string) => ref(SH_TL, `${col}${rn}`);
+    const T = (k: string) => ref(SH_TL, `${L(k)}${rn}`);
     const start = pr;
     pl.getCell(pr, 1).value = `PHIẾU LƯƠNG THÁNG ${m}.${y}`;
     pl.getCell(pr, 3).value = String(r.full_name ?? "").toUpperCase();
@@ -390,36 +363,37 @@ export async function exportPayrollExcel(opts: { month: string; rows: any[] }) {
     pl.getRow(pr).eachCell((c: any) => (c.fill = fill("FFF2F2F2")));
     pr++;
     pl.getRow(pr).values = ["Năm bắt đầu làm", r.start_label ?? "", "Khu vực", r.area ?? ""]; pr++;
-    pl.getRow(pr).values = ["Bộ phận", r.position ?? "", "Lương cơ bản", f(T("D"), n0(r.base_salary))];
+    pl.getRow(pr).values = ["Bộ phận", r.position ?? "", "Lương cơ bản", f(T("base"), n0(r.base_salary))];
     pl.getCell(pr, 4).numFmt = "#,##0"; pr++;
     pl.getRow(pr).values = ["Diễn giải", "Ngày công", "Thành tiền", "Ghi chú"];
     pl.getRow(pr).font = { bold: true }; pr++;
     const incomeFirst = pr;
     const ot = [r.ot_hours_15 ? `${r.ot_hours_15}h×1,5` : "", r.ot_hours_20 ? `${r.ot_hours_20}h×2` : ""].filter(Boolean).join(" + ");
     const incomes: [string, any, string, number, string][] = [
-      ["Lương thực tế", f(T("F"), n0(r.worked_days)), "G", n0(r.salary_by_days), `/ ${r.standard_days} công chuẩn`],
-      ["Tăng ca", ot, "L", n0(r.overtime_amount), ""],
-      ["Lương doanh số", "", "H", n0(r.tech_revenue), ""],
-      ["Hoa hồng", "", "I", n0(r.commission), ""],
-      ["Xăng xe", "", "M", n0(r.travel_allowance), r.travel_note ?? ""],
-      ["Thưởng", "", "N", n0(r.bonus), ""],
-      ["Phụ cấp", "", "O", n0(r.extra_allowance), r.extra_note ?? ""],
+      ["Lương thực tế", f(T("worked"), n0(r.worked_days)), "salary", n0(r.salary_by_days), `/ ${r.standard_days} công chuẩn`],
+      ["Tăng ca", ot, "ot", n0(r.overtime_amount), ""],
+      ["DS kỹ thuật", "", "tech", n0(r.tech_revenue), ""],
+      ["DS bán hàng", "", "sales", n0(r.commission), ""],
+      ["DS kinh doanh", "", "biz", n0(r.business_revenue), ""],
+      ["Xăng xe", "", "travel", n0(r.travel_allowance), r.travel_note ?? ""],
+      ["Thưởng", "", "bonus", n0(r.bonus), ""],
+      ["Phụ cấp", "", "extra", n0(r.extra_allowance), r.extra_note ?? ""],
     ];
-    for (const [label, days, col, val, note] of incomes) {
-      pl.getRow(pr).values = [label, days, f(T(col), val), note]; pr++;
+    for (const [label, days, key, val, note] of incomes) {
+      pl.getRow(pr).values = [label, days, f(T(key), val), note]; pr++;
     }
     const grossRow = pr;
     pl.getRow(pr).values = ["Tổng lương (1)", "", f(`SUM(C${incomeFirst}:C${pr - 1})`, n0(r.gross)), ""];
     pl.getRow(pr).font = { bold: true }; pr++;
     const dedFirst = pr;
     const deds: [string, string, number, string][] = [
-      ["BHXH", "R", n0(r.social_insurance), ""],
-      ["Tạm ứng", "Q", n0(r.advance), ""],
-      ["Quỹ công đoàn", "S", n0(r.union_fee), ""],
-      ["Trừ khác", "T", n0(r.other_deduction), r.other_note ?? ""],
+      ["BHXH", "bhxh", n0(r.social_insurance), ""],
+      ["Tạm ứng", "adv", n0(r.advance), ""],
+      ["Quỹ công đoàn", "union", n0(r.union_fee), ""],
+      ["Trừ khác", "other", n0(r.other_deduction), r.other_note ?? ""],
     ];
-    for (const [label, col, val, note] of deds) {
-      pl.getRow(pr).values = [label, "", f(T(col), val), note]; pr++;
+    for (const [label, key, val, note] of deds) {
+      pl.getRow(pr).values = [label, "", f(T(key), val), note]; pr++;
     }
     const dedRow = pr;
     pl.getRow(pr).values = ["Tổng khấu trừ (2)", "", f(`SUM(C${dedFirst}:C${pr - 1})`, n0(r.deductions)), ""];
@@ -458,8 +432,9 @@ function slipHtml(r: any, month: string, siteName: string) {
       <tr class="h"><td>Diễn giải</td><td class="c">Ngày công</td><td class="r">Thành tiền</td><td>Ghi chú</td></tr>
       ${line("Lương thực tế", String(r.worked_days ?? ""), r.salary_by_days, `/ ${r.standard_days} công chuẩn`)}
       ${line("Tăng ca", ot, r.overtime_amount)}
-      ${line("Lương doanh số", "", r.tech_revenue)}
-      ${line("Hoa hồng", "", r.commission)}
+      ${line("DS kỹ thuật", "", r.tech_revenue)}
+      ${line("DS bán hàng", "", r.commission)}
+      ${line("DS kinh doanh", "", r.business_revenue)}
       ${line("Xăng xe", "", r.travel_allowance, r.travel_note)}
       ${line("Thưởng", "", r.bonus)}
       ${line("Phụ cấp", "", r.extra_allowance, r.extra_note)}

@@ -5,6 +5,7 @@ import { fetchRows, uid, now, logActivity } from "./supabase";
 import { computeTechPay } from "./schedule.functions";
 import { insertCashVoucher } from "./cash.functions";
 import { fetchAllPaged } from "./reports.functions";
+import { sellerCollections } from "./sales-collections";
 
 /**
  * Nhân sự: Lịch trực ca + Chấm công + Bảng lương (migration v13).
@@ -14,7 +15,7 @@ import { fetchAllPaged } from "./reports.functions";
  *   công thực tế   = X + N/2 + L
  *   lương theo công = LCB / công chuẩn × công thực tế
  *   tăng ca        = LCB / công chuẩn / 8 × (giờ ×1,5 + giờ ×2,0)
- *   tổng thu nhập  = lương theo công + lương doanh số + hoa hồng + tăng ca
+ *   tổng thu nhập  = lương theo công + lương doanh số + DS bán hàng + tăng ca
  *                    + xăng xe + thưởng + phụ cấp
  *   khấu trừ       = tạm ứng + BHXH + công đoàn + trừ khác
  *   thực lĩnh      = tổng thu nhập − khấu trừ
@@ -35,9 +36,8 @@ type Perm = "manage_payroll" | "manage_roster";
  *   branchIds → các chi nhánh người này được gán (bảng user_branches).
  *               Lịch trực: chỉ sửa ca / nhân viên thuộc các chi nhánh này.
  *               Bảng lương: chỉ dùng để chọn QUỸ chi nhánh khi chi lương.
- *   userIds   → CHỈ với "Quản lý lương nhân sự": đúng những nhân viên admin đã
- *               phân cho người này ở tab "Phân việc" (payroll_assignments, v16).
- *               Mặc định rỗng = không quản lý lương ai.
+ *   userIds   → CHỈ với "Quản lý lương nhân sự": CHÍNH MÌNH (mặc định) + những
+ *               nhân viên admin phân thêm ở tab "Phân việc" (payroll_assignments, v16).
  */
 type Scope = { actorId: string; isAdmin: boolean; branchIds: Set<string>; userIds?: Set<string> };
 
@@ -70,7 +70,9 @@ async function assertPerm(actorId: string | undefined, perm: Perm): Promise<Scop
     if (error) {
       throw new Error(`${error.message}. Nếu báo "does not exist" thì chưa chạy sql_migration_v16_payroll_assignments.sql.`);
     }
-    return { actorId, isAdmin: false, branchIds, userIds: new Set(((data ?? []) as any[]).map((r) => r.user_id)) };
+    // Mặc định luôn gồm CHÍNH MÌNH: tự chấm công và quản lý lương bản thân.
+    const userIds = new Set<string>([actorId, ...((data ?? []) as any[]).map((r) => r.user_id)]);
+    return { actorId, isAdmin: false, branchIds, userIds };
   }
   if (!branchIds.size) {
     throw new Error("Tài khoản của bạn chưa được gán chi nhánh nào — nhờ quản trị viên gán chi nhánh để quản lý.");
@@ -520,8 +522,6 @@ export const upsertPayProfileFn = createServerFn({ method: "POST" }).handler(
     if (!data?.user_id) throw new Error("Thiếu nhân viên");
     await assertUserInScope(scope, data.user_id);
 
-    const rate = num(data.commission_rate);
-    if (rate < 0 || rate > 100) throw new Error("% hoa hồng phải từ 0 đến 100");
     if (num(data.standard_days) <= 0) throw new Error("Số công chuẩn phải lớn hơn 0");
     if (num(data.base_salary) < 0) throw new Error("Lương cơ bản không được âm");
 
@@ -536,8 +536,8 @@ export const upsertPayProfileFn = createServerFn({ method: "POST" }).handler(
       bank_name: data.bank_name?.trim() || null,
       bank_account: data.bank_account?.replace(/\s+/g, "") || null,
       bank_owner: data.bank_owner?.trim() || null,
-      commission_rate: rate,
-      commission_group: rate > 0 ? data.commission_group || null : null,
+      // commission_rate / commission_group: KHÔNG ghi nữa (DS bán hàng chưa có
+      // công thức) — giữ nguyên giá trị cũ trong DB để sau này dùng lại.
       tech_revenue: Boolean(data.tech_revenue),
       social_insurance: num(data.social_insurance),
       union_fee: num(data.union_fee),
@@ -545,7 +545,6 @@ export const upsertPayProfileFn = createServerFn({ method: "POST" }).handler(
       sort_order: Number(data.sort_order ?? 0),
       updated_at: now(),
     };
-    if (row.commission_rate > 0 && !row.commission_group) throw new Error("Chọn nhóm khách để tính hoa hồng");
     const { error } = await db.from("pay_profiles").upsert(row, { onConflict: "user_id" });
     if (error) throw new Error(error.message);
     await logActivity({ action: "update_pay_profile", detail: `Cập nhật hồ sơ lương NV ${data.user_id}`, employee_id: data.actorId ?? null });
@@ -590,7 +589,7 @@ async function lockedItems(month: string): Promise<Map<string, any>> {
   const db = getSupabaseAdmin();
   const { data, error } = await db.from("payroll_items").select("*").eq("period_id", period.id).eq("status", "locked");
   if (error) {
-    throw new Error(`${error.message}. Nếu báo lỗi cột "status" thì chưa chạy sql_migration_v14_payroll_scope.sql.`);
+    throw new Error(`${error.message}. Nếu báo thiếu cột thì chưa chạy migration (cột "status" → v14, "business_revenue" → v19).`);
   }
   return new Map(((data ?? []) as any[]).map((i) => [i.user_id, i]));
 }
@@ -735,8 +734,10 @@ export const fillAttendanceRowFn = createServerFn({ method: "POST" }).handler(
 const INPUT_FIELDS = [
   "ot_hours_15", "ot_hours_20", "travel_allowance", "travel_note", "bonus",
   "extra_allowance", "extra_note", "other_deduction", "other_note",
-  "commission_override", "social_insurance_override",
+  "commission_override", "social_insurance_override", "business_override",
 ];
+/** Ô ghi đè DS bán hàng / DS kinh doanh: CHỈ admin được sửa. */
+const ADMIN_ONLY_FIELDS = ["commission_override", "business_override"];
 
 /** Các loại phiếu tính là tạm ứng (chi) và hoàn tạm ứng (thu). */
 async function advanceVoucherTypes() {
@@ -755,6 +756,117 @@ async function advanceVoucherTypes() {
   };
 }
 
+// ─── DS bán hàng / DS kinh doanh (migration v19) ──────────────────────────
+// Chức vụ cố định theo id (migration v18) — đổi tên chức vụ không ảnh hưởng.
+const POS_SALES_MANAGER = "pos_sales_manager";
+const POS_SALES = "pos_sales";
+const POS_BUSINESS = "pos_business";
+const BUSINESS_RATE = 1; // % doanh thu bản thân
+const STAFF_RATE = 1; // % phần vượt KPI, chia theo tỷ lệ doanh thu
+const DEFAULT_COEF = 0.5; // % SUM cho quản lý bán hàng
+
+/**
+ * Ngữ cảnh tính DS của một tháng: doanh thu thực thu theo người bán + chức vụ
+ * + phân việc + hệ số + KPI. Tính trên TOÀN BỘ nhân viên (không theo phạm vi
+ * người xem) vì DS của một người phụ thuộc doanh thu cả nhóm.
+ */
+async function salesContext(month: string) {
+  const db = getSupabaseAdmin();
+  const [collections, usersRes, asgRes, setRes, kpiRes] = await Promise.all([
+    sellerCollections(month),
+    db.from("users").select("id, full_name, position_id"),
+    db.from("payroll_assignments").select("manager_id, user_id"),
+    db.from("sales_settings").select("manager_id, coef"),
+    db.from("sales_kpis").select("manager_id, month, kpi").lte("month", month),
+  ]);
+  const missingV19 = Boolean(setRes.error || kpiRes.error);
+  const users = new Map(((usersRes.data ?? []) as any[]).map((u) => [u.id, u]));
+  const nameOf = (id: string) => users.get(id)?.full_name ?? id;
+  const posOf = (id: string) => users.get(id)?.position_id ?? null;
+
+  const assigned = new Map<string, Set<string>>();
+  for (const a of (asgRes.data ?? []) as any[]) {
+    (assigned.get(a.manager_id) ?? assigned.set(a.manager_id, new Set()).get(a.manager_id)).add(a.user_id);
+  }
+  const coefOf = new Map(((setRes.data ?? []) as any[]).map((s) => [s.manager_id, num(s.coef)]));
+  // KPI hiệu lực = KPI của tháng gần nhất <= tháng đang tính.
+  const kpiOf = new Map<string, { kpi: number; month: string }>();
+  for (const k of ((kpiRes.data ?? []) as any[]).sort((a, b) => a.month.localeCompare(b.month))) {
+    kpiOf.set(k.manager_id, { kpi: num(k.kpi), month: k.month });
+  }
+
+  const revenue = (id: string) => round(collections.bySeller.get(id)?.total ?? 0);
+  const team = (m: string) => [m, ...[...(assigned.get(m) ?? [])].filter((u) => u !== m)];
+  const teamSum = (m: string) => team(m).reduce((s, u) => s + revenue(u), 0);
+  // Quản lý bán hàng đang quản lý nhân viên này (qua tab Phân việc).
+  const salesManagersOf = (u: string) =>
+    [...assigned.entries()]
+      .filter(([m, set]) => set.has(u) && posOf(m) === POS_SALES_MANAGER && m !== u)
+      .map(([m]) => m)
+      .sort((a, b) => String(nameOf(a)).localeCompare(String(nameOf(b)), "vi"));
+
+  /** DS bán hàng tự tính + chi tiết để hiện / kiểm tra. */
+  function sales(u: string) {
+    const pos = posOf(u);
+    if (pos === POS_SALES_MANAGER) {
+      const coef = coefOf.has(u) ? coefOf.get(u)! : DEFAULT_COEF;
+      const members = team(u).map((id) => ({ user_id: id, full_name: nameOf(id), revenue: revenue(id), self: id === u }));
+      const sum = members.reduce((s, x) => s + x.revenue, 0);
+      return { auto: round((sum * coef) / 100), detail: { role: "manager", coef, sum, members, warnings: [] as string[] } };
+    }
+    if (pos === POS_SALES) {
+      const warnings: string[] = [];
+      const mgrs = salesManagersOf(u);
+      const x = revenue(u);
+      if (!mgrs.length) {
+        warnings.push('Chưa thuộc quản lý bán hàng nào — admin tick ở tab "Phân việc".');
+        return { auto: 0, detail: { role: "staff", x, warnings } };
+      }
+      if (mgrs.length > 1) {
+        warnings.push(`Đang được ${mgrs.length} quản lý bán hàng cùng phân: ${mgrs.map(nameOf).join(", ")} — tạm tính theo ${nameOf(mgrs[0])}.`);
+      }
+      const m = mgrs[0];
+      const y = teamSum(m);
+      const k = kpiOf.get(m);
+      if (!k) {
+        warnings.push(`Admin chưa đặt KPI cho ${nameOf(m)} — DS bán hàng tạm = 0.`);
+        return { auto: 0, detail: { role: "staff", x, y, manager_id: m, manager_name: nameOf(m), warnings } };
+      }
+      const T = Math.max(0, y - k.kpi);
+      const ratio = y > 0 ? x / y : 0;
+      const auto = round(ratio * (STAFF_RATE / 100) * T);
+      return {
+        auto,
+        detail: {
+          role: "staff", x, y, ratio, rate: STAFF_RATE, kpi: k.kpi, kpi_month: k.month, T,
+          manager_id: m, manager_name: nameOf(m), below_kpi: y < k.kpi, warnings,
+        },
+      };
+    }
+    return { auto: 0, detail: null };
+  }
+
+  function business(u: string) {
+    if (posOf(u) !== POS_BUSINESS) return { auto: 0, detail: null };
+    const r = revenue(u);
+    return { auto: round((r * BUSINESS_RATE) / 100), detail: { revenue: r, rate: BUSINESS_RATE } };
+  }
+
+  return {
+    sales,
+    business,
+    posOf,
+    lines: (id: string) => collections.bySeller.get(id)?.lines ?? [],
+    revenue,
+    unattributed: round(collections.unattributed),
+    missingV19,
+  };
+}
+
+/** Chức vụ nào cần doanh thu thực thu (để khỏi tính khi không ai cần). */
+const needsSalesContext = (positionId: string | null | undefined) =>
+  positionId === POS_SALES_MANAGER || positionId === POS_SALES || positionId === POS_BUSINESS;
+
 /** Dòng hiển thị từ snapshot đã chốt — KHÔNG tính lại. */
 function rowFromSnapshot(i: any, p: any) {
   return {
@@ -772,6 +884,8 @@ function rowFromSnapshot(i: any, p: any) {
     salary_by_days: num(i.salary_by_days),
     tech_revenue: num(i.tech_revenue),
     commission: num(i.commission),
+    business_revenue: num(i.business_revenue),
+    business_override: i.business_override ?? null,
     ot_hours_15: num(i.ot_hours_15),
     ot_hours_20: num(i.ot_hours_20),
     overtime_amount: num(i.overtime_amount),
@@ -836,40 +950,20 @@ async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: 
     advanceVoucherTypes(),
   ]);
 
+  // Chức vụ của những người chưa chốt → chỉ tính doanh thu thực thu khi có
+  // người là quản lý bán hàng / nhân viên bán hàng / kinh doanh.
+  const posRes = userIds.length
+    ? await db.from("users").select("id, position_id").in("id", userIds)
+    : { data: [] };
+  const needCtx = ((posRes.data ?? []) as any[]).some((u) => needsSalesContext(u.position_id));
+  const ctx = needCtx ? await salesContext(month) : null;
+
   const codesByUser: Record<string, Record<string, string>> = {};
   for (const a of (attRes.data ?? []) as any[]) {
     (codesByUser[a.user_id] ||= {})[a.work_date] = a.code;
   }
   const inputs = new Map(((itemsRes.data ?? []) as any[]).map((i) => [i.user_id, i]));
   const techByUser = new Map(((tech as any).rows ?? []).map((r: any) => [r.user_id, r]));
-
-  // ── Hoa hồng: doanh thu đơn hoàn tất trong tháng theo nhóm khách ──
-  // Cùng ngữ nghĩa trang Báo cáo: theo completed_at (giờ VN), đơn cũ thiếu
-  // completed_at thì lấy created_at.
-  const groups = [...new Set(profiles.filter((p) => num(p.commission_rate) > 0 && p.commission_group).map((p) => p.commission_group))];
-  const ordersByGroup: Record<string, any[]> = {};
-  if (groups.length) {
-    const SEL = "id, code, customer_id, total, completed_at, created_at";
-    const [a, b] = await Promise.all([
-      fetchAllPaged(() => db.from("orders").select(SEL).eq("status", "completed").not("completed_at", "is", null).gte("completed_at", fromTs).lt("completed_at", nextTs)),
-      fetchAllPaged(() => db.from("orders").select(SEL).eq("status", "completed").is("completed_at", null).gte("created_at", fromTs).lt("created_at", nextTs)),
-    ]);
-    const orders = [...a, ...b].filter((o) => o.customer_id);
-    const custIds = [...new Set(orders.map((o) => o.customer_id))];
-    const custMap = new Map<string, any>();
-    for (let i = 0; i < custIds.length; i += 500) {
-      const { data: cs } = await db.from("customers").select("id, name, group_name").in("id", custIds.slice(i, i + 500));
-      for (const c of cs ?? []) custMap.set(c.id, c);
-    }
-    for (const o of orders) {
-      const c = custMap.get(o.customer_id);
-      if (!c || !groups.includes(c.group_name)) continue;
-      (ordersByGroup[c.group_name] ||= []).push({
-        id: o.id, code: o.code, total: num(o.total), customer_name: c.name,
-        date: String(o.completed_at || o.created_at),
-      });
-    }
-  }
 
   // ── Tạm ứng: phiếu chi "Tạm ứng" cho NV − phiếu thu "Hoàn tạm ứng" từ NV ──
   const advanceByUser: Record<string, { total: number; vouchers: any[] }> = {};
@@ -908,11 +1002,15 @@ async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: 
     const techRow = p.tech_revenue ? techByUser.get(p.user_id) : null;
     const techRevenue = round(techRow?.total_money ?? 0);
 
-    const groupOrders = p.commission_group ? ordersByGroup[p.commission_group] ?? [] : [];
-    const groupRevenue = groupOrders.reduce((s, o) => s + o.total, 0);
-    const commissionAuto = round((groupRevenue * num(p.commission_rate)) / 100);
-    const commission = inp.commission_override !== null && inp.commission_override !== undefined
-      ? round(inp.commission_override) : commissionAuto;
+    // DS bán hàng (quản lý / nhân viên bán hàng) và DS kinh doanh — tự tính theo
+    // chức vụ; admin có thể ghi đè.
+    const salesCalc = ctx ? ctx.sales(p.user_id) : { auto: 0, detail: null };
+    const businessCalc = ctx ? ctx.business(p.user_id) : { auto: 0, detail: null };
+    const hasOverride = (v: any) => v !== null && v !== undefined;
+    const commissionAuto = salesCalc.auto;
+    const commission = hasOverride(inp.commission_override) ? round(inp.commission_override) : commissionAuto;
+    const businessAuto = businessCalc.auto;
+    const businessRevenue = hasOverride(inp.business_override) ? round(inp.business_override) : businessAuto;
 
     const hourly = base / stdDays / 8;
     const overtime = round(hourly * (num(inp.ot_hours_15) * 1.5 + num(inp.ot_hours_20) * 2));
@@ -926,7 +1024,7 @@ async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: 
       ? round(inp.social_insurance_override) : noWork ? 0 : round(p.social_insurance);
     const unionFee = noWork ? 0 : round(p.union_fee);
 
-    const gross = salaryByDays + techRevenue + commission + overtime
+    const gross = salaryByDays + techRevenue + commission + businessRevenue + overtime
       + round(inp.travel_allowance) + round(inp.bonus) + round(inp.extra_allowance);
     const deductions = advance + socialInsurance + unionFee + round(inp.other_deduction);
 
@@ -951,10 +1049,17 @@ async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: 
       tech_enabled: Boolean(p.tech_revenue),
       commission,
       commission_auto: commissionAuto,
-      commission_rate: num(p.commission_rate),
-      commission_group: p.commission_group,
-      commission_orders: groupOrders,
-      commission_base: groupRevenue,
+      sales_detail: salesCalc.detail,
+      business_revenue: businessRevenue,
+      business_auto: businessAuto,
+      business_detail: businessCalc.detail,
+      business_override: inp.business_override ?? null,
+      // Các khoản thu (tiền thực thu) của chính người này — cho hộp chi tiết.
+      revenue_lines: ctx && (salesCalc.detail || businessCalc.detail) ? ctx.lines(p.user_id) : [],
+      commission_rate: 0,
+      commission_group: null,
+      commission_orders: [],
+      commission_base: 0,
       ot_hours_15: num(inp.ot_hours_15),
       ot_hours_20: num(inp.ot_hours_20),
       overtime_amount: overtime,
@@ -978,7 +1083,8 @@ async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: 
     };
   });
 
-  if (opts?.draftOnly) return { period, rows: computed, salaryVoucherType: vtypes.salaryType };
+  const salesInfo = ctx ? { unattributed: ctx.unattributed, missingV19: ctx.missingV19 } : null;
+  if (opts?.draftOnly) return { period, rows: computed, salaryVoucherType: vtypes.salaryType, salesInfo };
 
   const profById = new Map(allProfiles.map((p) => [p.user_id, p]));
   const snapshots = allProfiles
@@ -986,7 +1092,7 @@ async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: 
     .map((p) => ({ ...rowFromSnapshot(locked.get(p.user_id), profById.get(p.user_id)), att_codes: codesByUser[p.user_id] ?? {} }));
   const order = new Map(allProfiles.map((p, i) => [p.user_id, i]));
   const rows = [...computed, ...snapshots].sort((a, b) => (order.get(a.user_id) ?? 0) - (order.get(b.user_id) ?? 0));
-  return { period, rows, salaryVoucherType: vtypes.salaryType };
+  return { period, rows, salaryVoucherType: vtypes.salaryType, salesInfo };
 }
 
 const isPaid = (r: any) => Boolean(r.cash_voucher_id) && !String(r.cash_voucher_id).startsWith("pending:");
@@ -1019,6 +1125,8 @@ export const getPayrollFn = createServerFn({ method: "GET" }).handler(
       // Để giao diện nói rõ phạm vi đang xem.
       scopeAll: scope.isAdmin,
       scopeBranchIds: [...scope.branchIds],
+      // Chỉ admin: tiền thu trong tháng không xác định được người bán.
+      salesInfo: scope.isAdmin ? r.salesInfo : r.salesInfo ? { missingV19: r.salesInfo.missingV19 } : null,
     };
   },
 );
@@ -1035,6 +1143,9 @@ export const savePayrollInputFn = createServerFn({ method: "POST" }).handler(
     const patch: Record<string, any> = {};
     for (const k of INPUT_FIELDS) {
       if (!(k in (data.values ?? {}))) continue;
+      if (ADMIN_ONLY_FIELDS.includes(k) && !scope.isAdmin) {
+        throw new Error("Chỉ quản trị viên được sửa DS bán hàng / DS kinh doanh");
+      }
       const v = data.values[k];
       if (k.endsWith("_note")) patch[k] = String(v ?? "").trim() || null;
       else if (k.endsWith("_override")) patch[k] = v === null || v === "" || v === undefined ? null : Number(v) || 0;
@@ -1084,6 +1195,8 @@ export const lockPayrollFn = createServerFn({ method: "POST" }).handler(
       other_deduction: r.other_deduction,
       other_note: r.other_note || null,
       commission_override: r.commission_override,
+      business_override: r.business_override,
+      business_revenue: r.business_revenue,
       full_name: r.full_name,
       position: r.position,
       base_salary: r.base_salary,
@@ -1228,7 +1341,7 @@ export const getPayrollAssignmentsFn = createServerFn({ method: "GET" }).handler
   async ({ data }: { data: { actorId?: string } }) => {
     await assertAdmin(data?.actorId);
     const db = getSupabaseAdmin();
-    const [users, adminsRes, permsRes, ubMap, brRes, profRes, asgRes] = await Promise.all([
+    const [users, adminsRes, permsRes, ubMap, brRes, profRes, asgRes, posRes, setRes, kpiRes] = await Promise.all([
       activeUsers(),
       db.from("users").select("id").eq("is_admin", 1),
       db.from("user_permissions").select("user_id").eq("permission", "manage_payroll"),
@@ -1236,7 +1349,11 @@ export const getPayrollAssignmentsFn = createServerFn({ method: "GET" }).handler
       db.from("branches").select("id, name"),
       db.from("pay_profiles").select("user_id, position, in_payroll"),
       db.from("payroll_assignments").select("manager_id, user_id"),
+      db.from("users").select("id, position_id"),
+      db.from("sales_settings").select("manager_id, coef"),
+      db.from("sales_kpis").select("manager_id, month, kpi").order("month"),
     ]);
+    const posOf = new Map(((posRes.data ?? []) as any[]).map((u) => [u.id, u.position_id ?? null]));
     if (asgRes.error) {
       throw new Error(`${asgRes.error.message}. Nếu báo "does not exist" thì chưa chạy sql_migration_v16_payroll_assignments.sql.`);
     }
@@ -1251,11 +1368,17 @@ export const getPayrollAssignmentsFn = createServerFn({ method: "GET" }).handler
       position: profile.get(u.id)?.position ?? null,
       in_payroll: Boolean(profile.get(u.id)?.in_payroll),
       is_admin: admins.has(u.id),
+      position_id: posOf.get(u.id) ?? null,
     });
     return {
       managers: users.filter((u) => managerIds.has(u.id)).map(shape),
       staff: users.map(shape),
       assignments: ((asgRes.data ?? []) as any[]).filter((a) => managerIds.has(a.manager_id)),
+      // DS bán hàng (v19): hệ số % và KPI theo tháng của quản lý bán hàng.
+      salesSettings: (setRes.data ?? []) as any[],
+      salesKpis: (kpiRes.data ?? []) as any[],
+      salesReady: !setRes.error && !kpiRes.error,
+      defaultCoef: DEFAULT_COEF,
     };
   },
 );
@@ -1294,5 +1417,94 @@ export const setPayrollAssignmentsFn = createServerFn({ method: "POST" }).handle
       employee_id: data.actorId ?? null,
     });
     return { changed: ids.length };
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 5) LƯƠNG CỦA TÔI — mỗi nhân viên xem lương của CHÍNH MÌNH (trang Tổng quan)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Không cần quyền gì: phạm vi bị khoá cứng đúng MỘT người = actorId, nên chỉ
+ * trả về dòng lương của chính người gọi. Dùng lại computePayroll → số liệu
+ * trùng khớp tuyệt đối với tab Bảng lương (người đã chốt lấy từ snapshot).
+ */
+export const getMySalaryFn = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data: { actorId?: string; month: string } }) => {
+    const actorId = data?.actorId;
+    if (!actorId) throw new Error("Thiếu thông tin người thực hiện");
+    monthRange(data.month);
+    const scope: Scope = { actorId, isAdmin: false, branchIds: new Set(), userIds: new Set([actorId]) };
+    const { rows } = await computePayroll(data.month, scope);
+    const r = rows.find((x: any) => x.user_id === actorId);
+    if (!r) return { month: data.month, row: null };
+    const paid = Boolean(r.cash_voucher_id) && !String(r.cash_voucher_id).startsWith("pending:");
+    // Chỉ trả các con số cần hiển thị / in phiếu — không kèm danh sách đơn,
+    // phiếu chi… (không cần cho nhân viên, giảm dữ liệu truyền đi).
+    const keep = [
+      "user_id", "full_name", "position", "area", "start_label", "bank_name", "bank_account",
+      "base_salary", "standard_days", "worked_days", "salary_by_days", "tech_revenue", "commission", "business_revenue",
+      "ot_hours_15", "ot_hours_20", "overtime_amount", "travel_allowance", "travel_note", "bonus",
+      "extra_allowance", "extra_note", "advance", "social_insurance", "union_fee", "other_deduction",
+      "other_note", "gross", "deductions", "net_pay", "locked", "no_attendance",
+    ];
+    const row: any = Object.fromEntries(keep.map((k) => [k, r[k]]));
+    row.paid = paid;
+    row.tech_count = (r.tech_lines ?? []).length;
+
+    // Quản lý / nhân viên bán hàng: DS bán hàng tính theo CẢ THÁNG (phụ thuộc
+    // doanh thu cả nhóm, KPI) → chỉ hiện khi tháng đã kết thúc. Ẩn ngay từ
+    // server và trừ khỏi tổng / thực lĩnh để không suy ngược ra được.
+    const db = getSupabaseAdmin();
+    const { data: me } = await db.from("users").select("position_id").eq("id", actorId).limit(1);
+    const pos = me?.[0]?.position_id ?? null;
+    row.sales_role = pos === POS_SALES_MANAGER ? "manager" : pos === POS_SALES ? "staff" : null;
+    row.business_role = pos === POS_BUSINESS;
+    const currentMonthVN = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 7);
+    if (row.sales_role && data.month >= currentMonthVN) {
+      const hidden = num(row.commission);
+      row.commission = null;
+      row.gross = num(row.gross) - hidden;
+      row.net_pay = num(row.net_pay) - hidden;
+      row.sales_pending = true;
+    }
+    return { month: data.month, row };
+  },
+);
+
+/** Admin đặt hệ số % DS bán hàng cho một quản lý bán hàng (mặc định 0,5%). */
+export const setSalesCoefFn = createServerFn({ method: "POST" }).handler(
+  async ({ data }: { data: { actorId?: string; managerId: string; coef: number } }) => {
+    await assertAdmin(data?.actorId);
+    const coef = Number(data.coef);
+    if (!Number.isFinite(coef) || coef < 0 || coef > 100) throw new Error("Hệ số phải từ 0 đến 100 (%)");
+    const { error } = await getSupabaseAdmin()
+      .from("sales_settings")
+      .upsert({ manager_id: data.managerId, coef, updated_at: now(), updated_by: data.actorId ?? null }, { onConflict: "manager_id" });
+    if (error) throw new Error(`${error.message}. Nếu báo "does not exist" thì chưa chạy sql_migration_v19_sales_revenue.sql.`);
+    await logActivity({ action: "set_sales_coef", detail: `Hệ số DS bán hàng ${coef}% cho ${data.managerId}`, employee_id: data.actorId ?? null });
+    return { ok: true };
+  },
+);
+
+/** Admin đặt KPI tháng cho một quản lý bán hàng. kpi = null → xoá KPI tháng đó (dùng lại KPI tháng trước). */
+export const setSalesKpiFn = createServerFn({ method: "POST" }).handler(
+  async ({ data }: { data: { actorId?: string; managerId: string; month: string; kpi: number | null } }) => {
+    await assertAdmin(data?.actorId);
+    monthRange(data.month);
+    const db = getSupabaseAdmin();
+    if (data.kpi === null || data.kpi === undefined || (data.kpi as any) === "") {
+      const { error } = await db.from("sales_kpis").delete().eq("manager_id", data.managerId).eq("month", data.month);
+      if (error) throw new Error(error.message);
+    } else {
+      const kpi = Number(data.kpi);
+      if (!Number.isFinite(kpi) || kpi < 0) throw new Error("KPI không hợp lệ");
+      const { error } = await db
+        .from("sales_kpis")
+        .upsert({ manager_id: data.managerId, month: data.month, kpi, updated_at: now(), updated_by: data.actorId ?? null }, { onConflict: "manager_id,month" });
+      if (error) throw new Error(`${error.message}. Nếu báo "does not exist" thì chưa chạy sql_migration_v19_sales_revenue.sql.`);
+    }
+    await logActivity({ action: "set_sales_kpi", detail: `KPI ${data.month} = ${data.kpi ?? "(xoá)"} cho ${data.managerId}`, employee_id: data.actorId ?? null });
+    return { ok: true };
   },
 );

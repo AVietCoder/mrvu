@@ -143,13 +143,14 @@ export const ALL_PERMISSIONS: { key: Permission; label: string; desc: string }[]
   { key: "view_cash_all",     label: "Xem sổ quỹ toàn bộ",        desc: "Xem & tạo phiếu thu/chi của tất cả chi nhánh" },
   { key: "customer_care",     label: "Gửi tin chăm sóc KH",       desc: "Gửi Zalo/Email sinh nhật & nhắc bảo dưỡng (tin Zalo tốn phí)" },
   { key: "manage_roster",     label: "Quản lý lịch trực",         desc: "Xếp ca, đánh dấu nghỉ cho các chi nhánh mình được gán" },
-  { key: "manage_payroll",    label: "Quản lý lương nhân sự",     desc: "Sửa lương cơ bản, hoa hồng, ngân hàng, chấm công, chốt & chi lương — chỉ những NV admin phân cho ở Bảng lương → Phân việc (mặc định không ai)" },
+  { key: "manage_payroll",    label: "Quản lý lương nhân sự",     desc: "Sửa lương cơ bản, DS bán hàng, ngân hàng, chấm công, chốt & chi lương — của chính mình + những NV admin phân cho ở Bảng lương → Phân việc" },
 ];
 
 // ── User ─────────────────────────────────────────────────────
 export type User = {
   id: ID; full_name: string; username: string; phone?: string;
   birthday?: string;      // yyyy-mm-dd — chỉ để nhắc sinh nhật nội bộ
+  position_id?: string;   // chức vụ (bảng positions, migration v18)
   is_admin: number; branch_ids: ID[]; permissions: Permission[];
   created_at: string;
 };

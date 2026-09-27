@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getReports } from "@/lib/reports.functions";
 import { AppShell, Card, StatCard, fmt } from "@/components/AppShell";
 import { useAuth } from "@/context/AuthContext";
+import { MySalaryCard } from "@/components/MySalaryCard";
 import { ShieldOff, ShoppingCart, Users, Package, BarChart2, Warehouse, CalendarDays, Settings, CreditCard, ChevronRight } from "lucide-react";
 
 import {
@@ -82,6 +83,8 @@ function ProgressBarLoader() {
 }
 
 function Dashboard() {
+  // Lương của tôi: mọi nhân viên trừ admin (admin xem ở Báo cáo / Bảng lương).
+  const { user, isAdmin } = useAuth();
   // const { isAdmin } = useAuth();
   // const fn = useServerFn(getReports);
 
@@ -115,6 +118,7 @@ function Dashboard() {
               </Link>
             ))}
           </div>
+          {user && !isAdmin && <MySalaryCard userId={user.id} />}
           <div className="flex flex-col items-center justify-center py-8 text-center gap-3">
             <ShieldOff className="h-12 w-12 text-muted-foreground opacity-30" />
 <p className="text-xs text-muted-foreground">

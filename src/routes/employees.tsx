@@ -11,6 +11,8 @@ import {
   getFormOptionsFn,
   resetPasswordFn,
   updateUserProfileFn,
+  upsertPositionFn,
+  deletePositionFn,
 } from "@/lib/auth.functions";
 import { useAuth } from "@/context/AuthContext";
 import { AppShell, Card } from "@/components/AppShell";
@@ -39,6 +41,11 @@ import {
   Phone,
   Calendar,
   Cake,
+  Briefcase,
+  Pencil,
+  Check,
+  X,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ALL_PERMISSIONS, type Permission } from "@/lib/types";
@@ -47,6 +54,33 @@ export const Route = createFileRoute("/employees")({
   head: () => ({ meta: [{ title: "Nhân viên — Mr.Vũ" }] }),
   component: Page,
 });
+
+// Màu cố định theo thứ tự chức vụ — cùng chức vụ luôn cùng màu ở mọi nơi.
+const POSITION_COLORS = [
+  "border-sky-200 bg-sky-50 text-sky-800",
+  "border-emerald-200 bg-emerald-50 text-emerald-800",
+  "border-violet-200 bg-violet-50 text-violet-800",
+  "border-amber-200 bg-amber-50 text-amber-800",
+  "border-rose-200 bg-rose-50 text-rose-800",
+  "border-teal-200 bg-teal-50 text-teal-800",
+  "border-indigo-200 bg-indigo-50 text-indigo-800",
+];
+const AVATAR_TONES = [
+  "bg-sky-100 text-sky-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-violet-100 text-violet-700",
+  "bg-amber-100 text-amber-700",
+  "bg-rose-100 text-rose-700",
+  "bg-teal-100 text-teal-700",
+  "bg-indigo-100 text-indigo-700",
+];
+
+/** Ảnh đại diện chữ cái: 2 chữ đầu của tên (vd "Vũ Văn Giang" → "VG"). */
+function Avatar({ name, tone }: { name: string; tone: string }) {
+  const parts = String(name || "?").trim().split(/\s+/);
+  const initials = (parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : parts[0].slice(0, 2)).toUpperCase();
+  return <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-bold ${tone}`}>{initials}</div>;
+}
 
 function Page() {
   const { user: me, isAdmin } = useAuth();
@@ -75,6 +109,9 @@ function Page() {
   const debouncedSearch = useDebouncedValue(search, 250);
   const [sortBy, setSortBy] = useState("name");
   const [page, setPage] = useState(1);
+  // "" = tất cả, "__none" = chưa có chức vụ, còn lại = id chức vụ
+  const [filterPosition, setFilterPosition] = useState("");
+  const [posOpen, setPosOpen] = useState(false);
 
   const [addOpen, setAddOpen] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
@@ -86,6 +123,7 @@ function Page() {
     password: "123456",
     is_admin: Number(0),
     branch_ids: [] as string[],
+    position_id: "",
   });
 
   const [viewId, setViewId] = useState<string | null>(null);
@@ -102,21 +140,37 @@ function Page() {
 
   const [bulkSelect, setBulkSelect] = useState<string[]>([]);
 
+  const staff = useMemo(() => (users ?? []).filter((u) => Number(u.is_admin) !== 1), [users]);
+  const posOrder = useMemo(
+    () => new Map<string, number>(((opts as any)?.positions ?? []).map((p: any, i: number) => [p.id, i] as [string, number])),
+    [opts],
+  );
+
   const filtered = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
-    return (users ?? [])
-      .filter((u) => Number(u.is_admin) !== 1)
+    return staff
+      .filter((u) => {
+        if (!filterPosition) return true;
+        const has = u.position_id && posOrder.has(u.position_id);
+        return filterPosition === "__none" ? !has : u.position_id === filterPosition;
+      })
       .filter(
         (u) =>
           u.full_name.toLowerCase().includes(q) ||
-          u.username.toLowerCase().includes(q)
+          u.username.toLowerCase().includes(q) ||
+          String(u.phone ?? "").replace(/\s/g, "").includes(q.replace(/\s/g, ""))
       )
       .sort((a, b) => {
-        if (sortBy === "name") return a.full_name.localeCompare(b.full_name);
+        if (sortBy === "name") return a.full_name.localeCompare(b.full_name, "vi");
+        if (sortBy === "position") {
+          const pa = posOrder.get(a.position_id ?? "") ?? 999;
+          const pb = posOrder.get(b.position_id ?? "") ?? 999;
+          return pa - pb || a.full_name.localeCompare(b.full_name, "vi");
+        }
         if (sortBy === "perm") return b.permissions.length - a.permissions.length;
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
-  }, [users, debouncedSearch, sortBy]);
+  }, [staff, debouncedSearch, sortBy, filterPosition, posOrder]);
 
   const paginated = useMemo(
     () => filtered.slice((page - 1) * DEFAULT_PAGE_SIZE, page * DEFAULT_PAGE_SIZE),
@@ -179,6 +233,7 @@ function Page() {
         password: "123456",
         is_admin: Number(0),
         branch_ids: [],
+        position_id: "",
       });
       qc.invalidateQueries({ queryKey: ["users"] });
     } catch (err: any) {
@@ -293,222 +348,269 @@ function Page() {
   const updateProfileFn = useServerFn(updateUserProfileFn);
   const [birthdayDraft, setBirthdayDraft] = useState("");
   const [savingBirthday, setSavingBirthday] = useState(false);
+  const [savingPosition, setSavingPosition] = useState(false);
   // Mở nhân viên khác thì nạp lại giá trị của người đó, không giữ lại bản nháp cũ.
   useEffect(() => {
     setBirthdayDraft(viewUser?.birthday ? String(viewUser.birthday).slice(0, 10) : "");
   }, [viewId, viewUser?.birthday]);
   const allBranchesCount = opts?.branches?.length || 0;
 
+  // ── Chức vụ ──
+  const positions: any[] = opts?.positions ?? [];
+  const positionById = useMemo(() => new Map(positions.map((p: any, i: number) => [p.id, { ...p, idx: i }])), [positions]);
+  const positionCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const u of staff) {
+      const k = u.position_id && positionById.has(u.position_id) ? u.position_id : "__none";
+      m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return m;
+  }, [staff, positionById]);
+
+  const branchNamesOf = (u: any): string[] => {
+    const isAll = u.branch_ids.length === 0 || u.branch_ids.length === allBranchesCount;
+    if (isAll) return ["Tất cả chi nhánh"];
+    return u.branch_ids.map((bid: string) => opts?.branches.find((b: any) => b.id === bid || b.name === bid)?.name ?? bid);
+  };
+
+  const PositionBadge = ({ id, size = "sm" }: { id?: string; size?: "sm" | "md" }) => {
+    const p = id ? positionById.get(id) : null;
+    if (!p) return <span className={`text-muted-foreground/70 ${size === "md" ? "text-sm" : "text-xs"}`}>Chưa có chức vụ</span>;
+    return (
+      <span className={`inline-flex items-center gap-1 rounded-full border font-medium ${size === "md" ? "px-2.5 py-1 text-sm" : "px-2 py-0.5 text-xs"} ${POSITION_COLORS[p.idx % POSITION_COLORS.length]}`}>
+        <Briefcase className={size === "md" ? "h-3.5 w-3.5" : "h-3 w-3"} />
+        {p.name}
+      </span>
+    );
+  };
+
+  const PermChips = ({ perms }: { perms: string[] }) =>
+    perms.length === 0 ? (
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <ShieldOff className="h-3 w-3" /> Chỉ xem cơ bản
+      </span>
+    ) : (
+      <div className="flex flex-wrap gap-1">
+        {perms.slice(0, 2).map((p) => (
+          <span key={p} className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+            {ALL_PERMISSIONS.find((x) => x.key === p)?.label ?? p}
+          </span>
+        ))}
+        {perms.length > 2 && (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title={perms.slice(2).map((p) => ALL_PERMISSIONS.find((x) => x.key === p)?.label ?? p).join(", ")}>
+            +{perms.length - 2}
+          </span>
+        )}
+      </div>
+    );
+
+  const ActionButtons = ({ u }: { u: any }) => (
+    <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+      <button className="rounded-md p-1.5 hover:bg-muted hover:text-blue-600" title="Xem chi tiết" onClick={() => setViewId(u.id)}>
+        <Eye className="h-4 w-4" />
+      </button>
+      {isAdmin && (
+        <>
+          <button className="rounded-md p-1.5 hover:bg-muted hover:text-primary" title="Cấp quyền" onClick={() => openPermDialog([u.id])}>
+            <ShieldCheck className="h-4 w-4" />
+          </button>
+          <button
+            className="rounded-md p-1.5 hover:bg-muted hover:text-orange-600"
+            title="Reset mật khẩu"
+            onClick={() => {
+              setResetPwId(u.id);
+              setNewPw("123456");
+            }}
+          >
+            <KeyRound className="h-4 w-4" />
+          </button>
+          <button className="rounded-md p-1.5 hover:bg-muted hover:text-destructive" title="Xóa" onClick={() => handleDelete(u.id, u.full_name)}>
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <AppShell title="Quản lý nhân viên" loading={!users}>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-        <Card>
-          <div className="flex items-center gap-2 mb-1">
-            <Users className="h-4 w-4 text-muted-foreground" />
-            <div className="text-xs text-muted-foreground uppercase">Tổng nhân viên</div>
-          </div>
-          <div className="text-2xl font-semibold">{filtered.length}</div>
-        </Card>
-
-        <Card>
-          <div className="flex items-center gap-2 mb-1">
-            <ShieldCheck className="h-4 w-4 text-primary" />
-            <div className="text-xs text-muted-foreground uppercase">Đã cấp quyền</div>
-          </div>
-          <div className="text-2xl font-semibold">
-            {filtered.filter((u) => u.permissions.length > 0).length}
-          </div>
-        </Card>
-
-        <Card>
-          <div className="flex items-center gap-2 mb-1">
-            <ShieldOff className="h-4 w-4 text-muted-foreground" />
-            <div className="text-xs text-muted-foreground uppercase">Chưa cấp quyền</div>
-          </div>
-          <div className="text-2xl font-semibold">
-            {filtered.filter((u) => u.permissions.length === 0).length}
-          </div>
-        </Card>
+      {/* ── Thống kê ── */}
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {[
+          { label: "Tổng nhân viên", value: staff.length, Icon: Users, tone: "bg-slate-100 text-slate-700" },
+          { label: "Đã cấp quyền", value: staff.filter((u) => u.permissions.length > 0).length, Icon: ShieldCheck, tone: "bg-primary/10 text-primary" },
+          { label: "Chưa có chức vụ", value: positionCount.get("__none") ?? 0, Icon: Briefcase, tone: "bg-amber-100 text-amber-700" },
+        ].map(({ label, value, Icon, tone }) => (
+          <Card key={label} className="flex items-center gap-3">
+            <div className={`grid h-10 w-10 place-items-center rounded-lg ${tone}`}><Icon className="h-5 w-5" /></div>
+            <div>
+              <div className="text-sm text-muted-foreground">{label}</div>
+              <div className="text-2xl font-bold tabular-nums">{value}</div>
+            </div>
+          </Card>
+        ))}
       </div>
 
-      <Card>
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <div className="font-medium flex items-center gap-2 flex-1">
-            <Users className="h-4 w-4" /> Danh sách nhân viên
+      <Card className="p-0 overflow-hidden">
+        {/* ── Tiêu đề + thao tác ── */}
+        <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
+          <div className="mr-auto flex items-center gap-2 text-base font-semibold">
+            <Users className="h-5 w-5 text-primary" /> Danh sách nhân viên
           </div>
-
           {bulkSelect.length > 0 && (
             <Button size="sm" variant="secondary" onClick={() => openPermDialog(bulkSelect)}>
-              <ShieldCheck className="h-4 w-4 mr-1" />
+              <ShieldCheck className="mr-1 h-4 w-4" />
               Cấp quyền cho {bulkSelect.length} người
             </Button>
           )}
-
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={() => setPosOpen(true)}>
+              <Briefcase className="mr-1 h-4 w-4" /> Chức vụ
+            </Button>
+          )}
           {isAdmin && (
             <Button size="sm" onClick={() => setAddOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" /> Thêm nhân viên
+              <Plus className="mr-1 h-4 w-4" /> Thêm nhân viên
             </Button>
           )}
         </div>
 
-        <SearchFilter
-          search={search}
-          onSearch={(v) => {
-            setSearch(v);
-            setPage(1);
-          }}
-          placeholder="Tìm tên, username..."
-          sortOptions={[
-            { value: "name", label: "Tên A→Z" },
-            { value: "perm", label: "Nhiều quyền nhất" },
-            { value: "date", label: "Mới nhất" },
-          ]}
-          sortValue={sortBy}
-          onSort={(v) => {
-            setSortBy(v);
-            setPage(1);
-          }}
-          total={filtered.length}
-          totalLabel="nhân viên"
-        />
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[640px]">
-            <thead className="text-left text-muted-foreground border-b">
-              <tr>
-                {isAdmin && (
-                  <th className="py-2 pr-3 w-8">
-                    <input
-                      type="checkbox"
-                      checked={bulkSelect.length === filtered.length && filtered.length > 0}
-                      onChange={(e) =>
-                        setBulkSelect(e.target.checked ? filtered.map((u) => u.id) : [])
-                      }
-                    />
-                  </th>
-                )}
-                <th className="py-2 pr-3">Họ tên</th>
-                <th className="pr-3">Username</th>
-                <th className="pr-3">SĐT</th>
-                <th className="pr-3">Chi nhánh</th>
-                <th className="pr-3">Quyền được cấp</th>
-                <th className="text-right">Thao tác</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {paginated.map((u) => {
-                const isAll = u.branch_ids.length === 0 || u.branch_ids.length === allBranchesCount;
-                const branchNames = isAll
-                  ? "Tất cả chi nhánh"
-                  : u.branch_ids
-                      .map(
-                        (bid) => opts?.branches.find((b: any) => (b.id === bid || b.name === bid))?.name ?? bid
-                      )
-                      .join(", ");
-
-                return (
-                  <tr
-                    key={u.id}
-                    className="border-b last:border-0 hover:bg-muted/30 cursor-pointer"
-                    onClick={() => setViewId(u.id)}
-                  >
-                    {isAdmin && (
-                      <td className="py-2 pr-3" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={bulkSelect.includes(u.id)}
-                          onChange={() => toggleBulk(u.id)}
-                        />
-                      </td>
-                    )}
-
-                    <td className="py-2 pr-3 font-medium">{u.full_name}</td>
-                    <td className="pr-3 font-mono text-xs">{u.username}</td>
-                    <td className="pr-3 text-muted-foreground">{u.phone ?? "—"}</td>
-                    <td className="pr-3 text-xs text-muted-foreground max-w-[140px] truncate">
-                      <span className="flex items-center gap-1">
-                        <Building2 className="h-3 w-3 shrink-0" /> {branchNames}
-                      </span>
-                    </td>
-                    <td className="pr-3">
-                      {u.permissions.length === 0 ? (
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <ShieldOff className="h-3 w-3" /> Chỉ xem cơ bản
-                        </span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {u.permissions.slice(0, 2).map((p) => {
-                            const def = ALL_PERMISSIONS.find((x) => x.key === p);
-                            return (
-                              <span
-                                key={p}
-                                className="text-xs bg-primary/10 text-primary rounded-full px-2 py-0.5"
-                              >
-                                {def?.label ?? p}
-                              </span>
-                            );
-                          })}
-                          {u.permissions.length > 2 && (
-                            <span className="text-xs bg-muted text-muted-foreground rounded-full px-2 py-0.5">
-                              +{u.permissions.length - 2}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    <td className="text-right" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        className="p-1 hover:text-blue-600"
-                        title="Xem chi tiết"
-                        onClick={() => setViewId(u.id)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-
-                      {isAdmin && (
-                        <>
-                          <button
-                            className="p-1 hover:text-primary"
-                            title="Cấp quyền"
-                            onClick={() => openPermDialog([u.id])}
-                          >
-                            <ShieldCheck className="h-4 w-4" />
-                          </button>
-                          <button
-                            className="p-1 hover:text-orange-600"
-                            title="Reset mật khẩu"
-                            onClick={() => {
-                              setResetPwId(u.id);
-                              setNewPw("123456");
-                            }}
-                          >
-                            <KeyRound className="h-4 w-4" />
-                          </button>
-                          <button
-                            className="p-1 hover:text-destructive"
-                            title="Xóa"
-                            onClick={() => handleDelete(u.id, u.full_name)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
-                    Chưa có nhân viên nào
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        {/* ── Lọc theo chức vụ ── */}
+        <div className="flex flex-wrap gap-1.5 border-b bg-slate-50/60 px-4 py-2.5">
+          {[
+            { key: "", label: "Tất cả", n: staff.length },
+            ...positions.map((p: any) => ({ key: p.id, label: p.name, n: positionCount.get(p.id) ?? 0 })),
+            { key: "__none", label: "Chưa có chức vụ", n: positionCount.get("__none") ?? 0 },
+          ].map((c) => (
+            <button
+              key={c.key || "all"}
+              onClick={() => {
+                setFilterPosition(c.key);
+                setPage(1);
+              }}
+              className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                filterPosition === c.key ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+              }`}
+            >
+              {c.label} <span className={filterPosition === c.key ? "opacity-80" : "text-muted-foreground"}>{c.n}</span>
+            </button>
+          ))}
         </div>
+
+        <div className="px-4 pt-3">
+          <SearchFilter
+            search={search}
+            onSearch={(v) => {
+              setSearch(v);
+              setPage(1);
+            }}
+            placeholder="Tìm tên, username, SĐT..."
+            sortOptions={[
+              { value: "name", label: "Tên A→Z" },
+              { value: "position", label: "Theo chức vụ" },
+              { value: "perm", label: "Nhiều quyền nhất" },
+              { value: "date", label: "Mới nhất" },
+            ]}
+            sortValue={sortBy}
+            onSort={(v) => {
+              setSortBy(v);
+              setPage(1);
+            }}
+            total={filtered.length}
+            totalLabel="nhân viên"
+          />
+        </div>
+
+        {/* ── Bảng (màn hình vừa trở lên) ── */}
+        <table className="hidden w-full text-sm md:table">
+          <thead>
+            <tr className="border-y bg-slate-50 text-left text-[13px] text-slate-600">
+              {isAdmin && (
+                <th className="w-10 py-2.5 pl-4">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={bulkSelect.length === filtered.length && filtered.length > 0}
+                    onChange={(e) => setBulkSelect(e.target.checked ? filtered.map((u) => u.id) : [])}
+                  />
+                </th>
+              )}
+              <th className="py-2.5 pl-4 font-semibold">Nhân viên</th>
+              <th className="px-3 font-semibold">Chức vụ</th>
+              <th className="px-3 font-semibold">Liên hệ</th>
+              <th className="px-3 font-semibold">Chi nhánh</th>
+              <th className="px-3 font-semibold">Quyền được cấp</th>
+              <th className="pr-4" />
+            </tr>
+          </thead>
+          <tbody>
+            {paginated.map((u) => {
+              const branches = branchNamesOf(u);
+              return (
+                <tr key={u.id} className="cursor-pointer border-b last:border-0 hover:bg-muted/30" onClick={() => setViewId(u.id)}>
+                  {isAdmin && (
+                    <td className="py-3 pl-4" onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" className="h-4 w-4" checked={bulkSelect.includes(u.id)} onChange={() => toggleBulk(u.id)} />
+                    </td>
+                  )}
+                  <td className="py-3 pl-4">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={u.full_name} tone={u.position_id && positionById.has(u.position_id) ? AVATAR_TONES[positionById.get(u.position_id).idx % AVATAR_TONES.length] : "bg-slate-200 text-slate-600"} />
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-slate-800">{u.full_name}</div>
+                        <div className="font-mono text-xs text-muted-foreground">@{u.username}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3"><PositionBadge id={u.position_id} /></td>
+                  <td className="px-3">
+                    {u.phone ? (
+                      <span className="flex items-center gap-1.5 tabular-nums text-slate-700"><Phone className="h-3.5 w-3.5 text-muted-foreground" />{u.phone}</span>
+                    ) : <span className="text-muted-foreground/60">—</span>}
+                  </td>
+                  <td className="max-w-[220px] px-3">
+                    <div className="flex flex-wrap gap-1">
+                      {branches.slice(0, 2).map((b) => (
+                        <span key={b} className="max-w-full truncate rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-700">{b}</span>
+                      ))}
+                      {branches.length > 2 && (
+                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-muted-foreground" title={branches.slice(2).join(", ")}>+{branches.length - 2}</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3"><PermChips perms={u.permissions} /></td>
+                  <td className="pr-4"><ActionButtons u={u} /></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {/* ── Thẻ (điện thoại) ── */}
+        <div className="divide-y md:hidden">
+          {paginated.map((u) => {
+            const branches = branchNamesOf(u);
+            return (
+              <div key={u.id} className="flex gap-3 px-4 py-3 active:bg-muted/40" onClick={() => setViewId(u.id)}>
+                <Avatar name={u.full_name} tone={u.position_id && positionById.has(u.position_id) ? AVATAR_TONES[positionById.get(u.position_id).idx % AVATAR_TONES.length] : "bg-slate-200 text-slate-600"} />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold">{u.full_name}</div>
+                      <div className="font-mono text-xs text-muted-foreground">@{u.username}{u.phone ? ` · ${u.phone}` : ""}</div>
+                    </div>
+                    <ActionButtons u={u} />
+                  </div>
+                  <PositionBadge id={u.position_id} />
+                  <div className="truncate text-xs text-muted-foreground"><Building2 className="mr-1 inline h-3 w-3" />{branches.join(", ")}</div>
+                  <PermChips perms={u.permissions} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {filtered.length === 0 && <div className="py-10 text-center text-muted-foreground">Không có nhân viên phù hợp</div>}
       </Card>
 
       <Pagination
@@ -540,6 +642,20 @@ function Page() {
                   setAddForm({ ...addForm, full_name: e.target.value })
                 }
               />
+            </div>
+
+            <div>
+              <Label>Chức vụ</Label>
+              <select
+                className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={addForm.position_id}
+                onChange={(e) => setAddForm({ ...addForm, position_id: e.target.value })}
+              >
+                <option value="">— Chưa chọn —</option>
+                {((opts as any)?.positions ?? []).map((p: any) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -640,14 +756,49 @@ function Page() {
           {viewUser && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-lg">{viewUser.full_name}</DialogTitle>
-                <DialogDescription>
-                  Thông tin chi tiết và quyền hạn của nhân viên.
-                </DialogDescription>
+                <div className="flex items-center gap-3">
+                  <Avatar
+                    name={viewUser.full_name}
+                    tone={viewUser.position_id && positionById.has(viewUser.position_id) ? AVATAR_TONES[positionById.get(viewUser.position_id).idx % AVATAR_TONES.length] : "bg-slate-200 text-slate-600"}
+                  />
+                  <div className="min-w-0">
+                    <DialogTitle className="text-lg">{viewUser.full_name}</DialogTitle>
+                    <DialogDescription className="mt-0.5">
+                      <PositionBadge id={viewUser.position_id} />
+                    </DialogDescription>
+                  </div>
+                </div>
               </DialogHeader>
 
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3 text-sm">
+                  {isAdmin && (
+                    <div className="col-span-2 rounded-lg border p-3">
+                      <div className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
+                        <Briefcase className="h-3 w-3" /> Chức vụ
+                      </div>
+                      <select
+                        className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                        value={viewUser.position_id ?? ""}
+                        disabled={savingPosition}
+                        onChange={async (e) => {
+                          setSavingPosition(true);
+                          try {
+                            await (updateProfileFn as any)({ data: { user_id: viewUser.id, position_id: e.target.value || null, admin_id: me?.id } });
+                            toast.success("Đã lưu chức vụ");
+                            qc.invalidateQueries({ queryKey: ["users"] });
+                          } catch (err: any) {
+                            toast.error(err?.message ?? "Lỗi lưu chức vụ");
+                          } finally {
+                            setSavingPosition(false);
+                          }
+                        }}
+                      >
+                        <option value="">— Chưa có chức vụ —</option>
+                        {positions.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                  )}
                   <div className="rounded-lg border bg-muted/30 p-3">
                     <div className="text-xs text-muted-foreground mb-1">Username</div>
                     <div className="font-mono font-medium">{viewUser.username}</div>
@@ -976,6 +1127,106 @@ function Page() {
           </div>
         </DialogContent>
       </Dialog>
+      <PositionManager
+        open={posOpen}
+        onOpenChange={setPosOpen}
+        positions={positions}
+        counts={positionCount}
+        adminId={me?.id}
+        onChanged={() => {
+          qc.invalidateQueries({ queryKey: ["form-options"] });
+          qc.invalidateQueries({ queryKey: ["users"] });
+        }}
+      />
     </AppShell>
+  );
+}
+
+/** Thêm / đổi tên / xoá chức vụ (chỉ admin). */
+function PositionManager({ open, onOpenChange, positions, counts, adminId, onChanged }: any) {
+  const upsert = useServerFn(upsertPositionFn) as any;
+  const del = useServerFn(deletePositionFn) as any;
+  const [newName, setNewName] = useState("");
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function run(key: string, fn: () => Promise<any>, ok: string) {
+    setBusy(key);
+    try {
+      await fn();
+      toast.success(ok);
+      onChanged();
+      return true;
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi");
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Briefcase className="h-5 w-5 text-primary" />Chức vụ</DialogTitle>
+          <DialogDescription>Xoá một chức vụ thì nhân viên đang giữ chức vụ đó chuyển về "Chưa có chức vụ".</DialogDescription>
+        </DialogHeader>
+        {positions.length === 0 && (
+          <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+            Chưa có chức vụ nào. Nếu vừa cập nhật phần mềm, cần chạy <span className="font-mono">sql_migration_v18_positions.sql</span> trước.
+          </div>
+        )}
+        <div className="divide-y rounded-lg border">
+          {positions.map((p: any, i: number) => (
+            <div key={p.id} className="flex items-center gap-2 px-3 py-2">
+              {editId === p.id ? (
+                <>
+                  <Input className="h-8" autoFocus value={editName} onChange={(e) => setEditName(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === "Enter" && (await run(p.id, () => upsert({ data: { id: p.id, name: editName, admin_id: adminId } }), "Đã đổi tên"))) setEditId(null);
+                      if (e.key === "Escape") setEditId(null);
+                    }} />
+                  <Button size="icon" variant="ghost" className="h-8 w-8" disabled={busy === p.id}
+                    onClick={async () => { if (await run(p.id, () => upsert({ data: { id: p.id, name: editName, admin_id: adminId } }), "Đã đổi tên")) setEditId(null); }}>
+                    {busy === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4 text-emerald-600" />}
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditId(null)}><X className="h-4 w-4" /></Button>
+                </>
+              ) : (
+                <>
+                  <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-sm font-medium ${POSITION_COLORS[i % POSITION_COLORS.length]}`}>{p.name}</span>
+                  <span className="mr-auto text-xs text-muted-foreground">{counts.get(p.id) ?? 0} người</span>
+                  <Button size="icon" variant="ghost" className="h-8 w-8" title="Đổi tên" onClick={() => { setEditId(p.id); setEditName(p.name); }}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" title="Xoá" disabled={busy === p.id}
+                    onClick={() => {
+                      const n = counts.get(p.id) ?? 0;
+                      if (!confirm(`Xoá chức vụ "${p.name}"?${n ? ` ${n} nhân viên sẽ về "Chưa có chức vụ".` : ""}`)) return;
+                      run(p.id, () => del({ data: { id: p.id, admin_id: adminId } }), "Đã xoá chức vụ");
+                    }}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+        <form
+          className="flex gap-2"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (await run("new", () => upsert({ data: { name: newName, admin_id: adminId } }), "Đã thêm chức vụ")) setNewName("");
+          }}
+        >
+          <Input placeholder="Tên chức vụ mới…" value={newName} onChange={(e) => setNewName(e.target.value)} />
+          <Button type="submit" disabled={!newName.trim() || busy === "new"}>
+            {busy === "new" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}Thêm
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

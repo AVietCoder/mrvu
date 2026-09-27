@@ -25,6 +25,7 @@ async function loadUser(row: any): Promise<User> {
     username: row.username,
     phone: row.phone ?? undefined,
     birthday: row.birthday ?? undefined,
+    position_id: row.position_id ?? undefined,
     is_admin: Number(row.is_admin),
     branch_ids: branchRows.map((r) => r.branch_id),
     permissions: permRows.map((r) => r.permission),
@@ -53,6 +54,7 @@ export const registerFn = createServerFn({ method: "POST" })
       full_name: string;
       phone?: string;
       birthday?: string;   // yyyy-mm-dd
+      position_id?: string;
       username: string;
       password: string;
       branch_ids?: string[];
@@ -77,6 +79,12 @@ export const registerFn = createServerFn({ method: "POST" })
     // khoản nào. Thiếu ngày sinh chỉ là không nhắc được sinh nhật.
     if (data.birthday) {
       await updateWhere("users", { birthday: data.birthday }, { id: user.id }).catch(
+        () => undefined,
+      );
+    }
+    // Chức vụ cũng ghi riêng (migration v18) — thiếu cột thì vẫn tạo được tài khoản.
+    if (data.position_id) {
+      await updateWhere("users", { position_id: data.position_id }, { id: user.id }).catch(
         () => undefined,
       );
     }
@@ -151,7 +159,14 @@ export const updateUserProfileFn = createServerFn({ method: "POST" })
   .handler(async ({
     data,
   }: {
-    data: { user_id: string; full_name?: string; phone?: string; birthday?: string | null; admin_id: string };
+    data: {
+      user_id: string;
+      full_name?: string;
+      phone?: string;
+      birthday?: string | null;
+      position_id?: string | null;
+      admin_id: string;
+    };
   }) => {
     const admin = await fetchRow("users", {
       eq: { id: data.admin_id, is_admin: Number(1) },
@@ -172,6 +187,15 @@ export const updateUserProfileFn = createServerFn({ method: "POST" })
       await updateWhere("users", { birthday: data.birthday || null }, { id: data.user_id }).catch(
         () => undefined,
       );
+    }
+
+    // Chức vụ: báo lỗi rõ nếu chưa chạy migration v18 (người dùng chủ động đổi).
+    if (data.position_id !== undefined) {
+      const { error } = await supabase
+        .from("users")
+        .update({ position_id: data.position_id || null })
+        .eq("id", data.user_id);
+      if (error) throw new Error(`Không lưu được chức vụ: ${error.message}. Cần chạy sql_migration_v18_positions.sql.`);
     }
 
     const target = await fetchRow<any>("users", { eq: { id: data.user_id }, select: "username, full_name" });
@@ -235,7 +259,51 @@ export const deleteUserFn = createServerFn({ method: "POST" })
   });
 
 export const getFormOptionsFn = createServerFn({ method: "GET" }).handler(async () => {
-  return {
-    branches: await fetchRows("branches", { orderBy: "name" }),
-  };
+  const [branches, positions] = await Promise.all([
+    fetchRows("branches", { orderBy: "name" }),
+    // Chưa chạy migration v18 thì chưa có bảng → danh sách rỗng, trang vẫn chạy.
+    fetchRows("positions", { orderBy: "sort_order" }).catch(() => []),
+  ]);
+  return { branches, positions };
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CHỨC VỤ (migration v18) — chỉ admin thêm / đổi tên / xoá
+// ═══════════════════════════════════════════════════════════════════════════
+async function assertAdminId(adminId?: string) {
+  const admin = adminId
+    ? await fetchRow("users", { eq: { id: adminId, is_admin: Number(1) }, select: "id" })
+    : null;
+  if (!admin) throw new Error("Không có quyền thực hiện");
+}
+
+export const upsertPositionFn = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: { id?: string; name: string; admin_id: string } }) => {
+    await assertAdminId(data.admin_id);
+    const name = String(data.name ?? "").trim().replace(/\s+/g, " ");
+    if (!name) throw new Error("Nhập tên chức vụ");
+    if (name.length > 60) throw new Error("Tên chức vụ tối đa 60 ký tự");
+
+    if (data.id) {
+      const { error } = await supabase.from("positions").update({ name }).eq("id", data.id);
+      if (error) throw new Error(/uq_positions_name|duplicate/i.test(error.message) ? `Đã có chức vụ "${name}"` : error.message);
+    } else {
+      const { data: last } = await supabase.from("positions").select("sort_order").order("sort_order", { ascending: false }).limit(1);
+      const { error } = await supabase
+        .from("positions")
+        .insert({ id: uid(), name, sort_order: Number(last?.[0]?.sort_order ?? 0) + 1 });
+      if (error) throw new Error(/uq_positions_name|duplicate/i.test(error.message) ? `Đã có chức vụ "${name}"` : error.message);
+    }
+    await logActivity({ action: "upsert_position", detail: `${data.id ? "Đổi tên" : "Thêm"} chức vụ: ${name}`, employee_id: data.admin_id });
+    return { ok: true };
+  });
+
+export const deletePositionFn = createServerFn({ method: "POST" })
+  .handler(async ({ data }: { data: { id: string; admin_id: string } }) => {
+    await assertAdminId(data.admin_id);
+    // FK ON DELETE SET NULL: nhân viên đang giữ chức vụ này về "chưa có chức vụ".
+    const { error } = await supabase.from("positions").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    await logActivity({ action: "delete_position", detail: `Xoá chức vụ ${data.id}`, employee_id: data.admin_id });
+    return { ok: true };
+  });
