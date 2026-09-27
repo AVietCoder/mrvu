@@ -1571,15 +1571,16 @@ export const getOrdersForExport = createServerFn({ method: "GET" }).handler(
     const productIds = Array.from(
       new Set(items.map((it) => it.product_id).filter(Boolean)),
     );
-    const productMap = new Map<string, { sku: string; name: string }>();
+    const productMap = new Map<string, { sku: string; name: string; accessory: boolean }>();
     for (const ids of chunkArray(productIds, 300)) {
       if (ids.length === 0) continue;
+      // count_in_total (v15) — chưa chạy migration thì đọc lại không có cột đó.
       const part = await fetchRows<any>("products", {
-        select: "id, sku, name",
+        select: "id, sku, name, count_in_total",
         eq: { id: ids },
-      });
+      }).catch(() => fetchRows<any>("products", { select: "id, sku, name", eq: { id: ids } }));
       for (const p of part)
-        productMap.set(p.id, { sku: p.sku ?? "", name: p.name ?? "" });
+        productMap.set(p.id, { sku: p.sku ?? "", name: p.name ?? "", accessory: p.count_in_total === false });
     }
 
     // 5) Tên nhân viên bán.
@@ -1634,14 +1635,14 @@ export const getOrdersForExport = createServerFn({ method: "GET" }).handler(
     // 7) Gộp sản phẩm đã bán (theo product_id).
     const prodAgg = new Map<
       string,
-      { sku: string; name: string; qty: number; revenue: number }
+      { sku: string; name: string; qty: number; revenue: number; accessory: boolean }
     >();
     for (const it of items) {
       const key = it.product_id || "__unknown__";
       const info =
-        productMap.get(it.product_id) ?? { sku: "", name: "(Không xác định)" };
+        productMap.get(it.product_id) ?? { sku: "", name: "(Không xác định)", accessory: false };
       const cur =
-        prodAgg.get(key) ?? { sku: info.sku, name: info.name, qty: 0, revenue: 0 };
+        prodAgg.get(key) ?? { sku: info.sku, name: info.name, qty: 0, revenue: 0, accessory: info.accessory };
       cur.qty += Number(it.qty || 0);
       cur.revenue += Number(it.total || 0);
       prodAgg.set(key, cur);

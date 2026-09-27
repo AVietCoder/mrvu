@@ -35,12 +35,18 @@ type FormState = {
   sale_price: string;
   min_stock: string;
   image_url: string;
+  /** false = phụ kiện đi kèm, không đếm vào thống kê số hàng hóa. */
+  count_in_total: boolean;
 };
 
 const empty: FormState = {
   name: "", category_id: "", brand_id: "",
   cost_price: "0", sale_price: "0", min_stock: "0", image_url: "",
+  count_in_total: true,
 };
+
+/** Chưa chạy migration v15 thì cột không có (undefined) → coi là hàng chính. */
+const isAccessory = (p: any) => p?.count_in_total === false;
 
 const PAGE_SIZE = 20;
 
@@ -83,6 +89,7 @@ function ProductsPage() {
   const [page, setPage] = useState(1);
   const [filterCategory, setFilterCategory] = useState("");
   const [filterBrand, setFilterBrand] = useState("");
+  const [filterKind, setFilterKind] = useState<"" | "goods" | "accessory">("");
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // ⛔ Chống tạo trùng sản phẩm (double-submit). `saving` chỉ để hiển thị UI;
@@ -110,9 +117,10 @@ function ProductsPage() {
       const matchSearch = p.name.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q);
       const matchCat = !filterCategory || p.category_id === filterCategory;
       const matchBrand = !filterBrand || (p as any).brand_id === filterBrand;
-      return matchSearch && matchCat && matchBrand;
+      const matchKind = !filterKind || (filterKind === "accessory") === isAccessory(p);
+      return matchSearch && matchCat && matchBrand && matchKind;
     }),
-    [data, debouncedSearch, filterCategory, filterBrand],
+    [data, debouncedSearch, filterCategory, filterBrand, filterKind],
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -136,6 +144,7 @@ function ProductsPage() {
       sale_price: String(p.sale_price),
       min_stock: String(p.min_stock),
       image_url: (p as any).image_url ?? "",
+      count_in_total: !isAccessory(p),
     });
     setOpen(true);
   }
@@ -159,6 +168,7 @@ function ProductsPage() {
           sale_price: parseInput(form.sale_price),
           min_stock: Number(form.min_stock) || 0,
           image_url: form.image_url.trim() || null,
+          count_in_total: form.count_in_total,
           actor_id: user?.id,
         },
       });
@@ -288,8 +298,12 @@ function ProductsPage() {
     (p: any) => Number(p.total_stock ?? 0) <= p.min_stock,
   ).length;
 
-  // TỔNG HÀNG TỒN: server đã cộng sẵn trên toàn bộ sản phẩm khớp bộ lọc.
+  // TỔNG HÀNG TỒN: server đã cộng sẵn, CHỈ hàng hóa chính — phụ kiện đi kèm
+  // (bỏ tick "Tính vào tổng số hàng hóa") được đếm riêng.
   const totalStock = Number(data?.totalStock ?? 0);
+  const accessoryStock = Number(data?.accessoryStock ?? 0);
+  const accessoryCount = Number(data?.accessoryCount ?? 0);
+  const goodsCount = Number(data?.goodsCount ?? (data?.products ?? []).length);
 
   return (
     <AppShell title="Quản lý hàng hóa" loading={isLoading && !data}>
@@ -309,11 +323,15 @@ function ProductsPage() {
             {filterBranch
               ? (data?.branches ?? []).find((b: any) => b.id === filterBranch)?.name ?? "chi nhánh đã chọn"
               : "toàn bộ kho / chi nhánh"}
+            {accessoryStock > 0 && <> · không gồm {accessoryStock.toLocaleString("vi-VN")} phụ kiện</>}
           </div>
         </Card>
         <Card>
           <div className="flex items-center gap-2 mb-1"><Package className="h-4 w-4 text-muted-foreground" /><div className="text-xs text-muted-foreground uppercase">Tổng sản phẩm</div></div>
-          <div className="text-2xl font-semibold">{(data?.products ?? []).length}</div>
+          <div className="text-2xl font-semibold">{goodsCount.toLocaleString("vi-VN")}</div>
+          {accessoryCount > 0 && (
+            <div className="text-xs text-muted-foreground mt-0.5">+ {accessoryCount} mã phụ kiện đi kèm</div>
+          )}
         </Card>
         <Card>
           <div className="flex items-center gap-2 mb-1"><AlertTriangle className="h-4 w-4 text-destructive" /><div className="text-xs text-muted-foreground uppercase">Tồn kho thấp</div></div>
@@ -349,6 +367,12 @@ function ProductsPage() {
             value={filterBrand} onChange={(e) => { setFilterBrand(e.target.value); setPage(1); }}>
             <option value="">Tất cả thương hiệu</option>
             {(data?.brands ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+          <select className="h-9 rounded-md border bg-background px-2 text-sm"
+            value={filterKind} onChange={(e) => { setFilterKind(e.target.value as any); setPage(1); }}>
+            <option value="">Hàng hóa + phụ kiện</option>
+            <option value="goods">Chỉ hàng hóa</option>
+            <option value="accessory">Chỉ phụ kiện đi kèm</option>
           </select>
           {/* Lọc kho: đổi luôn con số "Tổng hàng tồn" ở trên — phân biệt rõ
               tổng toàn hệ thống với tổng của một chi nhánh. */}
@@ -404,7 +428,14 @@ function ProductsPage() {
                         </td>
                         <td className="font-medium pr-2">
                           <div>{p.name}</div>
-                          {p.sku && <div className="text-xs text-muted-foreground">{p.sku}</div>}
+                          <div className="flex items-center gap-1.5">
+                            {p.sku && <span className="text-xs text-muted-foreground">{p.sku}</span>}
+                            {isAccessory(p) && (
+                              <span className="rounded-full bg-slate-100 px-2 py-px text-[11px] font-medium text-slate-600" title="Không tính vào tổng số hàng hóa">
+                                Phụ kiện đi kèm
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="text-right pr-2 font-semibold text-primary">{fmt(p.sale_price)}</td>
                         <td className={"text-right pr-2 font-medium " + (low ? "text-destructive" : "")}>{qty}{low && <AlertTriangle className="h-3 w-3 inline ml-1" />}</td>
@@ -502,6 +533,22 @@ function ProductsPage() {
               <Field label="Tồn tối thiểu (cảnh báo)">
                 <Input type="number" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} />
               </Field>
+
+              <label className="col-span-2 flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 hover:bg-muted/40">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4"
+                  checked={form.count_in_total}
+                  onChange={(e) => setForm({ ...form, count_in_total: e.target.checked })}
+                />
+                <span className="text-sm">
+                  <span className="font-medium">Tính vào tổng số hàng hóa</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Bỏ tick nếu đây là <strong>phụ kiện đi kèm</strong> (điều khiển, ty, ốp…): vẫn bán và quản lý tồn kho bình thường
+                    nhưng không được đếm trong thống kê số hàng hóa (Tổng hàng tồn, Tổng sản phẩm, Top sản phẩm bán, Tổng SL bán).
+                  </span>
+                </span>
+              </label>
 
               {/* Ảnh sản phẩm */}
               <Field label="Ảnh sản phẩm" className="col-span-2">
@@ -655,6 +702,9 @@ function ProductsPage() {
 
                 <div className="text-xs text-muted-foreground">
                   Tồn tối thiểu cảnh báo: <span className="font-medium">{viewProduct.min_stock}</span>
+                  {isAccessory(viewProduct) && (
+                    <> · <span className="font-medium text-slate-700">Phụ kiện đi kèm — không tính vào tổng số hàng hóa</span></>
+                  )}
                 </div>
               </div>
 

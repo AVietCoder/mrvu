@@ -281,6 +281,8 @@ function Page() {
       qtyMap.set(i.product_id, { qty: cur.qty - Number(i.qty || 0), revenue: cur.revenue - Number(i.qty || 0) * Number(i.unit_price || 0) });
     });
     const topProducts = [...qtyMap.entries()]
+      // Phụ kiện đi kèm (bỏ tick "Tính vào tổng số hàng hóa") không xếp hạng.
+      .filter(([pid]) => (productMap.get(pid) as any)?.count_in_total !== false)
       .map(([pid, v]) => ({ name: (productMap.get(pid) as any)?.name ?? pid, ...v }))
       .filter((p) => p.qty > 0)
       .sort((a, b) => b.qty - a.qty).slice(0, 8);

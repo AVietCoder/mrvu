@@ -67,6 +67,8 @@ export interface SalesProductRow {
   name: string;
   qty: number;
   revenue: number;
+  /** Phụ kiện đi kèm — không cộng vào "Tổng SL bán". */
+  accessory?: boolean;
 }
 
 export interface ExportSalesReportOptions {
@@ -283,8 +285,15 @@ export async function exportSalesReportToExcel(
 
   wsP.mergeCells(`A2:${pLastCol}2`);
   const pSub = wsP.getCell("A2");
-  const totalQty = products.reduce((s, p) => s + Number(p.qty ?? 0), 0);
-  pSub.value = `${products.length} sản phẩm · Tổng SL bán: ${new Intl.NumberFormat("vi-VN").format(totalQty)}${filterPart}`;
+  // Phụ kiện đi kèm vẫn liệt kê (có doanh thu) nhưng không cộng vào Tổng SL bán.
+  const goods = products.filter((p) => !p.accessory);
+  const accessories = products.length - goods.length;
+  const totalQty = goods.reduce((s, p) => s + Number(p.qty ?? 0), 0);
+  const nf = new Intl.NumberFormat("vi-VN");
+  pSub.value =
+    `${goods.length} sản phẩm · Tổng SL bán: ${nf.format(totalQty)}` +
+    (accessories ? ` (không gồm ${accessories} mã phụ kiện đi kèm)` : "") +
+    filterPart;
   pSub.font = { italic: true, size: 10, color: { argb: "FF6B7280" } };
   pSub.alignment = { horizontal: "center" };
 
@@ -308,7 +317,7 @@ export async function exportSalesReportToExcel(
     const row = wsP.addRow({
       stt: i + 1,
       sku: p.sku ?? "",
-      name: p.name ?? "",
+      name: p.accessory ? `${p.name ?? ""} (phụ kiện đi kèm)` : p.name ?? "",
       qty: Number(p.qty ?? 0),
       revenue: Number(p.revenue ?? 0),
     });

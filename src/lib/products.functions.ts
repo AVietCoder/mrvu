@@ -50,9 +50,31 @@ export const listProducts = createServerFn({ method: "GET" }).handler(
     }
 
     const products = (rpcRes.data ?? []) as any[];
-    const totalStock = products.reduce((s, p) => s + Number(p.total_stock || 0), 0);
+    // Phụ kiện đi kèm (count_in_total = false) KHÔNG cộng vào thống kê số hàng
+    // hóa. Chưa chạy migration v15 thì cột không có → coi như hàng chính.
+    const isAccessory = (p: any) => p.count_in_total === false;
+    let totalStock = 0;
+    let accessoryStock = 0;
+    let accessoryCount = 0;
+    for (const p of products) {
+      const q = Number(p.total_stock || 0);
+      if (isAccessory(p)) {
+        accessoryStock += q;
+        accessoryCount += 1;
+      } else totalStock += q;
+    }
 
-    return { products, categories, brands, branches, totalStock, branchId };
+    return {
+      products,
+      categories,
+      brands,
+      branches,
+      totalStock,
+      accessoryStock,
+      accessoryCount,
+      goodsCount: products.length - accessoryCount,
+      branchId,
+    };
   },
 );
 
@@ -89,9 +111,26 @@ export const upsertProduct = createServerFn({ method: "POST" })
       tech_fee: Number(data.tech_fee || 0),
     };
 
+    // Cờ "tính vào tổng số hàng hóa" ghi RIÊNG sau khi lưu sản phẩm: nếu chưa
+    // chạy migration v15 (thiếu cột) thì việc lưu sản phẩm vẫn thành công.
+    const saveCountFlag = async (id: string) => {
+      if (data.count_in_total === undefined) return;
+      const flag = data.count_in_total !== false;
+      const { error } = await supabase.from("products").update({ count_in_total: flag }).eq("id", id);
+      // Chỉ báo lỗi khi người dùng thực sự bỏ tick — để mặc định (true) thì
+      // thiếu cột cũng không sao.
+      if (error && !flag) {
+        throw new Error(
+          `Đã lưu sản phẩm nhưng chưa lưu được "không tính vào tổng số hàng hóa": ${error.message}. ` +
+            "Cần chạy sql_migration_v15_product_count_flag.sql.",
+        );
+      }
+    };
+
     // ===== SỬA =====
     if (data.id) {
       await updateWhere("products", payload, { id: data.id });
+      await saveCountFlag(data.id);
       await logActivity({
         action: "update_product",
         detail: `Cập nhật sản phẩm: ${data.name}`,
@@ -128,12 +167,6 @@ export const upsertProduct = createServerFn({ method: "POST" })
       const sku = (data.sku?.trim() || (await nextSku())) as string;
       try {
         await insertRow("products", { id, ...payload, sku, created_at: now() });
-        await logActivity({
-          action: "create_product",
-          detail: `Thêm sản phẩm: ${data.name} (SKU ${sku})`,
-          employee_id: data.actor_id || null,
-        });
-        return { ok: true, id, sku };
       } catch (e: any) {
         const msg = String(e?.message ?? e);
         const isSkuDup =
@@ -148,6 +181,15 @@ export const upsertProduct = createServerFn({ method: "POST" })
         }
         throw e; // lỗi khác -> ném ra ngay
       }
+      // Đã chèn xong — cờ phụ kiện ghi NGOÀI khối retry để lỗi của nó không
+      // bị nhầm là lỗi trùng SKU.
+      await saveCountFlag(id);
+      await logActivity({
+        action: "create_product",
+        detail: `Thêm sản phẩm: ${data.name} (SKU ${sku})`,
+        employee_id: data.actor_id || null,
+      });
+      return { ok: true, id, sku };
     }
     throw lastErr ?? new Error("Không tạo được SKU duy nhất, vui lòng thử lại.");
   });

@@ -129,7 +129,11 @@ export const getReports = createServerFn({ method: "GET" })
 
     // 3. Ref data nhỏ — tải song song
     const [products, customers, branches, users, stock] = await Promise.all([
-      fetchAllRows<any>("products", { select: "id, name, sku, min_stock" }),
+      // count_in_total (v15): phụ kiện đi kèm không vào Top sản phẩm. Chưa chạy
+      // migration thì thiếu cột → đọc lại không có cột đó, không làm hỏng báo cáo.
+      fetchAllRows<any>("products", { select: "id, name, sku, min_stock, count_in_total" }).catch(() =>
+        fetchAllRows<any>("products", { select: "id, name, sku, min_stock" }),
+      ),
       fetchAllRows<any>("customers", { select: "id, name, phone, debt" }),
       fetchRows<any>("branches", { select: "id, name" }),
       fetchRows<any>("users", { select: "id, full_name" }),
@@ -176,6 +180,7 @@ export const getReports = createServerFn({ method: "GET" })
       topQty.set(item.product_id, (topQty.get(item.product_id) ?? 0) - Number(item.qty || 0));
     }
     const topProducts = [...topQty.entries()]
+      .filter(([productId]) => productMap.get(productId)?.count_in_total !== false)
       .map(([productId, qty]) => ({ name: productMap.get(productId)?.name ?? productId, qty }))
       .filter((p) => p.qty > 0)
       .sort((a, b) => b.qty - a.qty)
