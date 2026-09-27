@@ -46,7 +46,7 @@ function AuthGuard() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  const publicPaths = ["/login", "/register"];
+  const publicPaths = ["/login"];
 
   useEffect(() => {
     if (!session && !publicPaths.includes(pathname)) {

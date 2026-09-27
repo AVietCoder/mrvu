@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as RosterRouteImport } from './routes/roster'
 import { Route as ReportsRouteImport } from './routes/reports'
-import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PayrollRouteImport } from './routes/payroll'
 import { Route as LoginRouteImport } from './routes/login'
@@ -46,11 +45,6 @@ const RosterRoute = RosterRouteImport.update({
 const ReportsRoute = ReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RegisterRoute = RegisterRouteImport.update({
-  id: '/register',
-  path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductsRoute = ProductsRouteImport.update({
@@ -162,7 +156,6 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/payroll': typeof PayrollRoute
   '/products': typeof ProductsRoute
-  '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/roster': typeof RosterRoute
   '/schedule': typeof ScheduleRoute
@@ -187,7 +180,6 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/payroll': typeof PayrollRoute
   '/products': typeof ProductsRoute
-  '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/roster': typeof RosterRoute
   '/schedule': typeof ScheduleRoute
@@ -213,7 +205,6 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/payroll': typeof PayrollRoute
   '/products': typeof ProductsRoute
-  '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/roster': typeof RosterRoute
   '/schedule': typeof ScheduleRoute
@@ -240,7 +231,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/payroll'
     | '/products'
-    | '/register'
     | '/reports'
     | '/roster'
     | '/schedule'
@@ -265,7 +255,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/payroll'
     | '/products'
-    | '/register'
     | '/reports'
     | '/roster'
     | '/schedule'
@@ -290,7 +279,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/payroll'
     | '/products'
-    | '/register'
     | '/reports'
     | '/roster'
     | '/schedule'
@@ -316,7 +304,6 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PayrollRoute: typeof PayrollRoute
   ProductsRoute: typeof ProductsRoute
-  RegisterRoute: typeof RegisterRoute
   ReportsRoute: typeof ReportsRoute
   RosterRoute: typeof RosterRoute
   ScheduleRoute: typeof ScheduleRoute
@@ -350,13 +337,6 @@ declare module '@tanstack/react-router' {
       path: '/reports'
       fullPath: '/reports'
       preLoaderRoute: typeof ReportsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/register': {
-      id: '/register'
-      path: '/register'
-      fullPath: '/register'
-      preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/products': {
@@ -508,7 +488,6 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   PayrollRoute: PayrollRoute,
   ProductsRoute: ProductsRoute,
-  RegisterRoute: RegisterRoute,
   ReportsRoute: ReportsRoute,
   RosterRoute: RosterRoute,
   ScheduleRoute: ScheduleRoute,

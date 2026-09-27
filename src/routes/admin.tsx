@@ -1,4 +1,10 @@
 // @ts-nocheck
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faReceipt, faBoxesStacked, faRightLeft, faEnvelope, faScrewdriverWrench, faCakeCandles,
+  type IconDefinition,
+} from "@fortawesome/free-solid-svg-icons";
+import "@/lib/fontawesome";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -91,13 +97,13 @@ function AdminPage() {
     | "email_order"
     | "email_maintenance"
     | "email_birthday";
-  const TEMPLATE_META: Record<TplKey, { label: string; icon: string; desc: string }> = {
-    order_invoice: { label: "Hóa đơn bán hàng", icon: "🧾", desc: "In khi tạo/hoàn tất đơn hàng" },
-    import_slip:   { label: "Phiếu nhập kho",    icon: "📦", desc: "In khi nhập hàng vào kho" },
-    transfer_slip: { label: "Phiếu chuyển kho",  icon: "🔄", desc: "In khi chuyển hàng giữa kho" },
-    email_order:   { label: "Email thông báo",   icon: "✉️",  desc: "Nội dung gửi email cho khách & admin" },
-    email_maintenance: { label: "Email nhắc bảo dưỡng", icon: "🔧", desc: "Gửi từ trang Chăm sóc KH khi đơn đến hạn 6 tháng" },
-    email_birthday:    { label: "Email sinh nhật",       icon: "🎂", desc: "Gửi từ trang Chăm sóc KH cho khách sinh nhật" },
+  const TEMPLATE_META: Record<TplKey, { label: string; icon: IconDefinition; desc: string }> = {
+    order_invoice: { label: "Hóa đơn bán hàng", icon: faReceipt, desc: "In khi tạo/hoàn tất đơn hàng" },
+    import_slip:   { label: "Phiếu nhập kho",    icon: faBoxesStacked, desc: "In khi nhập hàng vào kho" },
+    transfer_slip: { label: "Phiếu chuyển kho",  icon: faRightLeft, desc: "In khi chuyển hàng giữa kho" },
+    email_order:   { label: "Email thông báo",   icon: faEnvelope, desc: "Nội dung gửi email cho khách & admin" },
+    email_maintenance: { label: "Email nhắc bảo dưỡng", icon: faScrewdriverWrench, desc: "Gửi từ trang Chăm sóc KH khi đơn đến hạn 6 tháng" },
+    email_birthday:    { label: "Email sinh nhật",       icon: faCakeCandles, desc: "Gửi từ trang Chăm sóc KH cho khách sinh nhật" },
   };
 
   /** Biến khả dụng theo TỪNG mẫu — mẫu sinh nhật không có mã đơn hàng. */
@@ -544,7 +550,7 @@ function AdminPage() {
                     ? "border-neutral-900 bg-neutral-900 text-white shadow-sm"
                     : "border-border bg-background hover:bg-muted"
                 }`}>
-                <span>{m.icon}</span>
+                <FontAwesomeIcon icon={m.icon} className="h-4 w-4" fixedWidth />
                 <span>{m.label}</span>
               </button>
             ))}
@@ -555,7 +561,10 @@ function AdminPage() {
             <div key={key} className="space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
-                  <div className="font-semibold">{TEMPLATE_META[key].icon} {TEMPLATE_META[key].label}</div>
+                  <div className="flex items-center gap-2 font-semibold">
+                    <FontAwesomeIcon icon={TEMPLATE_META[key].icon} className="h-4 w-4 text-primary" fixedWidth />
+                    {TEMPLATE_META[key].label}
+                  </div>
                   <div className="text-xs text-muted-foreground mt-0.5">{TEMPLATE_META[key].desc}</div>
                 </div>
                 <div className="flex gap-2">

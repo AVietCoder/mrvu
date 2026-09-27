@@ -2,7 +2,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   getAttendanceMonthFn,
   setAttendanceFn,
@@ -30,6 +30,7 @@ import { ScrollX } from "@/components/ScrollX";
 import { todayVN, formatDateVN } from "@/lib/date-vn";
 import {
   ChevronLeft, ChevronRight, Lock, Unlock, Wallet, Printer, Download, Loader2, ShieldOff, Wand2, Pencil,
+  CalendarCheck, Banknote, UserCog, TrendingUp, TrendingDown, CheckCircle2, AlertTriangle, Plus, Info,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -49,26 +50,33 @@ const shiftMonth = (m: string, delta: number) => {
 /** Bấm ô chấm công xoay vòng đúng các mã của file Excel. */
 const CYCLE: (string | null)[] = ["X", "N", "L", "K", null];
 const CODE_STYLE: Record<string, string> = {
-  X: "bg-green-100 text-green-800",
-  N: "bg-yellow-100 text-yellow-800",
-  L: "bg-blue-100 text-blue-800",
-  K: "bg-red-100 text-red-700",
+  X: "bg-emerald-100 text-emerald-800",
+  N: "bg-amber-100 text-amber-800",
+  L: "bg-sky-100 text-sky-800",
+  K: "bg-rose-100 text-rose-700",
 };
+const CODE_LABEL: Record<string, string> = { X: "Làm cả ngày", N: "Nửa ngày", L: "Nghỉ có lương", K: "Nghỉ không lương" };
+
+const TABS = [
+  ["attendance", "Chấm công", CalendarCheck],
+  ["payroll", "Bảng lương", Banknote],
+  ["profiles", "Hồ sơ lương", UserCog],
+] as const;
 
 function PayrollPage() {
   const { user, isAdmin } = useAuth();
   const canView = Boolean(user && (isAdmin || hasPermission(user as any, "manage_payroll")));
-  const [month, setMonth] = useState(shiftMonth(todayVN().slice(0, 7), 0));
+  const [month, setMonth] = useState(todayVN().slice(0, 7));
   const [tab, setTab] = useState<"attendance" | "payroll" | "profiles">("attendance");
   const [y, mm] = month.split("-");
 
   if (!canView) {
     return (
       <AppShell title="Bảng lương">
-        <Card className="text-center py-12">
-          <ShieldOff className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
-          <div className="font-medium">Bạn không có quyền xem bảng lương</div>
-          <div className="text-sm text-muted-foreground">Cần quyền "Chấm công & bảng lương".</div>
+        <Card className="py-12 text-center">
+          <ShieldOff className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+          <div className="text-base font-medium">Bạn không có quyền xem bảng lương</div>
+          <div className="text-sm text-muted-foreground">Cần quyền "Quản lý lương nhân sự".</div>
         </Card>
       </AppShell>
     );
@@ -77,14 +85,27 @@ function PayrollPage() {
   return (
     <AppShell title="Chấm công & Bảng lương">
       <Card className="mb-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => setMonth(shiftMonth(month, -1))}><ChevronLeft className="h-4 w-4" /></Button>
-          <div className="font-semibold min-w-[110px] text-center">Tháng {Number(mm)}/{y}</div>
-          <Button variant="outline" size="icon" onClick={() => setMonth(shiftMonth(month, 1))}><ChevronRight className="h-4 w-4" /></Button>
+        <div className="flex flex-wrap items-center gap-3">
+          {tab !== "profiles" && (
+            <div className="flex items-center gap-1.5">
+              <Button variant="outline" size="icon" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Tháng trước"><ChevronLeft className="h-4 w-4" /></Button>
+              <div className="min-w-[150px] text-center text-xl font-bold tracking-tight">Tháng {Number(mm)}/{y}</div>
+              <Button variant="outline" size="icon" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Tháng sau"><ChevronRight className="h-4 w-4" /></Button>
+              {month !== todayVN().slice(0, 7) && (
+                <Button variant="ghost" size="sm" onClick={() => setMonth(todayVN().slice(0, 7))}>Tháng này</Button>
+              )}
+            </div>
+          )}
           <div className="flex-1" />
-          <div className="flex rounded-md border overflow-hidden text-sm">
-            {[["attendance", "Chấm công"], ["payroll", "Bảng lương"], ["profiles", "Hồ sơ lương"]].map(([k, l]) => (
-              <button key={k} className={`px-3 py-1.5 ${tab === k ? "bg-primary text-primary-foreground" : ""}`} onClick={() => setTab(k as any)}>{l}</button>
+          <div className="flex w-full rounded-lg border bg-muted/40 p-1 sm:w-auto">
+            {TABS.map(([k, l, Icon]) => (
+              <button
+                key={k}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors sm:flex-none ${tab === k ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setTab(k as any)}
+              >
+                <Icon className="h-4 w-4" />{l}
+              </button>
             ))}
           </div>
         </div>
@@ -93,6 +114,17 @@ function PayrollPage() {
       {tab === "payroll" && <PayrollTab month={month} actorId={user?.id} />}
       {tab === "profiles" && <ProfilesTab actorId={user?.id} />}
     </AppShell>
+  );
+}
+
+function Loading() {
+  return <Card className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></Card>;
+}
+function EmptyPayroll() {
+  return (
+    <Card className="py-10 text-center text-base text-muted-foreground">
+      Chưa có nhân viên nào trong bảng lương. Vào tab <strong className="text-foreground">Hồ sơ lương</strong> để thêm.
+    </Card>
   );
 }
 
@@ -111,6 +143,7 @@ function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) 
   // Ghi đè lạc quan: bấm ô là đổi ngay, không chờ server.
   const [local, setLocal] = useState<Record<string, string | null>>({});
   const [filling, setFilling] = useState(false);
+  const today = todayVN();
 
   // Khoá theo TỪNG NGƯỜI (người đã chốt lương thì hàng của họ chỉ xem).
   const lockedCount = (data?.rows ?? []).filter((r: any) => r.locked).length;
@@ -122,6 +155,7 @@ function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) 
     setLocal((p) => ({ ...p, [key]: next }));
     try {
       await setFn({ data: { userId, date, code: next, actorId } });
+      qc.invalidateQueries({ queryKey: ["payroll", month] });
     } catch (e: any) {
       setLocal((p) => ({ ...p, [key]: current }));
       toast.error(e?.message ?? "Lỗi lưu chấm công");
@@ -145,14 +179,9 @@ function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) 
     }
   }
 
-  if (isLoading) return <Card className="py-10 flex justify-center"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+  if (isLoading) return <Loading />;
   if (error) return <Card className="text-sm text-destructive">{String((error as any).message)}</Card>;
-  if (!data?.rows?.length)
-    return (
-      <Card className="text-sm text-muted-foreground">
-        Chưa có nhân viên nào trong bảng lương. Vào tab <strong>Hồ sơ lương</strong> để thêm.
-      </Card>
-    );
+  if (!data?.rows?.length) return <EmptyPayroll />;
 
   const codeOf = (r: any, d: string) => {
     const k = `${r.user_id}|${d}`;
@@ -169,45 +198,69 @@ function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) 
 
   return (
     <Card className="p-0 overflow-hidden">
-      <div className="flex flex-wrap items-center gap-3 p-3 border-b text-xs">
-        {Object.entries({ X: "Làm cả ngày", N: "Nửa ngày", L: "Nghỉ có lương", K: "Nghỉ không lương" }).map(([c, l]) => (
-          <span key={c} className="flex items-center gap-1"><span className={`rounded px-1.5 font-bold ${CODE_STYLE[c]}`}>{c}</span>{l}</span>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3">
+        {Object.entries(CODE_LABEL).map(([c, l]) => (
+          <span key={c} className="flex items-center gap-1.5 text-sm">
+            <span className={`grid h-6 w-6 place-items-center rounded-md text-sm font-bold ${CODE_STYLE[c]}`}>{c}</span>{l}
+          </span>
         ))}
-        <span className="text-muted-foreground">· Bấm ô để đổi mã · Công thực tế = X + N/2 + L</span>
+        <span className="text-sm text-muted-foreground">Bấm ô để đổi mã · Công = X + N/2 + L</span>
         <div className="flex-1" />
         {lockedCount > 0 && (
-          <span className="text-orange-700 font-medium flex items-center gap-1"><Lock className="h-3.5 w-3.5" />{lockedCount} người đã chốt lương — hàng của họ chỉ xem</span>
+          <span className="flex items-center gap-1 text-sm font-medium text-orange-700"><Lock className="h-4 w-4" />{lockedCount} người đã chốt — chỉ xem</span>
         )}
         {lockedCount < (data?.rows?.length ?? 0) && (
-          <Button size="sm" variant="outline" onClick={fillAll} disabled={filling}>
-            {filling ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Wand2 className="h-4 w-4 mr-1" />}
+          <Button variant="outline" onClick={fillAll} disabled={filling}>
+            {filling ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Wand2 className="mr-1.5 h-4 w-4" />}
             Điền nhanh ô trống
           </Button>
         )}
       </div>
       <ScrollX>
-        <table className="text-xs border-collapse min-w-max">
+        <table className="min-w-max border-separate border-spacing-0 text-sm">
           <thead>
             <tr>
-              <th className="sticky left-0 z-20 bg-muted border px-2 py-1.5 text-left min-w-[170px]">Họ và tên</th>
-              {data.dates.map((d: string) => (
-                <th key={d} className={`border px-0.5 py-1 w-8 ${dow(d) === 0 ? "bg-amber-50" : "bg-muted"}`}>
-                  <div>{Number(d.slice(8))}</div>
-                  <div className="text-muted-foreground font-normal">{WD[dow(d)]}</div>
+              <th className="sticky left-0 z-20 min-w-[230px] border-b border-r bg-slate-50 px-4 py-2 text-left font-semibold text-slate-600">
+                Nhân viên <span className="font-normal text-muted-foreground">· công / chuẩn</span>
+              </th>
+              {data.dates.map((d: string) => {
+                const isToday = d === today;
+                const isSun = dow(d) === 0;
+                return (
+                  <th key={d} className={`w-10 border-b border-r px-0 py-1.5 text-center ${isToday ? "bg-amber-100" : isSun ? "bg-rose-50" : "bg-slate-50"}`}>
+                    <div className={`text-sm font-bold ${isToday ? "text-amber-900" : isSun ? "text-rose-700" : "text-slate-800"}`}>{Number(d.slice(8))}</div>
+                    <div className={`text-[11px] font-medium ${isSun ? "text-rose-500" : "text-slate-400"}`}>{WD[dow(d)]}</div>
+                  </th>
+                );
+              })}
+              {["X", "N", "L", "K"].map((c) => (
+                <th key={c} className="w-11 border-b border-r bg-slate-50 text-center">
+                  <span className={`inline-grid h-6 w-6 place-items-center rounded-md text-xs font-bold ${CODE_STYLE[c]}`}>{c}</span>
                 </th>
               ))}
-              {["X", "N", "L", "K"].map((c) => <th key={c} className="border px-1.5 bg-muted">{c}</th>)}
-              <th className="border px-2 bg-muted">Công</th>
             </tr>
           </thead>
           <tbody>
             {data.rows.map((r: any) => {
               const t = totals(r);
+              const std = Number(r.standard_days) || 26;
               return (
-                <tr key={r.user_id}>
-                  <td className="sticky left-0 z-10 bg-background border px-2 py-1">
-                    <div className="font-medium">{r.full_name}</div>
-                    {r.position && <div className="text-muted-foreground">{r.position}</div>}
+                <tr key={r.user_id} className="group">
+                  <td className="sticky left-0 z-10 border-b border-r bg-background px-4 py-2 group-hover:bg-slate-50">
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 font-semibold text-slate-800">
+                          <span className="truncate">{r.full_name}</span>
+                          {r.locked && <Lock className="h-3.5 w-3.5 shrink-0 text-orange-600" title="Đã chốt lương" />}
+                        </div>
+                        {r.position && <div className="text-xs text-muted-foreground">{r.position}</div>}
+                      </div>
+                      {/* Số công đặt ngay cạnh tên để không bị khuất bên phải khi lưới dài. */}
+                      <div className={`shrink-0 rounded-lg px-2.5 py-1 text-right tabular-nums ${t.worked >= std ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-800"}`}>
+                        <span className="text-lg font-bold">{t.worked}</span>
+                        <span className="text-xs text-muted-foreground">/{std}</span>
+                      </div>
+                    </div>
                   </td>
                   {data.dates.map((d: string) => {
                     const c = codeOf(r, d);
@@ -215,18 +268,16 @@ function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) 
                       <td
                         key={d}
                         onClick={() => cycle(r.user_id, d, c, r.locked)}
-                        title={r.notes?.[d] ?? ""}
-                        className={`border text-center font-bold select-none ${r.locked ? "opacity-70" : "cursor-pointer hover:ring-1 hover:ring-primary"} ${c ? CODE_STYLE[c] : dow(d) === 0 ? "bg-amber-50/60" : ""}`}
+                        title={`${CODE_LABEL[c] ?? "Chưa chấm"}${r.notes?.[d] ? ` — ${r.notes[d]}` : ""}`}
+                        className={`h-12 select-none border-b border-r p-1 text-center ${d === today ? "bg-amber-50" : dow(d) === 0 ? "bg-rose-50/50" : ""} ${r.locked ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:bg-primary/5"}`}
                       >
-                        {c ?? ""}
+                        {c && <span className={`inline-grid h-8 w-8 place-items-center rounded-md text-sm font-bold ${CODE_STYLE[c]}`}>{c}</span>}
                       </td>
                     );
                   })}
-                  <td className="border text-center">{t.X || ""}</td>
-                  <td className="border text-center">{t.N || ""}</td>
-                  <td className="border text-center">{t.L || ""}</td>
-                  <td className="border text-center">{t.K || ""}</td>
-                  <td className="border text-center font-bold px-2">{t.worked}<span className="text-muted-foreground font-normal">/{r.standard_days}</span></td>
+                  {(["X", "N", "L", "K"] as const).map((c) => (
+                    <td key={c} className="border-b border-r text-center font-semibold tabular-nums text-slate-700">{t[c] || ""}</td>
+                  ))}
                 </tr>
               );
             })}
@@ -240,16 +291,17 @@ function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) 
 // ═══════════════════════════════════════════════════════════════════════════
 // Bảng lương
 // ═══════════════════════════════════════════════════════════════════════════
-function MoneyInput({ value, disabled, onSave, width = "w-24", decimals = false }: any) {
+function MoneyInput({ value, disabled, onSave, width = "w-28", decimals = false, placeholder = "0" }: any) {
   const [v, setV] = useState<string | null>(null);
-  const shown = v ?? (value ? String(value) : "");
+  const shown = v ?? (value ? (decimals ? String(value) : money(value)) : "");
   return (
     <input
-      className={`h-7 ${width} rounded border border-input bg-background px-1.5 text-right text-xs disabled:bg-transparent disabled:border-transparent`}
+      className={`h-9 ${width} rounded-md border border-input bg-background px-2 text-right text-sm tabular-nums focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:border-transparent disabled:bg-transparent`}
       inputMode="decimal"
       disabled={disabled}
       value={shown}
-      placeholder="0"
+      placeholder={placeholder}
+      onFocus={() => setV(value ? String(value) : "")}
       onChange={(e) => setV(e.target.value.replace(decimals ? /[^\d.,]/g : /[^\d]/g, ""))}
       onBlur={() => {
         if (v === null) return;
@@ -259,6 +311,25 @@ function MoneyInput({ value, disabled, onSave, width = "w-24", decimals = false 
       }}
       onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
     />
+  );
+}
+
+function Stat({ label, value, sub, icon: Icon, tone = "slate" }: any) {
+  const tones: Record<string, string> = {
+    slate: "bg-slate-100 text-slate-700",
+    green: "bg-emerald-100 text-emerald-700",
+    red: "bg-rose-100 text-rose-700",
+    brand: "bg-primary/10 text-primary",
+  };
+  return (
+    <Card className="flex items-start gap-3">
+      <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${tones[tone]}`}><Icon className="h-5 w-5" /></div>
+      <div className="min-w-0">
+        <div className="text-sm text-muted-foreground">{label}</div>
+        <div className="truncate text-2xl font-bold tabular-nums tracking-tight">{value}</div>
+        {sub && <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>}
+      </div>
+    </Card>
   );
 }
 
@@ -316,12 +387,13 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
   const s = data?.summary;
   const siteName = settings?.site_name?.trim() || "MR*VU";
 
-  if (isLoading) return <Card className="py-10 flex justify-center"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+  if (isLoading) return <Loading />;
   if (error) return <Card className="text-sm text-destructive">{String((error as any).message)}</Card>;
 
   const draftCount = rows.filter((r) => !r.locked).length;
   const lockedUnpaid = rows.filter((r) => r.locked && !r.cash_voucher_id);
   const paidCount = s?.paid ?? 0;
+  const sum = (k: string) => rows.reduce((a, r) => a + Number(r[k] || 0), 0);
 
   async function lockRows(userIds?: string[]) {
     const who = userIds?.length === 1 ? rows.find((r) => r.user_id === userIds[0])?.full_name : `${draftCount} người chưa chốt`;
@@ -340,179 +412,215 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
     });
   }
 
+  // Ô tiêu đề / ô dữ liệu dùng chung để bảng đều nhau
+  const TH = "border-b border-r px-3 py-2 text-[13px] font-semibold whitespace-nowrap";
+  const TD = "border-b border-r px-3 py-2.5 text-right tabular-nums whitespace-nowrap";
+  const linkBtn = "font-medium text-primary underline decoration-dotted underline-offset-4 hover:decoration-solid";
+
   return (
     <>
+      {/* ── Tổng quan ── */}
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Tổng thu nhập" value={`${money(s?.gross)}đ`} sub={`${rows.length} nhân viên`} icon={TrendingUp} tone="green" />
+        <Stat label="Tổng khấu trừ" value={`${money(s?.deductions)}đ`} sub="Tạm ứng lương, BHXH, công đoàn, trừ khác" icon={TrendingDown} tone="red" />
+        <Stat
+          label="Tổng chi (thực lĩnh)"
+          value={`${money(s?.payout ?? s?.net)}đ`}
+          sub={s?.negative > 0 ? <span className="text-rose-600">{s.negative} người thực lĩnh âm — không chi</span> : "Chỉ cộng người thực lĩnh > 0"}
+          icon={Wallet}
+          tone="brand"
+        />
+        <Card>
+          <div className="mb-2 text-sm text-muted-foreground">Trạng thái</div>
+          <div className="space-y-1.5 text-sm">
+            <div className="flex items-center justify-between"><span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-slate-400" />Chưa chốt</span><strong className="tabular-nums">{draftCount}</strong></div>
+            <div className="flex items-center justify-between"><span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-orange-500" />Đã chốt, chưa chi</span><strong className="tabular-nums">{lockedUnpaid.length}</strong></div>
+            <div className="flex items-center justify-between"><span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Đã chi</span><strong className="tabular-nums">{paidCount}</strong></div>
+          </div>
+        </Card>
+      </div>
+
+      {/* ── Thao tác ── */}
       <Card className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <span className="rounded bg-muted px-2 py-1">{draftCount} chưa chốt</span>
-            <span className="rounded bg-orange-100 text-orange-800 px-2 py-1">{lockedUnpaid.length} đã chốt, chưa chi</span>
-            <span className="rounded bg-green-100 text-green-800 px-2 py-1">{paidCount} đã chi</span>
-          </div>
-          <span className="text-sm text-muted-foreground">
-            Tổng chi <strong className="text-foreground">{money(s?.payout ?? s?.net)}đ</strong>
-            {s?.negative > 0 && (
-              <span className="ml-2 text-red-600" title="Khấu trừ (tạm ứng lương, BHXH…) lớn hơn thu nhập — không chi, phần âm là số NV còn nợ">
-                · {s.negative} người thực lĩnh âm
-              </span>
-            )}
-          </span>
-          <div className="flex-1" />
           {draftCount > 0 && (
             <Button onClick={() => lockRows()} disabled={!!busy}>
-              {busy === "lock" ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Lock className="h-4 w-4 mr-1" />}Chốt lương ({draftCount})
-            </Button>
-          )}
-          {lockedUnpaid.length > 0 && (
-            <Button variant="outline" onClick={() => unlockRows()} disabled={!!busy}>
-              <Unlock className="h-4 w-4 mr-1" />Mở lại ({lockedUnpaid.length})
+              {busy === "lock" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Lock className="mr-1.5 h-4 w-4" />}Chốt lương ({draftCount})
             </Button>
           )}
           {lockedUnpaid.length > 0 && (
             <Button onClick={() => { setPayResult(null); setPayOpen(true); }} disabled={!!busy}>
-              <Wallet className="h-4 w-4 mr-1" />Chi lương qua Sổ quỹ
+              <Wallet className="mr-1.5 h-4 w-4" />Chi lương qua Sổ quỹ
             </Button>
           )}
+          {lockedUnpaid.length > 0 && (
+            <Button variant="outline" onClick={() => unlockRows()} disabled={!!busy}>
+              <Unlock className="mr-1.5 h-4 w-4" />Mở lại ({lockedUnpaid.length})
+            </Button>
+          )}
+          <div className="flex-1" />
           <Button variant="outline" onClick={() => printPayslips(rows, month, siteName)} disabled={!rows.length}>
-            <Printer className="h-4 w-4 mr-1" />In phiếu lương
+            <Printer className="mr-1.5 h-4 w-4" />In phiếu lương
           </Button>
           <Button variant="outline" onClick={() => exportPayrollExcel({ month, rows }).catch((e) => toast.error(e?.message))} disabled={!rows.length}>
-            <Download className="h-4 w-4 mr-1" />Excel
+            <Download className="mr-1.5 h-4 w-4" />Xuất Excel
           </Button>
         </div>
-        {!data?.scopeAll && (
-          <div className="text-xs text-muted-foreground mt-2">
-            Bạn đang xem nhân viên thuộc các chi nhánh mình được gán. Chốt / mở lại / chi lương chỉ áp dụng cho những người này.
+        {(!data?.scopeAll || data?.hasSalaryVoucherType === false) && (
+          <div className="mt-3 space-y-1 text-sm">
+            {!data?.scopeAll && (
+              <div className="flex items-start gap-1.5 text-muted-foreground">
+                <Info className="mt-0.5 h-4 w-4 shrink-0" />Bạn đang xem nhân viên thuộc các chi nhánh mình được gán. Chốt / mở lại / chi lương chỉ áp dụng cho những người này.
+              </div>
+            )}
+            {data?.hasSalaryVoucherType === false && (
+              <div className="flex items-start gap-1.5 text-orange-700">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />Sổ quỹ chưa có loại phiếu chi "Chi Lương" — cần tạo trước khi chi lương.
+              </div>
+            )}
           </div>
-        )}
-        {data?.hasSalaryVoucherType === false && (
-          <div className="text-xs text-orange-700 mt-2">Sổ quỹ chưa có loại phiếu chi "Chi Lương" — cần tạo trước khi chi lương.</div>
         )}
       </Card>
 
       {!rows.length ? (
-        <Card className="text-sm text-muted-foreground">Chưa có nhân viên nào trong bảng lương. Vào tab <strong>Hồ sơ lương</strong> để thêm.</Card>
+        <EmptyPayroll />
       ) : (
         <Card className="p-0 overflow-hidden">
           <ScrollX>
-            <table className="text-xs border-collapse min-w-max">
+            <table className="min-w-max border-separate border-spacing-0 text-sm">
               <thead>
-                <tr className="bg-muted">
-                  <th className="border px-2 py-1" rowSpan={2}>STT</th>
-                  <th className="sticky left-0 z-20 bg-muted border px-2 py-1 text-left min-w-[160px]" rowSpan={2}>Tên NV</th>
-                  <th className="border px-2" colSpan={4}>Lương & thời gian làm việc</th>
-                  <th className="border px-2" colSpan={6}>Phụ cấp / thu nhập thêm</th>
-                  <th className="border px-2" colSpan={4}>Khấu trừ</th>
-                  <th className="sticky right-0 z-20 bg-muted border px-3 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.2)]" rowSpan={2}>Thực lĩnh</th>
+                <tr>
+                  <th rowSpan={2} className={`${TH} sticky left-0 z-20 min-w-[250px] bg-slate-50 text-left text-slate-600`}>Nhân viên</th>
+                  <th colSpan={4} className={`${TH} bg-slate-100 text-center text-slate-700`}>Lương & ngày công</th>
+                  <th colSpan={6} className={`${TH} bg-emerald-50 text-center text-emerald-800`}>Thu nhập thêm</th>
+                  <th colSpan={4} className={`${TH} bg-rose-50 text-center text-rose-800`}>Khấu trừ</th>
+                  <th rowSpan={2} className={`${TH} sticky right-0 z-20 min-w-[140px] bg-primary/10 text-right text-primary shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.25)]`}>Thực lĩnh</th>
                 </tr>
-                <tr className="bg-muted">
-                  {["Lương CB", "Công chuẩn", "Công TT", "Lương TN", "DS kỹ thuật", "Hoa hồng", "Tăng ca (giờ ×1,5 / ×2)", "Xăng xe tỉnh", "Thưởng", "Phụ cấp", "Tạm ứng", "BHXH", "Công đoàn", "Trừ khác"].map((h) => (
-                    <th key={h} className="border px-2 py-1 font-medium whitespace-nowrap">{h}</th>
+                <tr>
+                  {[
+                    ["Lương CB", "bg-slate-50"], ["Công", "bg-slate-50"], ["Chuẩn", "bg-slate-50"], ["Lương TN", "bg-slate-50"],
+                    ["DS kỹ thuật", "bg-emerald-50/60"], ["Hoa hồng", "bg-emerald-50/60"], ["Tăng ca (giờ ×1,5 · ×2)", "bg-emerald-50/60"],
+                    ["Xăng xe tỉnh", "bg-emerald-50/60"], ["Thưởng", "bg-emerald-50/60"], ["Phụ cấp", "bg-emerald-50/60"],
+                    ["Tạm ứng", "bg-rose-50/60"], ["BHXH", "bg-rose-50/60"], ["Công đoàn", "bg-rose-50/60"], ["Trừ khác", "bg-rose-50/60"],
+                  ].map(([h, bg]) => (
+                    <th key={h} className={`${TH} ${bg} text-right font-medium text-slate-600`}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r: any, i: number) => (
-                  <tr key={r.user_id} className="hover:bg-muted/30">
-                    <td className="border px-2 text-center">{i + 1}</td>
-                    <td className="sticky left-0 z-10 bg-background border px-2 py-1">
-                      <div className="flex items-start gap-1">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium flex items-center gap-1">
-                            {r.full_name}
-                            {r.locked && <Lock className="h-3 w-3 text-orange-600" title="Đã chốt" />}
+                {rows.map((r: any) => {
+                  const paid = r.cash_voucher_id && !String(r.cash_voucher_id).startsWith("pending:");
+                  return (
+                    <tr key={r.user_id} className="group">
+                      <td className="sticky left-0 z-10 border-b border-r bg-background px-3 py-2.5 group-hover:bg-slate-50">
+                        <div className="flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 font-semibold text-slate-800">
+                              <span className="truncate">{r.full_name}</span>
+                            </div>
+                            <div className="mt-0.5 flex items-center gap-1.5 text-xs">
+                              <span className="text-muted-foreground">{r.position}</span>
+                              {paid ? (
+                                <span className="rounded-full bg-emerald-100 px-2 py-px font-medium text-emerald-700">Đã chi</span>
+                              ) : r.locked ? (
+                                <span className="rounded-full bg-orange-100 px-2 py-px font-medium text-orange-700">Đã chốt</span>
+                              ) : (
+                                <span className="rounded-full bg-slate-100 px-2 py-px font-medium text-slate-600">Nháp</span>
+                              )}
+                            </div>
                           </div>
-                          <div className="text-muted-foreground">{r.position}</div>
-                        </div>
-                        {/* Thao tác nằm trong cột tên (dính trái) để luôn bấm được, không phải cuộn sang phải. */}
-                        <div className="flex shrink-0 items-center">
-                          {!r.locked ? (
-                            <>
-                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Ghi chú xăng xe / phụ cấp / trừ khác, ghi đè hoa hồng" onClick={() => setDetail({ kind: "notes", row: r })}>
-                                <Pencil className="h-3.5 w-3.5" />
+                          {/* Thao tác nằm trong cột tên (dính trái) để luôn bấm được, không phải cuộn sang phải. */}
+                          <div className="flex shrink-0 items-center">
+                            {!r.locked ? (
+                              <>
+                                <Button size="icon" variant="ghost" className="h-8 w-8" title="Ghi chú xăng xe / phụ cấp / trừ khác, ghi đè hoa hồng" onClick={() => setDetail({ kind: "notes", row: r })}>
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-8 w-8" title="Chốt lương riêng người này" disabled={!!busy} onClick={() => lockRows([r.user_id])}>
+                                  <Lock className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : !r.cash_voucher_id ? (
+                              <Button size="icon" variant="ghost" className="h-8 w-8" title="Mở lại để sửa" disabled={!!busy} onClick={() => unlockRows([r.user_id])}>
+                                <Unlock className="h-4 w-4 text-orange-600" />
                               </Button>
-                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Chốt lương riêng người này" disabled={!!busy} onClick={() => lockRows([r.user_id])}>
-                                <Lock className="h-3.5 w-3.5" />
-                              </Button>
-                            </>
-                          ) : !r.cash_voucher_id ? (
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Mở lại để sửa" disabled={!!busy} onClick={() => unlockRows([r.user_id])}>
-                              <Unlock className="h-3.5 w-3.5 text-orange-600" />
-                            </Button>
-                          ) : null}
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="In phiếu lương" onClick={() => printPayslips([r], month, siteName)}><Printer className="h-3.5 w-3.5" /></Button>
+                            ) : null}
+                            <Button size="icon" variant="ghost" className="h-8 w-8" title="In phiếu lương" onClick={() => printPayslips([r], month, siteName)}><Printer className="h-4 w-4" /></Button>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="border px-2 text-right">{money(r.base_salary)}</td>
-                    <td className="border px-2 text-center">{r.standard_days}</td>
-                    <td className="border px-2 text-center font-medium">
-                      {r.worked_days}
-                      {r.no_attendance && !r.locked && (
-                        <div className="text-[10px] font-normal text-orange-600 whitespace-nowrap" title="Tháng này chưa chấm công ngày nào — sang tab Chấm công. Chưa trừ BHXH/công đoàn.">chưa chấm</div>
-                      )}
-                    </td>
-                    <td className="border px-2 text-right">{money(r.salary_by_days)}</td>
-                    <td className="border px-2 text-right">
-                      {r.tech_enabled || r.snapshot ? (
-                        <button className="underline decoration-dotted hover:text-primary" disabled={r.snapshot} onClick={() => setDetail({ kind: "tech", row: r })}>{money(r.tech_revenue)}</button>
-                      ) : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="border px-2 text-right">
-                      {r.commission_rate > 0 && !r.snapshot ? (
-                        <div className="flex items-center gap-1 justify-end">
-                          <button className="underline decoration-dotted hover:text-primary" onClick={() => setDetail({ kind: "commission", row: r })}>
-                            {money(r.commission)}{r.commission_override !== null && <span className="text-orange-600">*</span>}
+                      </td>
+                      <td className={TD}>{money(r.base_salary)}</td>
+                      <td className={`${TD} text-center`}>
+                        <span className="font-semibold">{r.worked_days}</span>
+                        {r.no_attendance && !r.locked && (
+                          <div className="text-[11px] font-medium text-orange-600" title="Tháng này chưa chấm công ngày nào — sang tab Chấm công. Chưa trừ BHXH/công đoàn.">chưa chấm</div>
+                        )}
+                      </td>
+                      <td className={`${TD} text-center text-muted-foreground`}>{r.standard_days}</td>
+                      <td className={`${TD} font-medium`}>{money(r.salary_by_days)}</td>
+                      <td className={TD}>
+                        {r.tech_enabled || r.snapshot ? (
+                          r.snapshot ? money(r.tech_revenue) : <button className={linkBtn} onClick={() => setDetail({ kind: "tech", row: r })}>{money(r.tech_revenue)}</button>
+                        ) : <span className="text-muted-foreground/60">—</span>}
+                      </td>
+                      <td className={TD}>
+                        {r.commission_rate > 0 && !r.snapshot ? (
+                          <button className={linkBtn} onClick={() => setDetail({ kind: "commission", row: r })}>
+                            {money(r.commission)}{r.commission_override !== null && <span className="text-orange-600" title="Đã ghi đè">*</span>}
                           </button>
+                        ) : r.commission ? money(r.commission) : <span className="text-muted-foreground/60">—</span>}
+                      </td>
+                      <td className={`${TD} px-2`}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <MoneyInput value={r.ot_hours_15} width="w-14" decimals placeholder="giờ" disabled={r.locked} onSave={(n: number) => save(r.user_id, { ot_hours_15: n })} />
+                          <MoneyInput value={r.ot_hours_20} width="w-14" decimals placeholder="giờ" disabled={r.locked} onSave={(n: number) => save(r.user_id, { ot_hours_20: n })} />
+                          <span className="w-24 text-right font-medium">{money(r.overtime_amount)}</span>
                         </div>
-                      ) : r.commission ? money(r.commission) : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="border px-1">
-                      <div className="flex items-center gap-1 justify-end">
-                        <MoneyInput value={r.ot_hours_15} width="w-11" decimals disabled={r.locked} onSave={(n: number) => save(r.user_id, { ot_hours_15: n })} />
-                        <MoneyInput value={r.ot_hours_20} width="w-11" decimals disabled={r.locked} onSave={(n: number) => save(r.user_id, { ot_hours_20: n })} />
-                        <span className="w-20 text-right">{money(r.overtime_amount)}</span>
-                      </div>
-                    </td>
-                    <td className="border px-1" title={r.travel_note}>
-                      <MoneyInput value={r.travel_allowance} disabled={r.locked} onSave={(n: number) => save(r.user_id, { travel_allowance: n })} />
-                    </td>
-                    <td className="border px-1"><MoneyInput value={r.bonus} disabled={r.locked} onSave={(n: number) => save(r.user_id, { bonus: n })} /></td>
-                    <td className="border px-1" title={r.extra_note}><MoneyInput value={r.extra_allowance} disabled={r.locked} onSave={(n: number) => save(r.user_id, { extra_allowance: n })} /></td>
-                    <td className="border px-2 text-right">
-                      {r.advance && !r.snapshot ? (
-                        <button className="underline decoration-dotted hover:text-primary" onClick={() => setDetail({ kind: "advance", row: r })}>{money(r.advance)}</button>
-                      ) : money(r.advance)}
-                    </td>
-                    <td className="border px-2 text-right">{money(r.social_insurance)}</td>
-                    <td className="border px-2 text-right">{money(r.union_fee)}</td>
-                    <td className="border px-1" title={r.other_note}><MoneyInput value={r.other_deduction} disabled={r.locked} onSave={(n: number) => save(r.user_id, { other_deduction: n })} /></td>
-                    <td
-                      className={`sticky right-0 z-10 bg-background border px-3 text-right font-bold text-base whitespace-nowrap shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.2)] ${r.net_pay < 0 ? "text-red-600" : ""}`}
-                      title={r.net_pay < 0 ? "Khấu trừ lớn hơn thu nhập — không chi lương, NV còn nợ số này" : undefined}
-                    >
-                      {money(r.net_pay)}
-                      {r.cash_voucher_id && !String(r.cash_voucher_id).startsWith("pending:") && <div className="text-[10px] font-normal text-green-700">đã chi</div>}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className={`${TD} px-2`} title={r.travel_note}>
+                        <MoneyInput value={r.travel_allowance} disabled={r.locked} onSave={(n: number) => save(r.user_id, { travel_allowance: n })} />
+                      </td>
+                      <td className={`${TD} px-2`}><MoneyInput value={r.bonus} disabled={r.locked} onSave={(n: number) => save(r.user_id, { bonus: n })} /></td>
+                      <td className={`${TD} px-2`} title={r.extra_note}><MoneyInput value={r.extra_allowance} disabled={r.locked} onSave={(n: number) => save(r.user_id, { extra_allowance: n })} /></td>
+                      <td className={TD}>
+                        {r.advance && !r.snapshot ? (
+                          <button className={linkBtn} onClick={() => setDetail({ kind: "advance", row: r })}>{money(r.advance)}</button>
+                        ) : money(r.advance)}
+                      </td>
+                      <td className={TD}>{money(r.social_insurance)}</td>
+                      <td className={TD}>{money(r.union_fee)}</td>
+                      <td className={`${TD} px-2`} title={r.other_note}><MoneyInput value={r.other_deduction} disabled={r.locked} onSave={(n: number) => save(r.user_id, { other_deduction: n })} /></td>
+                      <td
+                        className={`sticky right-0 z-10 border-b bg-background px-4 py-2.5 text-right text-lg font-bold tabular-nums whitespace-nowrap shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.25)] group-hover:bg-slate-50 ${r.net_pay < 0 ? "text-rose-600" : "text-slate-900"}`}
+                        title={r.net_pay < 0 ? "Khấu trừ lớn hơn thu nhập — không chi lương, NV còn nợ số này" : undefined}
+                      >
+                        {money(r.net_pay)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
-                <tr className="bg-muted font-bold">
-                  <td className="border px-2" colSpan={5}>TỔNG CHI</td>
+                <tr className="font-bold">
+                  <td className="sticky left-0 z-10 border-r bg-slate-100 px-3 py-3 text-left">TỔNG CỘNG</td>
+                  <td className="border-r bg-slate-100" colSpan={3} />
                   {["salary_by_days", "tech_revenue", "commission", "overtime_amount", "travel_allowance", "bonus", "extra_allowance", "advance", "social_insurance", "union_fee", "other_deduction"].map((k) => (
-                    <td key={k} className="border px-2 text-right">{money(rows.reduce((s2, r) => s2 + Number(r[k] || 0), 0))}</td>
+                    <td key={k} className="border-r bg-slate-100 px-3 py-3 text-right tabular-nums">{money(sum(k))}</td>
                   ))}
-                  <td className="sticky right-0 z-10 bg-muted border px-3 text-right shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.2)]" title="Tổng thực lĩnh (kể cả người âm)">{money(rows.reduce((s2, r) => s2 + Number(r.net_pay || 0), 0))}</td>
+                  <td className="sticky right-0 z-10 bg-primary/10 px-4 py-3 text-right text-lg tabular-nums text-primary shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.25)]" title="Tổng thực lĩnh (kể cả người âm)">
+                    {money(sum("net_pay"))}
+                  </td>
                 </tr>
               </tfoot>
             </table>
           </ScrollX>
-          <div className="px-3 py-2 text-xs text-muted-foreground border-t">
-            Lương TN = Lương CB / công chuẩn × công thực tế · Tăng ca = Lương CB / công chuẩn / 8 × giờ × 1,5 (hoặc × 2) ·
-            DS kỹ thuật chỉ tính lịch đã hoàn thành · Tạm ứng = phiếu chi "Chi tạm ứng lương" trong Sổ quỹ (phiếu "Tạm ứng" công tác không trừ lương) · Tháng chưa chấm công thì chưa trừ BHXH/công đoàn · Kéo chuột hoặc bấm mũi tên để xem cột bên phải ·
-            {isFetching ? " đang cập nhật…" : " "}
-            <button className="underline" onClick={() => refetch()}>tải lại</button>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t bg-slate-50/60 px-4 py-3 text-[13px] text-muted-foreground">
+            <span><strong className="text-slate-600">Lương TN</strong> = Lương CB ÷ công chuẩn × công</span>
+            <span><strong className="text-slate-600">Tăng ca</strong> = Lương CB ÷ công chuẩn ÷ 8 × giờ × 1,5 (hoặc × 2)</span>
+            <span><strong className="text-slate-600">DS kỹ thuật</strong>: chỉ lịch đã hoàn thành</span>
+            <span><strong className="text-slate-600">Tạm ứng</strong>: phiếu "Chi tạm ứng lương" (tạm ứng công tác không trừ)</span>
+            <span>Chưa chấm công thì chưa trừ BHXH/công đoàn</span>
+            <button className="ml-auto underline" onClick={() => refetch()}>{isFetching ? "đang cập nhật…" : "tải lại"}</button>
           </div>
         </Card>
       )}
@@ -531,26 +639,27 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Chi lương tháng {month}</DialogTitle>
+            <DialogTitle className="text-lg">Chi lương tháng {month}</DialogTitle>
             <DialogDescription>
               Tạo 1 phiếu chi "Chi Lương" trong Sổ quỹ cho mỗi người chưa được chi. Bấm lại sẽ bỏ qua người đã chi — không tạo phiếu trùng.
             </DialogDescription>
           </DialogHeader>
           {payResult ? (
-            <div className="space-y-1 text-sm max-h-[50vh] overflow-y-auto">
+            <div className="max-h-[50vh] space-y-1.5 overflow-y-auto text-sm">
               {payResult.length === 0 && <div className="text-muted-foreground">Không còn ai cần chi.</div>}
               {payResult.map((r) => (
-                <div key={r.user_id} className={r.ok ? "" : "text-destructive"}>
-                  {r.ok ? "✓" : "✗"} {r.name} — {r.ok ? `${r.code} · ${money(r.amount)}đ` : r.reason}
+                <div key={r.user_id} className={`flex items-center gap-2 ${r.ok ? "" : "text-destructive"}`}>
+                  {r.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertTriangle className="h-4 w-4" />}
+                  {r.name} — {r.ok ? `${r.code} · ${money(r.amount)}đ` : r.reason}
                 </div>
               ))}
-              <Button className="w-full mt-2" onClick={() => setPayOpen(false)}>Đóng</Button>
+              <Button className="mt-2 w-full" onClick={() => setPayOpen(false)}>Đóng</Button>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div>
-                <Label className="text-xs">Chi từ chi nhánh / quỹ *</Label>
-                <select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm" value={payBranch} onChange={(e) => setPayBranch(e.target.value)}>
+                <Label>Chi từ chi nhánh / quỹ *</Label>
+                <select className="mt-1.5 h-10 w-full rounded-md border bg-background px-3 text-sm" value={payBranch} onChange={(e) => setPayBranch(e.target.value)}>
                   <option value="">— Chọn —</option>
                   {(opts?.branches ?? [])
                     .filter((b: any) => data?.scopeAll || (data?.scopeBranchIds ?? []).includes(b.id))
@@ -558,16 +667,16 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
                 </select>
               </div>
               <div>
-                <Label className="text-xs">Hình thức</Label>
-                <div className="flex gap-3 mt-1 text-sm">
-                  <label className="flex items-center gap-1"><input type="radio" checked={payFund === "ngan_hang"} onChange={() => setPayFund("ngan_hang")} />Chuyển khoản</label>
-                  <label className="flex items-center gap-1"><input type="radio" checked={payFund === "tien_mat"} onChange={() => setPayFund("tien_mat")} />Tiền mặt</label>
+                <Label>Hình thức</Label>
+                <div className="mt-1.5 flex gap-4 text-sm">
+                  <label className="flex items-center gap-1.5"><input type="radio" checked={payFund === "ngan_hang"} onChange={() => setPayFund("ngan_hang")} />Chuyển khoản</label>
+                  <label className="flex items-center gap-1.5"><input type="radio" checked={payFund === "tien_mat"} onChange={() => setPayFund("tien_mat")} />Tiền mặt</label>
                 </div>
               </div>
-              <div className="rounded bg-muted/50 p-2 text-sm">
+              <div className="rounded-lg bg-muted/60 p-3 text-sm">
                 Sẽ chi cho <strong>{lockedUnpaid.filter((r) => r.net_pay > 0).length}</strong> người đã chốt, tổng{" "}
-                <strong>{money(lockedUnpaid.filter((r) => r.net_pay > 0).reduce((a, r) => a + r.net_pay, 0))}đ</strong>
-                {draftCount > 0 && <div className="text-xs text-orange-700 mt-1">{draftCount} người chưa chốt sẽ không được chi.</div>}
+                <strong className="text-base">{money(lockedUnpaid.filter((r) => r.net_pay > 0).reduce((a, r) => a + r.net_pay, 0))}đ</strong>
+                {draftCount > 0 && <div className="mt-1 text-orange-700">{draftCount} người chưa chốt sẽ không được chi.</div>}
               </div>
               <Button
                 className="w-full"
@@ -581,7 +690,7 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
                   })
                 }
               >
-                {busy === "pay" && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}Tạo phiếu chi
+                {busy === "pay" && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}Tạo phiếu chi
               </Button>
             </div>
           )}
@@ -596,43 +705,47 @@ function DetailDialog({ detail, onClose, onSave }: any) {
   const [notes, setNotes] = useState<any>({});
   const open = Boolean(detail);
   const k = detail?.kind;
+  const TBL = "w-full text-sm";
+  const HEAD = "border-b text-left text-muted-foreground [&_th]:py-2 [&_th]:font-medium";
+  const ROW = "border-b last:border-0 [&_td]:py-2";
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) { onClose(); setNotes({}); } }}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
         {r && (
           <>
             <DialogHeader>
-              <DialogTitle>
+              <DialogTitle className="text-lg">
                 {k === "tech" && `Lương doanh số — ${r.full_name}`}
                 {k === "commission" && `Hoa hồng — ${r.full_name}`}
-                {k === "advance" && `Tạm ứng — ${r.full_name}`}
+                {k === "advance" && `Tạm ứng lương — ${r.full_name}`}
                 {k === "notes" && `Ghi chú & điều chỉnh — ${r.full_name}`}
               </DialogTitle>
               {k === "commission" && (
                 <DialogDescription>
-                  {r.commission_rate}% × doanh thu đơn hoàn tất trong tháng của nhóm khách "{r.commission_group}" = {money(r.commission_base)}đ × {r.commission_rate}% = {money(r.commission_auto)}đ
+                  {r.commission_rate}% × doanh thu đơn hoàn tất trong tháng của nhóm khách "{r.commission_group}" = {money(r.commission_base)}đ × {r.commission_rate}% = <strong>{money(r.commission_auto)}đ</strong>
                 </DialogDescription>
               )}
+              {k === "tech" && <DialogDescription>Tổng: <strong>{money(r.tech_revenue)}đ</strong> từ {(r.tech_lines ?? []).length} lịch đã hoàn thành.</DialogDescription>}
             </DialogHeader>
 
             {k === "tech" && (
-              <table className="w-full text-xs">
-                <thead className="text-left text-muted-foreground border-b">
-                  <tr><th className="py-1">Ngày</th><th>Công việc</th><th>Loại / phụ phí</th><th className="text-right">Số người</th><th className="text-right">Phần của NV</th></tr>
+              <table className={TBL}>
+                <thead className={HEAD}>
+                  <tr><th>Ngày</th><th>Công việc</th><th>Loại / phụ phí</th><th className="text-right">Số người</th><th className="text-right">Phần của NV</th></tr>
                 </thead>
                 <tbody>
-                  {(r.tech_lines ?? []).length === 0 && <tr><td colSpan={5} className="py-3 text-center text-muted-foreground">Không có lịch đã hoàn thành trong tháng.</td></tr>}
+                  {(r.tech_lines ?? []).length === 0 && <tr><td colSpan={5} className="py-4 text-center text-muted-foreground">Không có lịch đã hoàn thành trong tháng.</td></tr>}
                   {(r.tech_lines ?? []).map((l: any) => (
-                    <tr key={l.schedule_id} className="border-b last:border-0">
-                      <td className="py-1 whitespace-nowrap">{formatDateVN(l.scheduled_date)}</td>
-                      <td>{l.title}</td>
-                      <td className="text-muted-foreground">
+                    <tr key={l.schedule_id} className={ROW}>
+                      <td className="whitespace-nowrap pr-3">{formatDateVN(l.scheduled_date)}</td>
+                      <td className="pr-3">{l.title}</td>
+                      <td className="pr-3 text-muted-foreground">
                         {l.work_type ? `${l.work_type.name}${l.work_type.qty > 1 ? ` ×${l.work_type.qty}` : ""}` : ""}
                         {(l.difficulties ?? []).map((d: any) => ` + ${d.name}${d.qty > 1 ? ` ×${d.qty}` : ""}`).join("")}
                       </td>
                       <td className="text-right">{l.num_people}</td>
-                      <td className="text-right font-medium">{money(l.money_share)}</td>
+                      <td className="text-right font-semibold tabular-nums">{money(l.money_share)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -640,33 +753,31 @@ function DetailDialog({ detail, onClose, onSave }: any) {
             )}
 
             {k === "commission" && (
-              <>
-                <table className="w-full text-xs">
-                  <thead className="text-left text-muted-foreground border-b"><tr><th className="py-1">Ngày</th><th>Hoá đơn</th><th>Khách</th><th className="text-right">Tổng tiền</th></tr></thead>
-                  <tbody>
-                    {(r.commission_orders ?? []).map((o: any) => (
-                      <tr key={o.id} className="border-b last:border-0">
-                        <td className="py-1">{formatDateVN(String(o.date).slice(0, 10))}</td>
-                        <td className="font-mono">{o.code}</td>
-                        <td>{o.customer_name}</td>
-                        <td className="text-right">{money(o.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </>
+              <table className={TBL}>
+                <thead className={HEAD}><tr><th>Ngày</th><th>Hoá đơn</th><th>Khách</th><th className="text-right">Tổng tiền</th></tr></thead>
+                <tbody>
+                  {(r.commission_orders ?? []).map((o: any) => (
+                    <tr key={o.id} className={ROW}>
+                      <td className="pr-3">{formatDateVN(String(o.date).slice(0, 10))}</td>
+                      <td className="pr-3 font-mono">{o.code}</td>
+                      <td className="pr-3">{o.customer_name}</td>
+                      <td className="text-right tabular-nums">{money(o.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
 
             {k === "advance" && (
-              <table className="w-full text-xs">
-                <thead className="text-left text-muted-foreground border-b"><tr><th className="py-1">Ngày</th><th>Phiếu</th><th>Ghi chú</th><th className="text-right">Số tiền</th></tr></thead>
+              <table className={TBL}>
+                <thead className={HEAD}><tr><th>Ngày</th><th>Phiếu</th><th>Ghi chú</th><th className="text-right">Số tiền</th></tr></thead>
                 <tbody>
                   {(r.advance_vouchers ?? []).map((v: any) => (
-                    <tr key={v.id} className="border-b last:border-0">
-                      <td className="py-1">{formatDateVN(String(v.created_at).slice(0, 10))}</td>
-                      <td className="font-mono">{v.code}</td>
-                      <td>{v.note}</td>
-                      <td className={`text-right ${v.amount < 0 ? "text-green-700" : ""}`}>{money(v.amount)}</td>
+                    <tr key={v.id} className={ROW}>
+                      <td className="pr-3">{formatDateVN(String(v.created_at).slice(0, 10))}</td>
+                      <td className="pr-3 font-mono">{v.code}</td>
+                      <td className="pr-3">{v.note}</td>
+                      <td className={`text-right tabular-nums ${v.amount < 0 ? "text-emerald-700" : ""}`}>{money(v.amount)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -674,28 +785,28 @@ function DetailDialog({ detail, onClose, onSave }: any) {
             )}
 
             {k === "notes" && (
-              <div className="space-y-3 text-sm">
+              <div className="space-y-4 text-sm">
                 {[
                   ["travel_note", "Diễn giải xăng xe đi tỉnh", "vd: 11/6 Biên Hoà, 27/6 Long An"],
                   ["extra_note", "Ghi chú phụ cấp", "vd: kéo thêm đoạn điện về tụ"],
                   ["other_note", "Ghi chú trừ khác", ""],
                 ].map(([f, l, ph]) => (
                   <div key={f}>
-                    <Label className="text-xs">{l}</Label>
-                    <Input className="mt-1" placeholder={ph} defaultValue={r[f] ?? ""} onChange={(e) => setNotes((p: any) => ({ ...p, [f]: e.target.value }))} />
+                    <Label>{l}</Label>
+                    <Input className="mt-1.5" placeholder={ph} defaultValue={r[f] ?? ""} onChange={(e) => setNotes((p: any) => ({ ...p, [f]: e.target.value }))} />
                   </div>
                 ))}
                 {r.commission_rate > 0 && (
                   <div>
-                    <Label className="text-xs">Ghi đè hoa hồng (để trống = tự tính {money(r.commission_auto)}đ)</Label>
+                    <Label>Ghi đè hoa hồng (để trống = tự tính {money(r.commission_auto)}đ)</Label>
                     <Input
-                      className="mt-1"
+                      className="mt-1.5"
                       inputMode="numeric"
                       defaultValue={r.commission_override ?? ""}
                       placeholder="Tự tính"
                       onChange={(e) => setNotes((p: any) => ({ ...p, commission_override: e.target.value.replace(/[^\d]/g, "") }))}
                     />
-                    <div className="text-xs text-muted-foreground mt-1">Dùng khi hoa hồng tính theo quý / theo tiền thực thu khác với doanh thu tháng.</div>
+                    <div className="mt-1 text-xs text-muted-foreground">Dùng khi hoa hồng tính theo quý / theo tiền thực thu khác với doanh thu tháng.</div>
                   </div>
                 )}
                 <div className="flex justify-end gap-2">
@@ -748,48 +859,84 @@ function ProfilesTab({ actorId }: { actorId?: string }) {
     }
   }
 
-  if (isLoading) return <Card className="py-10 flex justify-center"><Loader2 className="h-5 w-5 animate-spin" /></Card>;
+  if (isLoading) return <Loading />;
   if (error) return <Card className="text-sm text-destructive">{String((error as any).message)}</Card>;
 
   const list = ((data ?? []) as any[]).filter((u) => showAll || u.profile?.in_payroll);
+  const TH = "border-b bg-slate-50 px-4 py-3 text-[13px] font-semibold text-slate-600 whitespace-nowrap";
+  const TD = "border-b px-4 py-3 align-middle";
 
   return (
-    <Card>
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div>
-          <div className="font-medium">Hồ sơ lương nhân viên</div>
-          <div className="text-xs text-muted-foreground">
+    <Card className="p-0 overflow-hidden">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b px-4 py-4">
+        <div className="min-w-0 max-w-3xl">
+          <div className="text-lg font-semibold">Hồ sơ lương nhân viên</div>
+          <div className="mt-1 text-sm text-muted-foreground">
             Chỉ người có hồ sơ và bật "Có trong bảng lương" mới xuất hiện ở tab Chấm công / Bảng lương.
             Người quản lý chỉ thấy nhân viên thuộc chi nhánh mình được gán; nhân viên chưa gán chi nhánh chỉ admin thấy.
           </div>
         </div>
-        <label className="text-sm flex items-center gap-1.5">
-          <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
+        <label className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted/50">
+          <input type="checkbox" className="h-4 w-4" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
           Hiện tất cả nhân viên (để thêm người mới)
         </label>
       </div>
       <ScrollX>
-        <table className="w-full text-sm min-w-[720px]">
-          <thead className="text-left text-muted-foreground border-b">
-            <tr><th className="py-1.5">Nhân viên</th><th>Chi nhánh</th><th>Chức vụ</th><th className="text-right">Lương CB</th><th className="text-right">Công chuẩn</th><th>Lương DS</th><th>Hoa hồng</th><th>Ngân hàng</th><th></th></tr>
+        <table className="w-full min-w-[980px] border-separate border-spacing-0 text-sm">
+          <thead>
+            <tr>
+              <th className={`${TH} text-left`}>Nhân viên</th>
+              <th className={`${TH} text-left`}>Chi nhánh</th>
+              <th className={`${TH} text-right`}>Lương CB</th>
+              <th className={`${TH} text-center`}>Công chuẩn</th>
+              <th className={`${TH} text-center`}>Lương DS</th>
+              <th className={`${TH} text-left`}>Hoa hồng</th>
+              <th className={`${TH} text-left`}>Ngân hàng</th>
+              <th className={`${TH} w-24`} />
+            </tr>
           </thead>
           <tbody>
-            {list.length === 0 && <tr><td colSpan={9} className="py-4 text-center text-muted-foreground">Chưa có ai. Tick "Hiện tất cả nhân viên" để thêm.</td></tr>}
+            {list.length === 0 && <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">Chưa có ai. Tick "Hiện tất cả nhân viên" để thêm.</td></tr>}
             {list.map((u) => {
               const p = u.profile;
+              const off = !p?.in_payroll;
               return (
-                <tr key={u.user_id} className={`border-b last:border-0 ${p?.in_payroll ? "" : "text-muted-foreground"}`}>
-                  <td className="py-1.5">{u.full_name}</td>
-                  <td className="text-xs text-muted-foreground max-w-[200px]">{(u.branches ?? []).join(", ") || <span className="text-orange-600">chưa gán chi nhánh</span>}</td>
-                  <td>{p?.position ?? ""}</td>
-                  <td className="text-right">{p ? money(p.base_salary) : ""}</td>
-                  <td className="text-right">{p?.standard_days ?? ""}</td>
-                  <td>{p?.tech_revenue ? "✓" : ""}</td>
-                  <td>{p?.commission_rate > 0 ? `${p.commission_rate}% · ${labelOf(p.commission_group)}` : ""}</td>
-                  <td className="text-xs">{p?.bank_account ? `${p.bank_name ?? ""} ${p.bank_account}` : ""}</td>
-                  <td className="text-right">
+                <tr key={u.user_id} className={`hover:bg-slate-50 ${off ? "opacity-60" : ""}`}>
+                  <td className={TD}>
+                    <div className="font-semibold text-slate-800">{u.full_name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {p?.position || "—"}
+                      {p && !p.in_payroll && <span className="ml-1.5 rounded bg-slate-200 px-1.5 text-[11px]">không trong bảng lương</span>}
+                    </div>
+                  </td>
+                  <td className={`${TD} max-w-[260px]`}>
+                    {(u.branches ?? []).length ? (
+                      <div className="flex flex-wrap gap-1">
+                        {(u.branches ?? []).map((b: string) => <span key={b} className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-700">{b}</span>)}
+                      </div>
+                    ) : <span className="text-xs font-medium text-orange-600">Chưa gán chi nhánh</span>}
+                  </td>
+                  <td className={`${TD} text-right text-base font-semibold tabular-nums`}>{p ? money(p.base_salary) : ""}</td>
+                  <td className={`${TD} text-center tabular-nums`}>{p?.standard_days ?? ""}</td>
+                  <td className={`${TD} text-center`}>
+                    {p?.tech_revenue ? <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">Có</span> : <span className="text-muted-foreground/60">—</span>}
+                  </td>
+                  <td className={TD}>
+                    {p?.commission_rate > 0 ? (
+                      <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700">{p.commission_rate}% · {labelOf(p.commission_group)}</span>
+                    ) : <span className="text-muted-foreground/60">—</span>}
+                  </td>
+                  <td className={TD}>
+                    {p?.bank_account ? (
+                      <>
+                        <div className="text-xs text-muted-foreground">{p.bank_name}</div>
+                        <div className="font-mono">{p.bank_account}</div>
+                      </>
+                    ) : <span className="text-muted-foreground/60">—</span>}
+                  </td>
+                  <td className={`${TD} text-right`}>
                     <Button size="sm" variant={p ? "ghost" : "outline"} onClick={() => setEdit({ user_id: u.user_id, full_name: u.full_name, standard_days: 26, in_payroll: true, ...(p ?? {}) })}>
-                      {p ? <Pencil className="h-4 w-4" /> : "Thêm"}
+                      {p ? <><Pencil className="mr-1 h-4 w-4" />Sửa</> : <><Plus className="mr-1 h-4 w-4" />Thêm</>}
                     </Button>
                   </td>
                 </tr>
@@ -800,48 +947,60 @@ function ProfilesTab({ actorId }: { actorId?: string }) {
       </ScrollX>
 
       <Dialog open={!!edit} onOpenChange={(v) => !v && setEdit(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Hồ sơ lương — {edit?.full_name}</DialogTitle></DialogHeader>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+          <DialogHeader><DialogTitle className="text-lg">Hồ sơ lương — {edit?.full_name}</DialogTitle></DialogHeader>
           {edit && (
-            <div className="space-y-3 text-sm">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {[["position", "Chức vụ / bộ phận", "Kỹ thuật"], ["area", "Khu vực", "HCM"], ["start_label", "Năm bắt đầu làm", "Tháng 3.2018"]].map(([f, l, ph]) => (
-                  <div key={f}><Label className="text-xs">{l}</Label><Input className="mt-1" placeholder={ph} value={edit[f] ?? ""} onChange={(e) => setEdit({ ...edit, [f]: e.target.value })} /></div>
-                ))}
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div><Label className="text-xs">Lương cơ bản *</Label><Input className="mt-1" inputMode="numeric" value={edit.base_salary ?? ""} onChange={(e) => setEdit({ ...edit, base_salary: e.target.value.replace(/[^\d]/g, "") })} /></div>
-                <div><Label className="text-xs">Số công chuẩn</Label><Input className="mt-1" inputMode="decimal" value={edit.standard_days ?? 26} onChange={(e) => setEdit({ ...edit, standard_days: e.target.value })} /></div>
-                <div><Label className="text-xs">BHXH trừ/tháng</Label><Input className="mt-1" inputMode="numeric" value={edit.social_insurance ?? ""} onChange={(e) => setEdit({ ...edit, social_insurance: e.target.value.replace(/[^\d]/g, "") })} /></div>
-                <div><Label className="text-xs">Công đoàn/tháng</Label><Input className="mt-1" inputMode="numeric" value={edit.union_fee ?? ""} onChange={(e) => setEdit({ ...edit, union_fee: e.target.value.replace(/[^\d]/g, "") })} /></div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div><Label className="text-xs">Ngân hàng</Label><Input className="mt-1" placeholder="MSB, Vietcombank..." value={edit.bank_name ?? ""} onChange={(e) => setEdit({ ...edit, bank_name: e.target.value })} /></div>
-                <div><Label className="text-xs">Số tài khoản</Label><Input className="mt-1 font-mono" value={edit.bank_account ?? ""} onChange={(e) => setEdit({ ...edit, bank_account: e.target.value })} /></div>
-                <div><Label className="text-xs">Chủ tài khoản</Label><Input className="mt-1" value={edit.bank_owner ?? ""} onChange={(e) => setEdit({ ...edit, bank_owner: e.target.value })} /></div>
-              </div>
-              <label className="flex items-center gap-2 rounded border p-2">
-                <input type="checkbox" checked={!!edit.tech_revenue} onChange={(e) => setEdit({ ...edit, tech_revenue: e.target.checked })} />
-                <span><strong>Tính lương doanh số từ Lịch làm việc</strong> <span className="text-muted-foreground">(kỹ thuật viên — tiền công các lịch đã hoàn thành được phân công)</span></span>
-              </label>
-              <div className="grid grid-cols-2 gap-3 rounded border p-2">
-                <div><Label className="text-xs">% hoa hồng</Label><Input className="mt-1" inputMode="decimal" placeholder="0.5" value={edit.commission_rate ?? ""} onChange={(e) => setEdit({ ...edit, commission_rate: e.target.value.replace(/[^\d.]/g, "") })} /></div>
-                <div>
-                  <Label className="text-xs">Trên doanh thu nhóm khách</Label>
-                  <select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm" value={edit.commission_group ?? ""} onChange={(e) => setEdit({ ...edit, commission_group: e.target.value })}>
-                    <option value="">— Không —</option>
-                    {groups.map((g) => <option key={g.code} value={g.code}>{g.name}</option>)}
-                  </select>
+            <div className="space-y-5 text-sm">
+              <section className="space-y-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Thông tin chung</div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {[["position", "Chức vụ / bộ phận", "Kỹ thuật"], ["area", "Khu vực", "HCM"], ["start_label", "Năm bắt đầu làm", "Tháng 3.2018"]].map(([f, l, ph]) => (
+                    <div key={f}><Label>{l}</Label><Input className="mt-1.5" placeholder={ph} value={edit[f] ?? ""} onChange={(e) => setEdit({ ...edit, [f]: e.target.value })} /></div>
+                  ))}
                 </div>
-                <div className="col-span-2 text-xs text-muted-foreground">Vd: 0.5 + Đại lý = 0,5% doanh thu các đơn hoàn tất trong tháng của khách nhóm Đại lý.</div>
-              </div>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={edit.in_payroll !== false} onChange={(e) => setEdit({ ...edit, in_payroll: e.target.checked })} />
-                Có trong bảng lương
+              </section>
+              <section className="space-y-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Lương & khấu trừ cố định</div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div><Label>Lương cơ bản *</Label><Input className="mt-1.5 font-semibold" inputMode="numeric" value={edit.base_salary ?? ""} onChange={(e) => setEdit({ ...edit, base_salary: e.target.value.replace(/[^\d]/g, "") })} /></div>
+                  <div><Label>Số công chuẩn</Label><Input className="mt-1.5" inputMode="decimal" value={edit.standard_days ?? 26} onChange={(e) => setEdit({ ...edit, standard_days: e.target.value })} /></div>
+                  <div><Label>BHXH trừ/tháng</Label><Input className="mt-1.5" inputMode="numeric" value={edit.social_insurance ?? ""} onChange={(e) => setEdit({ ...edit, social_insurance: e.target.value.replace(/[^\d]/g, "") })} /></div>
+                  <div><Label>Công đoàn/tháng</Label><Input className="mt-1.5" inputMode="numeric" value={edit.union_fee ?? ""} onChange={(e) => setEdit({ ...edit, union_fee: e.target.value.replace(/[^\d]/g, "") })} /></div>
+                </div>
+              </section>
+              <section className="space-y-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tài khoản nhận lương</div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div><Label>Ngân hàng</Label><Input className="mt-1.5" placeholder="MSB, Vietcombank..." value={edit.bank_name ?? ""} onChange={(e) => setEdit({ ...edit, bank_name: e.target.value })} /></div>
+                  <div><Label>Số tài khoản</Label><Input className="mt-1.5 font-mono" value={edit.bank_account ?? ""} onChange={(e) => setEdit({ ...edit, bank_account: e.target.value })} /></div>
+                  <div><Label>Chủ tài khoản</Label><Input className="mt-1.5" value={edit.bank_owner ?? ""} onChange={(e) => setEdit({ ...edit, bank_owner: e.target.value })} /></div>
+                </div>
+              </section>
+              <section className="space-y-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Thu nhập theo doanh số</div>
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 hover:bg-muted/40">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4" checked={!!edit.tech_revenue} onChange={(e) => setEdit({ ...edit, tech_revenue: e.target.checked })} />
+                  <span><strong>Tính lương doanh số từ Lịch làm việc</strong><br /><span className="text-muted-foreground">Kỹ thuật viên — tiền công các lịch đã hoàn thành được phân công.</span></span>
+                </label>
+                <div className="grid grid-cols-2 gap-3 rounded-lg border p-3">
+                  <div><Label>% hoa hồng</Label><Input className="mt-1.5" inputMode="decimal" placeholder="0.5" value={edit.commission_rate ?? ""} onChange={(e) => setEdit({ ...edit, commission_rate: e.target.value.replace(/[^\d.]/g, "") })} /></div>
+                  <div>
+                    <Label>Trên doanh thu nhóm khách</Label>
+                    <select className="mt-1.5 h-10 w-full rounded-md border bg-background px-3 text-sm" value={edit.commission_group ?? ""} onChange={(e) => setEdit({ ...edit, commission_group: e.target.value })}>
+                      <option value="">— Không —</option>
+                      {groups.map((g) => <option key={g.code} value={g.code}>{g.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-span-2 text-xs text-muted-foreground">Vd: 0.5 + Đại lý = 0,5% doanh thu các đơn hoàn tất trong tháng của khách nhóm Đại lý.</div>
+                </div>
+              </section>
+              <label className="flex cursor-pointer items-center gap-2.5">
+                <input type="checkbox" className="h-4 w-4" checked={edit.in_payroll !== false} onChange={(e) => setEdit({ ...edit, in_payroll: e.target.checked })} />
+                <span className="font-medium">Có trong bảng lương</span>
               </label>
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 border-t pt-4">
                 <Button variant="outline" onClick={() => setEdit(null)}>Huỷ</Button>
-                <Button onClick={save} disabled={saving}>{saving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}Lưu</Button>
+                <Button onClick={save} disabled={saving}>{saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}Lưu hồ sơ</Button>
               </div>
             </div>
           )}
