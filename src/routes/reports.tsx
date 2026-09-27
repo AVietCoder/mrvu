@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { getReports } from "@/lib/reports.functions";
+import { SalesByCustomer } from "@/components/SalesByCustomer";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -105,6 +106,9 @@ function Page() {
   });
 
   const presets = [
+    // days: 0 → from = to = hôm nay. todayStr()/daysAgoStr() đã tính theo
+    // Asia/Ho_Chi_Minh nên "hôm nay" là ngày Việt Nam, không phải ngày UTC.
+    { label: "Hôm nay", days: 0, key: "today" },
     { label: "7 ngày", days: 6, key: "7d" },
     { label: "30 ngày", days: 29, key: "30d" },
     { label: "90 ngày", days: 89, key: "90d" },
@@ -599,6 +603,9 @@ function Page() {
               </table>
             </Card>
           </div>
+
+          {/* Dùng chung khoảng ngày của trang (kể cả preset "Hôm nay"). */}
+          <SalesByCustomer fromDate={fromDate} toDate={toDate} enabled={canView} />
 
           <Card>
             <div className="font-semibold mb-3">Công nợ phải thu ({data.debtors?.length ?? 0} khách)</div>

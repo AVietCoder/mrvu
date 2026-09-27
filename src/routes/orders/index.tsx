@@ -14,6 +14,7 @@ import { exportSalesReportToExcel } from "@/lib/export-sales-report";
 import { createSchedule, listWorkTypes } from "@/lib/schedule.functions";
 import { upsertCustomer, listCustomers, getCustomerLite } from "@/lib/customers.functions";
 import { normalizeVnPhone } from "@/lib/zalo/phone";
+import { useCustomerGroups } from "@/hooks/useCustomerGroups";
 import { buildInvoiceHtml } from "@/lib/print-invoice";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { SearchFilter } from "@/components/SearchFilter";
@@ -112,12 +113,6 @@ const PROVINCES = [
   "Thừa Thiên Huế","Tiền Giang","TP. Hồ Chí Minh","Trà Vinh","Tuyên Quang","Vĩnh Long","Vĩnh Phúc","Yên Bái",
 ];
 
-const GROUP_LABEL: Record<string, string> = {
-  le: "Khách lẻ",
-  dai_ly: "Đại lý",
-  vip: "VIP",
-  cong_trinh: "Công trình",
-};
 // Thêm 2 status này vào dòng 48 (ngay dưới cancelled):
 const STATUS_LABEL: Record<string, string> = {
   completed: "Hoàn tất",
@@ -233,6 +228,8 @@ function Page() {
   const createScheduleFn = useServerFn(createSchedule);
   const listWorkTypesFn = useServerFn(listWorkTypes);
   const upsertCustomerFn = useServerFn(upsertCustomer);
+  // Nhóm khách đang bật, lấy từ bảng customer_groups.
+  const { active: activeCustGroups } = useCustomerGroups();
   const qc = useQueryClient();
 
   // Form tạo đơn mở/đóng — refs nặng chỉ tải khi form mở (xem dưới).
@@ -288,7 +285,8 @@ function Page() {
   const [quickCustName, setQuickCustName] = useState("");
   const [quickCustPhone, setQuickCustPhone] = useState("");
   const [quickCustEmail, setQuickCustEmail] = useState("");
-  const [quickCustGroup, setQuickCustGroup] = useState("le");
+  // Để trống: bắt buộc chọn nhóm, không ngầm gán "Khách lẻ" nữa.
+  const [quickCustGroup, setQuickCustGroup] = useState("");
   const [quickCustType, setQuickCustType] = useState<"ca_nhan"|"to_chuc">("ca_nhan");
   const [quickCustNote, setQuickCustNote] = useState("");
   const [quickCustGender, setQuickCustGender] = useState("");
@@ -683,7 +681,7 @@ function Page() {
 
   function resetQuickCustForm() {
     setQuickCustName(""); setQuickCustPhone(""); setQuickCustEmail("");
-    setQuickCustGroup("le"); setQuickCustType("ca_nhan"); setQuickCustNote("");
+    setQuickCustGroup(""); setQuickCustType("ca_nhan"); setQuickCustNote("");
     setQuickCustGender(""); setQuickCustBirthday(""); setQuickCustProvince("");
     setQuickCustWard(""); setQuickCustAddress(""); setQuickCustCccd("");
     setQuickCustPassport(""); setQuickCustCompany(""); setQuickCustTaxCode("");
@@ -693,6 +691,7 @@ function Page() {
   // Bấm "Lưu thông tin": còn cảnh báo trùng thì hỏi lại 1 lần rồi mới tạo.
   function handleQuickCustSaveClick() {
     if (!quickCustName.trim()) return toast.error("Nhập tên khách hàng");
+    if (!quickCustGroup) return toast.error("Vui lòng chọn nhóm khách hàng");
     if (custDuplicates.length > 0) {
       setDupConfirmOpen(true);
       return;
@@ -702,6 +701,7 @@ function Page() {
 
   async function handleQuickCreateCustomer() {
     if (!quickCustName.trim()) return toast.error("Nhập tên khách hàng");
+    if (!quickCustGroup) return toast.error("Vui lòng chọn nhóm khách hàng");
     setSavingCust(true);
     try {
       await upsertCustomerFn({
@@ -1831,10 +1831,16 @@ function Page() {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div className="space-y-1">
-                        <Label className="text-xs font-medium">Nhóm đối tác</Label>
-                        <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        <Label className="text-xs font-medium">
+                          Nhóm khách hàng <span className="text-destructive">*</span>
+                        </Label>
+                        <select
+                          className={`mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm ${
+                            quickCustGroup ? "border-input" : "border-destructive/60"
+                          }`}
                           value={quickCustGroup} onChange={(e) => setQuickCustGroup(e.target.value)}>
-                          {Object.entries(GROUP_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                          <option value="" disabled>— Chọn nhóm —</option>
+                          {activeCustGroups.map((g) => <option key={g.code} value={g.code}>{g.name}</option>)}
                         </select>
                       </div>
                       <div className="space-y-1">
@@ -1871,10 +1877,16 @@ function Page() {
                           value={quickCustEmail} onChange={(e) => setQuickCustEmail(e.target.value)} />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs font-medium">Nhóm đối tác</Label>
-                        <select className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        <Label className="text-xs font-medium">
+                          Nhóm khách hàng <span className="text-destructive">*</span>
+                        </Label>
+                        <select
+                          className={`mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm ${
+                            quickCustGroup ? "border-input" : "border-destructive/60"
+                          }`}
                           value={quickCustGroup} onChange={(e) => setQuickCustGroup(e.target.value)}>
-                          {Object.entries(GROUP_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                          <option value="" disabled>— Chọn nhóm —</option>
+                          {activeCustGroups.map((g) => <option key={g.code} value={g.code}>{g.name}</option>)}
                         </select>
                       </div>
                     </div>

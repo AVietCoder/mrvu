@@ -47,6 +47,7 @@ import {
   Loader2,
   NotebookPen,
 } from "lucide-react";
+import { useCustomerGroups } from "@/hooks/useCustomerGroups";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
@@ -55,19 +56,6 @@ export const Route = createFileRoute("/customers/$id")({
   component: CustomerDetailPage,
 });
 
-const groupLabel: Record<string, string> = {
-  le: "Khách lẻ",
-  dai_ly: "Đại lý",
-  vip: "VIP",
-  cong_trinh: "Công trình",
-};
-
-const groupColor: Record<string, string> = {
-  le: "bg-gray-100 text-gray-700",
-  dai_ly: "bg-blue-100 text-blue-700",
-  vip: "bg-yellow-100 text-yellow-700",
-  cong_trinh: "bg-purple-100 text-purple-700",
-};
 
 const STATUS_LABEL: Record<string, string> = {
   completed: "Hoàn tất",
@@ -187,6 +175,9 @@ function CustomerDetailPage() {
   const { id } = useParams({ from: "/customers/$id" });
   const qc = useQueryClient();
   const { isAdmin, user } = useAuth();
+  // Nhóm khách lấy từ bảng customer_groups (trước đây hardcode 4 nhóm).
+  const { optionsFor: groupOptionsFor, labelOf: groupLabelOf, colorClassOf: groupColorOf } =
+    useCustomerGroups();
 
   const getCustomer = useServerFn(getCustomerById);
   const upsert = useServerFn(upsertCustomer);
@@ -545,10 +536,10 @@ function CustomerDetailPage() {
                 <div className="flex flex-wrap gap-1 mt-1">
                   <span
                     className={`text-xs rounded-full px-2 py-0.5 ${
-                      groupColor[customer.group_name] ?? "bg-gray-100 text-gray-700"
+                      groupColorOf(customer.group_name)
                     }`}
                   >
-                    {groupLabel[customer.group_name] ?? customer.group_name}
+                    {groupLabelOf(customer.group_name)}
                   </span>
                   {customer.customer_type === "to_chuc" && (
                     <span className="text-xs rounded-full px-2 py-0.5 bg-indigo-100 text-indigo-700">
@@ -896,15 +887,19 @@ function CustomerDetailPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-1">
-                      <Label className="text-xs font-medium">Nhóm đối tác</Label>
+                      <Label className="text-xs font-medium">
+                        Nhóm khách hàng <span className="text-destructive">*</span>
+                      </Label>
                       <select
                         className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                         value={form.group_name}
                         onChange={(e) => setForm({ ...form, group_name: e.target.value })}
                       >
-                        {Object.entries(groupLabel).map(([v, l]) => (
-                          <option key={v} value={v}>
-                            {l}
+                        {/* Gồm nhóm đang bật + nhóm hiện tại của khách (kể cả
+                            đã tắt), để mở form sửa không vô tình đổi nhóm. */}
+                        {groupOptionsFor(form.group_name).map((g) => (
+                          <option key={g.code} value={g.code}>
+                            {g.name}
                           </option>
                         ))}
                       </select>
@@ -960,15 +955,19 @@ function CustomerDetailPage() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs font-medium">Nhóm đối tác</Label>
+                      <Label className="text-xs font-medium">
+                        Nhóm khách hàng <span className="text-destructive">*</span>
+                      </Label>
                       <select
                         className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                         value={form.group_name}
                         onChange={(e) => setForm({ ...form, group_name: e.target.value })}
                       >
-                        {Object.entries(groupLabel).map(([v, l]) => (
-                          <option key={v} value={v}>
-                            {l}
+                        {/* Gồm nhóm đang bật + nhóm hiện tại của khách (kể cả
+                            đã tắt), để mở form sửa không vô tình đổi nhóm. */}
+                        {groupOptionsFor(form.group_name).map((g) => (
+                          <option key={g.code} value={g.code}>
+                            {g.name}
                           </option>
                         ))}
                       </select>

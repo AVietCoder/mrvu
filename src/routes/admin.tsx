@@ -84,14 +84,32 @@ function AdminPage() {
 
   // ── Print / Email Templates ─────────────────────────────────
   // ── 4 template keys ─────────────────────────────────────────────────────
-  type TplKey = "order_invoice" | "import_slip" | "transfer_slip" | "email_order";
+  type TplKey =
+    | "order_invoice"
+    | "import_slip"
+    | "transfer_slip"
+    | "email_order"
+    | "email_maintenance"
+    | "email_birthday";
   const TEMPLATE_META: Record<TplKey, { label: string; icon: string; desc: string }> = {
     order_invoice: { label: "Hóa đơn bán hàng", icon: "🧾", desc: "In khi tạo/hoàn tất đơn hàng" },
     import_slip:   { label: "Phiếu nhập kho",    icon: "📦", desc: "In khi nhập hàng vào kho" },
     transfer_slip: { label: "Phiếu chuyển kho",  icon: "🔄", desc: "In khi chuyển hàng giữa kho" },
     email_order:   { label: "Email thông báo",   icon: "✉️",  desc: "Nội dung gửi email cho khách & admin" },
+    email_maintenance: { label: "Email nhắc bảo dưỡng", icon: "🔧", desc: "Gửi từ trang Chăm sóc KH khi đơn đến hạn 6 tháng" },
+    email_birthday:    { label: "Email sinh nhật",       icon: "🎂", desc: "Gửi từ trang Chăm sóc KH cho khách sinh nhật" },
   };
-  const TEMPLATE_DEFAULTS: Record<TplKey, { header: string; footer: string; warranty: string; showWarranty: boolean; emailSubject?: string }> = {
+
+  /** Biến khả dụng theo TỪNG mẫu — mẫu sinh nhật không có mã đơn hàng. */
+  const TEMPLATE_VARS: Record<TplKey, string[]> = {
+    order_invoice: ["{Ten_Cua_Hang}", "{Ma_Don_Hang}", "{Khach_Hang}", "{Dia_Chi}", "{So_Dien_Thoai}", "{Ngay}", "{Thang}", "{Nam}", "{Tong_Tien}", "{Nguoi_Lap}"],
+    import_slip:   ["{Ten_Cua_Hang}", "{Ngay}", "{Thang}", "{Nam}", "{Nguoi_Lap}"],
+    transfer_slip: ["{Ten_Cua_Hang}", "{Ngay}", "{Thang}", "{Nam}", "{Nguoi_Lap}"],
+    email_order:   ["{Ten_Cua_Hang}", "{Ma_Don_Hang}", "{Khach_Hang}", "{Tong_Tien}"],
+    email_maintenance: ["{Ten_Cua_Hang}", "{Khach_Hang}", "{Ma_Khach_Hang}", "{San_Pham}", "{Ma_Don_Hang}", "{So_Don}", "{Ngay_Xuat_Kho}", "{Ngay_Den_Han}", "{So_Dien_Thoai_CH}", "{Dia_Chi_CH}"],
+    email_birthday:    ["{Ten_Cua_Hang}", "{Khach_Hang}", "{Ma_Khach_Hang}", "{Tuoi}", "{So_Dien_Thoai_CH}"],
+  };
+  const TEMPLATE_DEFAULTS: Record<TplKey, { header: string; footer: string; warranty: string; showWarranty: boolean; emailSubject?: string; body?: string }> = {
     order_invoice: {
       header: "PHIẾU XUẤT KHO KIỂM BẢO HÀNH",
       footer: "Quạt trần {Ten_Cua_Hang} chân thành cảm ơn sự tin tưởng của Quý khách hàng!",
@@ -116,6 +134,34 @@ function AdminPage() {
       warranty: "",
       showWarranty: false,
       emailSubject: "[{Ten_Cua_Hang}] Đơn hàng {Ma_Don_Hang} — {Khach_Hang}",
+    },
+    email_maintenance: {
+      header: "",
+      footer: "Email tự động từ {Ten_Cua_Hang} — Vui lòng không trả lời email này.",
+      warranty: "",
+      showWarranty: false,
+      emailSubject: "[{Ten_Cua_Hang}] Đã đến kỳ bảo dưỡng định kỳ — {Khach_Hang}",
+      body:
+        "Kính gửi {Khach_Hang},\n\n" +
+        "Theo ghi nhận của {Ten_Cua_Hang}, sản phẩm Quý khách đã mua đã đến kỳ bảo dưỡng định kỳ 6 tháng.\n\n" +
+        "• Sản phẩm: {San_Pham}\n" +
+        "• Mã đơn: {Ma_Don_Hang}\n" +
+        "• Ngày xuất kho: {Ngay_Xuat_Kho}\n" +
+        "• Ngày đến hạn: {Ngay_Den_Han}\n\n" +
+        "Việc kiểm tra định kỳ giúp thiết bị vận hành an toàn và bền hơn. " +
+        "Quý khách vui lòng liên hệ {So_Dien_Thoai_CH} để đặt lịch.",
+    },
+    email_birthday: {
+      header: "",
+      footer: "Email tự động từ {Ten_Cua_Hang} — Vui lòng không trả lời email này.",
+      warranty: "",
+      showWarranty: false,
+      emailSubject: "[{Ten_Cua_Hang}] Chúc mừng sinh nhật {Khach_Hang}!",
+      body:
+        "Kính gửi {Khach_Hang},\n\n" +
+        "{Ten_Cua_Hang} xin gửi lời chúc mừng sinh nhật tới Quý khách. " +
+        "Chúc Quý khách và gia đình thật nhiều sức khoẻ và niềm vui.\n\n" +
+        "Trân trọng cảm ơn Quý khách đã tin tưởng đồng hành cùng chúng tôi.",
     },
   };
 
@@ -527,7 +573,7 @@ function AdminPage() {
               <div className={`grid gap-4 ${previewTpl ? "lg:grid-cols-2" : "grid-cols-1"}`}>
                 {/* LEFT: form fields */}
                 <div className="space-y-3">
-                  {key !== "email_order" ? (
+                  {!key.startsWith("email_") ? (
                     <>
                       <div>
                         <Label className="text-xs mb-1">Tiêu đề phiếu</Label>
@@ -566,6 +612,20 @@ function AdminPage() {
                           onChange={(e) => setTplField(key, "emailSubject", e.target.value)}
                           placeholder={TEMPLATE_DEFAULTS[key].emailSubject} />
                       </div>
+                      {/* Chỉ mẫu email CSKH mới có phần thân — email đơn hàng
+                          dựng bảng sản phẩm bằng code nên không sửa tay được. */}
+                      {TEMPLATE_DEFAULTS[key].body !== undefined && (
+                        <div>
+                          <Label className="text-xs mb-1">Nội dung email</Label>
+                          <Textarea value={getTplField(key, "body")}
+                            onChange={(e) => setTplField(key, "body", e.target.value)}
+                            className="min-h-[180px] text-sm"
+                            placeholder={TEMPLATE_DEFAULTS[key].body} />
+                          <div className="text-[11px] text-muted-foreground mt-1">
+                            Để trống = dùng nội dung mặc định. Xuống dòng được giữ nguyên khi gửi.
+                          </div>
+                        </div>
+                      )}
                       <div>
                         <Label className="text-xs mb-1">Chân trang email</Label>
                         <Input value={getTplField(key, "footer")}
@@ -575,9 +635,11 @@ function AdminPage() {
                     </>
                   )}
                   <div className="rounded-lg bg-muted/40 border px-3 py-2.5 text-xs text-muted-foreground leading-relaxed">
-                    <div className="font-semibold text-foreground mb-1.5">Biến tự động (sẽ thay bằng dữ liệu thật khi in):</div>
+                    <div className="font-semibold text-foreground mb-1.5">Biến tự động (sẽ thay bằng dữ liệu thật):</div>
                     <div className="flex flex-wrap gap-1.5">
-                      {["{Ten_Cua_Hang}","{Ma_Don_Hang}","{Khach_Hang}","{Dia_Chi}","{So_Dien_Thoai}","{Ngay}","{Thang}","{Nam}","{Tong_Tien}","{Nguoi_Lap}"].map(v => (
+                      {/* Biến theo TỪNG mẫu: trước đây liệt kê cứng 10 biến của
+                          hoá đơn nên mẫu sinh nhật cũng hiện {Ma_Don_Hang}. */}
+                      {(TEMPLATE_VARS[key] ?? []).map(v => (
                         <code key={v} className="rounded bg-background border px-1.5 py-0.5 font-mono text-[11px] text-foreground">{v}</code>
                       ))}
                     </div>
@@ -587,7 +649,7 @@ function AdminPage() {
                 {/* RIGHT: live preview — matches actual print output */}
                 {previewTpl && (
                   <div className="rounded-xl border bg-white shadow overflow-hidden" style={{minHeight:420}}>
-                    {key !== "email_order" ? (
+                    {!key.startsWith("email_") ? (
                       /* ── Xem trước phiếu in thực tế — dùng buildInvoiceHtml để đồng bộ 100% ── */
                       <iframe
                         title={`preview-${key}`}

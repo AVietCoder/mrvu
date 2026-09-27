@@ -283,6 +283,136 @@ export const deleteWorkType = createServerFn({ method: "POST" })
   });
 
 // ── Bảng chấm công theo tháng ─────────────────────────────────────────────────
+// ── computeTechPay ────────────────────────────────────────────────────────────
+// Phần TÍNH tiền công kỹ thuật viên, tách khỏi attendanceSummary để Bảng lương
+// dùng lại đúng một công thức (không viết công thức thứ hai).
+//   - attendanceSummary (tab "Chấm công" của Lịch làm việc) gọi với
+//     ["approved", "in_progress", "done"] → hành vi GIỮ NGUYÊN như trước.
+//   - Bảng lương gọi với ["done"] → chỉ trả tiền cho việc đã làm xong.
+// Thân hàm là code cũ chuyển nguyên sang, chỉ tham số hoá danh sách trạng thái.
+export async function computeTechPay({
+  from,
+  next,
+  statuses,
+}: {
+  from: string;
+  next: string;
+  statuses: string[];
+}) {
+  const { data: schedules, error: e1 } = await supabase
+    .from("schedules")
+    .select("id, title, scheduled_date, scheduled_time, work_type_id, work_type_qty, status, customer_id, order_id, address")
+    .gte("scheduled_date", from)
+    .lt("scheduled_date", next)
+    .in("status", statuses);
+  if (e1) throw new Error(e1.message);
+
+  const ids = (schedules ?? []).map((s: any) => s.id);
+  const [assigns, diffs, fees, wtypes, wdiffs, users, customers, orders] = await Promise.all([
+    ids.length
+      ? supabase.from("schedule_assignments").select("schedule_id, user_id").in("schedule_id", ids).then((r) => r.data ?? [])
+      : Promise.resolve([]),
+    ids.length
+      ? supabase.from("schedule_difficulties").select("schedule_id, difficulty_id, qty").in("schedule_id", ids).then((r) => r.data ?? [])
+      : Promise.resolve([]),
+    ids.length
+      ? supabase.from("tech_fees").select("schedule_id, product_id, qty, unit_fee, user_id").in("schedule_id", ids).then((r) => r.data ?? [])
+      : Promise.resolve([]),
+    fetchRows("work_types"),
+    fetchRows("work_difficulties"),
+    fetchRows("users", { select: "id, full_name, username" }),
+    fetchRows("customers", { select: "id, name, phone", orderBy: "created_at", ascending: false }),
+    fetchRows("orders", { select: "id, code, total" }),
+  ]);
+
+  const wtMap: Record<string, any> = {};
+  for (const w of wtypes) wtMap[w.id] = w;
+  const wdMap: Record<string, any> = {};
+  for (const w of wdiffs) wdMap[w.id] = w;
+  const userMap: Record<string, any> = {};
+  for (const u of users) userMap[u.id] = u;
+
+  const assignBySchedule: Record<string, string[]> = {};
+  for (const a of assigns as any[]) {
+    (assignBySchedule[a.schedule_id] ||= []).push(a.user_id);
+  }
+  const diffsBySchedule: Record<string, { difficulty_id: string; qty: number }[]> = {};
+  for (const d of diffs as any[]) {
+    (diffsBySchedule[d.schedule_id] ||= []).push({ difficulty_id: d.difficulty_id, qty: Math.max(1, Number(d.qty ?? 1)) });
+  }
+  const feesBySchedule: Record<string, { items: any[]; sharedTotal: number; perUserExtra: Record<string, number> }> = {};
+  for (const f of fees as any[]) {
+    const bucket = (feesBySchedule[f.schedule_id] ||= { items: [], sharedTotal: 0, perUserExtra: {} });
+    const amount = Number(f.qty || 0) * Number(f.unit_fee || 0);
+    bucket.items.push({ product_id: f.product_id, qty: Number(f.qty || 0), unit_fee: Number(f.unit_fee || 0), amount, user_id: f.user_id || null });
+    if (f.user_id) {
+      bucket.perUserExtra[f.user_id] = (bucket.perUserExtra[f.user_id] ?? 0) + amount;
+    } else {
+      bucket.sharedTotal += amount;
+    }
+  }
+
+  const perUser: Record<string, {
+    user_id: string; full_name: string; username: string;
+    type_points: number; diff_points: number; total_money: number;
+    extra_income: number; schedule_count: number; lines: any[];
+  }> = {};
+
+  for (const s of schedules as any[]) {
+    const people = assignBySchedule[s.id] || [];
+    if (!people.length) continue;
+    const n = people.length;
+    const wt = s.work_type_id ? wtMap[s.work_type_id] : null;
+    const wtQty = Math.max(1, Number(s.work_type_qty ?? 1));
+    const dRows = diffsBySchedule[s.id] || [];
+    const diffSumPrice = dRows.reduce((sum, d) => sum + Number(wdMap[d.difficulty_id]?.bonus || 0) * d.qty, 0);
+    const typePrice = Number(wt?.price || 0) * wtQty;
+    const feeBucket = feesBySchedule[s.id] || { items: [], sharedTotal: 0, perUserExtra: {} };
+    const sharedExtraTotal = feeBucket.sharedTotal;
+
+    for (const uid_ of people) {
+      const u = userMap[uid_] || { id: uid_, full_name: uid_, username: "" };
+      const row = (perUser[uid_] ||= { user_id: uid_, full_name: u.full_name, username: u.username, type_points: 0, diff_points: 0, total_money: 0, extra_income: 0, schedule_count: 0, lines: [] });
+      const typePt = wt ? 1 / n : 0;
+      const diffPt = dRows.length / n;
+      const userDirectExtra = feeBucket.perUserExtra[uid_] ?? 0;
+      const money = (typePrice + diffSumPrice + sharedExtraTotal) / n + userDirectExtra;
+      const extraIncomeShare = sharedExtraTotal / n + userDirectExtra;
+      row.type_points += typePt;
+      row.diff_points += diffPt;
+      row.total_money += money;
+      row.extra_income += extraIncomeShare;
+      row.schedule_count += 1;
+      row.lines.push({
+        schedule_id: s.id, title: s.title, scheduled_date: s.scheduled_date,
+        scheduled_time: s.scheduled_time, status: s.status, customer_id: s.customer_id,
+        order_id: s.order_id, address: s.address,
+        work_type: wt ? { id: wt.id, name: wt.name, price: Number(wt.price || 0), qty: wtQty } : null,
+        difficulties: dRows.map((d) => ({ id: d.difficulty_id, name: wdMap[d.difficulty_id]?.name || d.difficulty_id, bonus: Number(wdMap[d.difficulty_id]?.bonus || 0), qty: d.qty })),
+        extra_income: feeBucket.items, extra_income_total: sharedExtraTotal + Object.values(feeBucket.perUserExtra).reduce((a, b) => a + b, 0),
+        extra_income_share: extraIncomeShare, num_people: n, type_point_share: typePt, diff_point_share: diffPt, money_share: money,
+      });
+    }
+  }
+
+  // ✅ Chi tiết chấm công: sắp xếp danh sách công việc theo NGÀY tăng dần
+  //    (đầu kỳ → cuối kỳ, cùng ngày thì theo giờ) — trước đây trả về theo
+  //    thứ tự ngẫu nhiên của truy vấn nên popup chi tiết hiển thị lộn xộn.
+  for (const row of Object.values(perUser)) {
+    row.lines.sort((a: any, b: any) => {
+      const dateCmp = String(a.scheduled_date ?? "").localeCompare(String(b.scheduled_date ?? ""));
+      if (dateCmp !== 0) return dateCmp;
+      return String(a.scheduled_time ?? "").localeCompare(String(b.scheduled_time ?? ""));
+    });
+  }
+
+  return {
+    rows: Object.values(perUser).sort((a, b) => b.total_money - a.total_money),
+    customers,
+    orders,
+  };
+}
+
 // ĐÃ TỐI ƯU: attendanceSummary chỉ tải schedules của khoảng ngày đang xem
 // (không tải toàn bộ), sau đó tải assignments/difficulties/fees chỉ cho
 // các schedule_id đó (batched .in() query). Đây là truy vấn đúng rồi — giữ nguyên.
@@ -305,119 +435,12 @@ export const attendanceSummary = createServerFn({ method: "GET" })
       next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
     }
 
-    const { data: schedules, error: e1 } = await supabase
-      .from("schedules")
-      .select("id, title, scheduled_date, scheduled_time, work_type_id, work_type_qty, status, customer_id, order_id, address")
-      .gte("scheduled_date", from)
-      .lt("scheduled_date", next)
-      .in("status", ["approved", "in_progress", "done"]);
-    if (e1) throw new Error(e1.message);
-
-    const ids = (schedules ?? []).map((s: any) => s.id);
-    const [assigns, diffs, fees, wtypes, wdiffs, users, customers, orders] = await Promise.all([
-      ids.length
-        ? supabase.from("schedule_assignments").select("schedule_id, user_id").in("schedule_id", ids).then((r) => r.data ?? [])
-        : Promise.resolve([]),
-      ids.length
-        ? supabase.from("schedule_difficulties").select("schedule_id, difficulty_id, qty").in("schedule_id", ids).then((r) => r.data ?? [])
-        : Promise.resolve([]),
-      ids.length
-        ? supabase.from("tech_fees").select("schedule_id, product_id, qty, unit_fee, user_id").in("schedule_id", ids).then((r) => r.data ?? [])
-        : Promise.resolve([]),
-      fetchRows("work_types"),
-      fetchRows("work_difficulties"),
-      fetchRows("users", { select: "id, full_name, username" }),
-      fetchRows("customers", { select: "id, name, phone", orderBy: "created_at", ascending: false }),
-      fetchRows("orders", { select: "id, code, total" }),
-    ]);
-
-    const wtMap: Record<string, any> = {};
-    for (const w of wtypes) wtMap[w.id] = w;
-    const wdMap: Record<string, any> = {};
-    for (const w of wdiffs) wdMap[w.id] = w;
-    const userMap: Record<string, any> = {};
-    for (const u of users) userMap[u.id] = u;
-
-    const assignBySchedule: Record<string, string[]> = {};
-    for (const a of assigns as any[]) {
-      (assignBySchedule[a.schedule_id] ||= []).push(a.user_id);
-    }
-    const diffsBySchedule: Record<string, { difficulty_id: string; qty: number }[]> = {};
-    for (const d of diffs as any[]) {
-      (diffsBySchedule[d.schedule_id] ||= []).push({ difficulty_id: d.difficulty_id, qty: Math.max(1, Number(d.qty ?? 1)) });
-    }
-    const feesBySchedule: Record<string, { items: any[]; sharedTotal: number; perUserExtra: Record<string, number> }> = {};
-    for (const f of fees as any[]) {
-      const bucket = (feesBySchedule[f.schedule_id] ||= { items: [], sharedTotal: 0, perUserExtra: {} });
-      const amount = Number(f.qty || 0) * Number(f.unit_fee || 0);
-      bucket.items.push({ product_id: f.product_id, qty: Number(f.qty || 0), unit_fee: Number(f.unit_fee || 0), amount, user_id: f.user_id || null });
-      if (f.user_id) {
-        bucket.perUserExtra[f.user_id] = (bucket.perUserExtra[f.user_id] ?? 0) + amount;
-      } else {
-        bucket.sharedTotal += amount;
-      }
-    }
-
-    const perUser: Record<string, {
-      user_id: string; full_name: string; username: string;
-      type_points: number; diff_points: number; total_money: number;
-      extra_income: number; schedule_count: number; lines: any[];
-    }> = {};
-
-    for (const s of schedules as any[]) {
-      const people = assignBySchedule[s.id] || [];
-      if (!people.length) continue;
-      const n = people.length;
-      const wt = s.work_type_id ? wtMap[s.work_type_id] : null;
-      const wtQty = Math.max(1, Number(s.work_type_qty ?? 1));
-      const dRows = diffsBySchedule[s.id] || [];
-      const diffSumPrice = dRows.reduce((sum, d) => sum + Number(wdMap[d.difficulty_id]?.bonus || 0) * d.qty, 0);
-      const typePrice = Number(wt?.price || 0) * wtQty;
-      const feeBucket = feesBySchedule[s.id] || { items: [], sharedTotal: 0, perUserExtra: {} };
-      const sharedExtraTotal = feeBucket.sharedTotal;
-
-      for (const uid_ of people) {
-        const u = userMap[uid_] || { id: uid_, full_name: uid_, username: "" };
-        const row = (perUser[uid_] ||= { user_id: uid_, full_name: u.full_name, username: u.username, type_points: 0, diff_points: 0, total_money: 0, extra_income: 0, schedule_count: 0, lines: [] });
-        const typePt = wt ? 1 / n : 0;
-        const diffPt = dRows.length / n;
-        const userDirectExtra = feeBucket.perUserExtra[uid_] ?? 0;
-        const money = (typePrice + diffSumPrice + sharedExtraTotal) / n + userDirectExtra;
-        const extraIncomeShare = sharedExtraTotal / n + userDirectExtra;
-        row.type_points += typePt;
-        row.diff_points += diffPt;
-        row.total_money += money;
-        row.extra_income += extraIncomeShare;
-        row.schedule_count += 1;
-        row.lines.push({
-          schedule_id: s.id, title: s.title, scheduled_date: s.scheduled_date,
-          scheduled_time: s.scheduled_time, status: s.status, customer_id: s.customer_id,
-          order_id: s.order_id, address: s.address,
-          work_type: wt ? { id: wt.id, name: wt.name, price: Number(wt.price || 0), qty: wtQty } : null,
-          difficulties: dRows.map((d) => ({ id: d.difficulty_id, name: wdMap[d.difficulty_id]?.name || d.difficulty_id, bonus: Number(wdMap[d.difficulty_id]?.bonus || 0), qty: d.qty })),
-          extra_income: feeBucket.items, extra_income_total: sharedExtraTotal + Object.values(feeBucket.perUserExtra).reduce((a, b) => a + b, 0),
-          extra_income_share: extraIncomeShare, num_people: n, type_point_share: typePt, diff_point_share: diffPt, money_share: money,
-        });
-      }
-    }
-
-    // ✅ Chi tiết chấm công: sắp xếp danh sách công việc theo NGÀY tăng dần
-    //    (đầu kỳ → cuối kỳ, cùng ngày thì theo giờ) — trước đây trả về theo
-    //    thứ tự ngẫu nhiên của truy vấn nên popup chi tiết hiển thị lộn xộn.
-    for (const row of Object.values(perUser)) {
-      row.lines.sort((a: any, b: any) => {
-        const dateCmp = String(a.scheduled_date ?? "").localeCompare(String(b.scheduled_date ?? ""));
-        if (dateCmp !== 0) return dateCmp;
-        return String(a.scheduled_time ?? "").localeCompare(String(b.scheduled_time ?? ""));
-      });
-    }
-
-    return {
-      month,
-      rows: Object.values(perUser).sort((a, b) => b.total_money - a.total_money),
-      customers,
-      orders,
-    };
+    const r = await computeTechPay({
+      from,
+      next,
+      statuses: ["approved", "in_progress", "done"],
+    });
+    return { month, rows: r.rows, customers: r.customers, orders: r.orders };
   });
 
 // ── updateScheduleOrderLink ───────────────────────────────────────────────────

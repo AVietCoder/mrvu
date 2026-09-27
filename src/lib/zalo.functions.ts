@@ -194,6 +194,8 @@ export const saveZnsTemplateFn = createServerFn({ method: "POST" }).handler(
       listParams?: any[];
       templateTag?: string;
       price?: string | number;
+      /** ENABLE | REJECT | ... — để trang CSKH báo được "mẫu đang bị từ chối". */
+      zaloStatus?: string;
     };
   }) => {
     const db = getSupabaseAdmin();
@@ -212,6 +214,8 @@ export const saveZnsTemplateFn = createServerFn({ method: "POST" }).handler(
       list_params: data.listParams ?? [],
       template_tag: data.templateTag ?? null,
       price: data.price != null ? Number(data.price) : null,
+      zalo_status: data.zaloStatus ?? null,
+      status_checked_at: now(),
     };
 
     const prev = (existing ?? [])[0] as any;

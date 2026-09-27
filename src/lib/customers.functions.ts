@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
 import { normalizePhoneForStorage } from "./zalo/phone";
+import { getSupabaseAdmin } from "./zalo/admin-client";
 import {
   aggregateColumn,
   countRows,
@@ -124,6 +125,18 @@ export const upsertCustomer = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {
     // ✅ Chỉ admin mới được chỉnh sửa công nợ / điều chỉnh công nợ
     const actorAdmin = await isActorAdmin(data._actor_id);
+
+    // Nhóm khách BẮT BUỘC khi tạo mới. Trước đây thiếu nhóm thì DB ngầm gán
+    // "Khách lẻ" (default của cột) — không ai chọn mà vẫn lưu được, nên gần
+    // như toàn bộ khách đều rơi vào "lẻ". Khi sửa khách thì không gửi nhóm
+    // lên = giữ nguyên nhóm cũ.
+    const groupCode = String(data.group_name ?? "").trim();
+    if (!data.id && !groupCode) {
+      throw new Error("Vui lòng chọn nhóm khách hàng");
+    }
+    if (data.id && data.group_name !== undefined && !groupCode) {
+      throw new Error("Vui lòng chọn nhóm khách hàng");
+    }
 
     const payload: Record<string, any> = {
       name: data.name,
@@ -499,3 +512,170 @@ export const collectCustomerPayment = createServerFn({ method: "POST" })
 
     return { ok: true, code, new_debt: newDebt };
   });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NHÓM KHÁCH HÀNG (bảng customer_groups — migration v12)
+//
+// customers.group_name lưu MÃ nhóm (code). Mã là bất biến; tên và màu sửa
+// được. Đọc thì ai cũng đọc được; thêm/sửa/xoá chỉ admin, ghi qua service
+// role vì bảng bật RLS chỉ cho phép đọc bằng anon key.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * 4 nhóm cũ vốn hardcode trong code. Dùng làm phương án dự phòng khi DB chưa
+ * chạy migration v12 — trang khách hàng vẫn chạy bình thường như trước.
+ */
+const FALLBACK_GROUPS = [
+  { code: "le", name: "Khách lẻ", color: "gray", sort_order: 1, is_active: true },
+  { code: "dai_ly", name: "Đại lý", color: "blue", sort_order: 2, is_active: true },
+  { code: "vip", name: "VIP", color: "amber", sort_order: 3, is_active: true },
+  { code: "cong_trinh", name: "Công trình", color: "purple", sort_order: 4, is_active: true },
+];
+
+const GROUP_COLORS = ["gray", "blue", "amber", "purple", "green", "red", "pink", "teal"];
+
+/** "Khách Sỉ Miền Nam" → "khach_si_mien_nam". Mã nhóm lưu trong customers. */
+function slugifyGroupCode(name: string): string {
+  return (
+    String(name || "")
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/đ/g, "d")
+      .replace(/Đ/g, "D")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 40) || "nhom"
+  );
+}
+
+export const listCustomerGroups = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data?: { withCounts?: boolean } }) => {
+    const { data: rows, error } = await supabase
+      .from("customer_groups")
+      .select("code, name, color, sort_order, is_active")
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
+
+    // Chưa chạy migration v12 → trả 4 nhóm cũ, không làm vỡ trang.
+    if (error) {
+      return { groups: FALLBACK_GROUPS.map((g) => ({ ...g, customer_count: null })), fallback: true };
+    }
+
+    const groups = (rows ?? []) as any[];
+
+    // Đếm số khách mỗi nhóm — chỉ khi màn quản lý cần (để biết nhóm nào xoá được).
+    if (data?.withCounts) {
+      await Promise.all(
+        groups.map(async (g) => {
+          g.customer_count = await countRows("customers", { eq: { group_name: g.code } }).catch(() => null);
+        }),
+      );
+    }
+
+    return { groups, fallback: false };
+  },
+);
+
+async function assertAdmin(actorId?: string) {
+  if (!(await isActorAdmin(actorId))) {
+    throw new Error("Chỉ quản trị viên mới được quản lý nhóm khách hàng");
+  }
+}
+
+export const upsertCustomerGroup = createServerFn({ method: "POST" }).handler(
+  async ({
+    data,
+  }: {
+    data: {
+      code?: string; // có = sửa, không có = thêm mới
+      name: string;
+      color?: string;
+      sort_order?: number;
+      is_active?: boolean;
+      actorId?: string;
+    };
+  }) => {
+    await assertAdmin(data?.actorId);
+
+    const name = String(data?.name ?? "").trim();
+    if (!name) throw new Error("Nhập tên nhóm");
+    if (name.length > 50) throw new Error("Tên nhóm tối đa 50 ký tự");
+
+    const color = GROUP_COLORS.includes(String(data.color)) ? String(data.color) : "gray";
+    const db = getSupabaseAdmin();
+
+    // Trùng tên (không phân biệt hoa thường) → dễ gây nhầm lẫn khi chọn.
+    const { data: same } = await db.from("customer_groups").select("code, name").ilike("name", name);
+    if ((same ?? []).some((g: any) => g.code !== data.code)) {
+      throw new Error(`Đã có nhóm tên "${name}"`);
+    }
+
+    if (data.code) {
+      // Sửa: KHÔNG đổi mã — mã đang được lưu trong hàng nghìn khách.
+      const { error } = await db
+        .from("customer_groups")
+        .update({
+          name,
+          color,
+          sort_order: Number(data.sort_order ?? 0),
+          is_active: data.is_active !== false,
+        })
+        .eq("code", data.code);
+      if (error) throw new Error(error.message);
+      await logActivity({ action: "update_customer_group", detail: `Sửa nhóm khách: ${name}`, employee_id: data.actorId ?? null });
+      return { code: data.code };
+    }
+
+    // Thêm mới: sinh mã từ tên, thêm hậu tố nếu trùng mã đã có.
+    const base = slugifyGroupCode(name);
+    let code = base;
+    for (let i = 2; i < 100; i++) {
+      const { data: hit } = await db.from("customer_groups").select("code").eq("code", code).limit(1);
+      if (!hit?.length) break;
+      code = `${base}_${i}`;
+    }
+
+    const { data: maxRow } = await db
+      .from("customer_groups")
+      .select("sort_order")
+      .order("sort_order", { ascending: false })
+      .limit(1);
+
+    const { error } = await db.from("customer_groups").insert({
+      code,
+      name,
+      color,
+      sort_order: data.sort_order ?? Number(maxRow?.[0]?.sort_order ?? 0) + 1,
+      is_active: data.is_active !== false,
+      created_at: now(),
+    });
+    if (error) throw new Error(error.message);
+    await logActivity({ action: "create_customer_group", detail: `Thêm nhóm khách: ${name}`, employee_id: data.actorId ?? null });
+    return { code };
+  },
+);
+
+export const deleteCustomerGroup = createServerFn({ method: "POST" }).handler(
+  async ({ data }: { data: { code: string; actorId?: string } }) => {
+    await assertAdmin(data?.actorId);
+    if (!data?.code) throw new Error("Thiếu mã nhóm");
+
+    // "le" là giá trị mặc định của cột customers.group_name trong DB — xoá đi
+    // thì mọi chỗ tạo khách không truyền nhóm sẽ lỗi khoá ngoại.
+    if (data.code === "le") throw new Error('Không thể xoá nhóm mặc định "Khách lẻ"');
+
+    const used = await countRows("customers", { eq: { group_name: data.code } });
+    if (used > 0) {
+      throw new Error(
+        `Nhóm đang có ${used} khách. Chuyển các khách này sang nhóm khác, hoặc TẮT nhóm để ẩn khỏi ô chọn.`,
+      );
+    }
+
+    const db = getSupabaseAdmin();
+    const { error } = await db.from("customer_groups").delete().eq("code", data.code);
+    if (error) throw new Error(error.message);
+    await logActivity({ action: "delete_customer_group", detail: `Xoá nhóm khách: ${data.code}`, employee_id: data.actorId ?? null });
+    return { ok: true };
+  },
+);

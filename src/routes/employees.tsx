@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   listUsersFn,
@@ -10,6 +10,7 @@ import {
   updateUserPermsFn,
   getFormOptionsFn,
   resetPasswordFn,
+  updateUserProfileFn,
 } from "@/lib/auth.functions";
 import { useAuth } from "@/context/AuthContext";
 import { AppShell, Card } from "@/components/AppShell";
@@ -37,6 +38,7 @@ import {
   KeyRound,
   Phone,
   Calendar,
+  Cake,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ALL_PERMISSIONS, type Permission } from "@/lib/types";
@@ -79,6 +81,7 @@ function Page() {
   const [addForm, setAddForm] = useState({
     full_name: "",
     phone: "",
+    birthday: "",
     username: "",
     password: "123456",
     is_admin: Number(0),
@@ -171,8 +174,10 @@ function Page() {
       setAddForm({
         full_name: "",
         phone: "",
+        birthday: "",
         username: "",
         password: "123456",
+        is_admin: Number(0),
         branch_ids: [],
       });
       qc.invalidateQueries({ queryKey: ["users"] });
@@ -283,6 +288,15 @@ function Page() {
   }
 
   const viewUser = viewId ? users?.find((u) => u.id === viewId) : null;
+
+  // Ô sửa ngày sinh trong dialog xem nhân viên.
+  const updateProfileFn = useServerFn(updateUserProfileFn);
+  const [birthdayDraft, setBirthdayDraft] = useState("");
+  const [savingBirthday, setSavingBirthday] = useState(false);
+  // Mở nhân viên khác thì nạp lại giá trị của người đó, không giữ lại bản nháp cũ.
+  useEffect(() => {
+    setBirthdayDraft(viewUser?.birthday ? String(viewUser.birthday).slice(0, 10) : "");
+  }, [viewId, viewUser?.birthday]);
   const allBranchesCount = opts?.branches?.length || 0;
 
   return (
@@ -539,6 +553,19 @@ function Page() {
             </div>
 
             <div>
+              <Label>Ngày sinh</Label>
+              <Input
+                type="date"
+                className="mt-1"
+                value={addForm.birthday}
+                onChange={(e) => setAddForm({ ...addForm, birthday: e.target.value })}
+              />
+              <div className="text-xs text-muted-foreground mt-1">
+                Chỉ dùng để nhắc sinh nhật nội bộ trong trang Chăm sóc KH. Không gửi tin cho nhân viên.
+              </div>
+            </div>
+
+            <div>
               <Label>Username *</Label>
               <Input
                 className="mt-1"
@@ -654,6 +681,47 @@ function Page() {
                     </div>
                     <div className="font-medium">
                       {new Date(viewUser.created_at).toLocaleDateString("vi-VN")}
+                    </div>
+                  </div>
+
+                  {/* Ngày sinh sửa được ngay tại đây — nhân viên tạo trước
+                      migration v11 đều chưa có, cần chỗ điền bổ sung. */}
+                  <div className="col-span-2 rounded-lg border p-3">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                      <Cake className="h-3 w-3" /> Ngày sinh
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        type="date"
+                        className="h-9"
+                        value={birthdayDraft}
+                        onChange={(e) => setBirthdayDraft(e.target.value)}
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={savingBirthday || birthdayDraft === (viewUser.birthday ?? "")}
+                        onClick={async () => {
+                          setSavingBirthday(true);
+                          try {
+                            await updateProfileFn({
+                              data: {
+                                user_id: viewUser.id,
+                                birthday: birthdayDraft || null,
+                                admin_id: me?.id,
+                              },
+                            });
+                            toast.success("Đã lưu ngày sinh");
+                            qc.invalidateQueries({ queryKey: ["users"] });
+                          } catch (e: any) {
+                            toast.error(e?.message ?? "Lỗi lưu ngày sinh");
+                          } finally {
+                            setSavingBirthday(false);
+                          }
+                        }}
+                      >
+                        {savingBirthday ? "Đang lưu..." : "Lưu"}
+                      </Button>
                     </div>
                   </div>
                 </div>

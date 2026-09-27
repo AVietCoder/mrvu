@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, Package, Boxes, ShoppingCart, Users, UserCog,
   BarChart3, Building2, Fan, LogOut, Settings, ShieldCheck, ChevronDown,
-  CalendarDays, BookOpen, History, MessageCircle,
+  CalendarDays, BookOpen, History, MessageCircle, HeartHandshake, CalendarClock, Banknote,
 } from "lucide-react";
 import { type ReactNode, useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -32,6 +32,13 @@ const nav: NavItem[] = [
   { to: "/branches",  label: "Chi nhánh",   icon: Building2,     permission: "manage_branches" },
   { to: "/schedule", label: "Lịch làm việc", icon: CalendarDays, permission: "create_schedule" as Permission }, // canSeeNav xử lý special cho schedule
   { to: "/activity", label: "Lịch sử", icon: History, permission: "admin" },
+  // Danh sách sinh nhật / bảo dưỡng: MỌI nhân viên đều xem được nên không đặt
+  // permission ở đây. Riêng nút GỬI trong trang mới gate bằng "customer_care".
+  { to: "/care", label: "Chăm sóc KH", icon: HeartHandshake },
+  // Lịch trực: mọi nhân viên xem được ca của mình. Nút sửa gate "manage_roster".
+  { to: "/roster", label: "Lịch trực", icon: CalendarClock },
+  // Lương + số tài khoản là dữ liệu nhạy cảm.
+  { to: "/payroll", label: "Bảng lương", icon: Banknote, permission: "manage_payroll" },
   // Đụng tới token gửi tin tốn tiền → chỉ admin.
   { to: "/zalo", label: "Zalo OA", icon: MessageCircle, permission: "admin" },
 ];

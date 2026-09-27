@@ -15,6 +15,7 @@ import {
 } from "./supabase";
 import { recalculateCustomerDebt } from "./customers.functions";
 import { enqueueOrderCompletedZns } from "./zalo/enqueue";
+import { sendEmail } from "./email";
 
 // ─── Gửi email thông báo admin ─────────────────────────────────────────────
 async function getAdminEmail(): Promise<string | null> {
@@ -149,25 +150,20 @@ async function sendOrderNotificationEmail(params: {
       ? `[${params.siteName}] Đơn hàng mới: ${params.orderCode} — ${params.customerName || "Khách lẻ"}`
       : `[${params.siteName}] Hoàn thành đơn: ${params.orderCode} — ${params.customerName || "Khách lẻ"}`;
 
-  // Gửi qua Supabase edge function "send-email" (nếu có)
-  // hoặc qua SMTP bằng fetch nếu tự cấu hình
-  // Hiện tại dùng Resend API nếu có RESEND_API_KEY trong env
-  const resendKey = process.env.RESEND_API_KEY;
-  if (!resendKey) return; // Chưa cấu hình — bỏ qua
-
-  await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: `${params.siteName} <noreply@ttv.vn>`,
-      to: [params.adminEmail],
-      subject,
-      html,
-    }),
+  // Đi qua tầng gửi mail dùng chung (src/lib/email.ts) thay vì tự gọi Resend.
+  // Hành vi giữ nguyên: thiếu RESEND_API_KEY thì bỏ qua im lặng, không làm
+  // hỏng việc tạo/hoàn tất đơn. Khác biệt duy nhất: lỗi từ Resend giờ ĐƯỢC
+  // ĐỌC thay vì vứt đi, nên hỏng gửi mail sẽ hiện trong log máy chủ.
+  const res = await sendEmail({
+    to: [params.adminEmail],
+    subject,
+    html,
+    siteName: params.siteName,
   });
+
+  if (!res.ok && res.error) {
+    console.error("[email] Gửi thông báo đơn hàng thất bại:", res.error);
+  }
 }
 
 type LineItem = { product_id: string; qty: number; unit_price: number; discount?: number };
@@ -972,7 +968,12 @@ export const updateOrderStatus = createServerFn({ method: "POST" })
     if (typeof data.paid === "number") updateFields.paid = data.paid;
     if (data.payment_method) updateFields.payment_method = data.payment_method;
     // ✅ Ghi completed_at = thời điểm nhấn "Tạo hóa đơn"
-    if (data.status === "completed") updateFields.completed_at = now();
+    // Chỉ đóng dấu mốc hoàn tất LẦN ĐẦU. Không có guard này thì mỗi lần thao
+    // tác lại trên đơn đã completed sẽ đẩy mốc về hiện tại, làm hạn bảo dưỡng
+    // 6 tháng của khách bị lùi vô hạn.
+    if (data.status === "completed" && currentOrder.status !== "completed") {
+      updateFields.completed_at = now();
+    }
     await updateWhere("orders", updateFields, { id: data.id });
 
     // Lựa chọn "Gửi thông báo Zalo" ở màn hình Tạo hóa đơn (đơn đặt hàng ->
@@ -1173,6 +1174,18 @@ export const updateOrder = createServerFn({ method: "POST" })
           paid: Number(data.paid || 0),
           payment_method: paymentMethod,
           note: data.note || null,
+          // Đường sửa đơn này TRỪ KHO khi chuyển sang completed (xem
+          // applyCompletedOrderSideEffects bên dưới) nhưng trước đây không ghi
+          // completed_at -> đơn đó mất mốc "hàng rời kho", kéo theo không tính
+          // được hạn bảo dưỡng 6 tháng và lọt khỏi báo cáo theo ngày.
+          // Đơn ĐÃ completed từ trước thì GIỮ NGUYÊN mốc cũ: sửa ghi chú không
+          // được phép reset lại đồng hồ bảo dưỡng của khách.
+          completed_at:
+            data.status === "completed"
+              ? existingStatus === "completed"
+                ? existingOrder.completed_at ?? now()
+                : now()
+              : null,
         },
         { id: data.id },
       );

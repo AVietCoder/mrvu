@@ -54,7 +54,10 @@ import {
   Wallet,
   Landmark,
   FileSpreadsheet,
+  Tags,
 } from "lucide-react";
+import { useCustomerGroups } from "@/hooks/useCustomerGroups";
+import { CustomerGroupManager } from "@/components/CustomerGroupManager";
 
 import { toast } from "sonner";
 
@@ -64,13 +67,6 @@ export const Route = createFileRoute("/customers/")({
   }),
   component: CustomersPage,
 });
-
-const groupLabel: Record<string, string> = {
-  le: "Khách lẻ",
-  dai_ly: "Đại lý",
-  vip: "VIP",
-  cong_trinh: "Công trình",
-};
 
 const PROVINCES = [
   "An Giang",
@@ -171,7 +167,8 @@ const empty: FormState = {
   district: "",
   ward: "",
   address: "",
-  group_name: "le",
+  // Để trống: bắt buộc nhân viên chọn, không ngầm gán "Khách lẻ" nữa.
+  group_name: "",
   customer_type: "ca_nhan",
   company_name: "",
   tax_code: "",
@@ -192,6 +189,10 @@ function CustomersPage() {
   const del = useServerFn(deleteCustomer);
   const statsFn = useServerFn(getCustomerStats);
   const exportFn = useServerFn(exportCustomerDebts);
+
+  // Nhóm khách lấy từ bảng customer_groups (trước đây hardcode 4 nhóm).
+  const { groups: allGroups, optionsFor: groupOptionsFor, labelOf: groupLabelOf } = useCustomerGroups();
+  const [groupMgrOpen, setGroupMgrOpen] = useState(false);
 
   const [exporting, setExporting] = useState(false);
 
@@ -325,6 +326,10 @@ function CustomersPage() {
   function handleSave(e: FormEvent) {
     e.preventDefault();
     if (saving) return; // chống nhấn đúp tạo 2 khách hàng
+    if (!form.group_name) {
+      toast.error("Vui lòng chọn nhóm khách hàng");
+      return;
+    }
     // Còn cảnh báo trùng → hỏi lại 1 lần, xác nhận xong mới lưu.
     if (duplicates.length > 0) {
       setDupConfirmOpen(true);
@@ -396,7 +401,7 @@ function CustomersPage() {
 
       // Mô tả bộ lọc để ghi vào phụ đề file.
       const parts: string[] = [];
-      if (filterGroup) parts.push(groupLabel[filterGroup] ?? filterGroup);
+      if (filterGroup) parts.push(groupLabelOf(filterGroup));
       if (filterDebt === "debt") parts.push("Có công nợ");
       else if (filterDebt === "no_debt") parts.push("Không nợ");
       if (debouncedSearch) parts.push(`từ khoá "${debouncedSearch}"`);
@@ -405,6 +410,7 @@ function CustomersPage() {
       const count = await exportCustomerDebtToExcel({
         customers: rows,
         filterText,
+        groupLabels: groupLabelOf,
       });
       toast.success(`Đã xuất ${count} khách hàng ra file Excel.`);
     } catch (err: any) {
@@ -530,10 +536,23 @@ function CustomersPage() {
                 onChange={(e) => { setFilterGroup(e.target.value); setPage(1); }}
               >
                 <option value="">Tất cả nhóm</option>
-                {Object.entries(groupLabel).map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
+                {/* Lọc thì hiện CẢ nhóm đã tắt — khách cũ vẫn nằm trong đó. */}
+                {allGroups.map((g) => (
+                  <option key={g.code} value={g.code}>
+                    {g.name}{g.is_active ? "" : " (đã tắt)"}
+                  </option>
                 ))}
               </select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => setGroupMgrOpen(true)}
+                title="Thêm / sửa nhóm khách hàng"
+              >
+                <Tags className="h-4 w-4 mr-1" /> Nhóm
+              </Button>
 
               <select
                 className="h-9 rounded-md border bg-background px-2 text-sm"
@@ -770,14 +789,19 @@ function CustomersPage() {
               {form.customer_type === "ca_nhan" && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-1">
-                    <Label className="text-xs font-medium">Nhóm đối tác</Label>
+                    <Label className="text-xs font-medium">
+                      Nhóm khách hàng <span className="text-destructive">*</span>
+                    </Label>
                     <select
-                      className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      className={`mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm ${
+                        form.group_name ? "border-input" : "border-destructive/60"
+                      }`}
                       value={form.group_name}
                       onChange={(e) => setForm({ ...form, group_name: e.target.value })}
                     >
-                      {Object.entries(groupLabel).map(([v, l]) => (
-                        <option key={v} value={v}>{l}</option>
+                      <option value="" disabled>— Chọn nhóm —</option>
+                      {groupOptionsFor(form.group_name).map((g) => (
+                        <option key={g.code} value={g.code}>{g.name}</option>
                       ))}
                     </select>
                   </div>
@@ -836,14 +860,19 @@ function CustomersPage() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs font-medium">Nhóm đối tác</Label>
+                      <Label className="text-xs font-medium">
+                        Nhóm khách hàng <span className="text-destructive">*</span>
+                      </Label>
                       <select
-                        className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        className={`mt-1 h-10 w-full rounded-md border bg-background px-3 text-sm ${
+                          form.group_name ? "border-input" : "border-destructive/60"
+                        }`}
                         value={form.group_name}
                         onChange={(e) => setForm({ ...form, group_name: e.target.value })}
                       >
-                        {Object.entries(groupLabel).map(([v, l]) => (
-                          <option key={v} value={v}>{l}</option>
+                        <option value="" disabled>— Chọn nhóm —</option>
+                        {groupOptionsFor(form.group_name).map((g) => (
+                          <option key={g.code} value={g.code}>{g.name}</option>
                         ))}
                       </select>
                     </div>
@@ -998,7 +1027,7 @@ function CustomersPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-lg font-bold">{viewCustomer.name}</div>
                     <span className={`rounded-full px-2 py-0.5 text-xs bg-gray-100 text-gray-700"`}>
-                      {groupLabel[viewCustomer.group_name] ?? viewCustomer.group_name}
+                      {groupLabelOf(viewCustomer.group_name)}
                     </span>
                     <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700">
                       {viewCustomer.customer_type === "to_chuc" ? "Tổ chức / Hộ kinh doanh" : "Cá nhân"}
@@ -1072,6 +1101,8 @@ function CustomersPage() {
           }
         }
       `}</style>
+
+      <CustomerGroupManager open={groupMgrOpen} onOpenChange={setGroupMgrOpen} />
     </AppShell>
   );
 }

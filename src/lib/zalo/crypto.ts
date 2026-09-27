@@ -56,15 +56,59 @@ export function decryptToken(payload: string): string {
 }
 
 /**
- * Khoá chống gửi trùng. Cùng một đơn + cùng một loại tin → luôn ra cùng một
- * khoá, nên lần enqueue thứ hai bị UNIQUE constraint của DB chặn lại.
+ * Khoá chống gửi trùng. Cùng một đối tượng + cùng một loại tin → luôn ra cùng
+ * một khoá, nên lần enqueue thứ hai bị UNIQUE constraint của DB chặn lại.
+ *
+ * ⚠️ NHÁNH CŨ PHẢI BẤT BIẾN TỪNG BYTE.
+ * Các job `order_completed` đã nằm sẵn trong DB với khoá sha256(conn|order|code).
+ * Đổi công thức → enqueue lại một đơn cũ sẽ sinh khoá khác → UNIQUE không chặn
+ * được nữa → KHÁCH NHẬN TIN LẦN HAI và mất tiền thật. Vì vậy nhánh cũ giữ
+ * nguyên, tin kiểu mới đi qua nhánh "v2" tách biệt.
+ *
+ * Phạm vi chống trùng (`scope`) theo từng loại tin:
+ *
+ *   order_completed → nhánh cũ, 1 tin / đơn / vĩnh viễn.
+ *   birthday        → scope "d:<ngày VN>"  — 1 tin / khách / ngày.
+ *                     Bấm gửi 5 lần trong ngày vẫn chỉ ra 1 tin.
+ *   maintenance     → scope "o:<hash danh sách đơn>" — 1 tin / BỘ ĐƠN đến hạn.
+ *                     Không dùng scope theo ngày: khi quét bù (p_window_days),
+ *                     khách đã nhắc hôm qua vẫn còn trong danh sách hôm nay,
+ *                     scope-ngày sẽ cho gửi lại. Sang kỳ sau có đơn mới đến
+ *                     hạn → bộ đơn đổi → khoá đổi → gửi được.
  */
 export function buildIdempotencyKey(parts: {
   connectionId: string;
-  orderId: string;
   templateCode: string;
+  orderId?: string | null;
+  customerId?: string | null;
+  scope?: string | null;
 }): string {
+  // ── Nhánh cũ (order_completed): KHÔNG ĐƯỢC SỬA ──
+  if (parts.orderId && !parts.customerId && !parts.scope) {
+    return createHash("sha256")
+      .update([parts.connectionId, parts.orderId, parts.templateCode].join("|"))
+      .digest("hex");
+  }
+
   return createHash("sha256")
-    .update([parts.connectionId, parts.orderId, parts.templateCode].join("|"))
+    .update(
+      [
+        "v2",
+        parts.connectionId,
+        parts.templateCode,
+        parts.customerId ?? "",
+        parts.orderId ?? "",
+        parts.scope ?? "",
+      ].join("|"),
+    )
     .digest("hex");
+}
+
+/**
+ * Rút gọn danh sách id đơn thành một chuỗi ổn định để làm scope.
+ * Sắp xếp trước để thứ tự trả về từ DB không làm đổi khoá.
+ */
+export function orderSetScope(orderIds: string[]): string {
+  const sorted = [...new Set(orderIds.filter(Boolean))].sort();
+  return "o:" + createHash("sha1").update(sorted.join(",")).digest("hex").slice(0, 16);
 }

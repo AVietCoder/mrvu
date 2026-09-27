@@ -51,6 +51,11 @@ export interface ExportCustomerDebtOptions {
   customers: any[];
   /** Mô tả bộ lọc đang áp dụng, hiển thị ở dòng phụ đề (không bắt buộc) */
   filterText?: string;
+  /**
+   * Tên nhóm theo mã, lấy từ bảng customer_groups. Không truyền thì dùng 4
+   * nhóm mặc định — nhóm mới thêm sẽ hiện ra bằng mã thay vì tên.
+   */
+  groupLabels?: (code: string) => string;
 }
 
 /**
@@ -157,7 +162,9 @@ export async function exportCustomerDebtToExcel(
       stt: i + 1,
       name: c.name ?? "",
       phone: c.phone ?? "",
-      group: GROUP_LABEL[c.group_name] ?? c.group_name ?? "",
+      group: opts.groupLabels
+        ? opts.groupLabels(c.group_name)
+        : GROUP_LABEL[c.group_name] ?? c.group_name ?? "",
       type: TYPE_LABEL[c.customer_type] ?? c.customer_type ?? "",
       company: c.company_name ?? "",
       address: joinAddress(c),

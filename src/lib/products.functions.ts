@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
-import { deleteWhere, fetchAllRows, fetchRows, insertRow, now, uid, updateWhere, logActivity } from "./supabase";
+import { deleteWhere, fetchAllRows, fetchRows, insertRow, now, uid, updateWhere, logActivity, supabase } from "./supabase";
 
 // Sinh SKU KHÔNG trùng: lấy số lớn nhất ở cuối TẤT CẢ sku hiện có rồi +1.
 // KHÔNG dùng COUNT(*): khi xoá sản phẩm thì count tụt xuống và sinh ra một SKU
@@ -23,16 +23,52 @@ async function nextSku(): Promise<string> {
   return "SP-" + String(max + 1).padStart(4, "0");
 }
 
-export const listProducts = createServerFn({ method: "GET" }).handler(async () => {
-  const [products, categories, brands, stock] = await Promise.all([
-    fetchAllRows("products", { orderBy: "name" }),
-    fetchRows("categories", { orderBy: "name" }),
-    fetchRows("brands", { orderBy: "name" }),
-    fetchAllRows("stock"),
-  ]);
+export const listProducts = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data?: { branch_id?: string } }) => {
+    const branchId = data?.branch_id || null;
 
-  return { products, categories, brands, stock };
-});
+    // Tổng tồn gộp NGAY TRONG POSTGRES (RPC products_with_stock, migration v11).
+    // Trước đây hàm này tải TOÀN BỘ bảng stock về trình duyệt rồi cộng bằng JS.
+    // Số dòng = sản phẩm × chi nhánh, mà PostgREST cắt ở 1000 dòng → tổng tồn
+    // bị thiếu ÂM THẦM khi dữ liệu lớn, không có lỗi nào báo ra.
+    //
+    // branch_id rỗng = tổng TOÀN HỆ THỐNG (mọi kho, mọi chi nhánh).
+    const [rpcRes, categories, brands, branches] = await Promise.all([
+      supabase.rpc("products_with_stock", { p_branch_id: branchId }),
+      fetchRows("categories", { orderBy: "name" }),
+      fetchRows("brands", { orderBy: "name" }),
+      // listProducts trước đây không trả branches, khiến khối "Tồn kho theo
+      // chi nhánh" trong dialog chi tiết luôn rỗng.
+      fetchRows("branches", { orderBy: "name" }),
+    ]);
+
+    if (rpcRes.error) {
+      throw new Error(
+        `Không đọc được tồn kho: ${rpcRes.error.message}. ` +
+          `Nếu báo "Could not find the function" thì chưa chạy sql_migration_v11_care.sql.`,
+      );
+    }
+
+    const products = (rpcRes.data ?? []) as any[];
+    const totalStock = products.reduce((s, p) => s + Number(p.total_stock || 0), 0);
+
+    return { products, categories, brands, branches, totalStock, branchId };
+  },
+);
+
+/**
+ * Tồn kho chi tiết theo chi nhánh của MỘT sản phẩm.
+ * Nạp lười khi mở dialog chi tiết, thay vì kéo cả bảng stock cho mọi sản phẩm.
+ */
+export const getProductStock = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data: { product_id: string } }) => {
+    if (!data?.product_id) return [];
+    return await fetchRows("stock", {
+      eq: { product_id: data.product_id },
+      select: "product_id, branch_id, qty",
+    });
+  },
+);
 
 export const upsertProduct = createServerFn({ method: "POST" })
   .handler(async ({ data }: { data: any }) => {

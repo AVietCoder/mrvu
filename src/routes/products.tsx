@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useRef } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
-  listProducts, upsertProduct, deleteProduct,
+  listProducts, upsertProduct, deleteProduct, getProductStock,
   upsertCategory, upsertBrand, deleteBrand, deleteCategory,
 } from "@/lib/products.functions";
 import { uploadImageToCloudinary } from "@/lib/cloudinary";
@@ -17,7 +17,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Search, Tags, ChevronLeft, ChevronRight, Eye, Package, AlertTriangle, ImagePlus, X, Upload, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Tags, ChevronLeft, ChevronRight, Eye, Package, AlertTriangle, ImagePlus, X, Upload, Loader2, Boxes } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
@@ -64,7 +64,16 @@ function ProductsPage() {
   const delCat    = useServerFn(deleteCategory);
   const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery({ queryKey: ["products"], queryFn: () => list() });
+  // Rỗng = tổng TOÀN HỆ THỐNG. Chọn chi nhánh = tổng theo chi nhánh đó.
+  const [filterBranch, setFilterBranch] = useState("");
+  const { data, isLoading } = useQuery({
+    queryKey: ["products", filterBranch],
+    queryFn: () => list({ data: { branch_id: filterBranch || undefined } }),
+  });
+
+  // Tồn kho chi tiết của 1 sản phẩm — nạp lười khi mở dialog, không kéo cả
+  // bảng stock cho mọi sản phẩm như trước.
+  const stockFn = useServerFn(getProductStock);
   const [form, setForm] = useState<FormState>(empty);
   const [open, setOpen] = useState(false);
   const [viewId, setViewId] = useState<string | null>(null);
@@ -111,8 +120,10 @@ function ProductsPage() {
 
   function handleSearch(val: string) { setSearch(val); setPage(1); }
 
+  // Tổng tồn giờ do Postgres trả sẵn trên từng dòng sản phẩm (RPC
+  // products_with_stock), không còn cộng ở trình duyệt.
   const totalsByProduct = (id: string) =>
-    (data?.stock ?? []).filter((s) => s.product_id === id).reduce((a, b) => a + b.qty, 0);
+    Number((data?.products ?? []).find((p: any) => p.id === id)?.total_stock ?? 0);
 
   function startNew() { setForm(empty); setOpen(true); }
   function startEdit(id: string) {
@@ -265,16 +276,41 @@ function ProductsPage() {
 
   // View product detail
   const viewProduct = viewId ? data?.products.find((p) => p.id === viewId) : null;
-  const viewStock = viewId ? (data?.stock ?? []).filter((s) => s.product_id === viewId) : [];
-  const viewTotalStock = viewStock.reduce((a, b) => a + b.qty, 0);
+  const { data: viewStock = [] } = useQuery({
+    queryKey: ["productStock", viewId],
+    queryFn: () => stockFn({ data: { product_id: viewId! } }),
+    enabled: Boolean(viewId),
+  });
+  const viewTotalStock = (viewStock as any[]).reduce((a: number, b: any) => a + Number(b.qty || 0), 0);
 
-  // Low stock count
-  const lowStockCount = (data?.products ?? []).filter((p) => totalsByProduct(p.id) <= p.min_stock).length;
+  // Low stock count — đọc thẳng total_stock, không lặp qua bảng stock nữa.
+  const lowStockCount = (data?.products ?? []).filter(
+    (p: any) => Number(p.total_stock ?? 0) <= p.min_stock,
+  ).length;
+
+  // TỔNG HÀNG TỒN: server đã cộng sẵn trên toàn bộ sản phẩm khớp bộ lọc.
+  const totalStock = Number(data?.totalStock ?? 0);
 
   return (
     <AppShell title="Quản lý hàng hóa" loading={isLoading && !data}>
       {/* Stats */}
-      <div className="hidden md:grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+      <div className="hidden md:grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+        {/* TỔNG HÀNG TỒN — tổng số lượng đang tồn trong TẤT CẢ kho/chi nhánh,
+            gộp ở Postgres. Chọn chi nhánh thì thành tổng của riêng nơi đó. */}
+        <Card>
+          <div className="flex items-center gap-2 mb-1">
+            <Boxes className="h-4 w-4 text-primary" />
+            <div className="text-xs text-muted-foreground uppercase">Tổng hàng tồn</div>
+          </div>
+          <div className="text-2xl font-semibold">
+            {totalStock.toLocaleString("vi-VN")}
+          </div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            {filterBranch
+              ? (data?.branches ?? []).find((b: any) => b.id === filterBranch)?.name ?? "chi nhánh đã chọn"
+              : "toàn bộ kho / chi nhánh"}
+          </div>
+        </Card>
         <Card>
           <div className="flex items-center gap-2 mb-1"><Package className="h-4 w-4 text-muted-foreground" /><div className="text-xs text-muted-foreground uppercase">Tổng sản phẩm</div></div>
           <div className="text-2xl font-semibold">{(data?.products ?? []).length}</div>
@@ -313,6 +349,13 @@ function ProductsPage() {
             value={filterBrand} onChange={(e) => { setFilterBrand(e.target.value); setPage(1); }}>
             <option value="">Tất cả thương hiệu</option>
             {(data?.brands ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+          {/* Lọc kho: đổi luôn con số "Tổng hàng tồn" ở trên — phân biệt rõ
+              tổng toàn hệ thống với tổng của một chi nhánh. */}
+          <select className="h-9 rounded-md border bg-background px-2 text-sm"
+            value={filterBranch} onChange={(e) => { setFilterBranch(e.target.value); setPage(1); }}>
+            <option value="">Tồn toàn hệ thống</option>
+            {(data?.branches ?? []).map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
 
           {isAdmin && (

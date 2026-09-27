@@ -251,66 +251,77 @@ export const listCash = createServerFn({ method: "GET" }).handler(async () => {
 });
 
 // ─── createCashVoucher ───────────────────────────────────────────────────────
+// ─── insertCashVoucher ───────────────────────────────────────────────────────
+// Ghi 1 phiếu thu/chi. Tách khỏi createCashVoucher để các nghiệp vụ khác (vd
+// chi lương hàng loạt ở Bảng lương) tạo phiếu theo ĐÚNG một luồng: cùng cách
+// sinh mã PT/PC chống trùng, cùng mô hình Bên A → Bên B, cùng cập nhật công nợ.
+// Thân hàm là code cũ của createCashVoucher, chỉ thêm trả về id phiếu.
+export async function insertCashVoucher(data: any): Promise<{ ok: true; code: string; id: string }> {
+  const prefix = data.type === "thu" ? "PT" : "PC";
+  // Retry loop to avoid duplicate key race condition
+  let code: string = "";
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const { count } = await supabase
+      .from("cash_vouchers")
+      .select("id", { count: "exact", head: true })
+      .eq("type", data.type);
+    const candidate = prefix + String((count ?? 0) + 1 + attempt).padStart(6, "0");
+    const { data: existing } = await supabase
+      .from("cash_vouchers")
+      .select("id")
+      .eq("code", candidate)
+      .maybeSingle();
+    if (!existing) { code = candidate; break; }
+  }
+  if (!code) {
+    const ts = Date.now().toString().slice(-6);
+    const rand = Math.floor(Math.random() * 100).toString().padStart(2, "0");
+    code = prefix + ts + rand;
+  }
+
+  const legacy = legacyFieldsFromAB(data);
+
+  const id = uid();
+  await insertRow("cash_vouchers", {
+    id,
+    code,
+    type: data.type, // 'thu' | 'chi'
+    fund_type: data.fund_type, // 'tien_mat' | 'ngan_hang'
+    branch_id: legacy.branch_id,
+    amount: Number(data.amount),
+    voucher_type_id: data.voucher_type_id || null,
+    // ── Mô hình A → B ──
+    from_kind: data.from_kind || null,
+    from_id:   data.from_kind && data.from_kind !== "other" ? (data.from_id || null) : null,
+    from_name: data.from_kind === "other" ? (data.from_name || null) : null,
+    to_kind:   data.to_kind || null,
+    to_id:     data.to_kind && data.to_kind !== "other" ? (data.to_id || null) : null,
+    to_name:   data.to_kind === "other" ? (data.to_name || null) : null,
+    // ── Cột cũ (tương thích công nợ / phiếu cũ) ──
+    collector_user_id: legacy.collector_user_id,
+    payer_customer_id: legacy.payer_customer_id,
+    payer_user_id: legacy.payer_user_id,
+    receiver_customer_id: legacy.receiver_customer_id,
+    note: data.note || null,
+    // Field accounting vẫn giữ để tương thích DB; UI không còn cho nhập.
+    accounting: data.accounting ?? true,
+    status: "active",
+    created_by: data.created_by || null,
+    // ✨ Cho phép chọn thời gian tạo phiếu từ UI, mặc định lấy now().
+    created_at: data.created_at || now(),
+  });
+
+  for (const customerId of extractRelatedCustomerIds(data)) {
+    await recalculateCustomerDebt(customerId);
+  }
+
+  return { ok: true, code, id };
+}
+
 export const createCashVoucher = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: any }) => {
-    const prefix = data.type === "thu" ? "PT" : "PC";
-    // Retry loop to avoid duplicate key race condition
-    let code: string = "";
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const { count } = await supabase
-        .from("cash_vouchers")
-        .select("id", { count: "exact", head: true })
-        .eq("type", data.type);
-      const candidate = prefix + String((count ?? 0) + 1 + attempt).padStart(6, "0");
-      const { data: existing } = await supabase
-        .from("cash_vouchers")
-        .select("id")
-        .eq("code", candidate)
-        .maybeSingle();
-      if (!existing) { code = candidate; break; }
-    }
-    if (!code) {
-      const ts = Date.now().toString().slice(-6);
-      const rand = Math.floor(Math.random() * 100).toString().padStart(2, "0");
-      code = prefix + ts + rand;
-    }
-
-    const legacy = legacyFieldsFromAB(data);
-
-    await insertRow("cash_vouchers", {
-      id: uid(),
-      code,
-      type: data.type, // 'thu' | 'chi'
-      fund_type: data.fund_type, // 'tien_mat' | 'ngan_hang'
-      branch_id: legacy.branch_id,
-      amount: Number(data.amount),
-      voucher_type_id: data.voucher_type_id || null,
-      // ── Mô hình A → B ──
-      from_kind: data.from_kind || null,
-      from_id:   data.from_kind && data.from_kind !== "other" ? (data.from_id || null) : null,
-      from_name: data.from_kind === "other" ? (data.from_name || null) : null,
-      to_kind:   data.to_kind || null,
-      to_id:     data.to_kind && data.to_kind !== "other" ? (data.to_id || null) : null,
-      to_name:   data.to_kind === "other" ? (data.to_name || null) : null,
-      // ── Cột cũ (tương thích công nợ / phiếu cũ) ──
-      collector_user_id: legacy.collector_user_id,
-      payer_customer_id: legacy.payer_customer_id,
-      payer_user_id: legacy.payer_user_id,
-      receiver_customer_id: legacy.receiver_customer_id,
-      note: data.note || null,
-      // Field accounting vẫn giữ để tương thích DB; UI không còn cho nhập.
-      accounting: data.accounting ?? true,
-      status: "active",
-      created_by: data.created_by || null,
-      // ✨ Cho phép chọn thời gian tạo phiếu từ UI, mặc định lấy now().
-      created_at: data.created_at || now(),
-    });
-
-    for (const customerId of extractRelatedCustomerIds(data)) {
-      await recalculateCustomerDebt(customerId);
-    }
-
-    return { ok: true, code };
+    const r = await insertCashVoucher(data);
+    return { ok: true, code: r.code };
   },
 );
 

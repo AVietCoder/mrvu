@@ -24,6 +24,7 @@ async function loadUser(row: any): Promise<User> {
     full_name: row.full_name,
     username: row.username,
     phone: row.phone ?? undefined,
+    birthday: row.birthday ?? undefined,
     is_admin: Number(row.is_admin),
     branch_ids: branchRows.map((r) => r.branch_id),
     permissions: permRows.map((r) => r.permission),
@@ -51,6 +52,7 @@ export const registerFn = createServerFn({ method: "POST" })
     data: {
       full_name: string;
       phone?: string;
+      birthday?: string;   // yyyy-mm-dd
       username: string;
       password: string;
       branch_ids?: string[];
@@ -69,6 +71,15 @@ export const registerFn = createServerFn({ method: "POST" })
       is_admin: Number(0),
       created_at: now(),
     });
+
+    // Ngày sinh ghi RIÊNG, có .catch(): insertRow là bản nghiêm ngặt, nếu DB
+    // chưa chạy migration v11 thì cả câu insert hỏng = KHÔNG TẠO ĐƯỢC tài
+    // khoản nào. Thiếu ngày sinh chỉ là không nhắc được sinh nhật.
+    if (data.birthday) {
+      await updateWhere("users", { birthday: data.birthday }, { id: user.id }).catch(
+        () => undefined,
+      );
+    }
 
     if (data.branch_ids?.length) {
       await supabase.from("user_branches").upsert(
@@ -124,6 +135,49 @@ export const resetPasswordFn = createServerFn({ method: "POST" })
     await logActivity({
       action: "reset_password",
       detail: `Admin reset mật khẩu cho ${target?.username || data.user_id}${target?.full_name ? ` (${target.full_name})` : ""}`,
+      employee_id: data.admin_id,
+    });
+    return { success: true };
+  });
+
+/**
+ * Sửa hồ sơ nhân viên đã tồn tại (hiện chỉ dùng cho ngày sinh và SĐT).
+ * Trước đây chỉ có đổi quyền và reset mật khẩu, không có đường nào sửa được
+ * thông tin cá nhân của nhân viên đã tạo.
+ *
+ * Kiểm quyền admin theo đúng mẫu resetPasswordFn ở trên.
+ */
+export const updateUserProfileFn = createServerFn({ method: "POST" })
+  .handler(async ({
+    data,
+  }: {
+    data: { user_id: string; full_name?: string; phone?: string; birthday?: string | null; admin_id: string };
+  }) => {
+    const admin = await fetchRow("users", {
+      eq: { id: data.admin_id, is_admin: Number(1) },
+      select: "id",
+    });
+    if (!admin) throw new Error("Không có quyền thực hiện");
+
+    const fields: Record<string, any> = {};
+    if (data.full_name !== undefined) fields.full_name = data.full_name;
+    if (data.phone !== undefined) fields.phone = data.phone || null;
+    if (Object.keys(fields).length) {
+      await updateWhere("users", fields, { id: data.user_id });
+    }
+
+    // Ngày sinh tách riêng, có .catch() phòng DB chưa chạy migration v11 —
+    // cột thiếu thì chỉ mất phần sinh nhật, không làm hỏng việc sửa hồ sơ.
+    if (data.birthday !== undefined) {
+      await updateWhere("users", { birthday: data.birthday || null }, { id: data.user_id }).catch(
+        () => undefined,
+      );
+    }
+
+    const target = await fetchRow<any>("users", { eq: { id: data.user_id }, select: "username, full_name" });
+    await logActivity({
+      action: "update_user_profile",
+      detail: `Cập nhật hồ sơ ${target?.username || data.user_id}${target?.full_name ? ` (${target.full_name})` : ""}`,
       employee_id: data.admin_id,
     });
     return { success: true };

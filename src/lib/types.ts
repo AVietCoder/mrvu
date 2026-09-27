@@ -37,7 +37,9 @@ export type StockTransferItem = {
   id: ID; transfer_id: ID; product_id: ID; qty: number;
 };
 
-export type CustomerGroup = "le" | "dai_ly" | "vip" | "cong_trinh";
+// Mã nhóm khách — danh sách nằm trong bảng customer_groups (migration v12),
+// không còn cố định 4 giá trị. "le" / "dai_ly" / "vip" / "cong_trinh" là 4 mã gốc.
+export type CustomerGroup = string;
 export type Customer = {
   id: ID; name: string; phone?: string;
   ward?: string; district?: string; province?: string; address?: string;
@@ -120,7 +122,10 @@ export type Permission =
   | "approve_schedule"    // Duyệt lịch + phân công người
   | "technician"          // Kỹ thuật viên: xem lịch được giao + tiền công
   | "view_cash_branch"    // Xem sổ quỹ chi nhánh của mình
-  | "view_cash_all";      // Xem sổ quỹ toàn bộ chi nhánh
+  | "view_cash_all"       // Xem sổ quỹ toàn bộ chi nhánh
+  | "customer_care"       // Gửi Zalo/Email chăm sóc KH (danh sách thì ai cũng xem được)
+  | "manage_roster"       // Xếp lịch trực ca (xem thì ai cũng xem được)
+  | "manage_payroll";     // Chấm công + bảng lương (dữ liệu nhạy cảm)
 
 export const ALL_PERMISSIONS: { key: Permission; label: string; desc: string }[] = [
   { key: "stock_in",          label: "Nhập kho",                  desc: "Tạo phiếu nhập hàng vào kho" },
@@ -136,11 +141,15 @@ export const ALL_PERMISSIONS: { key: Permission; label: string; desc: string }[]
   { key: "technician",        label: "Kỹ thuật viên",             desc: "Xem lịch được giao và tiền công" },
   { key: "view_cash_branch",  label: "Xem sổ quỹ chi nhánh",      desc: "Xem & tạo phiếu thu/chi của chi nhánh mình" },
   { key: "view_cash_all",     label: "Xem sổ quỹ toàn bộ",        desc: "Xem & tạo phiếu thu/chi của tất cả chi nhánh" },
+  { key: "customer_care",     label: "Gửi tin chăm sóc KH",       desc: "Gửi Zalo/Email sinh nhật & nhắc bảo dưỡng (tin Zalo tốn phí)" },
+  { key: "manage_roster",     label: "Xếp lịch trực",             desc: "Xếp ca trực showroom / văn phòng, đánh dấu nghỉ" },
+  { key: "manage_payroll",    label: "Chấm công & bảng lương",    desc: "Chấm công, tính lương, chi lương (xem được lương + STK mọi người)" },
 ];
 
 // ── User ─────────────────────────────────────────────────────
 export type User = {
   id: ID; full_name: string; username: string; phone?: string;
+  birthday?: string;      // yyyy-mm-dd — chỉ để nhắc sinh nhật nội bộ
   is_admin: number; branch_ids: ID[]; permissions: Permission[];
   created_at: string;
 };

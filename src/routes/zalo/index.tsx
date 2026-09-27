@@ -28,16 +28,56 @@ export const Route = createFileRoute("/zalo/")({
   component: Page,
 });
 
-/** Các biến của đơn hàng mà app có thể điền vào template ZNS. */
-const AVAILABLE_VARS = [
-  { key: "order_code", label: "Mã đơn hàng", sample: "HD009274" },
-  { key: "customer_name", label: "Tên khách hàng", sample: "Lê Lan Hương" },
-  { key: "total_amount", label: "Tổng tiền", sample: "1.250.000" },
-  { key: "paid_amount", label: "Khách đã trả", sample: "1.000.000" },
-  { key: "debt_amount", label: "Còn nợ", sample: "250.000" },
-  { key: "branch_name", label: "Chi nhánh", sample: "Mr.VU OFFICE" },
-  { key: "order_date", label: "Ngày đặt", sample: "14/08/2026" },
-];
+/**
+ * Các loại mẫu tin hệ thống biết điền dữ liệu. Mỗi loại có bộ biến riêng —
+ * mẫu sinh nhật không có mã đơn, mẫu đơn hàng không có ngày bảo dưỡng.
+ *
+ * `code` phải khớp với mã dùng ở tầng gửi:
+ *   order_completed → src/lib/zalo/enqueue.ts
+ *   birthday | maintenance → src/lib/zalo/enqueue-care.ts
+ */
+const TEMPLATE_KINDS = [
+  {
+    code: "order_completed",
+    label: "Mua hàng thành công",
+    defaultName: "Thông báo mua hàng thành công",
+    vars: [
+      { key: "order_code", label: "Mã đơn hàng", sample: "HD009274" },
+      { key: "customer_name", label: "Tên khách hàng", sample: "Lê Lan Hương" },
+      { key: "total_amount", label: "Tổng tiền", sample: "1.250.000" },
+      { key: "paid_amount", label: "Khách đã trả", sample: "1.000.000" },
+      { key: "debt_amount", label: "Còn nợ", sample: "250.000" },
+      { key: "branch_name", label: "Chi nhánh", sample: "Mr.VU OFFICE" },
+      { key: "order_date", label: "Ngày đặt", sample: "14/08/2026" },
+    ],
+  },
+  {
+    code: "birthday",
+    label: "Chúc mừng sinh nhật",
+    defaultName: "Chúc mừng sinh nhật khách hàng",
+    vars: [
+      { key: "customer_name", label: "Tên khách hàng", sample: "Lê Lan Hương" },
+      { key: "customer_code", label: "Mã khách hàng", sample: "KH000123" },
+      { key: "shop_name", label: "Tên cửa hàng", sample: "Mr.Vũ" },
+      { key: "shop_phone", label: "SĐT cửa hàng", sample: "0911021102" },
+    ],
+  },
+  {
+    code: "maintenance",
+    label: "Nhắc bảo dưỡng định kỳ",
+    defaultName: "Thông báo đến hạn bảo dưỡng định kỳ",
+    vars: [
+      { key: "customer_name", label: "Tên khách hàng", sample: "Lê Lan Hương" },
+      { key: "customer_code", label: "Mã khách hàng", sample: "KH000123" },
+      { key: "product_name", label: "Sản phẩm đã mua", sample: "Quạt trần VILLA 60" },
+      { key: "order_code", label: "Mã đơn hàng", sample: "HD009514" },
+      { key: "shipped_date", label: "Ngày xuất kho", sample: "19/02/2026" },
+      { key: "due_date", label: "Ngày đến hạn", sample: "19/08/2026" },
+      { key: "shop_name", label: "Tên cửa hàng", sample: "Mr.Vũ" },
+      { key: "shop_phone", label: "SĐT cửa hàng", sample: "0911021102" },
+    ],
+  },
+] as const;
 
 function Page() {
   const authUrlFn = useServerFn(getZaloAuthUrlFn);
@@ -147,6 +187,12 @@ function Page() {
   const [info, setInfo] = useState<any>(null);
   const [checking, setChecking] = useState(false);
   const [paramMap, setParamMap] = useState<Record<string, string>>({});
+  // Loại mẫu đang cấu hình. Trước đây trang này hardcode "order_completed"
+  // nên chỉ lưu được đúng một mẫu.
+  const [kindCode, setKindCode] = useState<string>("order_completed");
+  const activeKind =
+    TEMPLATE_KINDS.find((k) => k.code === kindCode) ?? TEMPLATE_KINDS[0];
+  const availableVars = activeKind.vars;
 
   async function inspect() {
     if (!templateId.trim()) return toast.error("Nhập Template ID");
@@ -159,7 +205,7 @@ function Page() {
       // dùng tự chọn — KHÔNG tự map bừa vì gửi sai nội dung là mất tiền thật.
       const guess: Record<string, string> = {};
       for (const p of r.listParams ?? []) {
-        const hit = AVAILABLE_VARS.find((v) => v.key === p.name);
+        const hit = availableVars.find((v) => v.key === p.name);
         if (hit) guess[p.name] = hit.key;
       }
       setParamMap(guess);
@@ -193,14 +239,15 @@ function Page() {
     try {
       await saveFn({
         data: {
-          code: "order_completed",
-          name: info.templateName || "Thông báo mua hàng thành công",
+          code: activeKind.code,
+          name: info.templateName || activeKind.defaultName,
           zaloTemplateId: String(info.templateId || templateId.trim()),
           paramMap,
           isActive: true,
           listParams: info.listParams ?? [],
           templateTag: info.templateTag,
           price: info.price,
+          zaloStatus: info.status,
         },
       });
       toast.success("Đã lưu cấu hình template");
@@ -328,14 +375,34 @@ function Page() {
 
       {/* ── Cấu hình template ── */}
       <Card className="mb-6">
-        <div className="font-medium mb-1">Mẫu tin "Mua hàng thành công"</div>
+        <div className="font-medium mb-1">Cấu hình mẫu tin ZNS</div>
         <div className="text-sm text-muted-foreground mb-4">
-          Dán Template ID mà Zalo đã duyệt, bấm Đọc template để app lấy đúng danh sách biến của
-          mẫu tin đó, rồi gán mỗi biến với một trường của đơn hàng.
+          Chọn loại mẫu, dán Template ID mà Zalo đã duyệt, bấm Đọc template để app lấy đúng danh
+          sách biến của mẫu đó, rồi gán mỗi biến với một trường dữ liệu.
         </div>
 
         <div className="flex gap-2 items-end flex-wrap mb-4">
-          <div className="flex-1 min-w-[240px]">
+          <div className="min-w-[200px]">
+            <Label>Loại mẫu tin</Label>
+            <select
+              className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+              value={kindCode}
+              onChange={(e) => {
+                setKindCode(e.target.value);
+                // Đổi loại mẫu thì ánh xạ biến cũ không còn đúng nữa.
+                setInfo(null);
+                setParamMap({});
+                setTemplateId("");
+              }}
+            >
+              {TEMPLATE_KINDS.map((k) => (
+                <option key={k.code} value={k.code}>
+                  {k.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex-1 min-w-[200px]">
             <Label>Template ID</Label>
             <Input
               value={templateId}
@@ -413,7 +480,7 @@ function Page() {
                     onChange={(e) => setParamMap({ ...paramMap, [p.name]: e.target.value })}
                   >
                     <option value="">— chọn trường —</option>
-                    {AVAILABLE_VARS.map((v) => (
+                    {availableVars.map((v) => (
                       <option key={v.key} value={v.key}>
                         {v.label} ({v.sample})
                       </option>
@@ -636,10 +703,23 @@ function Page() {
             {saved.map((t: any) => (
               <div key={t.id} className="flex items-center justify-between border-b pb-2">
                 <div>
-                  <div className="font-medium">{t.name}</div>
+                  <div className="font-medium">
+                    {t.name}
+                    <span className="text-xs text-muted-foreground font-normal ml-2">
+                      {TEMPLATE_KINDS.find((k) => k.code === t.code)?.label ?? t.code}
+                    </span>
+                  </div>
                   <div className="text-xs text-muted-foreground font-mono">
                     {t.code} → Zalo ID {t.zalo_template_id}
+                    {t.price != null && ` · ${Number(t.price).toLocaleString("vi-VN")}đ/tin`}
                   </div>
+                  {/* Zalo có thể từ chối mẫu SAU khi đã duyệt. Không hiện ra thì
+                      người dùng chỉ thấy tin không tới mà không hiểu vì sao. */}
+                  {t.zalo_status && t.zalo_status !== "ENABLE" && (
+                    <div className="text-xs text-destructive mt-0.5">
+                      Zalo: {t.zalo_status} — chưa gửi được, cần sửa mẫu và xin duyệt lại
+                    </div>
+                  )}
                 </div>
                 <span
                   className={

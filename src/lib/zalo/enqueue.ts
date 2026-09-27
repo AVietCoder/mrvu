@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "./admin-client";
 import { buildIdempotencyKey } from "./crypto";
 import { normalizeVnPhone } from "./phone";
+import { buildTemplateData } from "./template-data";
 import { uid, now } from "../supabase";
 
 /**
@@ -26,12 +27,6 @@ function fmtMoney(n: number): string {
 function fmtDate(iso?: string | null): string {
   const d = iso ? new Date(iso) : new Date();
   return d.toLocaleDateString("vi-VN");
-}
-
-/** Cắt chuỗi theo maxLength Zalo khai báo — vượt quá là Zalo từ chối cả tin. */
-function clamp(value: string, maxLength?: number): string {
-  if (!maxLength || maxLength <= 0) return value;
-  return value.length > maxLength ? value.slice(0, maxLength) : value;
 }
 
 export async function enqueueOrderCompletedZns(orderId: string): Promise<EnqueueResult> {
@@ -126,26 +121,12 @@ export async function enqueueOrderCompletedZns(orderId: string): Promise<Enqueue
       order_date: fmtDate(order.created_at),
     };
 
-    // param_map: { tên param của Zalo -> tên trường nội bộ }
-    const paramMap = (tpl.param_map ?? {}) as Record<string, string>;
-    const listParams = (tpl.list_params ?? []) as Array<{
-      name: string;
-      require?: boolean;
-      maxLength?: number;
-    }>;
-    const maxLenByName = new Map(listParams.map((p) => [p.name, p.maxLength]));
-
-    const templateData: Record<string, string> = {};
-    for (const [zaloParam, internalKey] of Object.entries(paramMap)) {
-      if (!internalKey) continue;
-      templateData[zaloParam] = clamp(values[internalKey] ?? "", maxLenByName.get(zaloParam));
-    }
+    // param_map: { tên param của Zalo -> tên trường nội bộ }.
+    // Logic ánh xạ + cắt theo maxLength dùng chung với tin sinh nhật/bảo dưỡng.
+    const { templateData, missing } = buildTemplateData(tpl, values);
 
     // Thiếu biến bắt buộc thì đừng gửi — chắc chắn Zalo từ chối, gửi chỉ tổ
     // tốn một lượt gọi và làm bẩn log.
-    const missing = listParams
-      .filter((p) => p.require && !templateData[p.name])
-      .map((p) => p.name);
     if (missing.length) {
       return { queued: false, reason: `Thiếu biến bắt buộc: ${missing.join(", ")}` };
     }
