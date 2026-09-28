@@ -74,6 +74,11 @@ function PayrollPage() {
   const canView = Boolean(user && (isAdmin || hasPermission(user as any, "manage_payroll")));
   const [month, setMonth] = useState(todayVN().slice(0, 7));
   const [tab, setTab] = useState<"attendance" | "payroll" | "profiles" | "assign">("attendance");
+  const [filters, setFiltersState] = useState<Filters>(() => loadFilters());
+  const setFilters = (f: Filters) => {
+    setFiltersState(f);
+    saveFilters(f);
+  };
   const [y, mm] = month.split("-");
 
   if (!canView) {
@@ -116,8 +121,8 @@ function PayrollPage() {
           </div>
         </div>
       </Card>
-      {tab === "attendance" && <AttendanceTab month={month} actorId={user?.id} />}
-      {tab === "payroll" && <PayrollTab month={month} actorId={user?.id} />}
+      {tab === "attendance" && <AttendanceTab month={month} actorId={user?.id} filters={filters} onFilters={setFilters} />}
+      {tab === "payroll" && <PayrollTab month={month} actorId={user?.id} filters={filters} onFilters={setFilters} />}
       {tab === "profiles" && <ProfilesTab actorId={user?.id} />}
       {tab === "assign" && isAdmin && <AssignTab actorId={user?.id} />}
     </AppShell>
@@ -143,10 +148,136 @@ function EmptyPayroll() {
   );
 }
 
+// ─── Bộ lọc dùng chung cho tab Chấm công & Bảng lương ─────────────────────
+type Filters = { q: string; branch: string; position: string; manager: string; att: string; pay: string };
+const EMPTY_FILTERS: Filters = { q: "", branch: "", position: "", manager: "", att: "", pay: "" };
+const FILTER_KEY = "mrvu.payroll.filters";
+const fold = (s: string) =>
+  String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d");
+
+function loadFilters(): Filters {
+  try {
+    return { ...EMPTY_FILTERS, ...JSON.parse(localStorage.getItem(FILTER_KEY) || "{}") };
+  } catch {
+    return EMPTY_FILTERS;
+  }
+}
+function saveFilters(f: Filters) {
+  try {
+    localStorage.setItem(FILTER_KEY, JSON.stringify(f));
+  } catch {}
+}
+
+/** Tiêu chí chung: tên, chi nhánh, chức vụ, người quản lý lương. */
+function matchCommon(r: any, f: Filters) {
+  if (f.q && !fold(r.full_name).includes(fold(f.q))) return false;
+  if (f.branch && !(r.branch_ids ?? []).includes(f.branch)) return false;
+  if (f.position === "__none" ? Boolean(r.position_id) : f.position && r.position_id !== f.position) return false;
+  if (f.manager && !(r.manager_ids ?? []).includes(f.manager)) return false;
+  return true;
+}
+const isPaidRow = (r: any) => Boolean(r.cash_voucher_id) && !String(r.cash_voucher_id).startsWith("pending:");
+/** Tiêu chí riêng tab Bảng lương. */
+function matchPay(r: any, f: Filters) {
+  switch (f.pay) {
+    case "draft": return !r.locked;
+    case "locked": return r.locked && !isPaidRow(r);
+    case "paid": return isPaidRow(r);
+    case "negative": return Number(r.net_pay) < 0;
+    case "warning": return (r.sales_detail?.warnings ?? []).length > 0;
+    case "override": return (r.commission_override ?? null) !== null || (r.business_override ?? null) !== null;
+    default: return true;
+  }
+}
+
+const ATT_OPTIONS = [
+  ["", "Mọi tình trạng chấm công"],
+  ["full", "Đủ công"],
+  ["short", "Thiếu công"],
+  ["none", "Chưa chấm ngày nào"],
+  ["self", "Có ngày tự chấm"],
+  ["note", "Có ghi chú"],
+] as const;
+const PAY_OPTIONS = [
+  ["", "Mọi trạng thái lương"],
+  ["draft", "Nháp (chưa chốt)"],
+  ["locked", "Đã chốt, chưa chi"],
+  ["paid", "Đã chi"],
+  ["negative", "Thực lĩnh âm"],
+  ["warning", "Có cảnh báo DS"],
+  ["override", "Có số admin ghi đè"],
+] as const;
+
+function PayrollFilters({ value, onChange, options, tab, shown, total }: any) {
+  const { isAdmin } = useAuth();
+  const f: Filters = value;
+  const set = (patch: Partial<Filters>) => onChange({ ...f, ...patch });
+  const sel = "h-9 rounded-md border bg-background px-2 text-sm";
+  const branches = options?.branches ?? [];
+  const positions = options?.positions ?? [];
+  const managers = options?.managers ?? [];
+  const chips: [keyof Filters, string][] = [];
+  if (f.q) chips.push(["q", `Tên: "${f.q}"`]);
+  if (f.branch) chips.push(["branch", branches.find((b: any) => b.id === f.branch)?.name ?? "Chi nhánh"]);
+  if (f.position) chips.push(["position", f.position === "__none" ? "Chưa có chức vụ" : positions.find((p: any) => p.id === f.position)?.name ?? "Chức vụ"]);
+  if (f.manager) chips.push(["manager", `QL: ${managers.find((m: any) => m.id === f.manager)?.full_name ?? ""}`]);
+  if (tab === "attendance" && f.att) chips.push(["att", ATT_OPTIONS.find(([k]) => k === f.att)?.[1] ?? ""]);
+  if (tab === "payroll" && f.pay) chips.push(["pay", PAY_OPTIONS.find(([k]) => k === f.pay)?.[1] ?? ""]);
+
+  return (
+    <Card className="mb-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[180px] flex-1">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input className="pl-8" placeholder="Tìm tên nhân viên…" value={f.q} onChange={(e) => set({ q: e.target.value })} />
+        </div>
+        {isAdmin && (
+          <>
+            <select className={sel} value={f.branch} onChange={(e) => set({ branch: e.target.value })}>
+              <option value="">Mọi chi nhánh</option>
+              {branches.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+            <select className={sel} value={f.position} onChange={(e) => set({ position: e.target.value })}>
+              <option value="">Mọi chức vụ</option>
+              {positions.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              <option value="__none">Chưa có chức vụ</option>
+            </select>
+            <select className={sel} value={f.manager} onChange={(e) => set({ manager: e.target.value })}>
+              <option value="">Mọi người quản lý</option>
+              {managers.map((m: any) => <option key={m.id} value={m.id}>Nhóm của {m.full_name}</option>)}
+            </select>
+          </>
+        )}
+        {tab === "attendance" && (
+          <select className={sel} value={f.att} onChange={(e) => set({ att: e.target.value })}>
+            {ATT_OPTIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+        )}
+        {tab === "payroll" && (
+          <select className={sel} value={f.pay} onChange={(e) => set({ pay: e.target.value })}>
+            {PAY_OPTIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+        )}
+      </div>
+      {chips.length > 0 && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-sm">
+          <span className="text-muted-foreground">Đang hiện <strong className="text-foreground">{shown}</strong>/{total} người ·</span>
+          {chips.map(([k, l]) => (
+            <button key={k} onClick={() => set({ [k]: "" } as any)} className="inline-flex items-center gap-1 rounded-full border bg-primary/5 px-2.5 py-0.5 text-primary hover:bg-primary/10">
+              {l}<span aria-hidden>×</span>
+            </button>
+          ))}
+          <button className="ml-1 text-muted-foreground underline" onClick={() => onChange(EMPTY_FILTERS)}>Xoá lọc</button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Chấm công
 // ═══════════════════════════════════════════════════════════════════════════
-function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) {
+function AttendanceTab({ month, actorId, filters, onFilters }: { month: string; actorId?: string; filters: Filters; onFilters: (f: Filters) => void }) {
   const qc = useQueryClient();
   const getFn = useServerFn(getAttendanceMonthFn);
   const setFn = useServerFn(setAttendanceFn);
@@ -158,10 +289,8 @@ function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) 
   // Ghi đè lạc quan: bấm ô là đổi ngay, không chờ server.
   const [local, setLocal] = useState<Record<string, string | null>>({});
   const [filling, setFilling] = useState(false);
+  const [editCell, setEditCell] = useState<null | { row: any; date: string }>(null);
   const today = todayVN();
-
-  // Khoá theo TỪNG NGƯỜI (người đã chốt lương thì hàng của họ chỉ xem).
-  const lockedCount = (data?.rows ?? []).filter((r: any) => r.locked).length;
 
   async function cycle(userId: string, date: string, current: string | null, rowLocked: boolean) {
     if (rowLocked) return;
@@ -174,23 +303,6 @@ function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) 
     } catch (e: any) {
       setLocal((p) => ({ ...p, [key]: current }));
       toast.error(e?.message ?? "Lỗi lưu chấm công");
-    }
-  }
-
-  async function fillAll() {
-    if (!data?.rows?.length) return;
-    if (!window.confirm("Điền X cho mọi ngày thường và K cho Chủ nhật — CHỈ các ô còn trống. Các ô đã chấm tay giữ nguyên.")) return;
-    setFilling(true);
-    try {
-      const r = await fillFn({ data: { month, userIds: data.rows.map((r: any) => r.user_id), weekdayCode: "X", sundayCode: "K", onlyEmpty: true, actorId } });
-      toast.success(`Đã điền ${r.filled} ô`);
-      setLocal({});
-      qc.invalidateQueries({ queryKey: ["attendance", month] });
-      qc.invalidateQueries({ queryKey: ["payroll", month] });
-    } catch (e: any) {
-      toast.error(e?.message ?? "Lỗi");
-    } finally {
-      setFilling(false);
     }
   }
 
@@ -210,96 +322,249 @@ function AttendanceTab({ month, actorId }: { month: string; actorId?: string }) 
     }
     return { ...t, worked: t.X + t.N / 2 + t.L };
   };
+  const matchAtt = (r: any) => {
+    const t = totals(r);
+    const std = Number(r.standard_days) || 26;
+    switch (filters.att) {
+      case "full": return t.worked >= std;
+      case "short": return t.worked > 0 && t.worked < std;
+      case "none": return t.X + t.N + t.L + t.K === 0;
+      case "self": return Object.values(r.marks ?? {}).some((m: any) => m?.self);
+      case "note": return Object.keys(r.notes ?? {}).length > 0;
+      default: return true;
+    }
+  };
+  const rows = data.rows.filter((r: any) => matchCommon(r, filters) && matchAtt(r));
+  // Khoá theo TỪNG NGƯỜI (người đã chốt lương thì hàng của họ chỉ xem).
+  const lockedCount = rows.filter((r: any) => r.locked).length;
+  const filtering = rows.length !== data.rows.length;
+
+  async function fillAll() {
+    if (!rows.length) return;
+    if (!window.confirm(`Điền X cho mọi ngày thường và K cho Chủ nhật — CHỈ các ô còn trống, cho ${rows.length} người đang hiện. Các ô đã chấm tay giữ nguyên.`)) return;
+    setFilling(true);
+    try {
+      const r = await fillFn({ data: { month, userIds: rows.map((r: any) => r.user_id), weekdayCode: "X", sundayCode: "K", onlyEmpty: true, actorId } });
+      toast.success(`Đã điền ${r.filled} ô`);
+      setLocal({});
+      qc.invalidateQueries({ queryKey: ["attendance", month] });
+      qc.invalidateQueries({ queryKey: ["payroll", month] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi");
+    } finally {
+      setFilling(false);
+    }
+  }
 
   return (
-    <Card className="p-0 overflow-hidden">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3">
-        {Object.entries(CODE_LABEL).map(([c, l]) => (
-          <span key={c} className="flex items-center gap-1.5 text-sm">
-            <span className={`grid h-6 w-6 place-items-center rounded-md text-sm font-bold ${CODE_STYLE[c]}`}>{c}</span>{l}
+    <>
+      <PayrollFilters value={filters} onChange={onFilters} options={data.filterOptions} tab="attendance" shown={rows.length} total={data.rows.length} />
+      <Card className="p-0 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3">
+          {Object.entries(CODE_LABEL).map(([c, l]) => (
+            <span key={c} className="flex items-center gap-1.5 text-sm">
+              <span className={`grid h-6 w-6 place-items-center rounded-md text-sm font-bold ${CODE_STYLE[c]}`}>{c}</span>{l}
+            </span>
+          ))}
+          <span className="flex items-center gap-1.5 text-sm">
+            <span className="h-5 w-5 rounded-md outline-dashed outline-2 -outline-offset-2 outline-sky-500" />NV tự chấm
           </span>
-        ))}
-        <span className="text-sm text-muted-foreground">Bấm ô để đổi mã · Công = X + N/2 + L</span>
-        <div className="flex-1" />
-        {lockedCount > 0 && (
-          <span className="flex items-center gap-1 text-sm font-medium text-orange-700"><Lock className="h-4 w-4" />{lockedCount} người đã chốt — chỉ xem</span>
-        )}
-        {lockedCount < (data?.rows?.length ?? 0) && (
-          <Button variant="outline" onClick={fillAll} disabled={filling}>
-            {filling ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Wand2 className="mr-1.5 h-4 w-4" />}
-            Điền nhanh ô trống
-          </Button>
-        )}
-      </div>
-      <ScrollX>
-        <table className="min-w-max border-separate border-spacing-0 text-sm">
-          <thead>
-            <tr>
-              <th className="sticky left-0 z-20 min-w-[230px] border-b border-r bg-slate-50 px-4 py-2 text-left font-semibold text-slate-600">
-                Nhân viên <span className="font-normal text-muted-foreground">· công / chuẩn</span>
-              </th>
-              {data.dates.map((d: string) => {
-                const isToday = d === today;
-                const isSun = dow(d) === 0;
-                return (
-                  <th key={d} className={`w-10 border-b border-r px-0 py-1.5 text-center ${isToday ? "bg-amber-100" : isSun ? "bg-rose-50" : "bg-slate-50"}`}>
-                    <div className={`text-sm font-bold ${isToday ? "text-amber-900" : isSun ? "text-rose-700" : "text-slate-800"}`}>{Number(d.slice(8))}</div>
-                    <div className={`text-[11px] font-medium ${isSun ? "text-rose-500" : "text-slate-400"}`}>{WD[dow(d)]}</div>
+          <span className="flex items-center gap-1.5 text-sm">
+            <span className="relative h-5 w-5 rounded-md bg-slate-100"><span className="absolute right-0 top-0 border-l-[7px] border-t-[7px] border-l-transparent border-t-rose-500" /></span>Có ghi chú
+          </span>
+          <span className="text-sm text-muted-foreground">Bấm ô để đổi mã · <strong className="text-foreground">chuột phải / giữ lâu</strong> để ghi chú</span>
+          <div className="flex-1" />
+          {lockedCount > 0 && (
+            <span className="flex items-center gap-1 text-sm font-medium text-orange-700"><Lock className="h-4 w-4" />{lockedCount} người đã chốt — chỉ xem</span>
+          )}
+          {lockedCount < rows.length && (
+            <Button variant="outline" onClick={fillAll} disabled={filling}>
+              {filling ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Wand2 className="mr-1.5 h-4 w-4" />}
+              Điền nhanh ô trống{filtering ? ` (${rows.length} người đang lọc)` : ""}
+            </Button>
+          )}
+        </div>
+        <ScrollX>
+          <table className="min-w-max border-separate border-spacing-0 text-sm">
+            <thead>
+              <tr>
+                <th className="sticky left-0 z-20 min-w-[230px] border-b border-r bg-slate-50 px-4 py-2 text-left font-semibold text-slate-600">
+                  Nhân viên <span className="font-normal text-muted-foreground">· công / chuẩn</span>
+                </th>
+                {data.dates.map((d: string) => {
+                  const isToday = d === today;
+                  const isSun = dow(d) === 0;
+                  return (
+                    <th key={d} className={`w-10 border-b border-r px-0 py-1.5 text-center ${isToday ? "bg-amber-100" : isSun ? "bg-rose-50" : "bg-slate-50"}`}>
+                      <div className={`text-sm font-bold ${isToday ? "text-amber-900" : isSun ? "text-rose-700" : "text-slate-800"}`}>{Number(d.slice(8))}</div>
+                      <div className={`text-[11px] font-medium ${isSun ? "text-rose-500" : "text-slate-400"}`}>{WD[dow(d)]}</div>
+                    </th>
+                  );
+                })}
+                {["X", "N", "L", "K"].map((c) => (
+                  <th key={c} className="w-11 border-b border-r bg-slate-50 text-center">
+                    <span className={`inline-grid h-6 w-6 place-items-center rounded-md text-xs font-bold ${CODE_STYLE[c]}`}>{c}</span>
                   </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 && (
+                <tr><td colSpan={data.dates.length + 5} className="py-10 text-center text-muted-foreground">Không có nhân viên khớp bộ lọc.</td></tr>
+              )}
+              {rows.map((r: any) => {
+                const t = totals(r);
+                const std = Number(r.standard_days) || 26;
+                return (
+                  <tr key={r.user_id} className="group">
+                    <td className="sticky left-0 z-10 border-b border-r bg-background px-4 py-2 group-hover:bg-slate-50">
+                      <div className="flex items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 font-semibold text-slate-800">
+                            <span className="truncate">{r.full_name}</span>
+                            {r.locked && <Lock className="h-3.5 w-3.5 shrink-0 text-orange-600" title="Đã chốt lương" />}
+                          </div>
+                          {r.position && <div className="text-xs text-muted-foreground">{r.position}</div>}
+                        </div>
+                        {/* Số công đặt ngay cạnh tên để không bị khuất bên phải khi lưới dài. */}
+                        <div className={`shrink-0 rounded-lg px-2.5 py-1 text-right tabular-nums ${t.worked >= std ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-800"}`}>
+                          <span className="text-lg font-bold">{t.worked}</span>
+                          <span className="text-xs text-muted-foreground">/{std}</span>
+                        </div>
+                      </div>
+                    </td>
+                    {data.dates.map((d: string) => {
+                      const c = codeOf(r, d);
+                      const note = r.notes?.[d];
+                      const mark = r.marks?.[d];
+                      const tip = [
+                        CODE_LABEL[c] ?? "Chưa chấm",
+                        note ? `Ghi chú: ${note}` : "",
+                        mark?.self ? "Nhân viên tự chấm" : mark?.by ? `Chấm bởi ${mark.by}` : "",
+                      ].filter(Boolean).join("\n");
+                      return (
+                        <td
+                          key={d}
+                          onClick={() => cycle(r.user_id, d, c, r.locked)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            if (!r.locked) setEditCell({ row: r, date: d });
+                          }}
+                          title={tip}
+                          className={`group/cell relative h-12 select-none border-b border-r p-1 text-center ${d === today ? "bg-amber-50" : dow(d) === 0 ? "bg-rose-50/50" : ""} ${r.locked ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:bg-primary/5"}`}
+                        >
+                          {c && (
+                            <span className={`inline-grid h-8 w-8 place-items-center rounded-md text-sm font-bold ${CODE_STYLE[c]} ${mark?.self ? "outline-dashed outline-2 -outline-offset-2 outline-sky-500" : ""}`}>
+                              {c}
+                            </span>
+                          )}
+                          {!r.locked && (
+                            <button
+                              type="button"
+                              title="Ghi chú / sửa ngày này"
+                              onClick={(e) => { e.stopPropagation(); setEditCell({ row: r, date: d }); }}
+                              className="absolute bottom-0 left-0 hidden rounded-tr bg-white/90 px-0.5 text-[10px] leading-none text-slate-500 shadow-sm hover:text-primary group-hover/cell:block"
+                            >
+                              ✎
+                            </button>
+                          )}
+                          {note && <span className="pointer-events-none absolute right-0 top-0 border-l-[8px] border-t-[8px] border-l-transparent border-t-rose-500" />}
+                        </td>
+                      );
+                    })}
+                    {(["X", "N", "L", "K"] as const).map((c) => (
+                      <td key={c} className="border-b border-r text-center font-semibold tabular-nums text-slate-700">{t[c] || ""}</td>
+                    ))}
+                  </tr>
                 );
               })}
-              {["X", "N", "L", "K"].map((c) => (
-                <th key={c} className="w-11 border-b border-r bg-slate-50 text-center">
-                  <span className={`inline-grid h-6 w-6 place-items-center rounded-md text-xs font-bold ${CODE_STYLE[c]}`}>{c}</span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.rows.map((r: any) => {
-              const t = totals(r);
-              const std = Number(r.standard_days) || 26;
-              return (
-                <tr key={r.user_id} className="group">
-                  <td className="sticky left-0 z-10 border-b border-r bg-background px-4 py-2 group-hover:bg-slate-50">
-                    <div className="flex items-center gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 font-semibold text-slate-800">
-                          <span className="truncate">{r.full_name}</span>
-                          {r.locked && <Lock className="h-3.5 w-3.5 shrink-0 text-orange-600" title="Đã chốt lương" />}
-                        </div>
-                        {r.position && <div className="text-xs text-muted-foreground">{r.position}</div>}
-                      </div>
-                      {/* Số công đặt ngay cạnh tên để không bị khuất bên phải khi lưới dài. */}
-                      <div className={`shrink-0 rounded-lg px-2.5 py-1 text-right tabular-nums ${t.worked >= std ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-800"}`}>
-                        <span className="text-lg font-bold">{t.worked}</span>
-                        <span className="text-xs text-muted-foreground">/{std}</span>
-                      </div>
-                    </div>
-                  </td>
-                  {data.dates.map((d: string) => {
-                    const c = codeOf(r, d);
-                    return (
-                      <td
-                        key={d}
-                        onClick={() => cycle(r.user_id, d, c, r.locked)}
-                        title={`${CODE_LABEL[c] ?? "Chưa chấm"}${r.notes?.[d] ? ` — ${r.notes[d]}` : ""}`}
-                        className={`h-12 select-none border-b border-r p-1 text-center ${d === today ? "bg-amber-50" : dow(d) === 0 ? "bg-rose-50/50" : ""} ${r.locked ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:bg-primary/5"}`}
-                      >
-                        {c && <span className={`inline-grid h-8 w-8 place-items-center rounded-md text-sm font-bold ${CODE_STYLE[c]}`}>{c}</span>}
-                      </td>
-                    );
-                  })}
-                  {(["X", "N", "L", "K"] as const).map((c) => (
-                    <td key={c} className="border-b border-r text-center font-semibold tabular-nums text-slate-700">{t[c] || ""}</td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </ScrollX>
-    </Card>
+            </tbody>
+          </table>
+        </ScrollX>
+      </Card>
+
+      <AttendanceCellDialog
+        key={editCell ? `${editCell.row.user_id}|${editCell.date}` : "none"}
+        cell={editCell}
+        code={editCell ? codeOf(editCell.row, editCell.date) : null}
+        onClose={() => setEditCell(null)}
+        onSaved={() => {
+          if (editCell) setLocal((p) => { const n = { ...p }; delete n[`${editCell.row.user_id}|${editCell.date}`]; return n; });
+          setEditCell(null);
+          qc.invalidateQueries({ queryKey: ["attendance", month] });
+          qc.invalidateQueries({ queryKey: ["payroll", month] });
+        }}
+        actorId={actorId}
+      />
+    </>
+  );
+}
+
+/** Hộp sửa một ô chấm công: chọn mã + ghi chú lý do (nghỉ lễ, tăng ca…). */
+function AttendanceCellDialog({ cell, code, onClose, onSaved, actorId }: any) {
+  const setFn = useServerFn(setAttendanceFn);
+  const [c, setC] = useState<string | null>(code ?? null);
+  const [note, setNote] = useState<string>(cell ? cell.row.notes?.[cell.date] ?? "" : "");
+  const [saving, setSaving] = useState(false);
+  if (!cell) return null;
+  const mark = cell.row.marks?.[cell.date];
+  const [yy, mm, dd] = cell.date.split("-");
+
+  async function save() {
+    setSaving(true);
+    try {
+      await setFn({ data: { userId: cell.row.user_id, date: cell.date, code: c, note, actorId } });
+      toast.success("Đã lưu");
+      onSaved();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Lỗi lưu");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-lg">{WD[dow(cell.date)]} {Number(dd)}/{Number(mm)}/{yy} — {cell.row.full_name}</DialogTitle>
+          <DialogDescription>
+            {mark?.self ? "Nhân viên tự chấm" : mark?.by ? `Chấm bởi ${mark.by}` : "Chưa chấm"}
+            {mark?.at ? ` · ${formatDateVN(String(mark.at).slice(0, 10))}` : ""}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="grid grid-cols-5 gap-2">
+            {(["X", "N", "L", "K"] as const).map((k) => (
+              <button
+                key={k}
+                onClick={() => setC(k)}
+                className={`rounded-lg border-2 py-2 text-center transition-all ${c === k ? "border-primary shadow-sm" : "border-transparent"} ${CODE_STYLE[k]}`}
+              >
+                <div className="text-lg font-bold">{k}</div>
+                <div className="text-[10px] leading-tight">{CODE_LABEL[k]}</div>
+              </button>
+            ))}
+            <button
+              onClick={() => setC(null)}
+              className={`rounded-lg border-2 bg-slate-50 py-2 text-center text-slate-500 ${c === null ? "border-primary" : "border-transparent"}`}
+            >
+              <div className="text-lg font-bold">—</div>
+              <div className="text-[10px] leading-tight">Xoá</div>
+            </button>
+          </div>
+          <div>
+            <Label>Ghi chú</Label>
+            <Input className="mt-1.5" placeholder="vd: nghỉ lễ 2/9, tăng ca lắp công trình…" value={note} disabled={!c} onChange={(e) => setNote(e.target.value)} />
+            {!c && <div className="mt-1 text-xs text-muted-foreground">Chọn mã trước rồi mới ghi chú được. Xoá mã thì ghi chú cũng bị xoá.</div>}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onClose}>Huỷ</Button>
+            <Button onClick={save} disabled={saving}>{saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}Lưu</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -348,7 +613,7 @@ function Stat({ label, value, sub, icon: Icon, tone = "slate" }: any) {
   );
 }
 
-function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
+function PayrollTab({ month, actorId, filters, onFilters }: { month: string; actorId?: string; filters: Filters; onFilters: (f: Filters) => void }) {
   const qc = useQueryClient();
   const getFn = useServerFn(getPayrollFn);
   const saveFn = useServerFn(savePayrollInputFn);
@@ -398,8 +663,17 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
     }
   }
 
-  const rows = (data?.rows ?? []) as any[];
-  const s = data?.summary;
+  const allRows = (data?.rows ?? []) as any[];
+  // Bộ lọc: thẻ tổng quan, TỔNG CỘNG, chốt / mở / chi / in / xuất đều theo các hàng đang hiện.
+  const rows = allRows.filter((r) => matchCommon(r, filters) && matchPay(r, filters));
+  const filtering = rows.length !== allRows.length;
+  const s = {
+    gross: rows.reduce((a, r) => a + Number(r.gross || 0), 0),
+    deductions: rows.reduce((a, r) => a + Number(r.deductions || 0), 0),
+    payout: rows.reduce((a, r) => a + Math.max(0, Number(r.net_pay || 0)), 0),
+    negative: rows.filter((r) => Number(r.net_pay) < 0).length,
+    paid: rows.filter(isPaidRow).length,
+  };
   const siteName = settings?.site_name?.trim() || "MR*VU";
 
   if (isLoading) return <Loading />;
@@ -411,17 +685,18 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
   const sum = (k: string) => rows.reduce((a, r) => a + Number(r[k] || 0), 0);
 
   async function lockRows(userIds?: string[]) {
-    const who = userIds?.length === 1 ? rows.find((r) => r.user_id === userIds[0])?.full_name : `${draftCount} người chưa chốt`;
+    const ids = userIds ?? rows.filter((r) => !r.locked).map((r) => r.user_id);
+    const who = ids.length === 1 ? rows.find((r) => r.user_id === ids[0])?.full_name : `${ids.length} người chưa chốt${filtering ? " (đang lọc)" : ""}`;
     if (!window.confirm(`Chốt lương tháng ${month} cho ${who}? Sau khi chốt, số liệu được giữ nguyên dù lịch/đơn/phiếu thay đổi.`)) return;
     await run("lock", async () => {
-      const r = await lockFn({ data: { month, userIds, actorId } });
+      const r = await lockFn({ data: { month, userIds: ids, actorId } });
       toast.success(`Đã chốt lương ${r.people} người`);
       refresh();
     });
   }
   async function unlockRows(userIds?: string[]) {
     await run("unlock", async () => {
-      const r = await unlockFn({ data: { month, userIds, actorId } });
+      const r = await unlockFn({ data: { month, userIds: userIds ?? lockedUnpaid.map((x) => x.user_id), actorId } });
       toast.success(`Đã mở lại ${r.unlocked} người${r.skippedPaid ? ` (bỏ qua ${r.skippedPaid} người đã chi)` : ""}`);
       refresh();
     });
@@ -436,7 +711,7 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
     <>
       {/* ── Tổng quan ── */}
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Tổng thu nhập" value={`${money(s?.gross)}đ`} sub={`${rows.length} nhân viên`} icon={TrendingUp} tone="green" />
+        <Stat label="Tổng thu nhập" value={`${money(s?.gross)}đ`} sub={filtering ? `${rows.length}/${allRows.length} nhân viên (đang lọc)` : `${rows.length} nhân viên`} icon={TrendingUp} tone="green" />
         <Stat label="Tổng khấu trừ" value={`${money(s?.deductions)}đ`} sub="Tạm ứng lương, BHXH, công đoàn, trừ khác" icon={TrendingDown} tone="red" />
         <Stat
           label="Tổng chi (thực lĩnh)"
@@ -455,12 +730,14 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
         </Card>
       </div>
 
+      <PayrollFilters value={filters} onChange={onFilters} options={data?.filterOptions} tab="payroll" shown={rows.length} total={allRows.length} />
+
       {/* ── Thao tác ── */}
       <Card className="mb-4">
         <div className="flex flex-wrap items-center gap-2">
           {draftCount > 0 && (
             <Button onClick={() => lockRows()} disabled={!!busy}>
-              {busy === "lock" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Lock className="mr-1.5 h-4 w-4" />}Chốt lương ({draftCount})
+              {busy === "lock" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Lock className="mr-1.5 h-4 w-4" />}Chốt lương ({draftCount}{filtering ? " đang lọc" : ""})
             </Button>
           )}
           {lockedUnpaid.length > 0 && (
@@ -511,8 +788,10 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
         )}
       </Card>
 
-      {!rows.length ? (
+      {!allRows.length ? (
         <EmptyPayroll />
+      ) : !rows.length ? (
+        <Card className="py-10 text-center text-muted-foreground">Không có nhân viên khớp bộ lọc.</Card>
       ) : (
         <Card className="p-0 overflow-hidden">
           <ScrollX>
@@ -717,7 +996,7 @@ function PayrollTab({ month, actorId }: { month: string; actorId?: string }) {
                 disabled={!payBranch || !!busy}
                 onClick={() =>
                   run("pay", async () => {
-                    const r = await payFn({ data: { month, fundType: payFund, branchId: payBranch, actorId } });
+                    const r = await payFn({ data: { month, fundType: payFund, branchId: payBranch, userIds: rows.map((x) => x.user_id), actorId } });
                     setPayResult(r.results);
                     refresh();
                     qc.invalidateQueries({ queryKey: ["cash"] });

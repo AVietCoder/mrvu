@@ -1,4 +1,6 @@
 // @ts-nocheck
+import { CustomerSourceField, customerSourceError } from "@/components/CustomerSourceField";
+import { customerSourceLabel } from "@/lib/types";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -159,6 +161,8 @@ type EditFormState = {
   bank_account: string;
   note: string;
   debt: string;
+  source: string;
+  source_note: string;
 };
 
 function fmtInput(val: string): string {
@@ -236,6 +240,8 @@ function CustomerDetailPage() {
     bank_account: "",
     note: "",
     debt: "0",
+    source: "",
+    source_note: "",
   });
 
   const customer = data?.customer ?? null;
@@ -324,6 +330,8 @@ function CustomerDetailPage() {
       bank_name: customer.bank_name ?? "",
       bank_account: customer.bank_account ?? "",
       note: customer.note ?? "",
+      source: customer.source ?? "",
+      source_note: customer.source_note ?? "",
       // ✅ Lấy đúng số dư đang hiển thị (đã trừ thu, cộng chi trả) thay vì customer.debt cũ trong DB
       debt: String(displayDebt),
     });
@@ -333,6 +341,9 @@ function CustomerDetailPage() {
   async function handleSave(e: any) {
     e.preventDefault();
     if (savingEdit) return;
+    // Sửa khách cũ: nguồn không bắt buộc, nhưng chọn "Khác" thì phải nhập cụ thể.
+    const srcErr = customerSourceError(form.source, form.source_note, false);
+    if (srcErr) return toast.error(srcErr);
     setSavingEdit(true);
     try {
       // ✅ Người dùng nhập TỔNG công nợ muốn hiển thị.
@@ -625,6 +636,12 @@ function CustomerDetailPage() {
                     <span>HC: {customer.passport_no}</span>
                   </div>
                 )}
+              </div>
+            )}
+
+            {customer.source && (
+              <div className="mt-3 pt-3 border-t text-sm text-muted-foreground">
+                Biết Mr.Vũ qua: <span className="font-medium text-foreground">{customerSourceLabel(customer.source, customer.source_note)}</span>
               </div>
             )}
 
@@ -975,6 +992,15 @@ function CustomerDetailPage() {
                   </div>
                 </>
               )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <CustomerSourceField
+                  source={form.source}
+                  note={form.source_note}
+                  required={false}
+                  onChange={({ source, note }) => setForm({ ...form, source, source_note: note })}
+                />
+              </div>
 
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Ghi chú</Label>

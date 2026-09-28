@@ -2,6 +2,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { normalizePhoneForStorage } from "./zalo/phone";
 import { getSupabaseAdmin } from "./zalo/admin-client";
+import { CUSTOMER_SOURCES } from "./types";
 import {
   aggregateColumn,
   countRows,
@@ -73,7 +74,23 @@ export const listCustomers = createServerFn({ method: "GET" })
     });
     if (error) throw new Error(error.message);
 
+    // RPC chỉ trả các cột để HIỂN THỊ danh sách (không có giới tính, ngày sinh,
+    // CCCD, hộ chiếu, MST, ngân hàng, ghi chú, nguồn khách…). Form "Sửa" và hộp
+    // xem chi tiết dùng chính dòng này → trước đây bấm Lưu là XOÁ các cột đó.
+    // Nạp đủ cột cho đúng ~pageSize khách của trang rồi ghép vào (số tính toán
+    // của RPC như công nợ giữ nguyên, không bị ghi đè).
     const customers = (rows ?? []) as any[];
+    if (customers.length) {
+      const { data: full } = await supabase
+        .from("customers")
+        .select("*")
+        .in("id", customers.map((c) => c.id));
+      const byId = new Map(((full ?? []) as any[]).map((c) => [c.id, c]));
+      for (let i = 0; i < customers.length; i++) {
+        const f = byId.get(customers[i].id);
+        if (f) customers[i] = { ...f, ...customers[i] };
+      }
+    }
     const totalFiltered = customers[0]?.filtered_count
       ? Number(customers[0].filtered_count)
       : 0;
@@ -138,6 +155,27 @@ export const upsertCustomer = createServerFn({ method: "POST" })
       throw new Error("Vui lòng chọn nhóm khách hàng");
     }
 
+    // Nguồn khách "Biết Mr.Vũ qua đâu?" (v20): BẮT BUỘC khi tạo mới. Khi sửa
+    // chỉ ghi nếu client gửi lên — khách cũ chưa có nguồn vẫn lưu được.
+    // Rỗng = không đổi (form sửa từ danh sách có thể không nạp nguồn cũ) — không bao giờ xoá nguồn đã có.
+    const source = String(data.source ?? "").trim() || undefined;
+    const sourceNote = String(data.source_note ?? "").trim();
+    if (!data.id && !source) throw new Error("Vui lòng chọn \"Biết Mr.Vũ qua đâu?\"");
+    if (source && !CUSTOMER_SOURCES.some((x) => x.key === source)) throw new Error("Nguồn khách không hợp lệ");
+    if (source === "khac" && !sourceNote) throw new Error("Chọn \"Khác\" thì nhập cụ thể biết Mr.Vũ qua đâu");
+    // Ghi RIÊNG sau khi lưu khách (cùng mẫu birthday): thiếu cột thì báo rõ cần
+    // chạy migration, không làm hỏng việc tạo khách.
+    const saveSource = async (id: string) => {
+      if (source === undefined) return;
+      const { error } = await supabase
+        .from("customers")
+        .update({ source: source || null, source_note: source === "khac" ? sourceNote : null })
+        .eq("id", id);
+      // KHÔNG ném lỗi: khách đã được lưu rồi — báo lỗi lúc này khiến nhân viên
+      // bấm tạo lại và sinh khách trùng. Chỉ ghi log (thường là chưa chạy v20).
+      if (error) console.warn(`[customers] Chưa lưu được nguồn khách (cần sql_migration_v20_customer_source.sql?): ${error.message}`);
+    };
+
     const payload: Record<string, any> = {
       name: data.name,
       // Nhân viên gõ "0906 249 669" vẫn được, nhưng lưu xuống thì bỏ dấu cách.
@@ -170,10 +208,12 @@ export const upsertCustomer = createServerFn({ method: "POST" })
 
     if (data.id) {
       await updateWhere("customers", payload, { id: data.id });
+      await saveSource(data.id);
       await logActivity({ action: "update_customer", detail: `Cập nhật khách hàng: ${data.name}`, employee_id: data._actor_id ?? null });
     } else {
+      const newId = uid();
       await insertRow("customers", {
-        id: uid(),
+        id: newId,
         ...payload,
         // Khách mới: nếu không phải admin thì công nợ khởi tạo = 0
         debt: actorAdmin ? (Number(data.debt) || 0) : 0,
@@ -182,6 +222,7 @@ export const upsertCustomer = createServerFn({ method: "POST" })
         created_by_name: data.created_by_name || null,
         created_at: now(),
       });
+      await saveSource(newId);
       await logActivity({ action: "create_customer", detail: `Thêm khách hàng mới: ${data.name}`, employee_id: data._actor_id ?? null });
     }
     return { ok: true };

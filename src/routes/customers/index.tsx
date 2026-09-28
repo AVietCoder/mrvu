@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { CustomerSourceField, customerSourceError } from "@/components/CustomerSourceField";
+import { customerSourceLabel } from "@/lib/types";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { memo, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
@@ -155,6 +157,9 @@ type FormState = {
   bank_account: string;
   note: string;
   debt: string;
+  /** "Biết Mr.Vũ qua đâu?" (v20) */
+  source: string;
+  source_note: string;
 };
 
 const empty: FormState = {
@@ -178,6 +183,8 @@ const empty: FormState = {
   bank_account: "",
   note: "",
   debt: "0",
+  source: "",
+  source_note: "",
 };
 
 function CustomersPage() {
@@ -318,6 +325,8 @@ function CustomersPage() {
       bank_account: c.bank_account ?? "",
       note: c.note ?? "",
       debt: String(getDisplayDebt(c.id)),
+      source: c.source ?? "",
+      source_note: c.source_note ?? "",
     });
 
     setOpen(true);
@@ -328,6 +337,12 @@ function CustomersPage() {
     if (saving) return; // chống nhấn đúp tạo 2 khách hàng
     if (!form.group_name) {
       toast.error("Vui lòng chọn nhóm khách hàng");
+      return;
+    }
+    // Nguồn khách bắt buộc khi TẠO MỚI; sửa khách cũ thì không bắt buộc.
+    const srcErr = customerSourceError(form.source, form.source_note, !form.id);
+    if (srcErr) {
+      toast.error(srcErr);
       return;
     }
     // Còn cảnh báo trùng → hỏi lại 1 lần, xác nhận xong mới lưu.
@@ -880,6 +895,16 @@ function CustomersPage() {
                 </>
               )}
 
+              {/* Biết Mr.Vũ qua đâu? — bắt buộc khi tạo mới */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <CustomerSourceField
+                  source={form.source}
+                  note={form.source_note}
+                  required={!form.id}
+                  onChange={({ source, note }) => setForm({ ...form, source, source_note: note })}
+                />
+              </div>
+
               {/* Ghi chú */}
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Ghi chú</Label>
@@ -1057,6 +1082,7 @@ function CustomersPage() {
                           <div><div className="text-xs uppercase text-muted-foreground">Số hộ chiếu</div><div className="font-medium">{viewCustomer.passport_no || "—"}</div></div>
                         </>
                       )}
+                      <div><div className="text-xs uppercase text-muted-foreground">Biết Mr.Vũ qua đâu</div><div className="font-medium">{customerSourceLabel(viewCustomer.source, viewCustomer.source_note) || "—"}</div></div>
                     </div>
                   </div>
 

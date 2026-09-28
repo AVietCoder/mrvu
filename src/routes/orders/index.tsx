@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { CustomerSourceField, customerSourceError } from "@/components/CustomerSourceField";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, useEffect } from "react";
@@ -289,6 +290,9 @@ function Page() {
   const [quickCustGroup, setQuickCustGroup] = useState("");
   const [quickCustType, setQuickCustType] = useState<"ca_nhan"|"to_chuc">("ca_nhan");
   const [quickCustNote, setQuickCustNote] = useState("");
+  // "Biết Mr.Vũ qua đâu?" — bắt buộc khi tạo khách (v20)
+  const [quickCustSource, setQuickCustSource] = useState("");
+  const [quickCustSourceNote, setQuickCustSourceNote] = useState("");
   const [quickCustGender, setQuickCustGender] = useState("");
   const [quickCustBirthday, setQuickCustBirthday] = useState("");
   const [quickCustProvince, setQuickCustProvince] = useState("");
@@ -686,12 +690,15 @@ function Page() {
     setQuickCustWard(""); setQuickCustAddress(""); setQuickCustCccd("");
     setQuickCustPassport(""); setQuickCustCompany(""); setQuickCustTaxCode("");
     setQuickCustBankName(""); setQuickCustBankAccount(""); setQuickCustDebt("0");
+    setQuickCustSource(""); setQuickCustSourceNote("");
   }
 
   // Bấm "Lưu thông tin": còn cảnh báo trùng thì hỏi lại 1 lần rồi mới tạo.
   function handleQuickCustSaveClick() {
     if (!quickCustName.trim()) return toast.error("Nhập tên khách hàng");
     if (!quickCustGroup) return toast.error("Vui lòng chọn nhóm khách hàng");
+    const srcErr = customerSourceError(quickCustSource, quickCustSourceNote, true);
+    if (srcErr) return toast.error(srcErr);
     if (custDuplicates.length > 0) {
       setDupConfirmOpen(true);
       return;
@@ -702,6 +709,8 @@ function Page() {
   async function handleQuickCreateCustomer() {
     if (!quickCustName.trim()) return toast.error("Nhập tên khách hàng");
     if (!quickCustGroup) return toast.error("Vui lòng chọn nhóm khách hàng");
+    const srcErr2 = customerSourceError(quickCustSource, quickCustSourceNote, true);
+    if (srcErr2) return toast.error(srcErr2);
     setSavingCust(true);
     try {
       await upsertCustomerFn({
@@ -723,6 +732,8 @@ function Page() {
           bank_name: quickCustBankName.trim() || undefined,
           bank_account: quickCustBankAccount.trim() || undefined,
           note: quickCustNote.trim() || undefined,
+          source: quickCustSource,
+          source_note: quickCustSourceNote.trim() || undefined,
           debt: Number(quickCustDebt) || 0,
           _actor_id: user?.id,
         },
@@ -1892,6 +1903,13 @@ function Page() {
                     </div>
                   </>
                 )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <CustomerSourceField
+                    source={quickCustSource}
+                    note={quickCustSourceNote}
+                    onChange={({ source, note }) => { setQuickCustSource(source); setQuickCustSourceNote(note); }}
+                  />
+                </div>
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">Ghi chú</Label>
                   <Input className="bg-background mt-1" placeholder="Ghi chú thêm về khách hàng..."

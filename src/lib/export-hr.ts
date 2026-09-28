@@ -160,7 +160,13 @@ export async function exportPayrollExcel(opts: { month: string; rows: any[] }) {
     row.getCell(1).value = i + 1;
     row.getCell(2).value = r.full_name;
     row.getCell(3).value = r.position ?? "";
-    dates.forEach((d, j) => { const code = r.att_codes?.[d]; if (code) row.getCell(D0 + j).value = code; });
+    dates.forEach((d, j) => {
+      const code = r.att_codes?.[d];
+      if (code) row.getCell(D0 + j).value = code;
+      // Ghi chú ngày (lý do nghỉ, tăng ca…) → comment của ô, như comment Excel.
+      const note = r.att_notes?.[d];
+      if (note) row.getCell(D0 + j).note = String(note);
+    });
     const span = `${colName(D0)}${rn}:${colName(D0 + dates.length - 1)}${rn}`;
     const t = r.attendance ?? {};
     row.getCell(cX).value = f(`COUNTIF(${span},"X")`, n0(t.X));

@@ -615,6 +615,58 @@ async function payrollProfiles(scope: Scope) {
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.full_name).localeCompare(String(b.full_name), "vi"));
 }
 
+/**
+ * Ghi attendance_days. Cột self_marked (v21) có thể chưa có → thử lại không có
+ * cột đó thay vì làm hỏng việc chấm công.
+ */
+async function upsertAttendance(rows: any[]) {
+  const db = getSupabaseAdmin();
+  let { error } = await db.from("attendance_days").upsert(rows, { onConflict: "user_id,work_date" });
+  if (error && /self_marked/i.test(error.message)) {
+    ({ error } = await db
+      .from("attendance_days")
+      .upsert(rows.map(({ self_marked, ...r }) => r), { onConflict: "user_id,work_date" }));
+  }
+  if (error) throw new Error(error.message);
+}
+
+/** Ngày hôm nay theo giờ Việt Nam (yyyy-mm-dd). */
+const todayVNStr = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
+
+/**
+ * Thông tin để LỌC bảng chấm công / bảng lương: chức vụ, chi nhánh, người
+ * quản lý lương (Phân việc) của từng nhân viên + danh sách lựa chọn.
+ */
+async function filterInfo(userIds: string[]) {
+  const db = getSupabaseAdmin();
+  const [posRes, ubMap, asgRes, brRes, pRes, uRes] = await Promise.all([
+    userIds.length ? db.from("users").select("id, position_id").in("id", userIds) : Promise.resolve({ data: [] }),
+    userBranchMap(),
+    db.from("payroll_assignments").select("manager_id, user_id"),
+    db.from("branches").select("id, name").order("name"),
+    db.from("positions").select("id, name, sort_order").order("sort_order"),
+    db.from("users").select("id, full_name"),
+  ]);
+  const pos = new Map(((posRes.data ?? []) as any[]).map((u) => [u.id, u.position_id ?? null]));
+  const mgrOf = new Map<string, string[]>();
+  for (const a of (asgRes.data ?? []) as any[]) mgrOf.set(a.user_id, [...(mgrOf.get(a.user_id) ?? []), a.manager_id]);
+  const names = new Map(((uRes.data ?? []) as any[]).map((u) => [u.id, u.full_name]));
+  const managerIds = [...new Set(((asgRes.data ?? []) as any[]).map((a) => a.manager_id))];
+  return {
+    of: (id: string) => ({
+      position_id: pos.get(id) ?? null,
+      branch_ids: [...(ubMap.get(id) ?? [])],
+      manager_ids: mgrOf.get(id) ?? [],
+    }),
+    options: {
+      branches: (brRes.data ?? []) as any[],
+      positions: (pRes.data ?? []) as any[],
+      managers: managerIds.map((id) => ({ id, full_name: names.get(id) ?? id })).sort((a, b) => String(a.full_name).localeCompare(String(b.full_name), "vi")),
+    },
+    nameOf: (id: string) => names.get(id) ?? null,
+  };
+}
+
 function tallyAttendance(codes: Record<string, string>) {
   const t = { X: 0, N: 0, L: 0, K: 0 };
   for (const c of Object.values(codes)) if (t[c] !== undefined) t[c] += 1;
@@ -628,19 +680,30 @@ export const getAttendanceMonthFn = createServerFn({ method: "GET" }).handler(
     const db = getSupabaseAdmin();
     const profiles = await payrollProfiles(scope);
     const ids = profiles.map((p) => p.user_id);
-    const [attRes, locked] = await Promise.all([
+    const loadAtt = (sel: string) =>
       ids.length
-        ? db.from("attendance_days").select("user_id, work_date, code, note").in("user_id", ids).gte("work_date", from).lt("work_date", next)
-        : Promise.resolve({ data: [], error: null }),
+        ? db.from("attendance_days").select(sel).in("user_id", ids).gte("work_date", from).lt("work_date", next)
+        : Promise.resolve({ data: [], error: null });
+    const [attTry, locked, fi] = await Promise.all([
+      loadAtt("user_id, work_date, code, note, updated_by, updated_at, self_marked"),
       lockedItems(data.month),
+      filterInfo(ids),
     ]);
-    if ((attRes as any).error) throw new Error((attRes as any).error.message);
+    // Chưa chạy v21 → không có cột self_marked, đọc lại không có cột đó.
+    const attRes: any = (attTry as any).error ? await loadAtt("user_id, work_date, code, note, updated_by, updated_at") : attTry;
+    if (attRes.error) throw new Error(attRes.error.message);
 
     const byUser: Record<string, Record<string, string>> = {};
     const notes: Record<string, Record<string, string>> = {};
-    for (const a of ((attRes as any).data ?? []) as any[]) {
+    const marks: Record<string, Record<string, any>> = {};
+    for (const a of (attRes.data ?? []) as any[]) {
       (byUser[a.user_id] ||= {})[a.work_date] = a.code;
       if (a.note) (notes[a.user_id] ||= {})[a.work_date] = a.note;
+      (marks[a.user_id] ||= {})[a.work_date] = {
+        self: Boolean(a.self_marked),
+        by: a.updated_by ? fi.nameOf(a.updated_by) : null,
+        at: a.updated_at ?? null,
+      };
     }
 
     return {
@@ -653,10 +716,13 @@ export const getAttendanceMonthFn = createServerFn({ method: "GET" }).handler(
         standard_days: num(p.standard_days) || 26,
         codes: byUser[p.user_id] ?? {},
         notes: notes[p.user_id] ?? {},
+        marks: marks[p.user_id] ?? {},
         totals: tallyAttendance(byUser[p.user_id] ?? {}),
         // Đã chốt lương → hàng chấm công của người này chỉ xem.
         locked: locked.has(p.user_id),
+        ...fi.of(p.user_id),
       })),
+      filterOptions: fi.options,
     };
   },
 );
@@ -675,14 +741,128 @@ export const setAttendanceFn = createServerFn({ method: "POST" }).handler(
       return { ok: true };
     }
     if (!["X", "N", "L", "K"].includes(data.code)) throw new Error("Mã chấm công không hợp lệ");
-    const { error } = await db.from("attendance_days").upsert(
-      { user_id: data.userId, work_date: data.date, code: data.code, note: data.note?.trim() || null, updated_by: data.actorId ?? null, updated_at: now() },
-      { onConflict: "user_id,work_date" },
-    );
-    if (error) throw new Error(error.message);
+    // Chỉ ghi ghi chú khi client GỬI key note — bấm đổi mã không được xoá ghi
+    // chú cũ (trước đây mỗi lần đổi mã là mất ghi chú).
+    const row: any = { user_id: data.userId, work_date: data.date, code: data.code, updated_by: data.actorId ?? null, updated_at: now(), self_marked: false };
+    if ("note" in data) row.note = data.note?.trim() || null;
+    await upsertAttendance([row]);
     return { ok: true };
   },
 );
+
+/** Sửa ghi chú của một ngày ĐÃ có mã (lý do nghỉ, tăng ca…). */
+export const setAttendanceNoteFn = createServerFn({ method: "POST" }).handler(
+  async ({ data }: { data: { userId: string; date: string; note: string | null; actorId?: string } }) => {
+    const scope = await assertPerm(data?.actorId, "manage_payroll");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data.date))) throw new Error("Ngày không hợp lệ");
+    await assertUserInScope(scope, data.userId);
+    await assertNotLocked(data.date.slice(0, 7), data.userId);
+    const { data: rows, error } = await getSupabaseAdmin()
+      .from("attendance_days")
+      .update({ note: String(data.note ?? "").trim() || null })
+      .eq("user_id", data.userId)
+      .eq("work_date", data.date)
+      .select("user_id");
+    if (error) throw new Error(error.message);
+    if (!rows?.length) throw new Error("Ngày này chưa chấm công — chọn mã trước rồi mới ghi chú");
+    return { ok: true };
+  },
+);
+
+// ─── TỰ CHẤM CÔNG (quyền "self_attendance", migration v21) ─────────────────
+
+async function assertSelfAttendance(actorId?: string) {
+  if (!actorId) throw new Error("Thiếu thông tin người thực hiện");
+  const perms = await fetchRows<any>("user_permissions", { eq: { user_id: actorId }, select: "permission" });
+  if (!perms.some((p: any) => p.permission === "self_attendance")) {
+    throw new Error('Bạn chưa có quyền "Tự chấm công" — nhờ quản trị viên cấp ở trang Nhân viên');
+  }
+}
+
+/** Chấm công tháng của CHÍNH MÌNH (chỉ xem) + trạng thái ngày hôm nay. */
+export const getMyAttendanceFn = createServerFn({ method: "GET" }).handler(
+  async ({ data }: { data: { actorId?: string; month: string } }) => getMyAttendance(data),
+);
+async function getMyAttendance(data: { actorId?: string; month: string }) {
+    await assertSelfAttendance(data?.actorId);
+    const { from, next, dates } = monthRange(data.month);
+    const db = getSupabaseAdmin();
+    const load = (sel: string) =>
+      db.from("attendance_days").select(sel).eq("user_id", data.actorId).gte("work_date", from).lt("work_date", next);
+    let res: any = await load("work_date, code, note, updated_by, self_marked");
+    if (res.error) res = await load("work_date, code, note, updated_by");
+    if (res.error) throw new Error(res.error.message);
+    const days: Record<string, any> = {};
+    for (const a of (res.data ?? []) as any[]) {
+      days[a.work_date] = {
+        code: a.code,
+        note: a.note ?? "",
+        // Do chính mình chấm (hoặc bản ghi cũ trước v21 do chính mình cập nhật)
+        self: Boolean(a.self_marked) || a.updated_by === data.actorId,
+      };
+    }
+    const today = todayVNStr();
+    const t = days[today];
+    const locked = (await lockedItems(today.slice(0, 7))).has(data.actorId!);
+    const { data: prof } = await db.from("pay_profiles").select("standard_days").eq("user_id", data.actorId).limit(1);
+    return {
+      month: data.month,
+      dates,
+      days,
+      totals: tallyAttendance(Object.fromEntries(Object.entries(days).map(([d, v]: any) => [d, v.code]))),
+      standard_days: num(prof?.[0]?.standard_days) || 26,
+      today,
+      locked,
+      // Hôm nay quản lý đã chấm → chỉ được sửa ghi chú.
+      todayByManager: Boolean(t && !t.self),
+    };
+}
+
+/**
+ * Tự chấm công NGÀY HÔM NAY (giờ VN — server tự lấy ngày, không nhận ngày
+ * từ client). Ngày do quản lý / admin đã chấm thì chỉ được sửa ghi chú.
+ */
+export const setMyAttendanceFn = createServerFn({ method: "POST" }).handler(
+  async ({ data }: { data: { actorId?: string; code?: "X" | "N" | "L" | "K" | null; note?: string } }) => setMyAttendance(data),
+);
+async function setMyAttendance(data: { actorId?: string; code?: "X" | "N" | "L" | "K" | null; note?: string; date?: string }) {
+    await assertSelfAttendance(data?.actorId);
+    const me = data.actorId!;
+    const today = todayVNStr();
+    await assertNotLocked(today.slice(0, 7), me);
+    const db = getSupabaseAdmin();
+    let cur: any = await db.from("attendance_days").select("code, updated_by, self_marked").eq("user_id", me).eq("work_date", today).limit(1);
+    if (cur.error) cur = await db.from("attendance_days").select("code, updated_by").eq("user_id", me).eq("work_date", today).limit(1);
+    const existing = (cur.data ?? [])[0];
+    const byManager = existing && !existing.self_marked && existing.updated_by !== me;
+    const note = data.note === undefined ? undefined : String(data.note ?? "").trim() || null;
+
+    if (byManager) {
+      // Quản lý đã chấm: giữ nguyên mã, chỉ cập nhật ghi chú.
+      if (data.code && data.code !== existing.code) {
+        throw new Error("Hôm nay quản lý đã chấm công cho bạn — bạn chỉ thêm được ghi chú");
+      }
+      if (note !== undefined) {
+        const { error } = await db.from("attendance_days").update({ note }).eq("user_id", me).eq("work_date", today);
+        if (error) throw new Error(error.message);
+      }
+      return { ok: true, date: today };
+    }
+
+    if (data.code === null) {
+      const { error } = await db.from("attendance_days").delete().eq("user_id", me).eq("work_date", today);
+      if (error) throw new Error(error.message);
+      return { ok: true, date: today };
+    }
+    const code = data.code ?? existing?.code;
+    if (!code) throw new Error("Chọn loại công trước (cả ngày / nửa ngày / nghỉ…)");
+    if (!["X", "N", "L", "K"].includes(code)) throw new Error("Mã chấm công không hợp lệ");
+    const row: any = { user_id: me, work_date: today, code, updated_by: me, updated_at: now(), self_marked: true };
+    if (note !== undefined) row.note = note;
+    await upsertAttendance([row]);
+    await logActivity({ action: "self_attendance", detail: `Tự chấm công ${today}: ${code}`, employee_id: me });
+    return { ok: true, date: today };
+}
 
 /**
  * Điền nhanh: vd "X cho mọi ngày thường, K cho Chủ nhật".
@@ -719,10 +899,7 @@ export const fillAttendanceRowFn = createServerFn({ method: "POST" }).handler(
         payload.push({ user_id: u, work_date: d, code, updated_by: data.actorId ?? null, updated_at: now() });
       }
     }
-    if (payload.length) {
-      const { error } = await db.from("attendance_days").upsert(payload, { onConflict: "user_id,work_date" });
-      if (error) throw new Error(error.message);
-    }
+    if (payload.length) await upsertAttendance(payload);
     return { ok: true, filled: payload.length };
   },
 );
@@ -938,7 +1115,7 @@ async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: 
   const allIds = allProfiles.map((p) => p.user_id);
   const [attRes, itemsRes, tech, vtypes] = await Promise.all([
     allIds.length
-      ? db.from("attendance_days").select("user_id, work_date, code").in("user_id", allIds).gte("work_date", from).lt("work_date", next)
+      ? db.from("attendance_days").select("user_id, work_date, code, note").in("user_id", allIds).gte("work_date", from).lt("work_date", next)
       : Promise.resolve({ data: [] }),
     period && userIds.length
       ? db.from("payroll_items").select("*").eq("period_id", period.id).in("user_id", userIds)
@@ -959,9 +1136,12 @@ async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: 
   const ctx = needCtx ? await salesContext(month) : null;
 
   const codesByUser: Record<string, Record<string, string>> = {};
+  const notesByUser: Record<string, Record<string, string>> = {};
   for (const a of (attRes.data ?? []) as any[]) {
     (codesByUser[a.user_id] ||= {})[a.work_date] = a.code;
+    if (a.note) (notesByUser[a.user_id] ||= {})[a.work_date] = a.note;
   }
+  const fi = await filterInfo(allIds);
   const inputs = new Map(((itemsRes.data ?? []) as any[]).map((i) => [i.user_id, i]));
   const techByUser = new Map(((tech as any).rows ?? []).map((r: any) => [r.user_id, r]));
 
@@ -1041,6 +1221,8 @@ async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: 
       standard_days: stdDays,
       attendance: att,
       att_codes: codesByUser[p.user_id] ?? {},
+      att_notes: notesByUser[p.user_id] ?? {},
+      ...fi.of(p.user_id),
       no_attendance: Object.keys(codesByUser[p.user_id] ?? {}).length === 0,
       worked_days: att.worked,
       salary_by_days: salaryByDays,
@@ -1084,15 +1266,21 @@ async function computePayroll(month: string, scope: Scope, opts?: { draftOnly?: 
   });
 
   const salesInfo = ctx ? { unattributed: ctx.unattributed, missingV19: ctx.missingV19 } : null;
-  if (opts?.draftOnly) return { period, rows: computed, salaryVoucherType: vtypes.salaryType, salesInfo };
+  const filterOptions = fi.options;
+  if (opts?.draftOnly) return { period, rows: computed, salaryVoucherType: vtypes.salaryType, salesInfo, filterOptions };
 
   const profById = new Map(allProfiles.map((p) => [p.user_id, p]));
   const snapshots = allProfiles
     .filter((p) => locked.has(p.user_id))
-    .map((p) => ({ ...rowFromSnapshot(locked.get(p.user_id), profById.get(p.user_id)), att_codes: codesByUser[p.user_id] ?? {} }));
+    .map((p) => ({
+      ...rowFromSnapshot(locked.get(p.user_id), profById.get(p.user_id)),
+      att_codes: codesByUser[p.user_id] ?? {},
+      att_notes: notesByUser[p.user_id] ?? {},
+      ...fi.of(p.user_id),
+    }));
   const order = new Map(allProfiles.map((p, i) => [p.user_id, i]));
   const rows = [...computed, ...snapshots].sort((a, b) => (order.get(a.user_id) ?? 0) - (order.get(b.user_id) ?? 0));
-  return { period, rows, salaryVoucherType: vtypes.salaryType, salesInfo };
+  return { period, rows, salaryVoucherType: vtypes.salaryType, salesInfo, filterOptions };
 }
 
 const isPaid = (r: any) => Boolean(r.cash_voucher_id) && !String(r.cash_voucher_id).startsWith("pending:");
@@ -1127,6 +1315,7 @@ export const getPayrollFn = createServerFn({ method: "GET" }).handler(
       scopeBranchIds: [...scope.branchIds],
       // Chỉ admin: tiền thu trong tháng không xác định được người bán.
       salesInfo: scope.isAdmin ? r.salesInfo : r.salesInfo ? { missingV19: r.salesInfo.missingV19 } : null,
+      filterOptions: r.filterOptions,
     };
   },
 );
@@ -1263,7 +1452,7 @@ export const unlockPayrollFn = createServerFn({ method: "POST" }).handler(
  * được mới tạo phiếu; tạo lỗi thì trả dòng về NULL để lần sau chi lại được.
  */
 export const payPayrollFn = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { month: string; fundType: "tien_mat" | "ngan_hang"; branchId: string; actorId?: string } }) => {
+  async ({ data }: { data: { month: string; fundType: "tien_mat" | "ngan_hang"; branchId: string; userIds?: string[]; actorId?: string } }) => {
     const scope = await assertPerm(data?.actorId, "manage_payroll");
     if (!data.branchId) throw new Error("Chọn chi nhánh / quỹ chi lương");
     // Chỉ chi từ quỹ của chi nhánh mình quản lý.
@@ -1283,7 +1472,10 @@ export const payPayrollFn = createServerFn({ method: "POST" }).handler(
       .is("cash_voucher_id", null)
       .gt("net_pay", 0);
     if (error) throw new Error(error.message);
-    const allowed = new Set(await scopedUserIds(scope, ((items ?? []) as any[]).map((i) => i.user_id)));
+    let allowedIds = await scopedUserIds(scope, ((items ?? []) as any[]).map((i) => i.user_id));
+    // Đang lọc trên giao diện → chỉ chi cho những người đang hiện.
+    if (data.userIds?.length) allowedIds = allowedIds.filter((u) => data.userIds!.includes(u));
+    const allowed = new Set(allowedIds);
 
     const [, mm] = data.month.split("-");
     const results: any[] = [];

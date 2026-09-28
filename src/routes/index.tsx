@@ -6,6 +6,8 @@ import { getReports } from "@/lib/reports.functions";
 import { AppShell, Card, StatCard, fmt } from "@/components/AppShell";
 import { useAuth } from "@/context/AuthContext";
 import { MySalaryCard } from "@/components/MySalaryCard";
+import { MyAttendanceCard } from "@/components/MyAttendanceCard";
+import { hasPermission } from "@/lib/types";
 import { ShieldOff, ShoppingCart, Users, Package, BarChart2, Warehouse, CalendarDays, Settings, CreditCard, ChevronRight } from "lucide-react";
 
 import {
@@ -118,6 +120,8 @@ function Dashboard() {
               </Link>
             ))}
           </div>
+          {/* Tự chấm công: chỉ người được cấp quyền "Tự chấm công" (không phải admin). */}
+          {user && !isAdmin && hasPermission(user as any, "self_attendance") && <MyAttendanceCard userId={user.id} />}
           {user && !isAdmin && <MySalaryCard userId={user.id} />}
           <div className="flex flex-col items-center justify-center py-8 text-center gap-3">
             <ShieldOff className="h-12 w-12 text-muted-foreground opacity-30" />
