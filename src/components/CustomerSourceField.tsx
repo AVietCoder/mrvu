@@ -34,7 +34,8 @@ export function CustomerSourceField({
         onChange={(e) => onChange({ source: e.target.value, note: e.target.value === "khac" ? note : "" })}
       >
         <option value="" disabled={required}>— Chọn nguồn —</option>
-        {CUSTOMER_SOURCES.map((s) => (
+        {/* Nguồn cũ (legacy) chỉ hiện khi khách đang mang giá trị đó. */}
+        {CUSTOMER_SOURCES.filter((s) => !s.legacy || s.key === source).map((s) => (
           <option key={s.key} value={s.key}>{s.label}</option>
         ))}
       </select>

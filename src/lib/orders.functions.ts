@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { syncLeadWins } from "./leads.functions";
 import { createServerFn } from "@tanstack/react-start";
 import {
   countRows,
@@ -900,6 +901,12 @@ export const createOrder = createServerFn({ method: "POST" })
       // chuyện đơn bị rollback mà job gửi tin vẫn nằm lại trong hàng đợi.
       if (status === "completed") {
         await enqueueOrderCompletedZns(oid);
+      }
+
+      // Khách tiềm năng của khách này (đang mở) → tự chuyển "Đã chốt" theo đơn.
+      // Lỗi ở đây (vd chưa chạy migration v22) KHÔNG được làm hỏng việc tạo đơn.
+      if (data.customer_id) {
+        await syncLeadWins({ customerIds: [data.customer_id] }).catch(() => undefined);
       }
 
       return { ok: true, code, receipt_code: receipt?.code ?? null, id: oid };

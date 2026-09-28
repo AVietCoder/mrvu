@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { ConsultHistory } from "@/components/leads/ConsultHistory";
 import { CustomerSourceField, customerSourceError } from "@/components/CustomerSourceField";
 import { customerSourceLabel } from "@/lib/types";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
@@ -728,6 +729,9 @@ function CustomerDetailPage() {
               </div>
             </div>
           </Card>
+
+          {/* Khách tiềm năng: các lần khách hỏi / ghé showroom (v22) */}
+          <ConsultHistory customerId={customer.id} />
         </div>
 
         <div className="lg:col-span-2 space-y-4">

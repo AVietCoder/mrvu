@@ -1,9 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { LeadsTab } from "@/components/leads/LeadsTab";
+import { Target } from "lucide-react";
 import { CustomerSourceField, customerSourceError } from "@/components/CustomerSourceField";
 import { customerSourceLabel } from "@/lib/types";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { memo, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   listCustomers,
   upsertCustomer,
@@ -66,6 +68,12 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/customers/")({
   head: () => ({
     meta: [{ title: "Khách hàng — Mr.Vũ" }],
+  }),
+  // ?tab=leads → tab "Khách tiềm năng"; &lead=<id> → mở sẵn chi tiết lead
+  // (dùng cho khung "Cần chăm hôm nay" ở trang Tổng quan).
+  validateSearch: (s: Record<string, unknown>): { tab?: "leads"; lead?: string } => ({
+    ...(s.tab === "leads" ? { tab: "leads" as const } : {}),
+    ...(typeof s.lead === "string" && s.lead ? { lead: s.lead } : {}),
   }),
   component: CustomersPage,
 });
@@ -187,7 +195,39 @@ const empty: FormState = {
   source_note: "",
 };
 
+/** Trang Khách hàng: 2 tab — danh sách khách và khách tiềm năng (thay file Excel HCM). */
 function CustomersPage() {
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const onLeads = search.tab === "leads";
+  const tabs = (
+    <div className="mb-4 flex w-full rounded-lg border bg-muted/40 p-1 sm:w-fit">
+      {[
+        [false, "Khách hàng", Users],
+        [true, "Khách tiềm năng", Target],
+      ].map(([isLeads, label, Icon]: any) => (
+        <button
+          key={label}
+          onClick={() => navigate({ search: isLeads ? { tab: "leads" } : {} })}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium sm:flex-none ${onLeads === isLeads ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          <Icon className="h-4 w-4" />{label}
+        </button>
+      ))}
+    </div>
+  );
+  if (onLeads) {
+    return (
+      <AppShell title="Khách hàng">
+        {tabs}
+        <LeadsTab openLeadId={search.lead} />
+      </AppShell>
+    );
+  }
+  return <CustomerListPage tabs={tabs} />;
+}
+
+function CustomerListPage({ tabs }: { tabs: ReactNode }) {
   const { user, isAdmin } = useAuth();
   const qc = useQueryClient();
 
@@ -448,6 +488,7 @@ function CustomersPage() {
 
   return (
     <AppShell title="Khách hàng">
+      {tabs}
       {/* LOADING PROGRESS */}
       {(isLoading || isFetching) && (
         <div className="fixed left-0 right-0 top-0 z-[9999]">

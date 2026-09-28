@@ -68,6 +68,10 @@ import { getSettings } from "@/lib/settings.functions";
 
 export const Route = createFileRoute("/orders/")({
   head: () => ({ meta: [{ title: "Bán hàng — Mr.Vũ" }] }),
+  // ?newFor=<customerId> → mở sẵn form tạo đơn cho khách đó (nút "Tạo đơn" ở
+  // khách tiềm năng).
+  validateSearch: (s: Record<string, unknown>): { newFor?: string } =>
+    typeof s.newFor === "string" && s.newFor ? { newFor: s.newFor } : {},
   component: Page,
 });
 
@@ -1066,6 +1070,19 @@ function Page() {
       </div>
     );
   }
+
+  // Mở từ khách tiềm năng: tạo đơn cho đúng khách đó, rồi xoá tham số khỏi URL
+  // để tải lại trang không mở lại form.
+  const { newFor } = Route.useSearch();
+  useEffect(() => {
+    if (!newFor) return;
+    setQuickInvoice(false);
+    reset();
+    setCustomer(newFor);
+    setOpen(true);
+    navigate({ to: "/orders", search: {}, replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newFor]);
 
   return (
     <AppShell title="Bán hàng" loading={ordersLoading}>

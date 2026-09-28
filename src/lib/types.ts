@@ -148,15 +148,51 @@ export const ALL_PERMISSIONS: { key: Permission; label: string; desc: string }[]
   { key: "self_attendance",   label: "Tự chấm công",              desc: "Tự chấm công ngày hôm nay cho bản thân ở trang Tổng quan (ngày quản lý đã chấm thì chỉ thêm được ghi chú)" },
 ];
 
-// ── Nguồn khách "Biết Mr.Vũ qua đâu?" (migration v20) ─────────
-export const CUSTOMER_SOURCES: { key: string; label: string }[] = [
-  { key: "facebook", label: "Facebook" },
-  { key: "google",   label: "Google" },
+// ── Nguồn khách "Biết Mr.Vũ qua đâu?" (v20, mở rộng v22) ─────
+// Dùng chung cho khách hàng và khách tiềm năng. legacy = chỉ để hiển thị dữ
+// liệu cũ, không còn trong ô chọn ("Facebook" đã tách thành Group / Fanpage).
+export const CUSTOMER_SOURCES: { key: string; label: string; legacy?: boolean }[] = [
+  { key: "showroom", label: "Showroom (khách tự ghé)" },
+  { key: "fb_group", label: "Group Facebook" },
+  { key: "fb_page",  label: "Fanpage Facebook" },
+  { key: "zalo",     label: "Zalo" },
   { key: "tiktok",   label: "Tiktok" },
+  { key: "google",   label: "Google" },
+  { key: "web",      label: "Website" },
   { key: "thiet_ke", label: "Thiết kế" },
-  { key: "ban_be",   label: "Bạn bè" },
+  { key: "ban_be",   label: "Bạn bè / người quen" },
+  { key: "khach_cu", label: "Khách cũ mua lại" },
+  { key: "noi_bo",   label: "Nội bộ chuyển (sếp / đồng nghiệp / chi nhánh khác)" },
   { key: "khac",     label: "Khác" },
+  { key: "facebook", label: "Facebook", legacy: true },
 ];
+
+// ── Khách tiềm năng (v22) ────────────────────────────────────
+export const LEAD_STAGES: { key: string; label: string; tone: string }[] = [
+  { key: "new",         label: "Mới",            tone: "bg-slate-100 text-slate-700 border-slate-200" },
+  { key: "consulting",  label: "Đang tư vấn",    tone: "bg-sky-100 text-sky-800 border-sky-200" },
+  { key: "appointment", label: "Hẹn ra showroom", tone: "bg-violet-100 text-violet-800 border-violet-200" },
+  { key: "quoted",      label: "Đã báo giá",     tone: "bg-amber-100 text-amber-800 border-amber-200" },
+  { key: "won",         label: "Đã chốt",        tone: "bg-emerald-100 text-emerald-800 border-emerald-300" },
+  { key: "lost",        label: "Không chốt",     tone: "bg-rose-100 text-rose-800 border-rose-200" },
+];
+export const OPEN_LEAD_STAGES = ["new", "consulting", "appointment", "quoted"];
+export const LEAD_LOST_REASONS: { key: string; label: string }[] = [
+  { key: "gia_cao",     label: "Giá cao" },
+  { key: "chua_xay",    label: "Nhà chưa xây / chưa hoàn thiện" },
+  { key: "mua_noi_khac", label: "Mua hãng khác / nơi khác" },
+  { key: "ko_phan_hoi", label: "Không phản hồi" },
+  { key: "ko_dung_nhu_cau", label: "Không đúng nhu cầu" },
+  { key: "khac",        label: "Khác (ghi rõ)" },
+];
+export const LEAD_ACTIVITY_KINDS: { key: string; label: string }[] = [
+  { key: "call",  label: "Gọi điện" },
+  { key: "zalo",  label: "Nhắn Zalo" },
+  { key: "quote", label: "Gửi báo giá" },
+  { key: "visit", label: "Khách ra showroom" },
+  { key: "note",  label: "Ghi chú" },
+];
+export const leadStageOf = (k?: string | null) => LEAD_STAGES.find((s) => s.key === k) ?? LEAD_STAGES[0];
 
 /** "Facebook" / "Khác — hội chợ" / "" (khách cũ chưa có). */
 export function customerSourceLabel(source?: string | null, note?: string | null): string {

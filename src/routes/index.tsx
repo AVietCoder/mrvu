@@ -7,6 +7,7 @@ import { AppShell, Card, StatCard, fmt } from "@/components/AppShell";
 import { useAuth } from "@/context/AuthContext";
 import { MySalaryCard } from "@/components/MySalaryCard";
 import { MyAttendanceCard } from "@/components/MyAttendanceCard";
+import { FollowUpCard } from "@/components/FollowUpCard";
 import { hasPermission } from "@/lib/types";
 import { ShieldOff, ShoppingCart, Users, Package, BarChart2, Warehouse, CalendarDays, Settings, CreditCard, ChevronRight } from "lucide-react";
 
@@ -120,6 +121,8 @@ function Dashboard() {
               </Link>
             ))}
           </div>
+          {/* Khách tiềm năng tới hẹn chăm (ai cũng thấy phần của mình; không có thì ẩn). */}
+          {user && <FollowUpCard userId={user.id} />}
           {/* Tự chấm công: chỉ người được cấp quyền "Tự chấm công" (không phải admin). */}
           {user && !isAdmin && hasPermission(user as any, "self_attendance") && <MyAttendanceCard userId={user.id} />}
           {user && !isAdmin && <MySalaryCard userId={user.id} />}
