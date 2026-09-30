@@ -163,6 +163,12 @@ export function LeadsTab({ openLeadId }: { openLeadId?: string }) {
       {view === "kanban" && <LeadKanban filters={filters} metaHook={metaHook} onOpen={setDetailId} />}
       {view === "report" && <LeadReport range={range} branchId={branchId} metaHook={metaHook} />}
 
+      {data?.noBranch && (
+        <Card className="border-amber-300 bg-amber-50 text-sm text-amber-900">
+          Tài khoản của bạn chưa được gán chi nhánh nào nên chưa xem được khách tiềm năng — nhờ quản trị viên gán chi nhánh ở trang Nhân viên.
+        </Card>
+      )}
+
       {view === "list" && (
         <Card className="p-0 overflow-hidden">
           {error ? (

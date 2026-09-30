@@ -13,8 +13,9 @@ import { CUSTOMER_SOURCES, LEAD_LOST_REASONS, LEAD_STAGES, OPEN_LEAD_STAGES } fr
  * WIN_WINDOW_DAYS kể từ ngày tiếp nhận.
  *
  * Quyền (kiểm ở server — bảng bật RLS deny-all):
- *   - Xem / thêm: lead thuộc các chi nhánh mình được gán (+ lead mình phụ trách / hỗ trợ).
- *   - Sửa: admin; người phụ trách / hỗ trợ; Quản lý bán hàng của chi nhánh đó.
+ *   - Xem / thêm: CHỈ lead thuộc các chi nhánh mình được gán (user_branches).
+ *   - Sửa: admin; hoặc (thuộc chi nhánh của lead VÀ là người phụ trách / hỗ trợ
+ *     hoặc Quản lý bán hàng).
  *   - Đổi người phụ trách: admin, Quản lý bán hàng.
  */
 
@@ -44,13 +45,13 @@ async function leadScope(actorId?: string): Promise<LeadScope> {
   };
 }
 
-const canSee = (s: LeadScope, l: any) =>
-  s.isAdmin || s.branchIds.has(l.branch_id) || l.owner_id === s.actorId || (l.helper_ids ?? []).includes(s.actorId);
+// Nhân viên CHỈ xem lead thuộc chi nhánh được gán — kể cả lead mình phụ trách
+// nhưng nằm ở chi nhánh khác cũng không xem / sửa được.
+const canSee = (s: LeadScope, l: any) => s.isAdmin || s.branchIds.has(l.branch_id);
 const canEdit = (s: LeadScope, l: any) =>
   s.isAdmin ||
-  l.owner_id === s.actorId ||
-  (l.helper_ids ?? []).includes(s.actorId) ||
-  (s.isSalesManager && s.branchIds.has(l.branch_id));
+  (s.branchIds.has(l.branch_id) &&
+    (l.owner_id === s.actorId || (l.helper_ids ?? []).includes(s.actorId) || s.isSalesManager));
 const canAssign = (s: LeadScope, branchId: string) => s.isAdmin || (s.isSalesManager && s.branchIds.has(branchId));
 
 function tableError(error: any) {
@@ -207,9 +208,8 @@ type ListArgs = {
 function applyScope(q: any, s: LeadScope) {
   if (s.isAdmin) return q;
   const ids = [...s.branchIds];
-  const parts = [`owner_id.eq.${s.actorId}`, `helper_ids.cs.{${s.actorId}}`];
-  if (ids.length) parts.unshift(`branch_id.in.(${ids.join(",")})`);
-  return q.or(parts.join(","));
+  // Chưa được gán chi nhánh nào → không thấy lead nào.
+  return ids.length ? q.in("branch_id", ids) : q.eq("id", "__khong_co_chi_nhanh__");
 }
 
 function applyFilters(q: any, a: ListArgs, withStage = true) {
@@ -281,6 +281,7 @@ export const listLeadsFn = createServerFn({ method: "GET" }).handler(async ({ da
     stageCounts,
     page,
     pageSize,
+    noBranch: !s.isAdmin && s.branchIds.size === 0,
   };
 });
 
@@ -309,9 +310,9 @@ export const getLeadFn = createServerFn({ method: "GET" }).handler(async ({ data
 /** Cảnh báo trùng theo SĐT: khách đã có + lead đang mở. */
 export const findLeadDuplicatesFn = createServerFn({ method: "GET" }).handler(
   async ({ data }: { data: { actorId?: string; phone?: string; excludeId?: string } }) => {
-    await leadScope(data?.actorId);
+    const s = await leadScope(data?.actorId);
     const d = digits(data.phone);
-    if (d.length < 9) return { customer: null, leads: [] };
+    if (d.length < 9) return { customer: null, leads: [], otherBranchLeads: [] };
     const phone = normalizePhoneForStorage(data.phone);
     const c = await customerByPhone(phone);
     let completed = 0;
@@ -324,10 +325,25 @@ export const findLeadDuplicatesFn = createServerFn({ method: "GET" }).handler(
       .select("id, name, lead_date, stage, owner_id, branch_id")
       .ilike("phone", `%${d.slice(-9)}%`)
       .in("stage", OPEN_LEAD_STAGES)
-      .limit(5);
+      .limit(20);
+    const all = ((ls ?? []) as any[]).filter((l) => l.id !== data.excludeId);
+    // Lead ở chi nhánh không được gán: chỉ báo TÊN SHOWROOM + số lượng, không lộ
+    // tên khách / người phụ trách / trạng thái.
+    const outside = all.filter((l) => !canSee(s, l));
+    const branchIds = [...new Set(outside.map((l) => l.branch_id).filter(Boolean))];
+    const names = new Map<string, string>();
+    if (branchIds.length) {
+      const { data: bs } = await db().from("branches").select("id, name").in("id", branchIds);
+      for (const b of bs ?? []) names.set(b.id, b.name);
+    }
+    const otherBranchLeads = branchIds.map((id) => ({
+      branch_name: names.get(id) ?? "showroom khác",
+      count: outside.filter((l) => l.branch_id === id).length,
+    }));
     return {
       customer: c ? { ...c, completed_orders: completed } : null,
-      leads: ((ls ?? []) as any[]).filter((l) => l.id !== data.excludeId),
+      leads: all.filter((l) => canSee(s, l)).slice(0, 5),
+      otherBranchLeads,
     };
   },
 );
@@ -335,14 +351,17 @@ export const findLeadDuplicatesFn = createServerFn({ method: "GET" }).handler(
 /** Khung "Cần chăm hôm nay" ở trang Tổng quan: lead mình phụ trách / hỗ trợ tới hẹn. */
 export const myFollowUpsFn = createServerFn({ method: "GET" }).handler(async ({ data }: { data: { actorId?: string } }) => {
   const s = await leadScope(data?.actorId);
-  const { data: rows, error } = await db()
-    .from("customer_leads")
-    .select("id, name, phone, lead_date, stage, next_follow_up, branch_id, interest_note")
-    .or(`owner_id.eq.${s.actorId},helper_ids.cs.{${s.actorId}}`)
-    .in("stage", OPEN_LEAD_STAGES)
-    .lte("next_follow_up", todayVN())
-    .order("next_follow_up", { ascending: true })
-    .limit(30);
+  // Chỉ lead mình phụ trách / hỗ trợ VÀ thuộc chi nhánh được gán.
+  const q = applyScope(
+    db()
+      .from("customer_leads")
+      .select("id, name, phone, lead_date, stage, next_follow_up, branch_id, interest_note")
+      .or(`owner_id.eq.${s.actorId},helper_ids.cs.{${s.actorId}}`)
+      .in("stage", OPEN_LEAD_STAGES)
+      .lte("next_follow_up", todayVN()),
+    s,
+  );
+  const { data: rows, error } = await q.order("next_follow_up", { ascending: true }).limit(30);
   if (error) return { rows: [], today: todayVN(), ready: false };
   return { rows: rows ?? [], today: todayVN(), ready: true };
 });
@@ -350,12 +369,14 @@ export const myFollowUpsFn = createServerFn({ method: "GET" }).handler(async ({ 
 /** Lịch sử tư vấn của một khách (trang chi tiết khách). */
 export const listCustomerLeadsFn = createServerFn({ method: "GET" }).handler(
   async ({ data }: { data: { actorId?: string; customerId: string } }) => {
-    await leadScope(data?.actorId);
-    const { data: rows, error } = await db()
+    const s = await leadScope(data?.actorId);
+    let q = db()
       .from("customer_leads")
       .select("id, lead_date, branch_id, stage, interest_note, interest_product_ids, owner_id, won_amount, lost_reason")
       .eq("customer_id", data.customerId)
       .order("lead_date", { ascending: false });
+    q = applyScope(q, s);
+    const { data: rows, error } = await q;
     if (error) return { rows: [] };
     return { rows: rows ?? [] };
   },

@@ -124,12 +124,18 @@ export function LeadForm({ open, lead, meta, onClose, onSaved }: any) {
             </div>
           </div>
 
-          {(dup?.customer || (dup?.leads ?? []).length > 0) && (
+          {(dup?.customer || (dup?.leads ?? []).length > 0 || (dup?.otherBranchLeads ?? []).length > 0) && (
             <div className="space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">
               {dup.customer && (
                 <div className="flex items-start gap-2">
                   <UserCheck className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>Đã là khách hàng: <strong>{dup.customer.name}</strong> — đã mua {dup.customer.completed_orders} đơn. Lead sẽ tự nối với khách này.</span>
+                </div>
+              )}
+              {(dup.otherBranchLeads ?? []).length > 0 && (
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>Khách này đang được tư vấn ở showroom khác: <strong>{dup.otherBranchLeads.map((o: any) => `${o.branch_name}${o.count > 1 ? ` (${o.count})` : ""}`).join(", ")}</strong>.</span>
                 </div>
               )}
               {(dup.leads ?? []).map((l: any) => (
