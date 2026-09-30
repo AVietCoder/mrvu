@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { BirthdayDayMonth, formatBirthday } from "@/components/BirthdayDayMonth";
 import { LeadsTab } from "@/components/leads/LeadsTab";
 import { Target } from "lucide-react";
 import { CustomerSourceField, customerSourceError } from "@/components/CustomerSourceField";
@@ -830,12 +831,11 @@ function CustomerListPage({ tabs }: { tabs: ReactNode }) {
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs font-medium">Ngày sinh</Label>
-                    <Input
-                      type="date"
-                      className="bg-background mt-1"
+                    <Label className="text-xs font-medium">Ngày sinh (ngày / tháng)</Label>
+                    <BirthdayDayMonth
+                      className="mt-1"
                       value={form.birthday}
-                      onChange={(e) => setForm({ ...form, birthday: e.target.value })}
+                      onChange={(v) => setForm({ ...form, birthday: v })}
                     />
                   </div>
                 </div>
@@ -1103,7 +1103,7 @@ function CustomerListPage({ tabs }: { tabs: ReactNode }) {
                     <div><div className="text-xs uppercase text-muted-foreground">Số điện thoại</div><div className="font-medium">{viewCustomer.phone ?? "—"}</div></div>
                     <div><div className="text-xs uppercase text-muted-foreground">Email</div><div className="font-medium break-all">{viewCustomer.email ?? "—"}</div></div>
                     <div><div className="text-xs uppercase text-muted-foreground">Giới tính</div><div className="font-medium">{viewCustomer.gender === "nam" ? "Nam" : viewCustomer.gender === "nu" ? "Nữ" : "—"}</div></div>
-                    <div><div className="text-xs uppercase text-muted-foreground">Ngày sinh</div><div className="font-medium">{viewCustomer.birthday ? new Date(viewCustomer.birthday).toLocaleDateString("vi-VN") : "—"}</div></div>
+                    <div><div className="text-xs uppercase text-muted-foreground">Ngày sinh</div><div className="font-medium">{formatBirthday(viewCustomer.birthday) || "—"}</div></div>
                     <div className="md:col-span-2"><div className="text-xs uppercase text-muted-foreground">Địa chỉ</div><div className="font-medium">{[viewCustomer.address, viewCustomer.ward, viewCustomer.province].filter(Boolean).join(", ") || "—"}</div></div>
                   </div>
                 </div>

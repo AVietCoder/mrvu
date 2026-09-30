@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { formatBirthday, hasRealBirthYear } from "@/components/BirthdayDayMonth";
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -286,6 +287,7 @@ function Page() {
                     ) : (
                       <>
                         <th className="py-2 pr-3">Sản phẩm</th>
+                        <th className="py-2 pr-3">NV tạo đơn</th>
                         <th className="py-2 pr-3">Xuất kho</th>
                         <th className="py-2 pr-3">Đến hạn</th>
                       </>
@@ -324,8 +326,8 @@ function Page() {
                         <td className="py-2 pr-3 text-xs">{r.email || "—"}</td>
                         {isBirthday ? (
                           <td className="py-2 pr-3">
-                            {formatDateVN(r.birthday)}
-                            {r.age != null && (
+                            {formatBirthday(r.birthday)}
+                            {r.age != null && hasRealBirthYear(r.birthday) && (
                               <span className="text-muted-foreground"> ({r.age} tuổi)</span>
                             )}
                           </td>
@@ -343,6 +345,7 @@ function Page() {
                                 </div>
                               )}
                             </td>
+                            <td className="py-2 pr-3 text-sm">{(r.staff_names ?? []).join(", ") || "—"}</td>
                             <td className="py-2 pr-3 text-xs">
                               {r.last_shipped_at
                                 ? formatDateVN(String(r.last_shipped_at).slice(0, 10))

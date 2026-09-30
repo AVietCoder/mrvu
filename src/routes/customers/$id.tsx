@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { BirthdayDayMonth, formatBirthday } from "@/components/BirthdayDayMonth";
 import { ConsultHistory } from "@/components/leads/ConsultHistory";
 import { CustomerSourceField, customerSourceError } from "@/components/CustomerSourceField";
 import { customerSourceLabel } from "@/lib/types";
@@ -590,7 +591,7 @@ function CustomerDetailPage() {
               {customer.birthday && (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <CalendarDays className="h-4 w-4 shrink-0" />
-                  <span>{new Date(customer.birthday).toLocaleDateString("vi-VN")}</span>
+                  <span>Sinh nhật {formatBirthday(customer.birthday)}</span>
                 </div>
               )}
             </div>
@@ -896,12 +897,11 @@ function CustomerDetailPage() {
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs font-medium">Ngày sinh</Label>
-                      <Input
-                        type="date"
-                        className="bg-background mt-1"
+                      <Label className="text-xs font-medium">Ngày sinh (ngày / tháng)</Label>
+                      <BirthdayDayMonth
+                        className="mt-1"
                         value={form.birthday}
-                        onChange={(e) => setForm({ ...form, birthday: e.target.value })}
+                        onChange={(v) => setForm({ ...form, birthday: v })}
                       />
                     </div>
                   </div>

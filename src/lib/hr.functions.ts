@@ -184,7 +184,12 @@ async function activeUsers() {
  * Ai cũng xem được; quyền sửa kiểm ở các hàm ghi.
  */
 export const getRosterMonthFn = createServerFn({ method: "GET" }).handler(
-  async ({ data }: { data: { month?: string; from?: string; to?: string } }) => {
+  async ({ data }: { data: { month?: string; from?: string; to?: string; actorId?: string } }) => {
+    // Chỉ hiện chi nhánh người xem được phân quyền (user_branches); admin thấy hết.
+    if (!data?.actorId) throw new Error("Thiếu thông tin người xem");
+    const viewer = (await fetchRows<any>("users", { eq: { id: data.actorId }, select: "id, is_admin", limit: 1 }))[0];
+    if (!viewer) throw new Error("Người dùng không tồn tại");
+    const viewerIsAdmin = Number(viewer.is_admin) === 1;
     let from: string, next: string, dates: string[], year: number;
     if (data?.from && data?.to) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(data.from) || !/^\d{4}-\d{2}-\d{2}$/.test(data.to) || data.to < data.from) {
@@ -223,7 +228,19 @@ export const getRosterMonthFn = createServerFn({ method: "GET" }).handler(
       );
     }
 
-    const entries = (entriesRes.data ?? []) as any[];
+    // ── Lọc theo chi nhánh được phân quyền ──
+    const allowedBranches = viewerIsAdmin
+      ? null
+      : new Set<string>([...(ubMap.get(data.actorId) ?? [])]);
+    const inAllowed = (bid: string | null | undefined) => !allowedBranches || (bid ? allowedBranches.has(bid) : false);
+    const shifts = ((shiftsRes.data ?? []) as any[]).filter((sh) => inAllowed(sh.branch_id));
+    const shiftIds = new Set(shifts.map((sh) => sh.id));
+    const visibleUsers = users.filter((u) => !allowedBranches || [...(ubMap.get(u.id) ?? [])].some((b) => allowedBranches.has(b)));
+    const visibleUserIds = new Set(visibleUsers.map((u) => u.id));
+    // Ca: chỉ ca thuộc chi nhánh được phép. Nghỉ (không có ca): chỉ người thuộc chi nhánh được phép.
+    const entries = ((entriesRes.data ?? []) as any[]).filter((e) =>
+      e.shift_id ? shiftIds.has(e.shift_id) : visibleUserIds.has(e.user_id),
+    );
     const summary: Record<string, any> = {};
     const bump = (uid_: string, key: string) => {
       const r = (summary[uid_] ||= { shifts: 0, off: 0, holiday: 0, half_off: 0, year_off: 0, year_holiday: 0, year_half_off: 0 });
@@ -237,18 +254,20 @@ export const getRosterMonthFn = createServerFn({ method: "GET" }).handler(
       } else bump(e.user_id, e.kind);
     }
     for (const e of (yearRes.data ?? []) as any[]) {
+      if (!visibleUserIds.has(e.user_id)) continue;
       bump(e.user_id, e.kind === "off" ? "year_off" : e.kind === "holiday" ? "year_holiday" : "year_half_off");
     }
 
     return {
       month: data.month ?? null,
       dates,
-      shifts: shiftsRes.data ?? [],
+      shifts,
       entries,
-      branches: branchesRes.data ?? [],
+      branches: ((branchesRes.data ?? []) as any[]).filter((b) => inAllowed(b.id)),
       // Kèm chi nhánh của từng người để giao diện lọc được danh sách chọn
       // theo phạm vi người quản lý (server vẫn kiểm lại khi ghi).
-      users: users.map((u) => ({ id: u.id, full_name: u.full_name, branch_ids: [...(ubMap.get(u.id) ?? [])] })),
+      users: visibleUsers.map((u) => ({ id: u.id, full_name: u.full_name, branch_ids: [...(ubMap.get(u.id) ?? [])] })),
+      noBranch: Boolean(allowedBranches && allowedBranches.size === 0),
       summary,
     };
   },
@@ -769,14 +788,16 @@ export const setAttendanceNoteFn = createServerFn({ method: "POST" }).handler(
   },
 );
 
-// ─── TỰ CHẤM CÔNG (quyền "self_attendance", migration v21) ─────────────────
+// ─── TỰ CHẤM CÔNG (migration v21) ──────────────────────────────────────────
+// MỌI nhân viên đang làm (không cần quyền riêng) tự chấm được ngày hôm nay
+// cho chính mình. Admin không chấm công nên không dùng.
 
 async function assertSelfAttendance(actorId?: string) {
   if (!actorId) throw new Error("Thiếu thông tin người thực hiện");
-  const perms = await fetchRows<any>("user_permissions", { eq: { user_id: actorId }, select: "permission" });
-  if (!perms.some((p: any) => p.permission === "self_attendance")) {
-    throw new Error('Bạn chưa có quyền "Tự chấm công" — nhờ quản trị viên cấp ở trang Nhân viên');
-  }
+  const rows = await fetchRows<any>("users", { eq: { id: actorId }, select: "id, is_admin, active", limit: 1 });
+  const u = rows[0];
+  if (!u || u.active === false) throw new Error("Tài khoản không hợp lệ hoặc đã ngừng hoạt động");
+  if (Number(u.is_admin) === 1) throw new Error("Tài khoản admin không chấm công");
 }
 
 /** Chấm công tháng của CHÍNH MÌNH (chỉ xem) + trạng thái ngày hôm nay. */

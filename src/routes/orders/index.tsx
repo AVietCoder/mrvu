@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { BirthdayDayMonth } from "@/components/BirthdayDayMonth";
 import { CustomerSourceField, customerSourceError } from "@/components/CustomerSourceField";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1852,9 +1853,8 @@ function Page() {
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-xs font-medium">Ngày sinh</Label>
-                        <Input type="date" className="bg-background mt-1"
-                          value={quickCustBirthday} onChange={(e) => setQuickCustBirthday(e.target.value)} />
+                        <Label className="text-xs font-medium">Ngày sinh (ngày / tháng)</Label>
+                        <BirthdayDayMonth className="mt-1" value={quickCustBirthday} onChange={setQuickCustBirthday} />
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

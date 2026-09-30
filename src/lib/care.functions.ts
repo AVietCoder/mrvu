@@ -108,11 +108,30 @@ export const getCareListFn = createServerFn({ method: "GET" }).handler(
     const st = ((settingsRes as any).data ?? [])[0] as any;
     const testPhones: string[] = Array.isArray(st?.test_phones) ? st.test_phones : [];
 
+    // Bảo dưỡng: tên nhân viên tạo (bán) các đơn đến hạn — để biết ai chăm lại khách.
+    const staffByOrder = new Map<string, string>();
+    if (kind === "maintenance") {
+      const orderIds = [...new Set(((listRes as any).data ?? []).flatMap((r: any) => r.order_ids ?? []))] as string[];
+      const empOf = new Map<string, string>();
+      for (let i = 0; i < orderIds.length; i += 300) {
+        const { data: os } = await db.from("orders").select("id, employee_id").in("id", orderIds.slice(i, i + 300));
+        for (const o of os ?? []) if (o.employee_id) empOf.set(o.id, o.employee_id);
+      }
+      const empIds = [...new Set(empOf.values())];
+      const names = new Map<string, string>();
+      if (empIds.length) {
+        const { data: us } = await db.from("users").select("id, full_name").in("id", empIds);
+        for (const u of us ?? []) names.set(u.id, u.full_name);
+      }
+      for (const [oid, eid] of empOf) if (names.has(eid)) staffByOrder.set(oid, names.get(eid)!);
+    }
+
     const rows = ((listRes as any).data ?? []).map((r: any) => {
       const phoneOk = Boolean(normalizeVnPhone(r.phone));
       const emailOk = Boolean(String(r.email || "").trim());
       return {
         ...r,
+        staff_names: [...new Set((r.order_ids ?? []).map((id: string) => staffByOrder.get(id)).filter(Boolean))],
         // Tính sẵn ở server để UI không phải lặp lại logic chuẩn hoá SĐT.
         can_zalo: phoneOk,
         can_email: emailOk,
@@ -264,7 +283,8 @@ function buildCareEmail(
     So_Don: String(row.order_count ?? ""),
     Ngay_Xuat_Kho: row.last_shipped_at ? formatDateVN(String(row.last_shipped_at).slice(0, 10)) : "",
     Ngay_Den_Han: formatDateVN(row.first_due_date),
-    Tuoi: row.age != null ? String(row.age) : "",
+    // Khách chỉ lưu ngày / tháng (năm giữ chỗ 1904) → không có tuổi.
+    Tuoi: row.age != null && String(row.birthday ?? "").slice(0, 4) !== "1904" ? String(row.age) : "",
   };
 
   const defaultSubject =

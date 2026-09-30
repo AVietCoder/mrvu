@@ -126,7 +126,7 @@ export type Permission =
   | "customer_care"       // Gửi Zalo/Email chăm sóc KH (danh sách thì ai cũng xem được)
   | "manage_roster"       // Quản lý lịch trực — chỉ chi nhánh mình quản lý (xem thì ai cũng xem được)
   | "manage_payroll"      // Quản lý lương nhân sự — chỉ NV admin phân ở tab "Phân việc"
-  | "self_attendance";    // Tự chấm công NGÀY HÔM NAY cho bản thân (trang Tổng quan)
+  | "self_attendance";    // (không còn dùng — mọi nhân viên đều tự chấm công được; giữ để dữ liệu cũ hợp lệ)
 
 export const ALL_PERMISSIONS: { key: Permission; label: string; desc: string }[] = [
   { key: "stock_in",          label: "Nhập kho",                  desc: "Tạo phiếu nhập hàng vào kho" },
@@ -145,7 +145,6 @@ export const ALL_PERMISSIONS: { key: Permission; label: string; desc: string }[]
   { key: "customer_care",     label: "Gửi tin chăm sóc KH",       desc: "Gửi Zalo/Email sinh nhật & nhắc bảo dưỡng (tin Zalo tốn phí)" },
   { key: "manage_roster",     label: "Quản lý lịch trực",         desc: "Xếp ca, đánh dấu nghỉ cho các chi nhánh mình được gán" },
   { key: "manage_payroll",    label: "Quản lý lương nhân sự",     desc: "Sửa lương cơ bản, DS bán hàng, ngân hàng, chấm công, chốt & chi lương — của chính mình + những NV admin phân cho ở Bảng lương → Phân việc" },
-  { key: "self_attendance",   label: "Tự chấm công",              desc: "Tự chấm công ngày hôm nay cho bản thân ở trang Tổng quan (ngày quản lý đã chấm thì chỉ thêm được ghi chú)" },
 ];
 
 // ── Nguồn khách "Biết Mr.Vũ qua đâu?" (v20, mở rộng v22) ─────

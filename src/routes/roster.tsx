@@ -99,8 +99,10 @@ function RosterPage() {
   );
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ["roster", view, range],
-    queryFn: () => getFn({ data: range }),
+    queryKey: ["roster", view, range, user?.id],
+    // Server chỉ trả chi nhánh người xem được phân quyền (admin thấy hết).
+    queryFn: () => getFn({ data: { ...range, actorId: user?.id } }),
+    enabled: Boolean(user?.id),
     placeholderData: (prev) => prev,
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ["roster"] });
@@ -604,7 +606,11 @@ function RosterPage() {
       ) : (
         data && (
           <>
-            {groups.length === 0 ? (
+            {data.noBranch ? (
+              <Card className="mb-4 py-10 text-center text-sm text-muted-foreground">
+                Tài khoản của bạn chưa được gán chi nhánh nào nên chưa xem được lịch trực — nhờ quản trị viên gán chi nhánh ở trang Nhân viên.
+              </Card>
+            ) : groups.length === 0 ? (
               <Card className="mb-4 py-10 text-center text-sm text-muted-foreground">
                 Chưa có ca trực nào{branchFilter ? " cho chi nhánh này" : ""}. Bấm <strong>Cài đặt ca</strong> để thêm.
               </Card>
