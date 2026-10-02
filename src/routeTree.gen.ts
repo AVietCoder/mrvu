@@ -9,98 +9,33 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as WarrantyRouteImport } from './routes/warranty'
-import { Route as ScheduleRouteImport } from './routes/schedule'
-import { Route as RosterRouteImport } from './routes/roster'
-import { Route as ReportsRouteImport } from './routes/reports'
-import { Route as ProductsRouteImport } from './routes/products'
-import { Route as PayrollRouteImport } from './routes/payroll'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as InventoryRouteImport } from './routes/inventory'
-import { Route as EmployeesRouteImport } from './routes/employees'
-import { Route as ChangePasswordRouteImport } from './routes/change-password'
-import { Route as CashRouteImport } from './routes/cash'
-import { Route as CareRouteImport } from './routes/care'
-import { Route as BranchesRouteImport } from './routes/branches'
-import { Route as AdminRouteImport } from './routes/admin'
-import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ZaloIndexRouteImport } from './routes/zalo/index'
-import { Route as OrdersIndexRouteImport } from './routes/orders/index'
+import { Route as ActivityRouteImport } from './routes/activity'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as BranchesRouteImport } from './routes/branches'
+import { Route as CareRouteImport } from './routes/care'
+import { Route as CashRouteImport } from './routes/cash'
+import { Route as ChangePasswordRouteImport } from './routes/change-password'
+import { Route as EmployeesRouteImport } from './routes/employees'
+import { Route as InventoryRouteImport } from './routes/inventory'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as PayrollRouteImport } from './routes/payroll'
+import { Route as ProductsRouteImport } from './routes/products'
+import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as RosterRouteImport } from './routes/roster'
+import { Route as ScheduleRouteImport } from './routes/schedule'
+import { Route as WarrantyRouteImport } from './routes/warranty'
 import { Route as CustomersIndexRouteImport } from './routes/customers/index'
-import { Route as ZaloCallbackRouteImport } from './routes/zalo/callback'
-import { Route as OrdersIdRouteImport } from './routes/orders/$id'
 import { Route as CustomersIdRouteImport } from './routes/customers/$id'
+import { Route as OrdersIndexRouteImport } from './routes/orders/index'
+import { Route as OrdersIdRouteImport } from './routes/orders/$id'
+import { Route as ZaloIndexRouteImport } from './routes/zalo/index'
+import { Route as ZaloCallbackRouteImport } from './routes/zalo/callback'
 import { Route as ApiJobsDrainRouteImport } from './routes/api/jobs/drain'
 
-const WarrantyRoute = WarrantyRouteImport.update({
-  id: '/warranty',
-  path: '/warranty',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ScheduleRoute = ScheduleRouteImport.update({
-  id: '/schedule',
-  path: '/schedule',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RosterRoute = RosterRouteImport.update({
-  id: '/roster',
-  path: '/roster',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ReportsRoute = ReportsRouteImport.update({
-  id: '/reports',
-  path: '/reports',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProductsRoute = ProductsRouteImport.update({
-  id: '/products',
-  path: '/products',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PayrollRoute = PayrollRouteImport.update({
-  id: '/payroll',
-  path: '/payroll',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const InventoryRoute = InventoryRouteImport.update({
-  id: '/inventory',
-  path: '/inventory',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EmployeesRoute = EmployeesRouteImport.update({
-  id: '/employees',
-  path: '/employees',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ChangePasswordRoute = ChangePasswordRouteImport.update({
-  id: '/change-password',
-  path: '/change-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CashRoute = CashRouteImport.update({
-  id: '/cash',
-  path: '/cash',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CareRoute = CareRouteImport.update({
-  id: '/care',
-  path: '/care',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BranchesRoute = BranchesRouteImport.update({
-  id: '/branches',
-  path: '/branches',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminRoute = AdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ActivityRoute = ActivityRouteImport.update({
@@ -108,19 +43,74 @@ const ActivityRoute = ActivityRouteImport.update({
   path: '/activity',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ZaloIndexRoute = ZaloIndexRouteImport.update({
-  id: '/zalo/',
-  path: '/zalo/',
+const BranchesRoute = BranchesRouteImport.update({
+  id: '/branches',
+  path: '/branches',
   getParentRoute: () => rootRouteImport,
 } as any)
-const OrdersIndexRoute = OrdersIndexRouteImport.update({
-  id: '/orders/',
-  path: '/orders/',
+const CareRoute = CareRouteImport.update({
+  id: '/care',
+  path: '/care',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CashRoute = CashRouteImport.update({
+  id: '/cash',
+  path: '/cash',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChangePasswordRoute = ChangePasswordRouteImport.update({
+  id: '/change-password',
+  path: '/change-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EmployeesRoute = EmployeesRouteImport.update({
+  id: '/employees',
+  path: '/employees',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InventoryRoute = InventoryRouteImport.update({
+  id: '/inventory',
+  path: '/inventory',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PayrollRoute = PayrollRouteImport.update({
+  id: '/payroll',
+  path: '/payroll',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductsRoute = ProductsRouteImport.update({
+  id: '/products',
+  path: '/products',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RosterRoute = RosterRouteImport.update({
+  id: '/roster',
+  path: '/roster',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScheduleRoute = ScheduleRouteImport.update({
+  id: '/schedule',
+  path: '/schedule',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WarrantyRoute = WarrantyRouteImport.update({
+  id: '/warranty',
+  path: '/warranty',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CustomersIndexRoute = CustomersIndexRouteImport.update({
@@ -128,9 +118,14 @@ const CustomersIndexRoute = CustomersIndexRouteImport.update({
   path: '/customers/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ZaloCallbackRoute = ZaloCallbackRouteImport.update({
-  id: '/zalo/callback',
-  path: '/zalo/callback',
+const CustomersIdRoute = CustomersIdRouteImport.update({
+  id: '/customers/$id',
+  path: '/customers/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrdersIndexRoute = OrdersIndexRouteImport.update({
+  id: '/orders/',
+  path: '/orders/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrdersIdRoute = OrdersIdRouteImport.update({
@@ -138,9 +133,14 @@ const OrdersIdRoute = OrdersIdRouteImport.update({
   path: '/orders/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const CustomersIdRoute = CustomersIdRouteImport.update({
-  id: '/customers/$id',
-  path: '/customers/$id',
+const ZaloIndexRoute = ZaloIndexRouteImport.update({
+  id: '/zalo/',
+  path: '/zalo/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ZaloCallbackRoute = ZaloCallbackRouteImport.update({
+  id: '/zalo/callback',
+  path: '/zalo/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiJobsDrainRoute = ApiJobsDrainRouteImport.update({
@@ -331,102 +331,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/warranty': {
-      id: '/warranty'
-      path: '/warranty'
-      fullPath: '/warranty'
-      preLoaderRoute: typeof WarrantyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/schedule': {
-      id: '/schedule'
-      path: '/schedule'
-      fullPath: '/schedule'
-      preLoaderRoute: typeof ScheduleRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/roster': {
-      id: '/roster'
-      path: '/roster'
-      fullPath: '/roster'
-      preLoaderRoute: typeof RosterRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reports': {
-      id: '/reports'
-      path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof ReportsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/products': {
-      id: '/products'
-      path: '/products'
-      fullPath: '/products'
-      preLoaderRoute: typeof ProductsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/payroll': {
-      id: '/payroll'
-      path: '/payroll'
-      fullPath: '/payroll'
-      preLoaderRoute: typeof PayrollRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/inventory': {
-      id: '/inventory'
-      path: '/inventory'
-      fullPath: '/inventory'
-      preLoaderRoute: typeof InventoryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/employees': {
-      id: '/employees'
-      path: '/employees'
-      fullPath: '/employees'
-      preLoaderRoute: typeof EmployeesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/change-password': {
-      id: '/change-password'
-      path: '/change-password'
-      fullPath: '/change-password'
-      preLoaderRoute: typeof ChangePasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/cash': {
-      id: '/cash'
-      path: '/cash'
-      fullPath: '/cash'
-      preLoaderRoute: typeof CashRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/care': {
-      id: '/care'
-      path: '/care'
-      fullPath: '/care'
-      preLoaderRoute: typeof CareRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/branches': {
-      id: '/branches'
-      path: '/branches'
-      fullPath: '/branches'
-      preLoaderRoute: typeof BranchesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin': {
-      id: '/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AdminRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/activity': {
@@ -436,25 +345,102 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ActivityRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/zalo/': {
-      id: '/zalo/'
-      path: '/zalo'
-      fullPath: '/zalo/'
-      preLoaderRoute: typeof ZaloIndexRouteImport
+    '/branches': {
+      id: '/branches'
+      path: '/branches'
+      fullPath: '/branches'
+      preLoaderRoute: typeof BranchesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/orders/': {
-      id: '/orders/'
-      path: '/orders'
-      fullPath: '/orders/'
-      preLoaderRoute: typeof OrdersIndexRouteImport
+    '/care': {
+      id: '/care'
+      path: '/care'
+      fullPath: '/care'
+      preLoaderRoute: typeof CareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cash': {
+      id: '/cash'
+      path: '/cash'
+      fullPath: '/cash'
+      preLoaderRoute: typeof CashRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/change-password': {
+      id: '/change-password'
+      path: '/change-password'
+      fullPath: '/change-password'
+      preLoaderRoute: typeof ChangePasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/employees': {
+      id: '/employees'
+      path: '/employees'
+      fullPath: '/employees'
+      preLoaderRoute: typeof EmployeesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/inventory': {
+      id: '/inventory'
+      path: '/inventory'
+      fullPath: '/inventory'
+      preLoaderRoute: typeof InventoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/payroll': {
+      id: '/payroll'
+      path: '/payroll'
+      fullPath: '/payroll'
+      preLoaderRoute: typeof PayrollRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/products': {
+      id: '/products'
+      path: '/products'
+      fullPath: '/products'
+      preLoaderRoute: typeof ProductsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/roster': {
+      id: '/roster'
+      path: '/roster'
+      fullPath: '/roster'
+      preLoaderRoute: typeof RosterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/schedule': {
+      id: '/schedule'
+      path: '/schedule'
+      fullPath: '/schedule'
+      preLoaderRoute: typeof ScheduleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/warranty': {
+      id: '/warranty'
+      path: '/warranty'
+      fullPath: '/warranty'
+      preLoaderRoute: typeof WarrantyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/customers/': {
@@ -464,11 +450,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CustomersIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/zalo/callback': {
-      id: '/zalo/callback'
-      path: '/zalo/callback'
-      fullPath: '/zalo/callback'
-      preLoaderRoute: typeof ZaloCallbackRouteImport
+    '/customers/$id': {
+      id: '/customers/$id'
+      path: '/customers/$id'
+      fullPath: '/customers/$id'
+      preLoaderRoute: typeof CustomersIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/orders/': {
+      id: '/orders/'
+      path: '/orders'
+      fullPath: '/orders/'
+      preLoaderRoute: typeof OrdersIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/orders/$id': {
@@ -478,11 +471,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrdersIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/customers/$id': {
-      id: '/customers/$id'
-      path: '/customers/$id'
-      fullPath: '/customers/$id'
-      preLoaderRoute: typeof CustomersIdRouteImport
+    '/zalo/': {
+      id: '/zalo/'
+      path: '/zalo'
+      fullPath: '/zalo/'
+      preLoaderRoute: typeof ZaloIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/zalo/callback': {
+      id: '/zalo/callback'
+      path: '/zalo/callback'
+      fullPath: '/zalo/callback'
+      preLoaderRoute: typeof ZaloCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/jobs/drain': {

@@ -16,7 +16,7 @@ export function PageLoader({ label = "Đang tải dữ liệu…" }: { label?: s
 
 /** Thanh tiến trình mảnh ở đầu trang, hiện khi đang điều hướng route. */
 export function RouterProgressBar() {
-  const isLoading = useRouterState({ select: (s) => s.isLoading || s.isTransitioning });
+  const isLoading = useRouterState({ select: (s) => s.isLoading || s.status === "pending" });
   return (
     <div
       aria-hidden
