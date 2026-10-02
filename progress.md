@@ -1,6 +1,6 @@
 # PROGRESS — Mr.Vũ POS (www.ttv.vn)
 
-> Tài liệu bàn giao cho kỹ sư / AI tiếp theo. Cập nhật lần cuối: **30/09/2026**.
+> Tài liệu bàn giao cho kỹ sư / AI tiếp theo. Cập nhật lần cuối: **02/10/2026**.
 > Đọc file này TRƯỚC khi sửa code. `README.md` và `PERFORMANCE.md` là tài liệu cũ (thời Lovable / Vercel Postgres, dữ liệu mẫu trong RAM) — **không còn đúng** về hạ tầng; tin file này.
 
 ---
@@ -43,7 +43,7 @@ Biến môi trường (tên, KHÔNG đọc / in giá trị): `VITE_SUPABASE_URL`
 
 ---
 
-## 3. Trạng thái migration (đã kiểm 30/09/2026: TẤT CẢ ĐÃ CHẠY tới v22)
+## 3. Trạng thái migration (đã kiểm 02/10/2026: đã chạy tới v23 · **v24 CHỜ chủ dự án chạy**)
 
 | File | Nội dung |
 |---|---|
@@ -61,8 +61,11 @@ Biến môi trường (tên, KHÔNG đọc / in giá trị): `VITE_SUPABASE_URL`
 | v20 | `customers.source / source_note` ("Biết Mr.Vũ qua đâu?") |
 | v21 | `attendance_days.self_marked` (nhân viên tự chấm) |
 | v22 | `customer_leads`, `lead_activities` (khách tiềm năng) |
+| v23 | Bảo hành: `products.warranty_months`, `factories`, `warranty_tickets`, `factory_claims`, `warranty_activities` (RLS deny-all). |
 
-Migration tiếp theo đặt tên **v23**.
+| **v24** ⏳ | Bảo hành hai mức: `products.warranty_motor_months` (120), `warranty_tickets.warranty_motor_months`, `warranty_tickets.fault_part`. **Chưa chạy lúc viết** — code chịu được (đọc / ghi cột v24 riêng, `getWarrantyMetaFn().migratedV24`) |
+
+Migration tiếp theo đặt tên **v25**.
 
 ---
 
@@ -79,6 +82,7 @@ Migration tiếp theo đặt tên **v23**.
 - Nhóm khách bắt buộc khi tạo. **Nguồn khách bắt buộc khi tạo** (`CUSTOMER_SOURCES` trong `types.ts`, component `CustomerSourceField`); sửa khách cũ không bắt buộc; giá trị rỗng không bao giờ xoá nguồn cũ. `facebook` là nguồn legacy (ẩn khỏi ô chọn).
 - **Ngày sinh khách chỉ ngày + tháng**: lưu năm giữ chỗ **1904** (`src/components/BirthdayDayMonth.tsx`: `formatBirthday`, `hasRealBirthYear`). Khách cũ có năm thật giữ nguyên. Không hiển thị tuổi khi năm = 1904.
 - Trang có 2 tab: **Khách hàng | Khách tiềm năng** (`?tab=leads&lead=<id>`).
+- **Tên công ty hiện DƯỚI tên khách** ở mọi nơi (khách có `company_name`, không cần là "tổ chức"): component `src/components/CustomerName.tsx`. Các RPC không trả cột này nên server gắn thêm bằng `attachCompany` / `companyNamesOf` (`src/lib/customer-company.ts`) → field `customer_company`. Đã áp dụng: danh sách + chi tiết đơn, phiếu in (`buildInvoiceHtml({ custCompany })`), CSKH, lịch làm việc, sổ quỹ, báo cáo theo khách, Zalo log, Excel bán hàng. Tin Zalo / email gửi khách KHÔNG đổi (vẫn chỉ tên).
 - Trang chi tiết khách có mục "Lịch sử tư vấn" (các lead của khách).
 - Báo cáo "Đơn hàng bán theo khách": `src/components/SalesByCustomer.tsx` trong trang Báo cáo (admin).
 
@@ -91,6 +95,7 @@ Migration tiếp theo đặt tên **v23**.
   - Chưa gán chi nhánh nào → không thấy lead nào; `listLeadsFn` trả `noBranch`, giao diện nhắc nhờ admin gán.
   - Sửa: admin; hoặc thuộc chi nhánh của lead VÀ (người phụ trách / hỗ trợ / QLBH). Đổi phụ trách + xoá: admin / QLBH.
   - Cảnh báo trùng SĐT (`findLeadDuplicatesFn`): lead ngoài phạm vi chỉ báo `otherBranchLeads: [{branch_name, count}]`, không lộ tên khách / người phụ trách.
+- Form "Thêm khách tiềm năng" có ô **chọn nhu cầu**: "Quan tâm mua quạt mới" (lead như cũ) / "Liên hệ bảo hành" → thân form đổi thành `TicketFormBody` và lưu thành **phiếu bảo hành khách lẻ** (mục 4.9), không tạo lead.
 - Giao diện: Danh sách (nhóm theo tháng, tô xanh / đỏ / vàng), Kanban kéo thả, Báo cáo (theo showroom / NV / nguồn / mẫu / lý do / tháng), Xuất Excel đúng bố cục file cũ (`src/lib/export-leads.ts`). Khung "Cần chăm hôm nay" ở trang Tổng quan (`FollowUpCard`).
 - Nhân viên "Ani" (44 lead) và "My" (5 lead) chưa có tài khoản → tên gốc nằm ở `legacy_staff`.
 
@@ -128,11 +133,30 @@ Migration tiếp theo đặt tên **v23**.
 - Trang Admin: mẫu in (hoá đơn, phiếu nhập / chuyển kho) + mẫu email (thông báo, bảo dưỡng, sinh nhật).
 - Báo cáo: `src/lib/reports.functions.ts` (`fetchAllPaged` dùng chung để đọc > 1000 dòng).
 
+### 4.9 Bảo hành (khách lẻ · đại lý · nhà máy) — `src/lib/warranty.functions.ts`, `src/lib/warranty-rules.ts`, `src/routes/warranty.tsx`, `src/components/warranty/*` (migration v23)
+- Trang `/warranty` (menu "Bảo hành", ai cũng vào được). Tab: **Khách lẻ · Đại lý · Nhà máy · Chờ NM trả hàng · Báo cáo · Cài đặt** (`?tab=…&ticket=<id>`).
+- **Quyền** (lọc ở server): phiếu khách lẻ / đại lý — nhân viên CHỈ xem / xử lý phiếu của chi nhánh được gán (`warrantyScope`, `applyScope`, cờ `noBranch`, giống lead); admin thấy hết; xoá phiếu chỉ admin. **Nhà máy + Cài đặt: chỉ admin** (`assertAdmin`).
+- **Phiếu** `warranty_tickets` (`kind` = `retail` | `dealer`; đại lý = khách nhóm `dai_ly`), mã `BH-YYYYMMDD-NNN` (lấy số lớn nhất + 1, trùng `code` thì thử lại). Trạng thái `new → processing → waiting_part → done → closed`.
+  - **Hạn bảo hành HAI MỨC theo từng mẫu** (thực tế "động cơ 10 năm, phụ kiện 12 tháng"): `products.warranty_motor_months` (động cơ, mặc định 120 — v24) và `products.warranty_months` (phụ kiện, mặc định 12), chụp vào phiếu. Phiếu có `fault_part` (`motor` | `accessory` | null — `WARRANTY_FAULT_PARTS`); form tự gợi ý từ loại lỗi. Còn hạn / hết hạn KHÔNG lưu — `warrantyState()` trong `warranty-rules.ts` so với **ngày gửi bảo hành** (giờ VN): đã chọn bộ phận → tính theo mức đó; chưa chọn → `in` nếu cả hai còn, `out` nếu cả hai hết, còn lại `partial` (nhãn 🟡 "Còn hạn động cơ"). Đổi số tháng ở Cài đặt → phiếu đang mở cập nhật theo, phiếu đã xong giữ nguyên. Đặt qua `setProductWarrantyMonthsFn` (KHÔNG đi qua `upsertProduct`).
+  - Ô chọn đại lý (`searchDealersFn`): không gõ → nhóm `dai_ly`; gõ tìm → MỌI khách khớp, nhóm Đại lý lên đầu, kèm nhãn nhóm (281 đại lý cũ đang nằm ở nhóm `le`).
+  - **Tự tìm ngày mua**: `lookupPurchaseFn` — đơn `completed` của khách (theo id hoặc SĐT) kèm mẫu đã mua; form tự điền đơn gần nhất, sửa tay được.
+  - Quy tắc: `free_support` ép giá linh kiện = 0; `buy_part` bắt buộc giá > 0; "Hoàn tất" bắt buộc có kết quả xử lý. `response_date` tự ghi khi có tư vấn / ghi chú / rời trạng thái "Mới tiếp nhận". **SLA 24h**: quá 24h chưa phản hồi → cờ `overdue`.
+  - **Tiền linh kiện chỉ ghi trên phiếu để thống kê** (không tạo phiếu thu). Có thể gắn `part_order_id` = đơn bán linh kiện (`linkTicketOrderFn`; nút mở `/orders?newFor=`).
+  - Loại lỗi `issue_type` (`WARRANTY_ISSUE_TYPES`) để thống kê "lỗi phổ biến"; mô tả chi tiết ở `issue_note`. Đính kèm ảnh / video (Cloudinary `/auto/upload`, `uploadFileToCloudinary`) hoặc dán link → `attachments` jsonb `[{url, kind, name}]`.
+  - **Tạo phiếu từ đơn hàng**: trang chi tiết đơn có `OrderWarrantyButton` (`ticketPrefillFromOrderFn`) — điền sẵn khách, ghi chú đơn → tình trạng, NV bán → NV tiếp nhận, gắn đơn làm `part_order_id` và lịch của đơn làm `schedule_id`; đơn đã có phiếu thì hiện mã phiếu. Nối với cách làm cũ của showroom (đơn có dịch vụ "Bảo hành VIP" SP000460 + linh kiện + lịch loại `install`). 5 đơn gần nhất đã nhập bằng `scripts/import-warranty-vip-orders.mjs` (`--commit`, chạy lại bỏ qua đơn đã có phiếu) → BH-20261002-001…005, trạng thái "Đang xử lý", **chưa có ngày mua / bộ phận lỗi / kết quả** — nhân viên bổ sung.
+  - "Tạo lịch bảo hành" → thêm dòng `schedules` loại `warranty` (cần quyền `create_schedule` / `approve_schedule`), lưu `schedule_id`.
+- **Nhà máy** `factory_claims`, mã `NM-YYYYMM-NNN`; danh mục `factories` (kèm `sla_days`, mặc định 14). Đặt `factory_solution` → ghi `solution_at`; "Không BH…" → `rejected`; "Đổi mới…" mà còn `waiting` → `awaiting` (⚠️ Chờ nhà máy trả hàng); quá `sla_days` kể từ `solution_at` → `overdue`. `confirmClaimReturnedFn` = nút "Đã nhận hàng". Từ phiếu khách lẻ / đại lý có nút "Gửi nhà máy" (lưu `ticket_id`).
+- **Cảnh báo** ở Tổng quan: `WarrantyAlertCard` (`warrantyAlerts`) — phiếu quá 24h (theo chi nhánh) + hàng nhà máy quá hạn (admin). Chưa chạy v23 → ẩn, không lỗi.
+- **Báo cáo**: `warrantyReportFn` (tổng ca, còn / hết hạn, tiền linh kiện, top mẫu, loại lỗi, đại lý, kết quả, hiệu suất kỹ thuật) và `factoryReportFn` (tỷ lệ hướng xử lý, nợ chưa trả, TB ngày trả, mẫu lỗi nhiều). Số liệu "tính ra" (còn hạn, quá hạn) nên server đọc hết theo bộ lọc rồi lọc / phân trang trong bộ nhớ.
+- Trang chi tiết khách có mục "Lịch sử bảo hành" (`WarrantyHistory`).
+- Hằng số nhãn: `WARRANTY_STAGES`, `WARRANTY_FINAL_ACTIONS`, `WARRANTY_ISSUE_TYPES`, `FACTORY_SOLUTIONS`, `FACTORY_RETURN_STATUSES` trong `types.ts`.
+
 ---
 
 ## 5. Cách kiểm thử đã dùng (không có test tự động)
 
 - **Gọi hàm server ngoài runtime**: handler `createServerFn` không gọi được trực tiếp (thiếu Start context). Cách làm: tạo file tạm `src/lib/.xxtest.ts` = nội dung file gốc + `export { hamNoiBo as __x }` (hoặc thay `createServerFn(...).handler(` bằng `(`), nạp bằng `vite.createServer({ configFile:false, resolve:{alias:{"@":"src"}}, server:{middlewareMode:true}, appType:"custom" })` + `ssrLoadModule`, đọc `.env` vào `process.env`. Nhớ xoá file tạm.
+- **Bắt lỗi "quên import" trong file `@ts-nocheck`**: chép file thành `*.zzchk.ts(x)` bỏ dòng `// @ts-nocheck`, chạy `tsc`, lọc `zzchk` + `TS2304|TS2552|TS2305|TS2307` (tên chưa khai báo / import sai), rồi xoá bản chép. Đã từng bắt được 1 lỗi thật (thiếu import trong `care.functions.ts`).
 - Các hàm tự chấm công đã được tách thân (`getMyAttendance`, `setMyAttendance`) để test được.
 - Dữ liệu thật: nếu phải ghi thử, **chụp lại trạng thái trước và khôi phục** (bản ghi, quyền, activity_logs).
 - Excel: xuất file trong script (giả lập `document` / `URL.createObjectURL`), đọc lại bằng exceljs + HyperFormula để so từng công thức với số app tính.
@@ -147,6 +171,14 @@ Migration tiếp theo đặt tên **v23**.
 4. Hồ sơ lương có ô "Chức vụ / bộ phận" gõ tay riêng, chưa liên kết với `users.position_id`.
 5. Tạo tài khoản cho "Ani", "My" rồi gắn lại lead cũ nếu muốn.
 6. Bảo mật: session phía server thay cho `actorId` (ưu tiên trước cho dữ liệu lương).
+7. **Bảo hành (4.9)** — còn lại:
+   - Đã kiểm trên dữ liệu thật 02/10/2026 (50 mục, dữ liệu thử đã xoá): mã phiếu / mã yêu cầu tăng và không trùng khi tạo song song, hạn BH theo mẫu, quy tắc tiền linh kiện, SLA 24h, phân quyền theo chi nhánh, đại lý, gắn đơn, tạo lịch, nhà máy, báo cáo. **Chưa mở giao diện trên trình duyệt.**
+   - **Chủ dự án chạy `sql_migration_v24_warranty_two_tier.sql`**, rồi kiểm phần ghi của hai mức (lưu `fault_part`, đặt hạn động cơ ở Cài đặt). Trước v24 đã kiểm: quy tắc hai mức, ô chọn đại lý, điền sẵn từ đơn, và việc lưu phiếu không hỏng khi thiếu cột.
+   - Zalo cho bảo hành: **chủ dự án chọn CHƯA làm**. OA có 3 mẫu ZNS bật (mua hàng 622226, sinh nhật 642321, "Thông báo nhắc đến lịch hẹn" 642205); mẫu 642205 lời văn cố định là nhắc **bảo trì định kỳ** (CSKH → Bảo dưỡng) nên không dùng cho phiếu bảo hành. Khi cần: đăng ký mẫu mới, thêm loại vào `TEMPLATE_KINDS` (`src/routes/zalo/index.tsx`) + hàm enqueue kiểu `enqueue-care.ts`.
+   - 281 khách tên có "Đại lý / ĐL" vẫn ở nhóm `le` (chưa chuyển nhóm — chỉ nới ô chọn). Các mã cũ "HÀNG TẠM ỨNG BẢO HÀNH" / "HÀNG TRẢ BẢO HÀNH" (chủ yếu đơn 2024 đã huỷ) không nhập lại.
+   - Thử tải video lên Cloudinary (preset unsigned có thể chỉ nhận ảnh) — nếu không được thì dùng dán link.
+   - Chưa có tự gửi email / thông báo nhắc quá hạn (dự án chưa có tác vụ định kỳ) — mới có khung cảnh báo ở Tổng quan.
+   - Đại lý chưa tự đăng nhập tạo phiếu (nhân viên tạo thay). Danh mục nhà máy admin tự nhập ở tab Cài đặt.
 
 ---
 

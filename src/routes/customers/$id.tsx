@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { BirthdayDayMonth, formatBirthday } from "@/components/BirthdayDayMonth";
 import { ConsultHistory } from "@/components/leads/ConsultHistory";
+import { WarrantyHistory } from "@/components/warranty/WarrantyHistory";
 import { CustomerSourceField, customerSourceError } from "@/components/CustomerSourceField";
 import { customerSourceLabel } from "@/lib/types";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
@@ -607,7 +608,7 @@ function CustomerDetailPage() {
               </div>
             )}
 
-            {customer.customer_type === "to_chuc" && (customer.company_name || customer.tax_code) && (
+            {(customer.company_name || (customer.customer_type === "to_chuc" && customer.tax_code)) && (
               <div className="mt-3 pt-3 border-t space-y-1.5 text-sm">
                 {customer.company_name && (
                   <div className="flex items-center gap-2 text-muted-foreground">
@@ -733,6 +734,9 @@ function CustomerDetailPage() {
 
           {/* Khách tiềm năng: các lần khách hỏi / ghé showroom (v22) */}
           <ConsultHistory customerId={customer.id} />
+
+          {/* Bảo hành: các phiếu bảo hành của khách (v23) */}
+          <WarrantyHistory customerId={customer.id} />
         </div>
 
         <div className="lg:col-span-2 space-y-4">

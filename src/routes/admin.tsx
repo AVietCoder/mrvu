@@ -681,6 +681,7 @@ function AdminPage() {
                             note: "",
                           },
                           custName: "Nguyễn Văn A",
+                          custCompany: "Công ty TNHH Mẫu",
                           custPhone: "0909 123 456",
                           custAddress: "",
                           branchName: "Cửa hàng chính",

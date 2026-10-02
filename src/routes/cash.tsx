@@ -516,13 +516,17 @@ function Page() {
   }, [users, isAdmin, user]);
 
   const customerOptions = useMemo(
-    () => customers.map((c: any) => ({ value: c.id, label: c.name, sub: c.phone ?? undefined })),
+    () => customers.map((c: any) => ({ value: c.id, label: c.name, sub: [c.phone, c.company_name].filter(Boolean).join(" · ") || undefined })),
     [customers],
   );
 
   const getBranchName   = (id: string) => branches.find((b: any) => b.id === id)?.name ?? "—";
   const getUserName     = (id: string) => users.find((u: any) => u.id === id)?.full_name ?? "";
-  const getCustomerName = (id: string) => customers.find((c: any) => c.id === id)?.name ?? "";
+  // Khách có tên công ty → "Tên — Công ty"
+  const getCustomerName = (id: string) => {
+    const c: any = customers.find((x: any) => x.id === id);
+    return c ? (c.company_name ? `${c.name} — ${c.company_name}` : c.name) : "";
+  };
   const getTypeName     = (id: string) => voucherTypes.find((t: any) => t.id === id)?.name ?? "—";
 
   // Nhãn 1 bên (A hoặc B) theo kind

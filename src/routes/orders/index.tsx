@@ -19,6 +19,7 @@ import { normalizeVnPhone } from "@/lib/zalo/phone";
 import { useCustomerGroups } from "@/hooks/useCustomerGroups";
 import { buildInvoiceHtml } from "@/lib/print-invoice";
 import { AppShell, Card, fmt } from "@/components/AppShell";
+import { CustomerName } from "@/components/CustomerName";
 import { SearchFilter } from "@/components/SearchFilter";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { AsyncSearchableSelect } from "@/components/AsyncSearchableSelect";
@@ -203,6 +204,7 @@ function printOrderSlip({
         note,
       },
       custName: custObj?.name,
+      custCompany: custObj?.company_name,
       custPhone: custObj?.phone,
       custAddress,
       branchName: branchObj?.name,
@@ -1020,7 +1022,7 @@ function Page() {
                       minute: "2-digit",
                     })}
                   </td>
-                  <td className="pr-2 max-w-[140px] truncate">{cust}</td>
+                  <td className="pr-2 max-w-[170px]"><CustomerName name={cust} company={o.customer_company} /></td>
                   <td className="pr-2 text-xs text-muted-foreground">{br}</td>
                   <td className="text-right font-medium pr-2 whitespace-nowrap">
                     {fmt(o.total)}
@@ -1162,13 +1164,13 @@ function Page() {
                       return (r?.customers ?? []).map((c: any) => ({
                         value: c.id,
                         label: c.name,
-                        sub: c.phone ?? undefined,
+                        sub: [c.phone, c.company_name].filter(Boolean).join(" · ") || undefined,
                       }));
                     }}
                     resolveSelected={async (idv) => {
                       const c = await custLiteFn({ data: { id: idv } });
                       return c
-                        ? { value: c.id, label: c.name, sub: c.phone ?? undefined }
+                        ? { value: c.id, label: c.name, sub: [c.phone, c.company_name].filter(Boolean).join(" · ") || undefined }
                         : null;
                     }}
                   />
@@ -2277,12 +2279,12 @@ function Page() {
                   fetchOptions={async (q) => {
                     const r = await listCustomersFn({ data: { search: q, page: 1, pageSize: 20 } });
                     return (r?.customers ?? []).map((c: any) => ({
-                      value: c.id, label: c.name, sub: c.phone ?? undefined,
+                      value: c.id, label: c.name, sub: [c.phone, c.company_name].filter(Boolean).join(" · ") || undefined,
                     }));
                   }}
                   resolveSelected={async (idv) => {
                     const c = await custLiteFn({ data: { id: idv } });
-                    return c ? { value: c.id, label: c.name, sub: c.phone ?? undefined } : null;
+                    return c ? { value: c.id, label: c.name, sub: [c.phone, c.company_name].filter(Boolean).join(" · ") || undefined } : null;
                   }}
                 />
               </div>
@@ -2415,7 +2417,7 @@ function Page() {
               >
                 <span className="font-mono text-xs font-semibold text-primary shrink-0">{o.code}</span>
                 <span className="flex-1 min-w-0">
-                  <span className="block text-sm font-medium truncate">{o.customer_name || "Khách lẻ"}</span>
+                  <CustomerName name={o.customer_name} company={o.customer_company} className="text-sm font-medium" />
                   <span className="block text-xs text-muted-foreground">
                     {new Date(o.completed_at || o.created_at).toLocaleDateString("vi-VN")}
                     {o.branch_name ? ` · ${o.branch_name}` : ""}

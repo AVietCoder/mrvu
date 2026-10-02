@@ -14,6 +14,8 @@ import { updateScheduleOrderLink } from "@/lib/schedule.functions";
 import { getSettings } from "@/lib/settings.functions";
 import { buildInvoiceHtml } from "@/lib/print-invoice";
 import { AppShell, Card, fmt } from "@/components/AppShell";
+import { CustomerName } from "@/components/CustomerName";
+import { OrderWarrantyButton } from "@/components/warranty/OrderWarrantyButton";
 import { PageLoader } from "@/components/Spinner";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { StockShortageDialog, type StockShortage } from "@/components/StockShortageDialog";
@@ -584,6 +586,7 @@ function OrderDetailPage() {
       buildInvoiceHtml({
         order,
         custName: custObj?.name,
+        custCompany: custObj?.company_name,
         custPhone: custObj?.phone,
         custAddress,
         branchName: branchObj?.name,
@@ -738,6 +741,9 @@ function OrderDetailPage() {
                   <Printer className="h-4 w-4 mr-1" /> In hóa đơn
                 </Button>
 
+                {/* Bảo hành: tạo phiếu từ đơn này (đơn "Bảo hành VIP" + linh kiện) hoặc mở phiếu đã có */}
+                {order.status !== "cancelled" && <OrderWarrantyButton orderId={order.id} />}
+
                 {canManageOrder &&
                   (order.status === "reserved" || order.status === "draft") && (
                     <Button
@@ -791,6 +797,7 @@ function OrderDetailPage() {
                       >
                         {cust.name}
                       </Link>
+                      {cust.company_name && <CustomerName name="" fallback="" company={cust.company_name} />}
                       {cust.phone && <div className="text-xs text-muted-foreground">{cust.phone}</div>}
                       {(cust.address || cust.district) && (
                         <div className="text-xs text-muted-foreground">

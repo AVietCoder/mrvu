@@ -272,7 +272,7 @@ export const getZaloDashboardFn = createServerFn({ method: "GET" }).handler(asyn
       ? db.from("orders").select("id, code, total").in("id", orderIds)
       : Promise.resolve({ data: [] as any[] }),
     custIds.length
-      ? db.from("customers").select("id, name").in("id", custIds)
+      ? db.from("customers").select("id, name, company_name").in("id", custIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
 
@@ -299,6 +299,7 @@ export const getZaloDashboardFn = createServerFn({ method: "GET" }).handler(asyn
       order_code: j.order_id ? orderById.get(j.order_id)?.code ?? null : null,
       order_total: j.order_id ? Number(orderById.get(j.order_id)?.total ?? 0) : 0,
       customer_name: j.customer_id ? custById.get(j.customer_id)?.name ?? null : null,
+      customer_company: j.customer_id ? custById.get(j.customer_id)?.company_name ?? null : null,
       phone: j.recipient_phone,
       status: j.status,
       attempts: Number(j.attempts ?? 0),

@@ -134,6 +134,7 @@ export function DuplicateCustomerAlert({
                     <span className="flex items-center gap-1 text-sm font-medium">
                       <User2 className="h-3.5 w-3.5 text-muted-foreground" />
                       {m.name}
+                      {m.company_name ? <span className="font-normal text-muted-foreground">· {m.company_name}</span> : null}
                     </span>
                     {m.phone && (
                       <span className="flex items-center gap-1 font-mono text-xs text-muted-foreground">

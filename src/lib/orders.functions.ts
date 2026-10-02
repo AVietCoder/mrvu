@@ -17,6 +17,7 @@ import {
 import { recalculateCustomerDebt } from "./customers.functions";
 import { enqueueOrderCompletedZns } from "./zalo/enqueue";
 import { sendEmail } from "./email";
+import { attachCompany, companyNamesOf } from "./customer-company";
 
 // ─── Gửi email thông báo admin ─────────────────────────────────────────────
 async function getAdminEmail(): Promise<string | null> {
@@ -591,7 +592,8 @@ export const searchOrdersPage = createServerFn({ method: "GET" }).handler(
     });
     if (error) throw new Error(error.message);
 
-    const orders = (rows ?? []) as any[];
+    // Tên công ty của khách (dòng phụ dưới tên khách) — RPC không trả cột này.
+    const orders = await attachCompany((rows ?? []) as any[]);
     const totalFiltered = orders[0]?.filtered_count
       ? Number(orders[0].filtered_count)
       : 0;
@@ -719,7 +721,7 @@ export const getOrderEditRefs = createServerFn({ method: "GET" }).handler(
       await Promise.all([
         fetchAllRows("products", { orderBy: "name" }),
         fetchAllRows("customers", {
-          select: "id, name, phone, address, ward, district, province",
+          select: "id, name, phone, address, ward, district, province, company_name",
           orderBy: "created_at",
           ascending: false,
         }),
@@ -1544,6 +1546,7 @@ export const getOrdersForExport = createServerFn({ method: "GET" }).handler(
 
     const orderIds = baseOrders.map((o) => o.id);
     const idChunks = chunkArray(orderIds, 300);
+    const companyOf = await companyNamesOf(baseOrders.map((o) => o.customer_id));
 
     // 2) deposit / paid / employee_id của các đơn (RPC không trả các cột này).
     const orderExtra = new Map<
@@ -1627,6 +1630,7 @@ export const getOrdersForExport = createServerFn({ method: "GET" }).handler(
         status: o.status,
         date: o.completed_at || o.created_at,
         customer_name: o.customer_name ?? "",
+        customer_company: companyOf.get(o.customer_id) ?? "",
         branch_name: o.branch_name ?? "",
         employee_name: extra.employee_id
           ? empMap.get(extra.employee_id) ?? ""

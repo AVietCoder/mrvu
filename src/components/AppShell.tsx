@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, Package, Boxes, ShoppingCart, Users, UserCog,
   BarChart3, Building2, Fan, LogOut, Settings, ShieldCheck, ChevronDown,
-  CalendarDays, BookOpen, History, MessageCircle, HeartHandshake, CalendarClock, Banknote,
+  CalendarDays, BookOpen, History, MessageCircle, HeartHandshake, CalendarClock, Banknote, Wrench,
 } from "lucide-react";
 import { type ReactNode, useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -35,6 +35,8 @@ const nav: NavItem[] = [
   // Danh sách sinh nhật / bảo dưỡng: MỌI nhân viên đều xem được nên không đặt
   // permission ở đây. Riêng nút GỬI trong trang mới gate bằng "customer_care".
   { to: "/care", label: "Chăm sóc KH", icon: HeartHandshake },
+  // Bảo hành: ai cũng vào được, server lọc phiếu theo chi nhánh được gán; phần nhà máy chỉ admin.
+  { to: "/warranty", label: "Bảo hành", icon: Wrench },
   // Lịch trực: mọi nhân viên xem được ca của mình. Nút sửa gate "manage_roster".
   { to: "/roster", label: "Lịch trực", icon: CalendarClock },
   // Lương + số tài khoản là dữ liệu nhạy cảm.

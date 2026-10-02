@@ -138,8 +138,8 @@ export async function sellerCollections(month: string): Promise<SellerCollection
 
   const custNames = new Map<string, string>();
   for (const part of chunk(custIds)) {
-    const { data } = await db.from("customers").select("id, name").in("id", part);
-    for (const c of data ?? []) custNames.set(c.id, c.name);
+    const { data } = await db.from("customers").select("id, name, company_name").in("id", part);
+    for (const c of data ?? []) custNames.set(c.id, c.company_name ? `${c.name} — ${c.company_name}` : c.name);
   }
 
   for (const c of custIds) {

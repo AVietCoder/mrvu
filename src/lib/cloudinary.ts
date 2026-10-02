@@ -25,3 +25,25 @@ export async function uploadImageToCloudinary(file: File): Promise<string> {
 
   return json.secure_url as string;
 }
+
+/**
+ * Ảnh HOẶC video (đính kèm phiếu bảo hành). Endpoint `/auto/upload` tự nhận loại
+ * file. Giới hạn dung lượng do gói Cloudinary quy định — lỗi trả về nguyên văn.
+ */
+export async function uploadFileToCloudinary(file: File): Promise<{ url: string; kind: "image" | "video" }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", uploadPreset);
+
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
+    method: "POST",
+    body: formData,
+  });
+
+  const json = await response.json();
+  if (!response.ok) {
+    throw new Error(json?.error?.message || "Cloudinary upload failed");
+  }
+
+  return { url: json.secure_url as string, kind: json.resource_type === "video" ? "video" : "image" };
+}

@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { MySalaryCard } from "@/components/MySalaryCard";
 import { MyAttendanceCard } from "@/components/MyAttendanceCard";
 import { FollowUpCard } from "@/components/FollowUpCard";
+import { WarrantyAlertCard } from "@/components/WarrantyAlertCard";
 import { ShieldOff, ShoppingCart, Users, Package, BarChart2, Warehouse, CalendarDays, Settings, CreditCard, ChevronRight } from "lucide-react";
 
 import {
@@ -122,6 +123,8 @@ function Dashboard() {
           </div>
           {/* Khách tiềm năng tới hẹn chăm (ai cũng thấy phần của mình; không có thì ẩn). */}
           {user && <FollowUpCard userId={user.id} />}
+          {/* Bảo hành: phiếu quá 24h chưa phản hồi + hàng nhà máy quá hạn gửi trả (admin). */}
+          {user && <WarrantyAlertCard userId={user.id} />}
           {/* Tự chấm công: mọi nhân viên (trừ admin). */}
           {user && !isAdmin && <MyAttendanceCard userId={user.id} />}
           {user && !isAdmin && <MySalaryCard userId={user.id} />}

@@ -206,7 +206,7 @@ export async function exportSalesReportToExcel(
       stt: i + 1,
       code: o.code ?? "",
       date: fmtCellDateTime(o.date),
-      customer: o.customer_name ?? "",
+      customer: (o as any).customer_company ? `${o.customer_name ?? ""} — ${(o as any).customer_company}` : o.customer_name ?? "",
       employee: o.employee_name ?? "",
       branch: o.branch_name ?? "",
       status: STATUS_LABEL[o.status] ?? o.status ?? "",

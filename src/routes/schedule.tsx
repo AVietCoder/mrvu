@@ -608,7 +608,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
     const _tpl  = (() => { try { return JSON.parse((ss as any)?.print_templates || "{}").order_invoice ?? {}; } catch { return {}; } })();
     const pw = window.open("", "_blank");
     if (!pw) return;
-    pw.document.write(buildInvoiceHtml({ order: linkedOrder, custName: custObj?.name, custPhone: custObj?.phone, custAddress, branchName: branchObj?.name, branchAddress: branchObj?.address, branchPhone: branchObj?.phone, empName, items, products: refsData?.products ?? [], moneyFmt, ss, tplOverride: _tpl }));
+    pw.document.write(buildInvoiceHtml({ order: linkedOrder, custName: custObj?.name, custCompany: custObj?.company_name, custPhone: custObj?.phone, custAddress, branchName: branchObj?.name, branchAddress: branchObj?.address, branchPhone: branchObj?.phone, empName, items, products: refsData?.products ?? [], moneyFmt, ss, tplOverride: _tpl }));
     pw.document.close();
     setTimeout(() => pw.print(), 300);
   }
@@ -727,7 +727,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                             <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
                           </Link>
                         )}
-                        {customer && (canApprove || isAdmin) && <div className="text-xs text-muted-foreground mb-1">👤 {customer.name}</div>}
+                        {customer && (canApprove || isAdmin) && <div className="text-xs text-muted-foreground mb-1">👤 {customer.name}{customer.company_name ? <span className="block pl-5">🏢 {customer.company_name}</span> : null}</div>}
                         {s.address && <div className="text-xs text-muted-foreground mb-1">📍 {s.address}</div>}
                         {assignees.length > 0 && <div className="flex flex-wrap gap-1 mb-2">{assignees.map((a: any) => { const u = usersById.get(String(a.user_id)); return <span key={a.user_id} className="text-xs bg-muted rounded-full px-2 py-0.5">{u?.full_name ?? a.user_id}</span>; })}</div>}
                         {isTech && techPay !== null && techPay > 0 && <div className="text-sm font-semibold text-green-600 mb-2">💰 Tiền công: {fmtMoney(techPay)}</div>}
@@ -778,7 +778,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                 if (linkedOrder) {
                   orderItemLines.push(`• Đơn hàng: ${linkedOrder.code} — ${fmtMoney(linkedOrder.total)}`);
                 }
-                return [ "📋 Nội dung đơn hàng:", "", `• Tiêu đề: ${s.title}`, `• Công việc: ${SCHEDULE_TYPES.find((t) => t.value === s.type)?.label ?? s.type}`, workType ? `• Loại hình công việc: ${workType.name}` : null, `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`, customer ? `• Khách hàng: ${customer.name}${customer.phone ? " — " + customer.phone : ""}` : null, s.address ? `• Địa chỉ: ${s.address}` : null, ...orderItemLines, assigner ? `• Người giao việc: ${assigner.full_name}` : null, creator ? `• Người tạo lịch: ${creator.full_name}` : null, assignees.length > 0 ? `• Người thực hiện:` : null, ...assigneeLines, s.note ? `• Ghi chú: ${s.note}` : null, `• Trạng thái: ${STATUS_LABELS[s.status]?.label ?? s.status}`].filter((v) => v !== null).join("\n");
+                return [ "📋 Nội dung đơn hàng:", "", `• Tiêu đề: ${s.title}`, `• Công việc: ${SCHEDULE_TYPES.find((t) => t.value === s.type)?.label ?? s.type}`, workType ? `• Loại hình công việc: ${workType.name}` : null, `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`, customer ? `• Khách hàng: ${customer.name}${customer.company_name ? " (" + customer.company_name + ")" : ""}${customer.phone ? " — " + customer.phone : ""}` : null, s.address ? `• Địa chỉ: ${s.address}` : null, ...orderItemLines, assigner ? `• Người giao việc: ${assigner.full_name}` : null, creator ? `• Người tạo lịch: ${creator.full_name}` : null, assignees.length > 0 ? `• Người thực hiện:` : null, ...assigneeLines, s.note ? `• Ghi chú: ${s.note}` : null, `• Trạng thái: ${STATUS_LABELS[s.status]?.label ?? s.status}`].filter((v) => v !== null).join("\n");
               }
               return (
                 <div key={s.id} className="rounded-xl border bg-card p-5 shadow-sm cursor-pointer hover:border-primary/40 hover:bg-muted/20 transition-colors" onClick={() => setViewSchedule(s)}>
@@ -1450,7 +1450,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-lg border bg-muted/30 p-3"><div className="text-xs text-muted-foreground mb-1">Ngày / Giờ</div><div className="font-medium">{s.scheduled_date?.slice(0,10)} {s.scheduled_time ?? ""}</div></div>
-                    <div className="rounded-lg border bg-muted/30 p-3"><div className="text-xs text-muted-foreground mb-1">Khách hàng</div><div className="font-medium">{customer ? `${customer.name}${customer.phone ? ` — ${customer.phone}` : ""}` : "Chưa chọn"}</div></div>
+                    <div className="rounded-lg border bg-muted/30 p-3"><div className="text-xs text-muted-foreground mb-1">Khách hàng</div><div className="font-medium">{customer ? `${customer.name}${customer.phone ? ` — ${customer.phone}` : ""}` : "Chưa chọn"}{customer?.company_name ? <span className="block text-xs font-normal text-muted-foreground">🏢 {customer.company_name}</span> : null}</div></div>
                     {s.address && <div className="col-span-2 rounded-lg border bg-muted/30 p-3"><div className="text-xs text-muted-foreground mb-1">Địa chỉ</div><div className="font-medium">{s.address}</div></div>}
                     {(() => {
                       const branchNames = getScheduleBranchNames(s);
@@ -1517,7 +1517,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                     orderItemLines.push(`• Đơn hàng: ${linkedOrder.code} — ${fmtMoney(linkedOrder.total)}`);
                   }
                   const assigneeLines: string[] = assignees.length > 0 ? assignees.map((a: any) => { const u = usersById.get(String(a.user_id)); return `  - ${u?.full_name ?? a.user_id}`; }) : [];
-                  const msgContent = [ "📋 Nội dung đơn hàng:", "", `• Tiêu đề: ${s.title}`, workType ? `• Loại hình công việc: ${workType.name}` : null, `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`, customer ? `• Khách hàng: ${customer.name}${customer.phone ? " — " + customer.phone : ""}` : null, s.address ? `• Địa chỉ: ${s.address}` : null, ...orderItemLines, assigner ? `• Người giao việc: ${assigner.full_name}` : null, creator ? `• Người tạo lịch: ${creator.full_name}` : null, assignees.length > 0 ? `• Người thực hiện:` : null, ...assigneeLines, s.note ? `• Ghi chú: ${s.note}` : null, `• Trạng thái: ${STATUS_LABELS[s.status]?.label ?? s.status}`].filter((v) => v !== null).join("\n");
+                  const msgContent = [ "📋 Nội dung đơn hàng:", "", `• Tiêu đề: ${s.title}`, workType ? `• Loại hình công việc: ${workType.name}` : null, `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`, customer ? `• Khách hàng: ${customer.name}${customer.company_name ? " (" + customer.company_name + ")" : ""}${customer.phone ? " — " + customer.phone : ""}` : null, s.address ? `• Địa chỉ: ${s.address}` : null, ...orderItemLines, assigner ? `• Người giao việc: ${assigner.full_name}` : null, creator ? `• Người tạo lịch: ${creator.full_name}` : null, assignees.length > 0 ? `• Người thực hiện:` : null, ...assigneeLines, s.note ? `• Ghi chú: ${s.note}` : null, `• Trạng thái: ${STATUS_LABELS[s.status]?.label ?? s.status}`].filter((v) => v !== null).join("\n");
                   function copyMsg() { navigator.clipboard.writeText(msgContent).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }
                   return (
                     <div className="rounded-lg border bg-muted/30 p-3">

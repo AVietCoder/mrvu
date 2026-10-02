@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getCareListFn, sendCareZaloFn, sendCareEmailFn } from "@/lib/care.functions";
 import { AppShell, Card, StatCard } from "@/components/AppShell";
+import { CustomerName } from "@/components/CustomerName";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -309,7 +310,7 @@ function Page() {
                           />
                         </td>
                         <td className="py-2 pr-3">
-                          <div className="font-medium">{r.customer_name}</div>
+                          <CustomerName name={r.customer_name} company={r.customer_company} fallback="—" className="font-medium" />
                           {r.customer_code && (
                             <div className="text-xs text-muted-foreground font-mono">{r.customer_code}</div>
                           )}

@@ -659,7 +659,7 @@ function Page() {
                           {new Date(m.sent_at || m.created_at).toLocaleString("vi-VN")}
                         </td>
                         <td className="py-2 pr-3 font-mono text-xs">{m.order_code ?? "—"}</td>
-                        <td className="py-2 pr-3">{m.customer_name ?? "—"}</td>
+                        <td className="py-2 pr-3">{m.customer_name ?? "—"}{m.customer_company ? <span className="block text-xs text-muted-foreground">🏢 {m.customer_company}</span> : null}</td>
                         <td className="py-2 pr-3 font-mono text-xs">{m.phone}</td>
                         <td className="py-2 pr-3">
                           <span className={`px-2 py-0.5 rounded text-xs whitespace-nowrap ${cls}`}>

@@ -7,6 +7,7 @@ import { normalizeVnPhone } from "./zalo/phone";
 import { sendEmail, renderTemplate, baseEmailHtml, escapeHtml } from "./email";
 import { todayVN, formatDateVN } from "./date-vn";
 import { fetchRows, logActivity } from "./supabase";
+import { companyNamesOf } from "./customer-company";
 
 /**
  * Chăm sóc khách hàng: sinh nhật hôm nay + nhắc bảo dưỡng định kỳ.
@@ -126,12 +127,16 @@ export const getCareListFn = createServerFn({ method: "GET" }).handler(
       for (const [oid, eid] of empOf) if (names.has(eid)) staffByOrder.set(oid, names.get(eid)!);
     }
 
+    // Tên công ty hiện dưới tên khách (khách có tên công ty).
+    const companyOf = await companyNamesOf(((listRes as any).data ?? []).map((r: any) => r.customer_id));
+
     const rows = ((listRes as any).data ?? []).map((r: any) => {
       const phoneOk = Boolean(normalizeVnPhone(r.phone));
       const emailOk = Boolean(String(r.email || "").trim());
       return {
         ...r,
         staff_names: [...new Set((r.order_ids ?? []).map((id: string) => staffByOrder.get(id)).filter(Boolean))],
+        customer_company: companyOf.get(r.customer_id) ?? null,
         // Tính sẵn ở server để UI không phải lặp lại logic chuẩn hoá SĐT.
         can_zalo: phoneOk,
         can_email: emailOk,

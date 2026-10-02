@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { upsertLeadFn, findLeadDuplicatesFn } from "@/lib/leads.functions";
@@ -11,9 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CustomerSourceField, customerSourceError } from "@/components/CustomerSourceField";
 import { LEAD_ACTIVITY_KINDS } from "@/lib/types";
-import { AlertTriangle, Loader2, UserCheck } from "lucide-react";
+import { AlertTriangle, Loader2, UserCheck, ShoppingBag, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { ProductMultiPicker, todayVN, addDaysStr, dmy, shortStaff, StageBadge } from "./shared";
+import { TicketFormBody } from "@/components/warranty/TicketForm";
 
 const EMPTY = {
   branch_id: "", lead_date: "", name: "", phone: "", address: "",
@@ -31,9 +33,13 @@ export function LeadForm({ open, lead, meta, onClose, onSaved }: any) {
   const [f, setF] = useState<any>(EMPTY);
   const [saving, setSaving] = useState(false);
   const isNew = !lead?.id;
+  const navigate = useNavigate();
+  // Nhu cầu của khách: mua quạt mới (lead) hay liên hệ bảo hành (→ phiếu bảo hành khách lẻ).
+  const [purpose, setPurpose] = useState<"buy" | "warranty">("buy");
 
   useEffect(() => {
     if (!open) return;
+    setPurpose("buy");
     if (lead?.id) {
       setF({
         ...EMPTY,
@@ -94,6 +100,46 @@ export function LeadForm({ open, lead, meta, onClose, onSaved }: any) {
           <DialogDescription>Khách hỏi / ghé showroom chưa mua. Có SĐT thì tự nối với khách hàng đã có.</DialogDescription>
         </DialogHeader>
 
+        {isNew && (
+          <div>
+            <Label>Nhu cầu của khách *</Label>
+            <div className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {[
+                ["buy", "Quan tâm mua quạt mới", "Lưu vào khách tiềm năng để chăm sóc", ShoppingBag],
+                ["warranty", "Liên hệ bảo hành", "Tạo phiếu bảo hành khách lẻ", Wrench],
+              ].map(([key, label, desc, Icon]: any) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setPurpose(key)}
+                  className={`flex items-center gap-3 rounded-lg border p-3 text-left ${purpose === key ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted"}`}
+                >
+                  <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${purpose === key ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}><Icon className="h-5 w-5" /></span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">{label}</span>
+                    <span className="block text-xs text-muted-foreground">{desc}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {isNew && purpose === "warranty" ? (
+          // Khách liên hệ bảo hành → phiếu bảo hành khách lẻ (không tính vào tỉ lệ chốt lead).
+          <TicketFormBody
+            kind="retail"
+            silent
+            initial={{ branch_id: f.branch_id, customer_name: f.name, phone: f.phone, address: f.address }}
+            onCancel={onClose}
+            onSaved={(r: any) => {
+              onClose();
+              toast.success(`Đã tạo phiếu bảo hành ${r.code}`, {
+                action: { label: "Mở phiếu", onClick: () => navigate({ to: "/warranty", search: { ticket: r.id } as any }) },
+              });
+            }}
+          />
+        ) : (
         <div className="space-y-4 text-sm">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
@@ -221,6 +267,7 @@ export function LeadForm({ open, lead, meta, onClose, onSaved }: any) {
             <Button onClick={save} disabled={saving}>{saving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}{isNew ? "Thêm" : "Lưu"}</Button>
           </div>
         </div>
+        )}
       </DialogContent>
     </Dialog>
   );

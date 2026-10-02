@@ -193,6 +193,60 @@ export const LEAD_ACTIVITY_KINDS: { key: string; label: string }[] = [
 ];
 export const leadStageOf = (k?: string | null) => LEAD_STAGES.find((s) => s.key === k) ?? LEAD_STAGES[0];
 
+// ── Bảo hành (v23) ───────────────────────────────────────────
+// Phiếu bảo hành khách lẻ (retail) / đại lý (dealer) và yêu cầu gửi nhà máy.
+export const WARRANTY_KINDS: { key: string; label: string }[] = [
+  { key: "retail", label: "Khách lẻ" },
+  { key: "dealer", label: "Đại lý" },
+];
+export const WARRANTY_STAGES: { key: string; label: string; tone: string }[] = [
+  { key: "new",          label: "Mới tiếp nhận", tone: "bg-sky-100 text-sky-800 border-sky-200" },
+  { key: "processing",   label: "Đang xử lý",    tone: "bg-amber-100 text-amber-800 border-amber-200" },
+  { key: "waiting_part", label: "Chờ linh kiện", tone: "bg-violet-100 text-violet-800 border-violet-200" },
+  { key: "done",         label: "Hoàn tất",      tone: "bg-emerald-100 text-emerald-800 border-emerald-300" },
+  { key: "closed",       label: "Đóng",          tone: "bg-slate-200 text-slate-700 border-slate-300" },
+];
+export const OPEN_WARRANTY_STAGES = ["new", "processing", "waiting_part"];
+export const warrantyStageOf = (k?: string | null) => WARRANTY_STAGES.find((s) => s.key === k) ?? WARRANTY_STAGES[0];
+export const WARRANTY_FINAL_ACTIONS: { key: string; label: string }[] = [
+  { key: "buy_part",     label: "Mua linh kiện mới" },
+  { key: "free_support", label: "Hỗ trợ miễn phí" },
+  { key: "replace_new",  label: "Thay mới" },
+  { key: "repair",       label: "Sửa chữa" },
+];
+// Bộ phận lỗi (v24) — quyết định tính theo hạn bảo hành ĐỘNG CƠ hay PHỤ KIỆN. Chưa chọn = chưa xác định.
+export const WARRANTY_FAULT_PARTS: { key: string; label: string }[] = [
+  { key: "motor",     label: "Động cơ" },
+  { key: "accessory", label: "Phụ kiện / linh kiện khác" },
+];
+// Loại lỗi — để thống kê "lỗi phổ biến nhất" (mô tả chi tiết vẫn ghi ở ô tình trạng).
+export const WARRANTY_ISSUE_TYPES: { key: string; label: string }[] = [
+  { key: "khong_chay",  label: "Không chạy / không lên nguồn" },
+  { key: "keu_rung",    label: "Kêu / rung lắc" },
+  { key: "remote",      label: "Remote / điều khiển" },
+  { key: "den",         label: "Đèn LED" },
+  { key: "mach",        label: "Hộp điều khiển / mạch" },
+  { key: "dong_co",     label: "Động cơ" },
+  { key: "canh",        label: "Cánh quạt" },
+  { key: "ngoai_quan",  label: "Ngoại quan (trầy, móp, thiếu phụ kiện)" },
+  { key: "khac",        label: "Khác" },
+];
+export const FACTORY_SOLUTIONS: { key: string; label: string; accept: boolean }[] = [
+  { key: "replace_part",      label: "Đổi mới linh kiện / phụ kiện", accept: true },
+  { key: "replace_motor",     label: "Đổi mới động cơ",              accept: true },
+  { key: "reject_expired",    label: "Không BH do quá hạn",          accept: false },
+  { key: "reject_user_fault", label: "Không BH do lỗi người dùng",   accept: false },
+];
+export const FACTORY_RETURN_STATUSES: { key: string; label: string; tone: string }[] = [
+  { key: "waiting",  label: "Chờ NM gửi trả", tone: "bg-amber-100 text-amber-800 border-amber-200" },
+  { key: "returned", label: "NM đã gửi trả",  tone: "bg-emerald-100 text-emerald-800 border-emerald-300" },
+  { key: "rejected", label: "Từ chối / Đóng", tone: "bg-slate-200 text-slate-700 border-slate-300" },
+];
+const labelIn = (list: { key: string; label: string }[], k?: string | null) => list.find((x) => x.key === k)?.label ?? (k || "");
+export const warrantyActionLabel = (k?: string | null) => labelIn(WARRANTY_FINAL_ACTIONS, k);
+export const warrantyIssueLabel = (k?: string | null) => labelIn(WARRANTY_ISSUE_TYPES, k);
+export const factorySolutionLabel = (k?: string | null) => labelIn(FACTORY_SOLUTIONS, k);
+
 /** "Facebook" / "Khác — hội chợ" / "" (khách cũ chưa có). */
 export function customerSourceLabel(source?: string | null, note?: string | null): string {
   if (!source) return "";

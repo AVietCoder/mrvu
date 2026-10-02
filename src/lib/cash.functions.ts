@@ -89,12 +89,12 @@ export const searchCashPage = createServerFn({ method: "GET" }).handler(
       fetchAllRows("cash_vouchers", { orderBy: "created_at", ascending: false }),
       fetchRows("branches", { orderBy: "name" }),
       fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
-      fetchAllRows("customers", { select: "id, name", orderBy: "created_at", ascending: false }),
+      fetchAllRows("customers", { select: "id, name, company_name", orderBy: "created_at", ascending: false }),
     ]);
 
     const branchName = new Map((branches as any[]).map((b) => [b.id, b.name]));
     const userName = new Map((users as any[]).map((u) => [u.id, u.full_name]));
-    const custName = new Map((customers as any[]).map((c) => [c.id, c.name]));
+    const custName = new Map((customers as any[]).map((c) => [c.id, c.company_name ? `${c.name} — ${c.company_name}` : c.name]));
     const gBranch = (id: string) => branchName.get(id) ?? "";
     const gUser = (id: string) => userName.get(id) ?? "";
     const gCust = (id: string) => custName.get(id) ?? "";
@@ -208,7 +208,7 @@ export const getCashRefs = createServerFn({ method: "GET" }).handler(async () =>
   const [branches, users, customers, voucherTypes, voucherNames] = await Promise.all([
     fetchRows("branches", { orderBy: "name" }),
     fetchRows("users", { select: "id, full_name, is_admin", orderBy: "full_name" }),
-    fetchAllRows("customers", { select: "id, name, phone", orderBy: "created_at", ascending: false }),
+    fetchAllRows("customers", { select: "id, name, phone, company_name", orderBy: "created_at", ascending: false }),
     fetchRows("cash_voucher_types", { orderBy: "name" }),
     // ✅ Gợi ý "Đơn vị khác": các tên đã từng nhập ở phiếu cũ (from_name/to_name)
     fetchAllRows("cash_vouchers", {
@@ -244,7 +244,7 @@ export const listCash = createServerFn({ method: "GET" }).handler(async () => {
     fetchAllRows("cash_vouchers", { orderBy: "created_at", ascending: false }),
     fetchRows("branches", { orderBy: "name" }),
     fetchRows("users", { select: "id, full_name, is_admin", orderBy: "full_name" }),
-    fetchAllRows("customers", { select: "id, name, phone", orderBy: "created_at", ascending: false }),
+    fetchAllRows("customers", { select: "id, name, phone, company_name", orderBy: "created_at", ascending: false }),
     fetchRows("cash_voucher_types", { orderBy: "name" }),
   ]);
   return { vouchers, branches, users, customers, voucherTypes };

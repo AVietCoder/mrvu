@@ -291,7 +291,7 @@ export const getLeadFn = createServerFn({ method: "GET" }).handler(async ({ data
   if (!canSee(s, l)) throw new Error("Bạn không có quyền xem khách tiềm năng này");
   const [acts, cust, order] = await Promise.all([
     db().from("lead_activities").select("*").eq("lead_id", l.id).order("at", { ascending: false }),
-    l.customer_id ? db().from("customers").select("id, name, phone, group_name").eq("id", l.customer_id).limit(1) : Promise.resolve({ data: [] }),
+    l.customer_id ? db().from("customers").select("id, name, phone, group_name, company_name").eq("id", l.customer_id).limit(1) : Promise.resolve({ data: [] }),
     l.won_order_id ? db().from("orders").select("id, code, total, status, created_at").eq("id", l.won_order_id).limit(1) : Promise.resolve({ data: [] }),
   ]);
   let customerOrders = 0;

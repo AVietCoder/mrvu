@@ -107,6 +107,7 @@ export function LeadDetail({ leadId, open, onClose, onEdit, metaHook }: any) {
                   <div className="sm:col-span-2">
                     <span className="text-muted-foreground">Khách hàng: </span>
                     <Link to="/customers/$id" params={{ id: data.customer.id }} className="font-medium text-primary underline">{data.customer.name}</Link>
+                    {data.customer.company_name && <span className="text-muted-foreground"> ({data.customer.company_name})</span>}
                     <span className="text-muted-foreground"> — đã mua {data.customer.completed_orders} đơn</span>
                   </div>
                 )}

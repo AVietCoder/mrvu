@@ -18,6 +18,7 @@ import { exportCustomerDebtToExcel } from "@/lib/export-customer-debt";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 import { AppShell, Card, fmt } from "@/components/AppShell";
+import { CustomerName } from "@/components/CustomerName";
 import { SearchFilter } from "@/components/SearchFilter";
 import {
   DuplicateCustomerAlert,
@@ -670,6 +671,7 @@ function CustomerListPage({ tabs }: { tabs: ReactNode }) {
                     >
                       {c.name}
                     </Link>
+                    {c.company_name && <CustomerName name="" fallback="" company={c.company_name} />}
                   </td>
                   <td className="pr-3 text-muted-foreground">{c.phone ?? "—"}</td>
                   <td className="max-w-[200px] truncate pr-3 text-xs text-muted-foreground">

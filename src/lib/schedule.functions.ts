@@ -61,7 +61,7 @@ export const listSchedules = createServerFn({ method: "GET" }).handler(async () 
 // Dùng cho: hiển thị tên khách / mã đơn / link in hóa đơn.
 export const getScheduleDisplayRefs = createServerFn({ method: "GET" }).handler(async () => {
   const [customers, orders, products] = await Promise.all([
-    fetchAllRows("customers", { select: "id, name, phone, address, ward, district, province", orderBy: "created_at", ascending: false }),
+    fetchAllRows("customers", { select: "id, name, phone, address, ward, district, province, company_name", orderBy: "created_at", ascending: false }),
     fetchAllRows("orders", {
       select: "id, code, customer_id, branch_id, employee_id, status, subtotal, discount, discount_type, discount_pct, vat_rate, vat_amount, total, deposit, paid, payment_method, note, created_at",
       orderBy: "created_at",
@@ -494,7 +494,7 @@ export const searchOrdersForSchedule = createServerFn({ method: "GET" })
     const custIds = Array.from(new Set(orderRows.map((o) => o.customer_id).filter(Boolean)));
     let customers: any[] = [];
     if (custIds.length) {
-      const { data: rows } = await supabase.from("customers").select("id, name, phone, address, ward, district, province").in("id", custIds);
+      const { data: rows } = await supabase.from("customers").select("id, name, phone, address, ward, district, province, company_name").in("id", custIds);
       customers = rows ?? [];
     }
     return { orders: orderRows, customers };
@@ -507,12 +507,12 @@ export const searchCustomersForSchedule = createServerFn({ method: "GET" })
     const limit = Math.min(Math.max(Number(data?.limit ?? 30), 1), 100);
 
     if (data?.ids && data.ids.length) {
-      const { data: rows, error } = await supabase.from("customers").select("id, name, phone, address, ward, district, province").in("id", data.ids);
+      const { data: rows, error } = await supabase.from("customers").select("id, name, phone, address, ward, district, province, company_name").in("id", data.ids);
       if (error) throw new Error(error.message);
       return { customers: rows ?? [] };
     }
 
-    let query = supabase.from("customers").select("id, name, phone, address, ward, district, province").order("created_at", { ascending: false }).limit(limit);
+    let query = supabase.from("customers").select("id, name, phone, address, ward, district, province, company_name").order("created_at", { ascending: false }).limit(limit);
     if (q) query = query.or(`name.ilike.%${q}%,phone.ilike.%${q}%`);
     const { data: rows, error } = await query;
     if (error) throw new Error(error.message);

@@ -17,6 +17,8 @@ export interface InvoiceTemplate {
 export interface BuildInvoiceArgs {
   order: any;
   custName?: string;
+  /** Tên công ty của khách — in ở dòng dưới tên khách (khách có tên công ty) */
+  custCompany?: string;
   custPhone?: string;
   custAddress?: string;
   branchName?: string;
@@ -76,6 +78,7 @@ function buildPalette(primary: string) {
 export function buildInvoiceHtml({
   order,
   custName,
+  custCompany,
   custPhone,
   custAddress,
   branchName,
@@ -302,7 +305,8 @@ body{
   <div class="info">
     <div class="cell">
       <div class="lbl">Khách hàng</div>
-      <div class="val">${esc(custName ?? "Khách lẻ")}${custPhone ? ` <small>· ${esc(custPhone)}</small>` : ""}</div>
+      <div class="val">${esc(custName ?? "Khách lẻ")}${custPhone ? ` <small>· ${esc(custPhone)}</small>` : ""}</div>${String(custCompany ?? "").trim() ? `
+      <div style="margin-top:2px;font-size:12px;font-weight:500;color:#555">${esc(String(custCompany).trim())}</div>` : ""}
     </div>
     <div class="cell">
       <div class="lbl">Chi nhánh</div>

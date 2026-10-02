@@ -366,7 +366,7 @@ export const getSalesByCustomer = createServerFn({ method: "GET" })
     for (let i = 0; i < ids.length; i += 500) {
       const { data: rows, error } = await supabase
         .from("customers")
-        .select("id, name, phone, external_code")
+        .select("id, name, phone, external_code, company_name")
         .in("id", ids.slice(i, i + 500));
       if (error) throw new Error(error.message);
       for (const c of rows ?? []) custMap.set(c.id, c);
@@ -379,6 +379,7 @@ export const getSalesByCustomer = createServerFn({ method: "GET" })
         return {
           ...g,
           customer_name: g.customer_id ? c?.name ?? "(khách đã xoá)" : "Khách lẻ (không lưu thông tin)",
+          customer_company: c?.company_name ?? null,
           phone: c?.phone ?? null,
           customer_code: c?.external_code ?? null,
           order_count: g.orders.length,

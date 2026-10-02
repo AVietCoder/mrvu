@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WarrantyRouteImport } from './routes/warranty'
 import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as RosterRouteImport } from './routes/roster'
 import { Route as ReportsRouteImport } from './routes/reports'
@@ -32,6 +33,11 @@ import { Route as OrdersIdRouteImport } from './routes/orders/$id'
 import { Route as CustomersIdRouteImport } from './routes/customers/$id'
 import { Route as ApiJobsDrainRouteImport } from './routes/api/jobs/drain'
 
+const WarrantyRoute = WarrantyRouteImport.update({
+  id: '/warranty',
+  path: '/warranty',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ScheduleRoute = ScheduleRouteImport.update({
   id: '/schedule',
   path: '/schedule',
@@ -159,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/reports': typeof ReportsRoute
   '/roster': typeof RosterRoute
   '/schedule': typeof ScheduleRoute
+  '/warranty': typeof WarrantyRoute
   '/customers/$id': typeof CustomersIdRoute
   '/orders/$id': typeof OrdersIdRoute
   '/zalo/callback': typeof ZaloCallbackRoute
@@ -183,6 +190,7 @@ export interface FileRoutesByTo {
   '/reports': typeof ReportsRoute
   '/roster': typeof RosterRoute
   '/schedule': typeof ScheduleRoute
+  '/warranty': typeof WarrantyRoute
   '/customers/$id': typeof CustomersIdRoute
   '/orders/$id': typeof OrdersIdRoute
   '/zalo/callback': typeof ZaloCallbackRoute
@@ -208,6 +216,7 @@ export interface FileRoutesById {
   '/reports': typeof ReportsRoute
   '/roster': typeof RosterRoute
   '/schedule': typeof ScheduleRoute
+  '/warranty': typeof WarrantyRoute
   '/customers/$id': typeof CustomersIdRoute
   '/orders/$id': typeof OrdersIdRoute
   '/zalo/callback': typeof ZaloCallbackRoute
@@ -234,6 +243,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/roster'
     | '/schedule'
+    | '/warranty'
     | '/customers/$id'
     | '/orders/$id'
     | '/zalo/callback'
@@ -258,6 +268,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/roster'
     | '/schedule'
+    | '/warranty'
     | '/customers/$id'
     | '/orders/$id'
     | '/zalo/callback'
@@ -282,6 +293,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/roster'
     | '/schedule'
+    | '/warranty'
     | '/customers/$id'
     | '/orders/$id'
     | '/zalo/callback'
@@ -307,6 +319,7 @@ export interface RootRouteChildren {
   ReportsRoute: typeof ReportsRoute
   RosterRoute: typeof RosterRoute
   ScheduleRoute: typeof ScheduleRoute
+  WarrantyRoute: typeof WarrantyRoute
   CustomersIdRoute: typeof CustomersIdRoute
   OrdersIdRoute: typeof OrdersIdRoute
   ZaloCallbackRoute: typeof ZaloCallbackRoute
@@ -318,6 +331,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/warranty': {
+      id: '/warranty'
+      path: '/warranty'
+      fullPath: '/warranty'
+      preLoaderRoute: typeof WarrantyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/schedule': {
       id: '/schedule'
       path: '/schedule'
@@ -491,6 +511,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReportsRoute: ReportsRoute,
   RosterRoute: RosterRoute,
   ScheduleRoute: ScheduleRoute,
+  WarrantyRoute: WarrantyRoute,
   CustomersIdRoute: CustomersIdRoute,
   OrdersIdRoute: OrdersIdRoute,
   ZaloCallbackRoute: ZaloCallbackRoute,

@@ -78,7 +78,7 @@ export function SalesByCustomer({
       lines.push(
         [
           i + 1,
-          r.customer_name,
+          r.customer_company ? `${r.customer_name} — ${r.customer_company}` : r.customer_name,
           r.customer_code ?? "",
           r.phone ?? "",
           `${formatDateVN(r.first_date)} - ${formatDateVN(r.last_date)}`,
@@ -200,6 +200,7 @@ export function SalesByCustomer({
                       ) : (
                         <span className="font-medium italic">{r.customer_name}</span>
                       )}
+                      {r.customer_company && <div className="text-xs text-muted-foreground">🏢 {r.customer_company}</div>}
                       {(r.customer_code || r.phone) && (
                         <div className="text-xs text-muted-foreground font-mono">
                           {[r.customer_code, r.phone].filter(Boolean).join(" · ")}
