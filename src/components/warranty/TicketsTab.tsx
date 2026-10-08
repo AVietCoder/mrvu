@@ -145,7 +145,7 @@ export function TicketsTab({ kind, metaHook, openTicketId, onSendFactory }: { ki
                 {data.rows.map((r: any) => (
                   <tr key={r.id} className={`cursor-pointer hover:brightness-95 ${ROW_TONE[r.warranty] ?? ""}`} onClick={() => setDetailId(r.id)}>
                     <td className="border-t px-3 py-2.5 align-top">
-                      <div className="font-mono text-xs font-semibold">{r.code}</div>
+                      <div className="whitespace-nowrap font-mono text-xs font-semibold">{r.code}</div>
                       {(meta?.allBranches ?? []).length > 1 && <div className="text-xs text-muted-foreground">{shortBranch(metaHook.branchName(r.branch_id))}</div>}
                     </td>
                     <td className="border-t px-3 py-2.5 align-top whitespace-nowrap">

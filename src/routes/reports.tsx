@@ -4,13 +4,14 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { getReports } from "@/lib/reports.functions";
 import { SalesByCustomer } from "@/components/SalesByCustomer";
+import { DailyReport } from "@/components/DailyReport";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Download, ShieldOff, TrendingUp, ShoppingBag, Users, Package, CreditCard, CalendarDays, Filter, BarChart3, RefreshCw, RotateCcw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -18,6 +19,8 @@ import {
 
 export const Route = createFileRoute("/reports")({
   head: () => ({ meta: [{ title: "Báo cáo — Mr.Vũ" }] }),
+  // Mặc định: báo cáo 1 ngày. ?tab=period → doanh thu & thống kê theo kỳ.
+  validateSearch: (s: Record<string, unknown>): { tab?: "period" } => (s.tab === "period" ? { tab: "period" as const } : {}),
   component: Page,
 });
 
@@ -81,7 +84,39 @@ function StatBox({ icon, label, value, sub, color = "text-primary" }: any) {
   );
 }
 
+/** Trang Báo cáo: 2 tab — Báo cáo ngày (mọi chỉ số của 1 ngày) và Doanh thu theo kỳ. */
 function Page() {
+  const { user } = useAuth();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const onPeriod = search.tab === "period";
+  const tabs = (
+    <div className="mb-4 flex w-full rounded-lg border bg-muted/40 p-1 sm:w-fit">
+      {[
+        [false, "Báo cáo ngày", CalendarDays],
+        [true, "Doanh thu theo kỳ", BarChart3],
+      ].map(([isPeriod, label, Icon]: any) => (
+        <button
+          key={label}
+          onClick={() => navigate({ search: isPeriod ? { tab: "period" } : {} })}
+          className={`flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium sm:flex-none ${onPeriod === isPeriod ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          <Icon className="h-4 w-4" />{label}
+        </button>
+      ))}
+    </div>
+  );
+  // Không phải admin → PeriodReport tự hiện màn hình "Không có quyền truy cập".
+  if (onPeriod || !user?.is_admin) return <PeriodReport tabs={tabs} />;
+  return (
+    <AppShell title="Báo cáo & Thống kê">
+      {tabs}
+      <DailyReport />
+    </AppShell>
+  );
+}
+
+function PeriodReport({ tabs }: { tabs: ReactNode }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const canView = Boolean(user?.is_admin);
@@ -368,6 +403,7 @@ function Page() {
 
   return (
     <AppShell title="Báo cáo & Thống kê">
+      {tabs}
       <div className="mb-5 rounded-xl border bg-card p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div>

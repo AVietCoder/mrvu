@@ -128,7 +128,7 @@ export function ClaimsTab({ mode, metaHook, fromTicket, onFromTicketDone }: { mo
                 {data.rows.map((r: any) => (
                   <tr key={r.id} className={`cursor-pointer hover:brightness-95 ${r.overdue ? "bg-rose-50/70" : r.awaiting ? "bg-amber-50/60" : ""}`} onClick={() => setFormClaim(r)}>
                     <td className="border-t px-3 py-2.5 align-top">
-                      <div className="font-mono text-xs font-semibold">{r.code}</div>
+                      <div className="whitespace-nowrap font-mono text-xs font-semibold">{r.code}</div>
                       {r.ticket_code && <div className="font-mono text-xs text-muted-foreground">↳ {r.ticket_code}</div>}
                     </td>
                     <td className="border-t px-3 py-2.5 align-top whitespace-nowrap">

@@ -1,6 +1,6 @@
 # PROGRESS — Mr.Vũ POS (www.ttv.vn)
 
-> Tài liệu bàn giao cho kỹ sư / AI tiếp theo. Cập nhật lần cuối: **02/10/2026**.
+> Tài liệu bàn giao cho kỹ sư / AI tiếp theo. Cập nhật lần cuối: **08/10/2026**.
 > Đọc file này TRƯỚC khi sửa code. `README.md` và `PERFORMANCE.md` là tài liệu cũ (thời Lovable / Vercel Postgres, dữ liệu mẫu trong RAM) — **không còn đúng** về hạ tầng; tin file này.
 
 ---
@@ -131,7 +131,13 @@ Migration tiếp theo đặt tên **v25**.
 
 ### 4.8 Khác
 - Trang Admin: mẫu in (hoá đơn, phiếu nhập / chuyển kho) + mẫu email (thông báo, bảo dưỡng, sinh nhật).
-- Báo cáo: `src/lib/reports.functions.ts` (`fetchAllPaged` dùng chung để đọc > 1000 dòng).
+- Báo cáo (`/reports`, chỉ admin) có 2 tab: **Báo cáo ngày** (mặc định) và **Doanh thu theo kỳ** (`?tab=period`, trang cũ). `src/lib/reports.functions.ts` (`fetchAllPaged` dùng chung để đọc > 1000 dòng).
+- **Báo cáo ngày** — `src/lib/daily-report.functions.ts` (`getDailyReportFn`, `buildDailyReport` tách thân để test), `src/components/DailyReport.tsx`. Mọi chỉ số của 1 ngày (giờ VN), lọc theo chi nhánh. Cách tính cố ý GIỮ ĐÚNG như trang gốc để số khớp nhau (đã đối chiếu 3 ngày thật):
+  - Doanh thu / đơn bán hàng = đơn `completed` theo `completed_at` (thiếu → `created_at`) − phiếu `returned` tạo trong ngày (= `getReports`).
+  - Đơn đặt hàng = đơn đang `reserved` TẠO trong ngày (không có lịch sử trạng thái: đặt hôm nay, hoàn tất hôm sau thì chuyển sang đơn bán của ngày hoàn tất).
+  - Quạt / phụ kiện bán ra = số lượng trên đơn hoàn tất; quạt = `count_in_total !== false`, nhóm hàng "DỊCH VỤ" tách riêng, còn lại là phụ kiện.
+  - Tiền thu / chi = phiếu `active` trong `cash_vouchers` tạo trong ngày, tách `fund_type` (`tien_mat` / `ngan_hang`); lọc chi nhánh dùng `branchDelta` sao y Sổ quỹ (= "Tổng thu / Tổng chi" của `searchCashPage`). Chuyển quỹ nội bộ vẫn nằm trong tổng nhưng nêu riêng.
+  - Khách mới = `customers.created_at` (khách không gắn chi nhánh → lọc chi nhánh vẫn là số toàn hệ thống). Ca bảo hành mới = `warranty_tickets.sent_date`. Lịch = `schedules.scheduled_date`, bỏ lịch đã huỷ.
 
 ### 4.9 Bảo hành (khách lẻ · đại lý · nhà máy) — `src/lib/warranty.functions.ts`, `src/lib/warranty-rules.ts`, `src/routes/warranty.tsx`, `src/components/warranty/*` (migration v23)
 - Trang `/warranty` (menu "Bảo hành", ai cũng vào được). Tab: **Khách lẻ · Đại lý · Nhà máy · Chờ NM trả hàng · Báo cáo · Cài đặt** (`?tab=…&ticket=<id>`).
@@ -157,6 +163,7 @@ Migration tiếp theo đặt tên **v25**.
 
 - **Gọi hàm server ngoài runtime**: handler `createServerFn` không gọi được trực tiếp (thiếu Start context). Cách làm: tạo file tạm `src/lib/.xxtest.ts` = nội dung file gốc + `export { hamNoiBo as __x }` (hoặc thay `createServerFn(...).handler(` bằng `(`), nạp bằng `vite.createServer({ configFile:false, resolve:{alias:{"@":"src"}}, server:{middlewareMode:true}, appType:"custom" })` + `ssrLoadModule`, đọc `.env` vào `process.env`. Nhớ xoá file tạm.
 - **Bắt lỗi "quên import" trong file `@ts-nocheck`**: chép file thành `*.zzchk.ts(x)` bỏ dòng `// @ts-nocheck`, chạy `tsc`, lọc `zzchk` + `TS2304|TS2552|TS2305|TS2307` (tên chưa khai báo / import sai), rồi xoá bản chép. Đã từng bắt được 1 lỗi thật (thiếu import trong `care.functions.ts`).
+- **Xem giao diện thật không cần mật khẩu**: chạy `npx vite dev --port 4180`, mở Chrome headless (`--remote-debugging-port`) và điều khiển qua CDP bằng `WebSocket` có sẵn của Node 22; đặt phiên vào `localStorage["qt_session"] = { session: { user, token }, saved_at }` bằng `Page.addScriptToEvaluateOnNewDocument` rồi `Page.captureScreenshot`. Trong Git Bash phải đặt `MSYS_NO_PATHCONV=1` khi truyền tham số dạng `/reports` (nếu không bị đổi thành đường dẫn Windows). Lỗi "Hydration failed" hiện ở MỌI trang (server không có phiên, client có) — có sẵn, React tự dựng lại.
 - Các hàm tự chấm công đã được tách thân (`getMyAttendance`, `setMyAttendance`) để test được.
 - Dữ liệu thật: nếu phải ghi thử, **chụp lại trạng thái trước và khôi phục** (bản ghi, quyền, activity_logs).
 - Excel: xuất file trong script (giả lập `document` / `URL.createObjectURL`), đọc lại bằng exceljs + HyperFormula để so từng công thức với số app tính.
