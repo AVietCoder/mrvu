@@ -18,7 +18,16 @@ export default defineConfig({
         },
       },
     }),
-    nitro(),
+    nitro({
+      vercel: {
+        // SEO Studio (/seo-studio/*): viết bài AI, gọi DataForSEO… cần lâu hơn mặc định.
+        // 300 giây là mức tối đa của gói Hobby khi bật Fluid Compute (mặc định cho dự án mới).
+        // Nếu tắt Fluid Compute thì đặt SEO_MAX_DURATION=60 trong biến môi trường build.
+        functionRules: {
+          "/seo-studio/**": { maxDuration: Number(process.env.SEO_MAX_DURATION || 300) },
+        },
+      },
+    }),
     react(),
   ],
   resolve: {
@@ -30,6 +39,9 @@ export default defineConfig({
       // "fs" stub package breaks khi Nitro bundle server. Bản browser của
       // exceljs (dist/exceljs.min.js) là self-contained (không cần fs/stream).
       { find: /^exceljs$/, replacement: "exceljs/dist/exceljs.min.js" },
+      // Cũng vì gói "fs" giả đó: thư viện postgres (SEO Studio) `import fs from 'fs'` sẽ trỏ nhầm
+      // vào gói giả. Ép về module có sẵn của Node.
+      { find: /^fs$/, replacement: "node:fs" },
     ],
     dedupe: [
       "react",

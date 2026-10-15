@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Autopost</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+/* Layout: năm thẻ làm việc (Websites, Từ khóa, Bài viết, Cài đặt, Nhật ký); xem trước bài mở ở ngăn bên phải */
+:root{
+  --bg:#f2f4f3; --surface:#ffffff; --sunk:#f7f9f8; --ink:#17221f; --muted:#5b6965; --line:#dce3e0;
+  --accent:#0d6957; --accent-ink:#ffffff; --accent-soft:#e0efea;
+  --ok:#2c7a4b; --ok-soft:#e3f2e8; --bad:#b9441a; --bad-soft:#fbe9e1; --warn:#9a6a12; --warn-soft:#f8efd9; --info:#3f6fa8; --info-soft:#e4edf8;
+  --serp-title:#1a0dab; --serp-url:#006621; --code:#f4f6f5; --shade:rgba(15,25,22,.35);
+  --f-body:"Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+  --f-read:"Lora", Georgia, "Times New Roman", serif;
+  --f-code:ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r:10px; color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1412; --surface:#151d1a; --sunk:#111816; --ink:#e4ebe8; --muted:#94a39e; --line:#25302c;
+  --accent:#4dbea6; --accent-ink:#06201a; --accent-soft:#163029;
+  --ok:#6fc690; --ok-soft:#16301f; --bad:#f0905f; --bad-soft:#3a2219; --warn:#e2b75a; --warn-soft:#352a14; --info:#8db5e8; --info-soft:#1a2738;
+  --serp-title:#8ab4f8; --serp-url:#7fc99a; --code:#0b100f; --shade:rgba(0,0,0,.55); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1412; --surface:#151d1a; --sunk:#111816; --ink:#e4ebe8; --muted:#94a39e; --line:#25302c;
+  --accent:#4dbea6; --accent-ink:#06201a; --accent-soft:#163029;
+  --ok:#6fc690; --ok-soft:#16301f; --bad:#f0905f; --bad-soft:#3a2219; --warn:#e2b75a; --warn-soft:#352a14; --info:#8db5e8; --info-soft:#1a2738;
+  --serp-title:#8ab4f8; --serp-url:#7fc99a; --code:#0b100f; --shade:rgba(0,0,0,.55); color-scheme:dark}
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+body.lock{overflow:hidden}
+[hidden]{display:none!important}
+.wrap{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.nav{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:-4px}
+.nav .tab{padding:8px 12px;color:var(--muted);text-decoration:none;font-weight:600;font-size:13px;border-bottom:2px solid transparent;margin-bottom:-1px}
+.nav .tab:hover{color:var(--ink)}
+.nav .tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-size:24px;font-weight:700;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:16px;margin:0}
+h3{font-size:14px;margin:0}
+.sub{color:var(--muted);margin:2px 0 0;max-width:72ch}
+.mode{font-size:12px;font-weight:600;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);display:inline-flex;gap:6px;align-items:center}
+.mode i{width:8px;height:8px;border-radius:50%;background:var(--warn)}
+.mode.live i{background:var(--ok)}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{font:inherit;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
+.seg button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.seg .n{font-weight:500;opacity:.75;margin-left:4px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.pad{padding:16px}
+.phead{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+.label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.hint{font-size:12px;color:var(--muted)}
+input[type=text],input[type=password],input[type=number],input[type=search],select,textarea{font:inherit;color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+textarea{resize:vertical;min-height:90px}
+input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input[type=checkbox],input[type=radio]{accent-color:var(--accent);width:16px;height:16px;vertical-align:middle}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 16px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field.full{grid-column:1/-1}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{font:inherit;font-weight:600;border-radius:8px;padding:8px 14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn.sm{padding:5px 10px;font-size:13px}
+.link{border:0;background:none;color:var(--accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:2px 4px;border-radius:4px}
+.link.danger{color:var(--muted)} .link.danger:hover,.link.danger.armed{color:var(--bad)}
+.tablebox{overflow:auto;max-height:640px}
+table{border-collapse:collapse;width:100%;min-width:760px}
+th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{position:sticky;top:0;background:var(--surface);font-size:12px;font-weight:600;color:var(--muted);z-index:1;white-space:nowrap}
+tr:hover td{background:var(--sunk)}
+td.stt{color:var(--muted);width:48px;font-variant-numeric:tabular-nums}
+td.when{font-size:12px;color:var(--muted);white-space:nowrap}
+.acts{display:flex;gap:4px;flex-wrap:wrap}
+.chip{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.c-pending{background:var(--sunk);color:var(--muted);border:1px solid var(--line)}
+.c-writing{background:var(--info-soft);color:var(--info)}
+.c-written,.c-local{background:var(--warn-soft);color:var(--warn)}
+.c-published{background:var(--ok-soft);color:var(--ok)}
+.c-error{background:var(--bad-soft);color:var(--bad)}
+.c-ok{background:var(--ok-soft);color:var(--ok)} .c-info{background:var(--info-soft);color:var(--info)} .c-warn{background:var(--warn-soft);color:var(--warn)}
+.sub-msg{display:block;font-size:12px;color:var(--muted);margin-top:2px;max-width:340px}
+.sub-msg.bad{color:var(--bad)}
+.empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.err{background:var(--bad-soft);color:var(--bad);border-radius:8px;padding:10px 12px;font-size:13px}
+.okmsg{background:var(--ok-soft);color:var(--ok);border-radius:8px;padding:10px 12px;font-size:13px}
+.note{background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--muted)}
+.note b{color:var(--ink)}
+.kindpick{display:flex;gap:10px;flex-wrap:wrap}
+.kindpick label{flex:1 1 220px;display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--sunk)}
+.kindpick label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.kindpick b{display:block}
+.fs{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.fs legend{font-weight:700;font-size:14px;padding:0;margin-bottom:4px}
+.divider{border:0;border-top:1px solid var(--line);margin:4px 0}
+.vars{display:flex;flex-direction:column;gap:8px}
+.var{display:grid;grid-template-columns:200px minmax(0,1fr) auto;gap:8px;align-items:center}
+@media (max-width:600px){.var{grid-template-columns:1fr}}
+code{font-family:var(--f-code);font-size:12px;background:var(--code);padding:1px 5px;border-radius:4px}
+.demo-flag{white-space:nowrap;font-size:11px;font-weight:600;color:var(--warn);background:var(--warn-soft);padding:2px 8px;border-radius:999px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;font-size:13px;font-weight:500;z-index:40;max-width:calc(100% - 32px)}
+
+/* ngăn xem bài */
+.shade{position:fixed;inset:0;background:var(--shade);z-index:20}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(900px,100%);background:var(--bg);z-index:21;display:flex;flex-direction:column;border-left:1px solid var(--line);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-right:env(safe-area-inset-right,0px)}
+.dhead{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--surface);flex-wrap:wrap}
+.dbody{overflow:auto;padding:18px;display:flex;flex-direction:column;gap:16px;flex:1}
+.serp{font-family:Arial, sans-serif;max-width:600px}
+.serp .u{font-size:12px;color:var(--serp-url);word-break:break-all}
+.serp .t{font-size:19px;color:var(--serp-title);line-height:1.3;margin:2px 0}
+.serp .d{font-size:13px;color:var(--muted)}
+.cc{font-size:12px;font-variant-numeric:tabular-nums}
+.cc.bad{color:var(--bad)} .cc.ok{color:var(--ok)}
+.article{font-family:var(--f-read);font-size:17px;line-height:1.75;max-width:68ch}
+.article h1{font-family:var(--f-body);font-size:28px;line-height:1.25;margin:0 0 16px;text-wrap:balance}
+.article h2{font-family:var(--f-body);font-size:21px;margin:28px 0 8px}
+.article h3{font-family:var(--f-body);font-size:17px;margin:20px 0 6px}
+.article p{margin:0 0 14px}
+.article a{color:var(--accent)}
+.article ul,.article ol{margin:0 0 14px;padding-left:22px}
+.article table{border-collapse:collapse;width:100%;min-width:0;font-family:var(--f-body);font-size:14px;margin:0 0 14px}
+.article th,.article td{border:1px solid var(--line);padding:6px 10px;position:static}
+.article figure{margin:18px 0}
+.article figure img{border-radius:8px;display:block;background:var(--sunk)}
+.article figcaption{font-size:13px;color:var(--muted);font-family:var(--f-body);margin-top:4px}
+.article blockquote{margin:0 0 14px;padding-left:14px;border-left:3px solid var(--accent);color:var(--muted)}
+.artbox{overflow-x:auto}
+pre.code{margin:0;background:var(--code);border:1px solid var(--line);border-radius:8px;padding:12px;font-family:var(--f-code);font-size:12px;overflow:auto;max-height:360px;white-space:pre-wrap;word-break:break-word}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav" aria-label="Công cụ">
+    <span style="font-weight:700;font-size:14px;padding:8px 14px 8px 0;margin-right:6px;border-right:1px solid var(--line);color:var(--ink);white-space:nowrap;align-self:center">Mr.Vũ SEO Studio</span>
+    <a class="tab" href="./">Tra cứu Volume</a>
+    <a class="tab" href="rank.html">Rank Tracker</a>
+    <a class="tab" href="audit.html">Audit On-page</a>
+    <a class="tab on" href="autopost.html" aria-current="page">Autopost</a>
+    <a class="tab" href="geo.html">AI Overview (GEO)</a>
+    <a class="tab" href="backlinks.html">Backlink</a>
+    <a class="tab" href="gsc.html">Search Console &amp; GA4</a>
+  </nav>
+  <header>
+    <div>
+      <h1>Autopost</h1>
+      <p class="sub">Từ danh sách từ khóa, AI lập dàn ý, viết bài chuẩn SEO, gắn ảnh và link nội bộ, rồi đăng lên WordPress hoặc website riêng, theo lịch hoặc bấm tay.</p>
+    </div>
+    <span class="mode" id="mode"><i></i><span id="modeText">Đang kiểm tra kết nối…</span></span>
+  </header>
+
+  <div class="seg" id="seg" role="tablist">
+    <button data-v="sites" class="on">Websites<span class="n" id="nSites"></span></button>
+    <button data-v="kws">Bộ từ khóa<span class="n" id="nKws"></span></button>
+    <button data-v="posts">Bài viết<span class="n" id="nPosts"></span></button>
+    <button data-v="settings">Cài đặt AI &amp; biến</button>
+    <button data-v="logs">Nhật ký</button>
+  </div>
+
+  <!-- ============ WEBSITES ============ -->
+  <section id="v-sites" style="display:flex;flex-direction:column;gap:18px">
+    <div class="panel">
+      <div class="phead"><h2>Website đăng bài</h2><button class="btn primary" id="addSite">+ Thêm website</button></div>
+      <div class="tablebox"><table>
+        <thead><tr><th>Website</th><th>Kiểu kết nối</th><th>Cách đăng</th><th>Ảnh</th><th>Lịch tự động</th><th>Từ khóa chờ</th><th>Đã đăng</th><th>Thao tác</th></tr></thead>
+        <tbody id="siteBody"></tbody>
+      </table></div>
+    </div>
+
+    <form class="panel pad" id="siteForm" hidden style="display:flex;flex-direction:column;gap:16px" novalidate>
+      <div class="row" style="justify-content:space-between"><h2 id="formTitle">Thêm website</h2><button type="button" class="btn sm" id="cancelSite">Đóng</button></div>
+      <div class="kindpick">
+        <label><input type="radio" name="kind" value="wordpress" checked><span><b>WordPress</b><span class="hint">Đăng qua REST API bằng Application Password. Tự tải ảnh, gắn danh mục, tag, ảnh đại diện.</span></span></label>
+        <label><input type="radio" name="kind" value="custom"><span><b>Website riêng (Custom API)</b><span class="hint">Cho web code riêng như ASP.NET, PHP… Công cụ gửi bài dạng JSON tới địa chỉ nhận bài của bạn.</span></span></label>
+      </div>
+      <fieldset class="fs">
+        <legend>Kết nối</legend>
+        <div class="grid">
+          <div class="field"><label class="label" for="fName">Tên gọi</label><input id="fName" type="text" placeholder="ví dụ: Blog MrVu"></div>
+          <div class="field"><label class="label" for="fUrl" id="lUrl">Địa chỉ website</label><input id="fUrl" type="text" placeholder="https://blog.mrvu.vn"></div>
+          <div class="field wp-only"><label class="label" for="fUser">Tên đăng nhập WordPress</label><input id="fUser" type="text" autocomplete="off"></div>
+          <div class="field"><label class="label" for="fSecret" id="lSecret">Application Password</label><input id="fSecret" type="password" autocomplete="new-password"></div>
+        </div>
+        <p class="hint wp-only" style="margin:0">Tạo Application Password trong WordPress: <b>Thành viên → Hồ sơ → Application Passwords</b>, đặt tên "Mr.Vũ SEO Studio", bấm Thêm và copy chuỗi được tạo (không phải mật khẩu đăng nhập).</p>
+        <p class="hint custom-only" style="margin:0" hidden>Công cụ gửi <code>POST</code> JSON gồm title, slug, content_html, meta_title, meta_description, tags, images (base64)… kèm header <code>Authorization: Bearer &lt;mã bảo mật&gt;</code>. Website trả về <code>{"id": ..., "url": ...}</code>. Chi tiết trong HUONG_DAN.md để gửi cho người làm web.</p>
+        <div class="row"><button type="button" class="btn" id="testBtn">Kiểm tra kết nối</button><span id="testMsg" class="hint"></span></div>
+      </fieldset>
+      <hr class="divider">
+      <fieldset class="fs">
+        <legend>Cách đăng bài</legend>
+        <div class="grid">
+          <div class="field wp-only"><label class="label" for="fCat">Danh mục</label><select id="fCat"><option value="">Bấm "Kiểm tra kết nối" để tải danh mục</option></select></div>
+          <div class="field custom-only" hidden><label class="label" for="fCatName">Chuyên mục (gửi kèm dạng chữ)</label><input id="fCatName" type="text" placeholder="ví dụ: Tin tức"></div>
+          <div class="field"><label class="label" for="fStatus">Trạng thái khi đăng</label><select id="fStatus"><option value="draft">Lưu nháp trên website (khuyên dùng)</option><option value="publish">Đăng công khai ngay</option></select></div>
+          <div class="field wp-only"><label class="label" for="fSeo">Plugin SEO trên website</label><select id="fSeo"><option value="none">Không / không chắc</option><option value="yoast">Yoast SEO</option><option value="rankmath">Rank Math</option></select></div>
+          <div class="field"><label class="label" for="fWords">Độ dài bài</label><select id="fWords"><option value="800">Khoảng 800 chữ</option><option value="1200" selected>Khoảng 1.200 chữ</option><option value="1800">Khoảng 1.800 chữ</option><option value="2500">Khoảng 2.500 chữ</option></select></div>
+          <div class="field"><label class="label" for="fImg">Ảnh trong bài</label><select id="fImg"><option value="none">Không gắn ảnh</option><option value="library">Thư viện ảnh của bạn</option><option value="pexels">Ảnh miễn phí bản quyền (Pexels)</option></select></div>
+          <div class="field"><label class="label" for="fImgN">Số ảnh mỗi bài</label><select id="fImgN"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div>
+          <div class="field full"><label class="label" for="fExtra">Yêu cầu riêng cho AI (dùng được biến như {hotline})</label>
+            <textarea id="fExtra" placeholder="ví dụ: Giọng văn thân thiện, xưng 'chúng tôi'. Cuối bài mời gọi {hotline} để được tư vấn lắp đặt tại {khu_vuc}. Không nhắc tên đối thủ."></textarea></div>
+        </div>
+        <p class="hint wp-only" style="margin:0">Chọn Yoast/Rank Math để công cụ ghi luôn meta title, meta description, từ khóa chính. Cần cài file <code>mrvu-seo-studio-seo-meta.php</code> (trong thư mục wordpress-plugin) vào website một lần.</p>
+      </fieldset>
+      <hr class="divider">
+      <fieldset class="fs">
+        <legend>Lịch tự động</legend>
+        <label class="row" style="gap:8px;cursor:pointer"><input type="checkbox" id="fAuto"> Tự động viết và đăng từ khóa đang chờ</label>
+        <div class="grid">
+          <div class="field"><label class="label" for="fPerDay">Số bài mỗi ngày</label><input id="fPerDay" type="number" min="1" max="20" value="2"></div>
+          <div class="field"><label class="label" for="fFrom">Từ giờ</label><input id="fFrom" type="number" min="0" max="23" value="8"></div>
+          <div class="field"><label class="label" for="fTo">Đến giờ</label><input id="fTo" type="number" min="1" max="24" value="21"></div>
+        </div>
+        <p class="hint" style="margin:0">Bài được rải đều trong khung giờ. Lịch chỉ chạy khi cửa sổ Mr.Vũ SEO Studio đang mở trên máy.</p>
+      </fieldset>
+      <div class="err" id="formErr" hidden></div>
+      <div class="row"><button type="submit" class="btn primary">Lưu website</button></div>
+    </form>
+  </section>
+
+  <!-- ============ TỪ KHÓA ============ -->
+  <section id="v-kws" hidden style="display:flex;flex-direction:column;gap:18px">
+    <div class="panel pad" style="display:flex;flex-direction:column;gap:12px">
+      <div class="grid">
+        <div class="field"><label class="label" for="kSite">Website</label><select id="kSite"></select></div>
+      </div>
+      <div class="field"><label class="label" for="kInput">Thêm từ khóa (mỗi dòng một từ, mỗi từ thành một bài)</label>
+        <textarea id="kInput" spellcheck="false" placeholder="cách chọn quạt trần phòng khách&#10;quạt trần có tốn điện không&#10;lắp quạt trần trần thạch cao"></textarea></div>
+      <div class="row" style="justify-content:space-between">
+        <span class="hint">Mẹo: lấy từ khóa từ tab Tra cứu Volume, ưu tiên từ dài, ý định tìm hiểu rõ ràng.</span>
+        <button class="btn primary" id="kAdd">Thêm vào hàng chờ</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="phead"><h2 id="kTitle">Hàng chờ từ khóa</h2><span class="hint" id="kMeta"></span></div>
+      <div class="tablebox"><table>
+        <thead><tr><th>STT</th><th>Từ khóa</th><th>Trạng thái</th><th>Bài viết</th><th>Cập nhật</th><th>Thao tác</th></tr></thead>
+        <tbody id="kBody"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ============ BÀI VIẾT ============ -->
+  <section id="v-posts" hidden class="panel">
+    <div class="phead"><h2>Bài AI đã viết</h2>
+      <div class="row"><label class="label" for="pSite" style="text-transform:none;letter-spacing:0;font-size:13px">Lọc</label><select id="pSite" style="width:auto"></select></div></div>
+    <div class="tablebox"><table>
+      <thead><tr><th>Tiêu đề</th><th>Từ khóa</th><th>Website</th><th>Trạng thái</th><th>Ngày viết</th><th>Thao tác</th></tr></thead>
+      <tbody id="pBody"></tbody>
+    </table></div>
+  </section>
+
+  <!-- ============ CÀI ĐẶT ============ -->
+  <section id="v-settings" hidden style="display:flex;flex-direction:column;gap:18px">
+    <form class="panel pad" id="setForm" style="display:flex;flex-direction:column;gap:16px" novalidate>
+      <fieldset class="fs">
+        <legend>Khóa API</legend>
+        <div class="grid">
+          <div class="field"><label class="label" for="sKey">Claude API key (viết bài)</label><input id="sKey" type="password" autocomplete="off" placeholder="sk-ant-…"><span class="hint">Tạo tại console.anthropic.com → API Keys.</span></div>
+          <div class="field"><label class="label" for="sModel">Model</label><input id="sModel" type="text"><span class="hint">Để mặc định nếu không chắc.</span></div>
+          <div class="field"><label class="label" for="sPex">Pexels API key (ảnh miễn phí)</label><input id="sPex" type="password" autocomplete="off"><span class="hint">Miễn phí tại pexels.com/api. Ảnh Pexels được dùng thương mại, không cần ghi nguồn.</span></div>
+        </div>
+        <div class="note" id="libNote"></div>
+      </fieldset>
+      <hr class="divider">
+      <fieldset class="fs">
+        <legend>Biến dùng chung</legend>
+        <p class="hint" style="margin:0">AI nhận toàn bộ thông tin này khi viết (chỉ dùng thông tin có ở đây, không tự bịa). Trong ô "Yêu cầu riêng" của website có thể gọi biến bằng <code>{ten_bien}</code>.</p>
+        <div class="vars" id="vars"></div>
+        <div><button type="button" class="btn sm" id="addVar">+ Thêm biến</button></div>
+      </fieldset>
+      <div class="row"><button type="submit" class="btn primary">Lưu cài đặt</button><span id="setMsg" class="hint"></span></div>
+    </form>
+  </section>
+
+  <!-- ============ NHẬT KÝ ============ -->
+  <section id="v-logs" hidden class="panel">
+    <div class="phead"><h2>Nhật ký hoạt động</h2><button class="btn sm" id="logRefresh">Tải lại</button></div>
+    <div class="tablebox"><table>
+      <thead><tr><th>Thời gian</th><th>Website</th><th>Loại</th><th>Nội dung</th></tr></thead>
+      <tbody id="lBody"></tbody>
+    </table></div>
+  </section>
+</div>
+
+<div class="shade" id="shade" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Xem trước bài viết">
+  <div class="dhead">
+    <span class="chip" id="dStatus"></span>
+    <div class="row" style="gap:6px">
+      <a class="btn sm" id="dOpen" target="_blank" rel="noopener" hidden>Mở bài trên website</a>
+      <button class="btn sm" id="dCopy">Copy HTML</button>
+      <button class="btn sm" id="dEdit">Sửa</button>
+      <button class="btn sm primary" id="dPub">Đăng lên website</button>
+      <button class="btn sm" id="dClose">Đóng</button>
+    </div>
+  </div>
+  <div class="dbody" id="dBody"></div>
+</aside>
+<textarea id="clip" aria-hidden="true" tabindex="-1" style="position:fixed;left:-9999px;top:0;width:1px;height:1px"></textarea>
+<div class="toast" id="toast" hidden></div>
+
+<script src="costguard.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const ST={pending:'Chờ viết',writing:'Đang viết',written:'Đã viết, chưa đăng',published:'Đã đăng',error:'Lỗi'};
+const PST={local:'Chưa đăng',published:'Đã đăng'};
+const IMG={none:'Không ảnh',library:'Thư viện riêng',pexels:'Pexels'};
+let live=false, sites=[], kws=[], posts=[], view='sites', editing=null, current=null, editMode=false, jobs={};
+
+function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,3200)}
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function fmt(iso){if(!iso)return '';const d=new Date(iso),p=n=>String(n).padStart(2,'0');return `${p(d.getHours())}:${p(d.getMinutes())} ${p(d.getDate())}/${p(d.getMonth()+1)}`}
+function copy(text,msg){const ok=()=>toast(msg||'Đã copy');const fb=()=>{const c=$('#clip');c.value=text;c.select();try{document.execCommand('copy');ok()}catch(e){toast('Trình duyệt chặn copy')}};
+  navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(text).then(ok,fb):fb()}
+function arm(btn,fn){if(!btn.classList.contains('armed')){const t=btn.textContent;btn.classList.add('armed');btn.textContent='Bấm lần nữa để xóa';setTimeout(()=>{btn.classList.remove('armed');btn.textContent=t},3000);return}fn()}
+async function http(path,opts){const r=await fetch(path,Object.assign({headers:{'Content-Type':'application/json'}},opts||{}));
+  const j=await r.json().catch(()=>({error:'Phản hồi không hợp lệ từ máy chủ'}));if(!r.ok||j.error)throw new Error(j.error||('Lỗi '+r.status));return j}
+
+/* ================= Chế độ mẫu ================= */
+const SAMPLE_HTML=`<p>Chọn <strong>quạt trần phòng khách</strong> đúng ngay từ đầu giúp không gian mát đều, chạy êm và tiết kiệm điện nhiều năm. Ba yếu tố quyết định là diện tích phòng, chiều cao trần và phong cách nội thất.</p>
+<h2>Chọn sải cánh theo diện tích phòng</h2><p>Sải cánh càng lớn, luồng gió càng phủ rộng. Bảng dưới là mức tham khảo phổ biến:</p>
+<table><thead><tr><th>Diện tích phòng</th><th>Sải cánh gợi ý</th></tr></thead><tbody><tr><td>Dưới 15 m²</td><td>90–105 cm</td></tr><tr><td>15–25 m²</td><td>120–132 cm</td></tr><tr><td>Trên 25 m²</td><td>132–152 cm hoặc 2 quạt</td></tr></tbody></table>
+<h2>Chọn theo chiều cao trần</h2><p>Khoảng cách từ cánh quạt tới sàn nên từ 2,3 m trở lên. Trần thấp dưới 2,7 m nên chọn loại ốp sát trần; trần cao trên 3,2 m dùng thêm ty nối để gió xuống tới người ngồi.</p>
+<h2>Động cơ DC hay AC?</h2><ul><li><strong>Động cơ DC</strong>: êm, nhiều tốc độ, tiết kiệm khoảng 50–70% điện so với AC.</li><li><strong>Động cơ AC</strong>: giá mềm, bền, dễ sửa.</li></ul><p>Xem thêm các mẫu <a href="https://mrvu.vn/san-pham/quat-tran-hien-dai.html">quạt trần hiện đại</a> đang có sẵn.</p>
+<h2>Câu hỏi thường gặp</h2><h3>Quạt trần phòng khách có tốn điện không?</h3><p>Không nhiều. Quạt động cơ DC chỉ dùng khoảng 30–35W ở mức cao nhất.</p><h3>Trần thạch cao có lắp được quạt trần không?</h3><p>Được, nhưng phải bắt móc treo vào sàn bê tông phía trên, không treo trực tiếp lên khung thạch cao.</p>
+<p>Cần tư vấn chọn mẫu và lắp đặt tận nơi, gọi <strong>0909 123 456</strong>.</p>`;
+function demoState(){const t=Date.now();const iso=m=>new Date(t-m*60000).toISOString();
+  return {seq:20,
+  sites:[{id:1,name:'Blog MrVu',kind:'wordpress',url:'https://blog.mrvu.vn',username:'admin',secret:'abcd e…ijkl',category_id:3,category_name:'Kiến thức quạt trần',post_status:'draft',seo_plugin:'rankmath',image_mode:'pexels',images_per_post:2,word_target:1200,extra_prompt:'Cuối bài mời gọi {hotline}.',auto_enabled:1,per_day:2,hour_from:8,hour_to:21},
+         {id:2,name:'mrvu.vn',kind:'custom',url:'https://mrvu.vn/api/nhan-bai.aspx',username:'',secret:'đã nhập',category_id:null,category_name:'Tin tức',post_status:'draft',seo_plugin:'none',image_mode:'library',images_per_post:2,word_target:1800,extra_prompt:'',auto_enabled:0,per_day:1,hour_from:8,hour_to:21}],
+  kws:[[1,'cách chọn quạt trần phòng khách','published',1],[1,'quạt trần có tốn điện không','written',2],[1,'lắp quạt trần trần thạch cao','pending'],[1,'quạt trần dc và ac loại nào tốt','pending'],[1,'vệ sinh quạt trần tại nhà','error'],[2,'quạt trần cổ điển cho nhà gỗ','pending']]
+    .map(([site_id,keyword,status,post_id],i)=>({id:i+1,site_id,keyword,status,post_id:post_id||null,error:status==='error'?'Pexels lỗi 429: Too many requests':null,updated_at:iso(30*(i+1))})),
+  posts:[{id:1,site_id:1,keyword:'cách chọn quạt trần phòng khách',title:'Cách chọn quạt trần phòng khách đẹp, mát và tiết kiệm điện',slug:'cach-chon-quat-tran-phong-khach',meta_title:'Cách Chọn Quạt Trần Phòng Khách Chuẩn, Mát, Tiết Kiệm Điện',meta_description:'Hướng dẫn chọn quạt trần phòng khách theo diện tích, chiều cao trần và loại động cơ. Bảng sải cánh tham khảo, mẹo lắp đặt. Xem ngay!',status:'published',remote_url:'https://blog.mrvu.vn/?p=501',remote_status:'draft',created_at:iso(200),tags:['quạt trần','phòng khách'],html:SAMPLE_HTML,extra:{links:[{url:'https://mrvu.vn/san-pham/quat-tran-hien-dai.html',anchor:'quạt trần hiện đại'}]},usage:{input_tokens:3100,output_tokens:4800}},
+         {id:2,site_id:1,keyword:'quạt trần có tốn điện không',title:'Quạt trần có tốn điện không? Cách tính tiền điện chính xác',slug:'quat-tran-co-ton-dien-khong',meta_title:'Quạt Trần Có Tốn Điện Không? Cách Tính Chi Phí Mỗi Tháng',meta_description:'Quạt trần tiêu thụ bao nhiêu điện mỗi tháng? So sánh động cơ DC và AC, cách tính tiền điện và mẹo dùng quạt trần tiết kiệm.',status:'local',remote_url:null,created_at:iso(90),tags:['quạt trần','tiết kiệm điện'],html:SAMPLE_HTML,extra:{links:[]},usage:{input_tokens:2900,output_tokens:4300}}],
+  logs:[['ok',1,'Đã đăng "Cách chọn quạt trần phòng khách đẹp, mát và tiết kiệm điện" (nháp) https://blog.mrvu.vn/?p=501',190],['ok',1,'AI đã viết "Cách chọn quạt trần phòng khách đẹp, mát và tiết kiệm điện" (3.100 + 4.800 token)',200],['error',1,'Từ khóa "vệ sinh quạt trần tại nhà": Pexels lỗi 429: Too many requests',150],['ok',1,'AI đã viết "Quạt trần có tốn điện không? Cách tính tiền điện chính xác" (2.900 + 4.300 token)',90]]
+    .map(([level,site_id,message,m],i)=>({id:i+1,level,site_id,message,at:iso(m)})),
+  settings:{anthropic_api_key:'sk-ant…a1b2',anthropic_model:'claude-sonnet-5-5',pexels_api_key:'',ap_variables:[{name:'thuong_hieu',value:'MrVu'},{name:'hotline',value:'0909 123 456'},{name:'khu_vuc',value:'TP.HCM và các tỉnh miền Nam'},{name:'bao_hanh',value:'Bảo hành động cơ 5 năm'}],library_count:0,library_path:'anh-thu-vien'}}}
+function dl(){try{const v=JSON.parse(localStorage.getItem('kho-ap-demo-v1'));if(v&&v.sites)return v}catch(e){}return demoState()}
+function ds(v){try{localStorage.setItem('kho-ap-demo-v1',JSON.stringify(v))}catch(e){}}
+async function mock(path,opts){
+  const m=(opts&&opts.method)||'GET',b=opts&&opts.body?JSON.parse(opts.body):{};const S=dl();let out;
+  const seg=path.split('?')[0].split('/').slice(2);const q=new URLSearchParams(path.split('?')[1]||'');
+  await new Promise(r=>setTimeout(r,80));
+  const sname=id=>(S.sites.find(s=>s.id===id)||{}).name;
+  if(m==='GET'&&seg[0]==='sites')out={items:S.sites.map(s=>Object.assign({},s,{pending:S.kws.filter(k=>k.site_id===s.id&&k.status==='pending').length,published:S.posts.filter(p=>p.site_id===s.id&&p.status==='published').length}))};
+  else if(m==='POST'&&seg.length===1&&seg[0]==='sites'){if(b.id){Object.assign(S.sites.find(s=>s.id===b.id),b,{secret:S.sites.find(s=>s.id===b.id).secret})}else{b.id=++S.seq;b.secret=b.secret?'đã nhập':'';S.sites.unshift(b)}out=b}
+  else if(seg[0]==='sites'&&seg[2]==='test'){await new Promise(r=>setTimeout(r,500));
+    out=(b.kind||'wordpress')==='custom'?{user:'Custom API',categories:[]}:{user:'Admin MrVu (dữ liệu mẫu)',categories:[{id:3,name:'Kiến thức quạt trần'},{id:4,name:'Tin tức & Sự kiện'},{id:5,name:'Hướng dẫn lắp đặt'}]}}
+  else if(m==='DELETE'&&seg[0]==='sites'){S.sites=S.sites.filter(s=>s.id!==+seg[1]);S.kws=S.kws.filter(k=>k.site_id!==+seg[1]);out={ok:true}}
+  else if(m==='GET'&&seg[0]==='keywords'){const sid=+q.get('site_id');out={items:S.kws.filter(k=>k.site_id===sid).map(k=>{const p=S.posts.find(x=>x.id===k.post_id);return Object.assign({},k,{post_title:p?p.title:null,remote_url:p?p.remote_url:null})})}}
+  else if(m==='POST'&&seg[0]==='keywords'&&seg.length===1){let n=0;b.keywords.forEach(k=>{k=k.trim();if(k&&!S.kws.some(x=>x.site_id===b.site_id&&x.keyword===k)){S.kws.push({id:++S.seq,site_id:b.site_id,keyword:k,status:'pending',updated_at:new Date().toISOString()});n++}});out={added:n}}
+  else if(seg[0]==='keywords'&&seg[2]==='reset'){const k=S.kws.find(x=>x.id===+seg[1]);k.status='pending';k.error=null;out={ok:true}}
+  else if(m==='DELETE'&&seg[0]==='keywords'){S.kws=S.kws.filter(k=>k.id!==+seg[1]);out={ok:true}}
+  else if(seg[0]==='write'){const k=S.kws.find(x=>x.id===b.keyword_id);const p={id:++S.seq,site_id:k.site_id,keyword:k.keyword,title:k.keyword.charAt(0).toUpperCase()+k.keyword.slice(1)+': hướng dẫn chi tiết từ A đến Z',
+      slug:k.keyword.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/[^a-z0-9]+/g,'-'),meta_title:k.keyword+' – hướng dẫn chi tiết',meta_description:'Tìm hiểu '+k.keyword+': kinh nghiệm thực tế, bảng so sánh và câu hỏi thường gặp. Xem ngay để chọn đúng!',
+      status:b.publish?'published':'local',remote_url:b.publish?'https://blog.mrvu.vn/?p='+(600+S.seq):null,remote_status:'draft',created_at:new Date().toISOString(),tags:['quạt trần'],html:SAMPLE_HTML,extra:{links:[]},usage:{input_tokens:3000,output_tokens:4500},demo:true};
+    S.posts.unshift(p);k.status=b.publish?'published':'written';k.post_id=p.id;k.updated_at=p.created_at;
+    S.logs.unshift({id:++S.seq,level:'ok',site_id:k.site_id,message:`AI đã viết "${p.title}" (dữ liệu mẫu)`,at:p.created_at});out={job_id:'demo-'+p.id}}
+  else if(seg[0]==='job'){await new Promise(r=>setTimeout(r,1200));out={status:'done',message:'Xong',result:+seg[1].split('-')[1]}}
+  else if(m==='GET'&&seg[0]==='posts'&&seg.length===1){const sid=q.get('site_id');out={items:S.posts.filter(p=>!sid||p.site_id===+sid).map(p=>Object.assign({},p,{site_name:sname(p.site_id)}))}}
+  else if(m==='GET'&&seg[0]==='posts'){out=S.posts.find(p=>p.id===+seg[1])}
+  else if(seg[0]==='posts'&&seg[2]==='publish'){const p=S.posts.find(x=>x.id===+seg[1]);p.status='published';p.remote_url='https://blog.mrvu.vn/?p='+(700+p.id);p.remote_status='draft';const k=S.kws.find(x=>x.post_id===p.id);if(k)k.status='published';out={job_id:'demo-'+p.id}}
+  else if(m==='POST'&&seg[0]==='posts'){Object.assign(S.posts.find(x=>x.id===+seg[1]),b);out={ok:true}}
+  else if(m==='DELETE'&&seg[0]==='posts'){S.posts=S.posts.filter(p=>p.id!==+seg[1]);S.kws.forEach(k=>{if(k.post_id===+seg[1]&&k.status==='written'){k.status='pending';k.post_id=null}});out={ok:true}}
+  else if(m==='GET'&&seg[0]==='settings')out=S.settings;
+  else if(m==='POST'&&seg[0]==='settings'){S.settings.ap_variables=b.ap_variables;if(b.anthropic_model)S.settings.anthropic_model=b.anthropic_model;out={ok:true}}
+  else if(seg[0]==='logs')out={items:S.logs.map(l=>Object.assign({},l,{site_name:sname(l.site_id)}))};
+  ds(S);return JSON.parse(JSON.stringify(out));
+}
+const api=(p,o)=>live?http(p,o):mock(p,o);
+
+/* ================= Điều hướng ================= */
+$('#seg').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(b)show(b.dataset.v)});
+function show(v){view=v;document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  ['sites','kws','posts','settings','logs'].forEach(x=>$('#v-'+x).hidden=x!==v);
+  ({sites:loadSites,kws:loadKws,posts:loadPosts,settings:loadSettings,logs:loadLogs})[v]().catch(e=>toast(e.message))}
+
+/* ================= Websites ================= */
+async function loadSites(){sites=(await api('api/ap/sites')).items;$('#nSites').textContent=sites.length||'';
+  const opts=sites.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  const k=$('#kSite').value,p=$('#pSite').value;$('#kSite').innerHTML=opts||'<option value="">Chưa có website</option>';$('#pSite').innerHTML='<option value="">Tất cả website</option>'+opts;
+  if(k&&sites.some(s=>s.id==k))$('#kSite').value=k;if(p)$('#pSite').value=p;
+  $('#siteBody').innerHTML=sites.length?sites.map(s=>`<tr>
+    <td><b>${esc(s.name)}</b>${live?'':' <span class="demo-flag">mẫu</span>'}<span class="sub-msg">${esc(s.url)}</span></td>
+    <td>${s.kind==='wordpress'?'WordPress':'Custom API'}</td>
+    <td>${s.post_status==='publish'?'Đăng ngay':'Lưu nháp'}${s.category_name?`<span class="sub-msg">${esc(s.category_name)}</span>`:''}</td>
+    <td>${IMG[s.image_mode]||'Không ảnh'}${s.image_mode!=='none'?` · ${s.images_per_post}`:''}</td>
+    <td>${s.auto_enabled?`<span class="chip c-published">Bật</span><span class="sub-msg">${s.per_day} bài/ngày, ${s.hour_from}h–${s.hour_to}h</span>`:'<span class="chip c-pending">Tắt</span>'}</td>
+    <td>${s.pending}</td><td>${s.published}</td>
+    <td><div class="acts"><button class="link" data-kw="${s.id}">Từ khóa</button><button class="link" data-edit="${s.id}">Sửa</button><button class="link danger" data-del="${s.id}">Xóa</button></div></td></tr>`).join('')
+    :'<tr><td colspan="8" class="empty">Chưa có website nào. Bấm <b>+ Thêm website</b> để kết nối WordPress hoặc website riêng.</td></tr>';
+}
+$('#siteBody').addEventListener('click',e=>{
+  const k=e.target.closest('[data-kw]');if(k){$('#kSite').value=k.dataset.kw;show('kws');return}
+  const ed=e.target.closest('[data-edit]');if(ed){openForm(sites.find(s=>s.id==ed.dataset.edit));return}
+  const d=e.target.closest('[data-del]');if(d)arm(d,async()=>{await api('api/ap/sites/'+d.dataset.del,{method:'DELETE'});toast('Đã xóa website và hàng chờ của nó');loadSites()});
+});
+$('#addSite').addEventListener('click',()=>openForm(null));
+$('#cancelSite').addEventListener('click',()=>{$('#siteForm').hidden=true});
+document.querySelectorAll('input[name=kind]').forEach(r=>r.addEventListener('change',syncKind));
+function kind(){return document.querySelector('input[name=kind]:checked').value}
+function syncKind(){const wp=kind()==='wordpress';document.querySelectorAll('.wp-only').forEach(x=>x.hidden=!wp);document.querySelectorAll('.custom-only').forEach(x=>x.hidden=wp);
+  $('#lUrl').textContent=wp?'Địa chỉ website':'Địa chỉ nhận bài (endpoint)';$('#fUrl').placeholder=wp?'https://blog.mrvu.vn':'https://mrvu.vn/api/nhan-bai.aspx';
+  $('#lSecret').textContent=wp?'Application Password':'Mã bảo mật (Bearer token)'}
+function openForm(s){editing=s;$('#formTitle').textContent=s?'Sửa website: '+s.name:'Thêm website';$('#formErr').hidden=true;$('#testMsg').textContent='';
+  document.querySelector(`input[name=kind][value=${s?s.kind:'wordpress'}]`).checked=true;syncKind();
+  $('#fName').value=s?s.name:'';$('#fUrl').value=s?s.url:'';$('#fUser').value=s?s.username||'':'';$('#fSecret').value=s?s.secret||'':'';
+  $('#fCat').innerHTML=s&&s.category_id?`<option value="${s.category_id}">${esc(s.category_name)}</option>`:'<option value="">Bấm "Kiểm tra kết nối" để tải danh mục</option>';
+  $('#fCatName').value=s&&s.kind==='custom'?s.category_name||'':'';
+  $('#fStatus').value=s?s.post_status:'draft';$('#fSeo').value=s?s.seo_plugin:'none';$('#fWords').value=s?String(s.word_target):'1200';
+  $('#fImg').value=s?s.image_mode:'none';$('#fImgN').value=s?String(s.images_per_post||2):'2';$('#fExtra').value=s?s.extra_prompt||'':'';
+  $('#fAuto').checked=s?!!s.auto_enabled:false;$('#fPerDay').value=s?s.per_day:2;$('#fFrom').value=s?s.hour_from:8;$('#fTo').value=s?s.hour_to:21;
+  $('#siteForm').hidden=false;$('#siteForm').scrollIntoView({behavior:'smooth',block:'start'})}
+$('#testBtn').addEventListener('click',async()=>{const m=$('#testMsg');m.className='hint';m.textContent='Đang kiểm tra…';
+  try{const r=await api('api/ap/sites/'+(editing?editing.id:'new')+'/test',{method:'POST',body:JSON.stringify({kind:kind(),url:$('#fUrl').value.trim(),username:$('#fUser').value.trim(),secret:$('#fSecret').value})});
+    m.className='chip c-published';m.textContent=kind()==='wordpress'?`Kết nối được với tài khoản ${r.user}`:'Địa chỉ nhận bài phản hồi tốt';
+    if(r.categories&&r.categories.length){const cur=$('#fCat').value;$('#fCat').innerHTML='<option value="">Không gắn danh mục</option>'+r.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');if(cur)$('#fCat').value=cur}
+  }catch(e){m.className='chip c-error';m.textContent=e.message}});
+$('#siteForm').addEventListener('submit',async e=>{e.preventDefault();const err=$('#formErr');err.hidden=true;
+  const wp=kind()==='wordpress',url=$('#fUrl').value.trim();
+  if(!/^https?:\/\//.test(url)){err.textContent='Địa chỉ phải bắt đầu bằng https://';err.hidden=false;return}
+  if(wp&&(!$('#fUser').value.trim()||!$('#fSecret').value)){err.textContent='Nhập tên đăng nhập và Application Password của WordPress.';err.hidden=false;return}
+  const cat=$('#fCat').selectedOptions[0];
+  const body={id:editing?editing.id:undefined,kind:kind(),name:$('#fName').value.trim()||url.replace(/^https?:\/\//,'').split('/')[0],url,username:$('#fUser').value.trim(),secret:$('#fSecret').value,
+    category_id:wp&&cat&&cat.value?+cat.value:null,category_name:wp?(cat&&cat.value?cat.textContent:''):$('#fCatName').value.trim(),
+    post_status:$('#fStatus').value,seo_plugin:wp?$('#fSeo').value:'none',word_target:+$('#fWords').value,image_mode:$('#fImg').value,images_per_post:+$('#fImgN').value,
+    extra_prompt:$('#fExtra').value.trim(),auto_enabled:$('#fAuto').checked?1:0,per_day:+$('#fPerDay').value||1,hour_from:+$('#fFrom').value||0,hour_to:+$('#fTo').value||24};
+  try{const s=await api('api/ap/sites',{method:'POST',body:JSON.stringify(body)});$('#siteForm').hidden=true;toast('Đã lưu website '+s.name);await loadSites();$('#kSite').value=s.id}
+  catch(e2){err.textContent=e2.message;err.hidden=false}});
+
+/* ================= Từ khóa ================= */
+async function loadKws(){if(!sites.length)await loadSites();const sid=+$('#kSite').value;kws=sid?(await api('api/ap/keywords?site_id='+sid)).items:[];renderKws()}
+function renderKws(){const s=sites.find(x=>x.id==$('#kSite').value);
+  const c=st=>kws.filter(k=>k.status===st).length;$('#nKws').textContent=c('pending')||'';
+  $('#kTitle').textContent=s?'Hàng chờ của '+s.name:'Hàng chờ từ khóa';
+  $('#kMeta').textContent=kws.length?`${c('pending')} chờ · ${c('written')} đã viết · ${c('published')} đã đăng${c('error')?' · '+c('error')+' lỗi':''}`:'';
+  $('#kBody').innerHTML=kws.length?kws.map((k,i)=>{const j=jobs[k.id];const st=j?'writing':k.status;return `<tr>
+    <td class="stt">${i+1}</td><td><b>${esc(k.keyword)}</b></td>
+    <td><span class="chip c-${st}">${ST[st]}</span>${j?`<span class="sub-msg">${esc(j)}</span>`:''}${k.status==='error'&&!j?`<span class="sub-msg bad">${esc(k.error)}</span>`:''}</td>
+    <td>${k.post_title?`<button class="link" data-post="${k.post_id}" style="text-align:left">${esc(k.post_title)}</button>`:'<span class="hint">—</span>'}</td>
+    <td class="when">${fmt(k.updated_at)}</td>
+    <td><div class="acts">${j?'':k.status==='pending'||k.status==='error'?`<button class="btn sm" data-write="${k.id}">Viết thử</button><button class="btn sm primary" data-writepub="${k.id}">Viết &amp; đăng</button>`:
+      k.status==='written'?`<button class="btn sm" data-post="${k.post_id}">Xem bài</button>`:k.remote_url?`<a class="btn sm" href="${esc(k.remote_url)}" target="_blank" rel="noopener">Mở bài</a>`:''}
+      ${j?'':`<button class="link danger" data-kdel="${k.id}">Xóa</button>`}</div></td></tr>`}).join('')
+    :`<tr><td colspan="6" class="empty">${sites.length?'Chưa có từ khóa. Dán danh sách ở trên rồi bấm <b>Thêm vào hàng chờ</b>.':'Thêm website trước ở mục Websites.'}</td></tr>`}
+$('#kSite').addEventListener('change',()=>loadKws().catch(e=>toast(e.message)));
+$('#kAdd').addEventListener('click',async()=>{const list=$('#kInput').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);const sid=+$('#kSite').value;
+  if(!sid){toast('Thêm website trước');return}if(!list.length){toast('Nhập ít nhất một từ khóa');return}
+  const r=await api('api/ap/keywords',{method:'POST',body:JSON.stringify({site_id:sid,keywords:list})});$('#kInput').value='';toast(`Đã thêm ${r.added} từ khóa`+(r.added<list.length?` (${list.length-r.added} từ đã có sẵn)`:''));loadKws()});
+$('#kBody').addEventListener('click',e=>{
+  const p=e.target.closest('[data-post]');if(p){openPost(+p.dataset.post);return}
+  const w=e.target.closest('[data-write],[data-writepub]');if(w){write(+(w.dataset.write||w.dataset.writepub),!!w.dataset.writepub);return}
+  const d=e.target.closest('[data-kdel]');if(d)arm(d,async()=>{await api('api/ap/keywords/'+d.dataset.kdel,{method:'DELETE'});loadKws()});
+});
+async function poll(jid,onMsg){let j;do{await new Promise(r=>setTimeout(r,1500));j=await api('api/ap/job/'+jid);onMsg&&onMsg(j.message)}while(j.status==='running');if(j.status==='error')throw new Error(j.message);return j.result}
+async function write(kid,publish){
+  if(window.CostGuard){const s=sites.find(x=>x.id==$('#kSite').value)||{};const g=await CostGuard.check('autopost_write',{words:s.word_target||1200,images:s.image_mode});if(!g.ok)return}
+  jobs[kid]='Đang bắt đầu…';renderKws();
+  try{const {job_id}=await api('api/ap/write',{method:'POST',body:JSON.stringify({keyword_id:kid,publish})});
+    const pid=await poll(job_id,m=>{jobs[kid]=m;renderKws()});delete jobs[kid];await loadKws();window.CostGuard&&CostGuard.after();
+    toast(publish?'Đã viết và đăng bài':'Đã viết xong, mở bài để đọc lại trước khi đăng');if(!publish)openPost(pid);
+  }catch(e){delete jobs[kid];await loadKws();toast(e.message)}}
+
+/* ================= Bài viết ================= */
+async function loadPosts(){if(!sites.length)await loadSites();const sid=$('#pSite').value;posts=(await api('api/ap/posts'+(sid?'?site_id='+sid:''))).items;$('#nPosts').textContent=posts.length||'';
+  $('#pBody').innerHTML=posts.length?posts.map(p=>`<tr><td><button class="link" data-post="${p.id}" style="text-align:left;font-size:14px">${esc(p.title)}</button></td><td>${esc(p.keyword)}</td><td>${esc(p.site_name||'')}</td>
+    <td><span class="chip c-${p.status}">${p.status==='published'?(p.remote_status==='draft'?'Đã gửi (nháp)':'Đã đăng'):PST[p.status]}</span></td><td class="when">${fmt(p.created_at)}</td>
+    <td><div class="acts"><button class="btn sm" data-post="${p.id}">Xem</button>${p.status==='local'?`<button class="btn sm primary" data-pub="${p.id}">Đăng</button>`:p.remote_url?`<a class="btn sm" href="${esc(p.remote_url)}" target="_blank" rel="noopener">Mở</a>`:''}<button class="link danger" data-pdel="${p.id}">Xóa</button></div></td></tr>`).join('')
+    :'<tr><td colspan="6" class="empty">Chưa có bài nào. Vào <b>Bộ từ khóa</b>, bấm <b>Viết thử</b> ở một từ khóa để AI viết bài đầu tiên.</td></tr>'}
+$('#pSite').addEventListener('change',()=>loadPosts().catch(e=>toast(e.message)));
+$('#pBody').addEventListener('click',e=>{const p=e.target.closest('[data-post]');if(p){openPost(+p.dataset.post);return}
+  const u=e.target.closest('[data-pub]');if(u){publish(+u.dataset.pub,u);return}
+  const d=e.target.closest('[data-pdel]');if(d)arm(d,async()=>{await api('api/ap/posts/'+d.dataset.pdel,{method:'DELETE'});toast('Đã xóa bài khỏi công cụ (không xóa trên website)');loadPosts()})});
+async function publish(pid,btn){if(btn){btn.disabled=true;btn.textContent='Đang đăng…'}
+  try{const {job_id}=await api('api/ap/posts/'+pid+'/publish',{method:'POST',body:'{}'});const url=await poll(job_id,m=>{if(btn)btn.textContent=m});
+    toast('Đã đăng lên website'+(url?'':''));if(current&&current.id===pid)await openPost(pid);if(view==='posts')loadPosts();if(view==='kws')loadKws()}
+  catch(e){toast(e.message);if(btn){btn.disabled=false;btn.textContent='Đăng'}}}
+
+/* ================= Xem trước bài ================= */
+function cc(n,lo,hi){return `<span class="cc ${n>=lo&&n<=hi?'ok':'bad'}">${n} ký tự (nên ${lo}–${hi})</span>`}
+async function openPost(id){current=await api('api/ap/posts/'+id);editMode=false;drawPost();$('#shade').hidden=false;$('#drawer').hidden=false;document.body.classList.add('lock');$('#dBody').scrollTop=0}
+function drawPost(){const p=current,site=sites.find(s=>s.id===p.site_id)||{};
+  $('#dStatus').className='chip c-'+p.status;$('#dStatus').textContent=p.status==='published'?(p.remote_status==='draft'?'Đã gửi lên website (nháp)':'Đã đăng'):'Chưa đăng';
+  $('#dPub').hidden=p.status!=='local';$('#dOpen').hidden=!p.remote_url;if(p.remote_url)$('#dOpen').href=p.remote_url;$('#dEdit').textContent=editMode?'Lưu sửa':'Sửa';
+  const base=(site.kind==='wordpress'?site.url:(site.url||'').replace(/\/api\/.*$/,''))||'';
+  const words=p.html.replace(/<[^>]+>/g,' ').split(/\s+/).filter(Boolean).length;
+  const links=(p.extra&&p.extra.links)||[];
+  let h=`<section class="panel pad" style="display:flex;flex-direction:column;gap:10px"><div class="label">Hiển thị trên Google (xem trước)</div>
+    <div class="serp"><div class="u">${esc(base.replace(/^https?:\/\//,''))} › ${esc(p.slug)}</div><div class="t">${esc(p.meta_title)}</div><div class="d">${esc(p.meta_description)}</div></div>
+    <div class="row hint" style="gap:16px">Meta title: ${cc(p.meta_title.length,45,60)} · Meta description: ${cc(p.meta_description.length,110,160)}</div>
+    <div class="row hint" style="gap:16px"><span>Từ khóa: <b>${esc(p.keyword)}</b></span><span>${words.toLocaleString('vi-VN')} chữ</span><span>${links.length} link nội bộ</span><span>Tag: ${esc((p.tags||[]).join(', ')||'—')}</span>${p.usage&&p.usage.output_tokens?`<span>${(p.usage.input_tokens+p.usage.output_tokens).toLocaleString('vi-VN')} token</span>`:''}</div></section>`;
+  if(editMode){h+=`<section class="panel pad grid">
+    <div class="field full"><label class="label" for="eTitle">Tiêu đề bài (H1)</label><input id="eTitle" type="text" value="${esc(p.title)}"></div>
+    <div class="field full"><label class="label" for="eMT">Meta title</label><input id="eMT" type="text" value="${esc(p.meta_title)}"></div>
+    <div class="field full"><label class="label" for="eMD">Meta description</label><textarea id="eMD" style="min-height:70px">${esc(p.meta_description)}</textarea></div>
+    <div class="field full"><label class="label" for="eSlug">Đường dẫn (slug)</label><input id="eSlug" type="text" value="${esc(p.slug)}"></div>
+    <div class="field full"><label class="label" for="eHtml">Nội dung (HTML)</label><textarea id="eHtml" style="min-height:420px;font-family:var(--f-code);font-size:12px">${esc(p.html)}</textarea></div></section>`}
+  else h+=`<section class="panel pad artbox"><article class="article"><h1>${esc(p.title)}</h1>${p.html}</article></section>`;
+  if(p.status==='local')h+=`<div class="note"><b>Nên đọc lại trước khi đăng.</b> Kiểm tra số liệu, giá, thông số kỹ thuật và thêm trải nghiệm thực tế của bạn. Google đánh giá thấp nội dung AI đăng hàng loạt mà không có giá trị riêng.</div>`;
+  $('#dBody').innerHTML=h}
+function closePost(){$('#shade').hidden=true;$('#drawer').hidden=true;document.body.classList.remove('lock');current=null}
+$('#dClose').addEventListener('click',closePost);$('#shade').addEventListener('click',closePost);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#drawer').hidden)closePost()});
+$('#dCopy').addEventListener('click',()=>current&&copy(`<h1>${current.title}</h1>\n`+current.html,'Đã copy HTML bài viết'));
+$('#dPub').addEventListener('click',()=>current&&publish(current.id,$('#dPub')));
+$('#dEdit').addEventListener('click',async()=>{if(!current)return;
+  if(!editMode){editMode=true;drawPost();return}
+  const b={title:$('#eTitle').value,meta_title:$('#eMT').value,meta_description:$('#eMD').value,slug:$('#eSlug').value,html:$('#eHtml').value};
+  try{await api('api/ap/posts/'+current.id,{method:'POST',body:JSON.stringify(b)});Object.assign(current,b);if(live)current=await api('api/ap/posts/'+current.id);editMode=false;drawPost();toast('Đã lưu chỉnh sửa')}catch(e){toast(e.message)}});
+
+/* ================= Cài đặt ================= */
+function varRow(v){const d=document.createElement('div');d.className='var';
+  d.innerHTML=`<input type="text" class="vn" placeholder="ten_bien" value="${esc(v.name||'')}" aria-label="Tên biến"><input type="text" class="vv" placeholder="Giá trị" value="${esc(v.value||'')}" aria-label="Giá trị"><button type="button" class="link danger">Xóa</button>`;
+  d.querySelector('button').addEventListener('click',()=>d.remove());return d}
+async function loadSettings(){const s=await api('api/ap/settings');$('#sKey').value=s.anthropic_api_key||'';$('#sModel').value=s.anthropic_model||'';$('#sPex').value=s.pexels_api_key||'';
+  $('#vars').innerHTML='';(s.ap_variables.length?s.ap_variables:[{name:'thuong_hieu',value:''},{name:'hotline',value:''}]).forEach(v=>$('#vars').appendChild(varRow(v)));
+  $('#libNote').innerHTML=`<b>Thư viện ảnh của bạn:</b> ${s.library_count} ảnh trong thư mục <code>${esc(s.library_path)}</code>. Chép ảnh sản phẩm, ảnh lắp đặt thực tế vào đây, đặt tên file không dấu theo nội dung (ví dụ <code>quat-tran-go-phong-khach.jpg</code>); công cụ chọn ảnh có tên khớp từ khóa nhất.`}
+$('#addVar').addEventListener('click',()=>$('#vars').appendChild(varRow({})));
+$('#setForm').addEventListener('submit',async e=>{e.preventDefault();
+  const vars=[...document.querySelectorAll('.var')].map(r=>({name:r.querySelector('.vn').value.trim().replace(/[{}\s]/g,'_'),value:r.querySelector('.vv').value.trim()})).filter(v=>v.name);
+  try{await api('api/ap/settings',{method:'POST',body:JSON.stringify({anthropic_api_key:$('#sKey').value,anthropic_model:$('#sModel').value,pexels_api_key:$('#sPex').value,ap_variables:vars})});
+    $('#setMsg').textContent='Đã lưu';toast('Đã lưu cài đặt');loadSettings()}catch(err){toast(err.message)}});
+
+/* ================= Nhật ký ================= */
+async function loadLogs(){const items=(await api('api/ap/logs')).items;const L={ok:['c-ok','Thành công'],error:['c-error','Lỗi'],warn:['c-warn','Lưu ý'],info:['c-info','Thông tin']};
+  $('#lBody').innerHTML=items.length?items.map(l=>`<tr><td class="when">${fmt(l.at)}</td><td>${esc(l.site_name||'')}</td><td><span class="chip ${(L[l.level]||L.info)[0]}">${(L[l.level]||L.info)[1]}</span></td><td style="word-break:break-word">${esc(l.message)}</td></tr>`).join('')
+    :'<tr><td colspan="4" class="empty">Chưa có hoạt động nào.</td></tr>'}
+$('#logRefresh').addEventListener('click',()=>loadLogs());
+
+/* ================= Khởi động ================= */
+(async()=>{
+  try{const c=new AbortController();setTimeout(()=>c.abort(),1500);const j=await (await fetch('api/health',{signal:c.signal})).json();
+    if(j&&j.ok){live=true;$('#mode').className='mode live';$('#modeText').textContent=j.ai?'Sẵn sàng · đã có khóa AI':'Sẵn sàng · cần nhập khóa Claude ở Cài đặt'}}catch(e){}
+  if(!live)$('#modeText').textContent='Bản xem trước — dữ liệu mẫu';
+  try{await loadSites();if(live){const k=await api('api/ap/posts');$('#nPosts').textContent=k.items.length||''}else $('#nPosts').textContent='2'}catch(e){toast(e.message)}
+})();
+})();
+</script>
+</body>
+</html>

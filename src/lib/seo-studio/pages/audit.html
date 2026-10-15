@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Audit On-page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: danh sách trang của website; bấm Audit mở báo cáo chi tiết ở ngăn bên phải (toàn màn hình trên điện thoại) */
+:root{
+  --bg:#f2f4f3; --surface:#ffffff; --sunk:#f7f9f8; --ink:#17221f; --muted:#5b6965; --line:#dce3e0;
+  --accent:#0d6957; --accent-ink:#ffffff; --accent-soft:#e0efea;
+  --ok:#2c7a4b; --ok-soft:#e3f2e8; --bad:#b9441a; --bad-soft:#fbe9e1; --warn:#9a6a12; --warn-soft:#f8efd9; --info:#3f6fa8; --info-soft:#e4edf8;
+  --code:#f4f6f5; --shade:rgba(15,25,22,.35);
+  --f-body:"Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+  --f-code:ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r:10px; color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1412; --surface:#151d1a; --sunk:#111816; --ink:#e4ebe8; --muted:#94a39e; --line:#25302c;
+  --accent:#4dbea6; --accent-ink:#06201a; --accent-soft:#163029;
+  --ok:#6fc690; --ok-soft:#16301f; --bad:#f0905f; --bad-soft:#3a2219; --warn:#e2b75a; --warn-soft:#352a14; --info:#8db5e8; --info-soft:#1a2738;
+  --code:#0b100f; --shade:rgba(0,0,0,.55); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1412; --surface:#151d1a; --sunk:#111816; --ink:#e4ebe8; --muted:#94a39e; --line:#25302c;
+  --accent:#4dbea6; --accent-ink:#06201a; --accent-soft:#163029;
+  --ok:#6fc690; --ok-soft:#16301f; --bad:#f0905f; --bad-soft:#3a2219; --warn:#e2b75a; --warn-soft:#352a14; --info:#8db5e8; --info-soft:#1a2738;
+  --code:#0b100f; --shade:rgba(0,0,0,.55); color-scheme:dark}
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+body.lock{overflow:hidden}
+[hidden]{display:none!important}
+.wrap{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.nav{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:-4px}
+.nav .tab{padding:8px 12px;color:var(--muted);text-decoration:none;font-weight:600;font-size:13px;border-bottom:2px solid transparent;margin-bottom:-1px}
+.nav .tab:hover{color:var(--ink)}
+.nav .tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-size:24px;font-weight:700;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:16px;margin:0}
+h3{font-size:14px;margin:0}
+.sub{color:var(--muted);margin:2px 0 0;max-width:72ch}
+.mode{font-size:12px;font-weight:600;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);display:inline-flex;gap:6px;align-items:center}
+.mode i{width:8px;height:8px;border-radius:50%;background:var(--warn)}
+.mode.live i{background:var(--ok)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.pad{padding:16px}
+.label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+input[type=text],input[type=search],select{font:inherit;color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+input:focus,select:focus,button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px;vertical-align:middle}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.btn{font:inherit;font-weight:600;border-radius:8px;padding:8px 14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn.sm{padding:5px 10px;font-size:13px}
+.status{font-size:13px;color:var(--accent);font-weight:500}
+.status.bad{color:var(--bad)}
+.progress{height:4px;background:var(--line);border-radius:2px;overflow:hidden}
+.progress i{display:block;height:100%;background:var(--accent);width:30%;animation:slide 1.2s ease-in-out infinite}
+.progress.det i{animation:none;transition:width .3s}
+@keyframes slide{0%{margin-left:-30%}100%{margin-left:100%}}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font:inherit;font-size:13px;font-weight:500;padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
+.chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);font-weight:600}
+.lbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--sunk)}
+.lbar input[type=search]{max-width:320px}
+.tablebox{overflow:auto;max-height:680px}
+table{border-collapse:collapse;width:100%;min-width:760px}
+th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{position:sticky;top:0;background:var(--surface);font-size:12px;font-weight:600;color:var(--muted);z-index:1;white-space:nowrap}
+td.stt{color:var(--muted);width:56px;font-variant-numeric:tabular-nums}
+td.u{word-break:break-all;min-width:280px}
+td.u a{color:var(--ink);text-decoration:none}
+td.u a:hover{color:var(--accent);text-decoration:underline}
+tr:hover td{background:var(--sunk)}
+tr.home td{background:var(--accent-soft)}
+.tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:4px;background:var(--accent);color:var(--accent-ink);margin-right:8px;vertical-align:1px}
+.type{font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--sunk);border:1px solid var(--line);white-space:nowrap}
+.score{display:inline-flex;justify-content:center;min-width:44px;font-weight:700;font-variant-numeric:tabular-nums;padding:3px 8px;border-radius:6px}
+.s-good{background:var(--ok-soft);color:var(--ok)} .s-mid{background:var(--warn-soft);color:var(--warn)} .s-bad{background:var(--bad-soft);color:var(--bad)}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.err{background:var(--bad-soft);color:var(--bad);border-radius:8px;padding:10px 12px;font-size:13px;white-space:pre-wrap}
+
+/* ngăn báo cáo */
+.shade{position:fixed;inset:0;background:var(--shade);z-index:20}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(820px,100%);background:var(--bg);z-index:21;display:flex;flex-direction:column;
+  border-left:1px solid var(--line);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-right:env(safe-area-inset-right,0px)}
+.dhead{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--surface)}
+.dhead .u{font-weight:600;word-break:break-all}
+.dbody{overflow:auto;padding:18px;display:flex;flex-direction:column;gap:16px;flex:1}
+.summary{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.ring{flex:none}
+.counts{display:flex;gap:8px;flex-wrap:wrap}
+.cnt{font-size:13px;font-weight:600;padding:4px 10px;border-radius:999px}
+.cnt.fail{background:var(--bad-soft);color:var(--bad)} .cnt.warn{background:var(--warn-soft);color:var(--warn)} .cnt.pass{background:var(--ok-soft);color:var(--ok)}
+.group h3{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}
+.check{display:grid;grid-template-columns:92px minmax(0,1fr);gap:4px 12px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.check:last-child{border-bottom:0}
+.st{font-size:11px;font-weight:700;padding:3px 0;border-radius:4px;text-align:center;height:max-content;text-transform:uppercase;letter-spacing:.04em}
+.st.fail{background:var(--bad-soft);color:var(--bad)} .st.warn{background:var(--warn-soft);color:var(--warn)} .st.pass{background:var(--ok-soft);color:var(--ok)} .st.info{background:var(--info-soft);color:var(--info)}
+.check .lb{font-weight:600}
+.check .val{color:var(--muted);font-size:13px;white-space:pre-wrap;word-break:break-word}
+.check .fix{grid-column:2;font-size:13px;background:var(--sunk);border-left:3px solid var(--accent);padding:6px 10px;border-radius:0 6px 6px 0}
+.check .fix b{color:var(--accent)}
+pre.code{margin:0;background:var(--code);border:1px solid var(--line);border-radius:8px;padding:12px;font-family:var(--f-code);font-size:12px;line-height:1.55;overflow:auto;max-height:340px;white-space:pre}
+.ai-list{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.opt{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.opt .n{font-size:12px;color:var(--muted);white-space:nowrap}
+.opts{display:flex;flex-direction:column;gap:6px}
+.kwrow{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+.kwrow .field{flex:1 1 240px}
+.demo-flag{white-space:nowrap;font-size:11px;font-weight:600;color:var(--warn);background:var(--warn-soft);padding:2px 8px;border-radius:999px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;font-size:13px;font-weight:500;z-index:40;max-width:calc(100% - 32px)}
+@media (max-width:600px){.check{grid-template-columns:1fr}.check .fix{grid-column:1}.st{width:92px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav" aria-label="Công cụ">
+    <span style="font-weight:700;font-size:14px;padding:8px 14px 8px 0;margin-right:6px;border-right:1px solid var(--line);color:var(--ink);white-space:nowrap;align-self:center">Mr.Vũ SEO Studio</span>
+    <a class="tab" href="./">Tra cứu Volume</a>
+    <a class="tab" href="rank.html">Rank Tracker</a>
+    <a class="tab on" href="audit.html" aria-current="page">Audit On-page</a>
+    <a class="tab" href="autopost.html">Autopost</a>
+    <a class="tab" href="geo.html">AI Overview (GEO)</a>
+    <a class="tab" href="backlinks.html">Backlink</a>
+    <a class="tab" href="gsc.html">Search Console &amp; GA4</a>
+  </nav>
+  <header>
+    <div>
+      <h1>Audit On-page</h1>
+      <p class="sub">Quét toàn bộ trang của website, phân loại trang, rồi kiểm tra từng URL theo checklist SEO kèm cách sửa, schema mẫu và gợi ý tối ưu bằng AI.</p>
+    </div>
+    <span class="mode" id="mode"><i></i><span id="modeText">Đang kiểm tra kết nối…</span></span>
+  </header>
+
+  <section class="panel pad" style="display:flex;flex-direction:column;gap:12px">
+    <div class="row">
+      <div class="field" style="flex:1 1 320px">
+        <label class="label" for="siteUrl">Website cần quét</label>
+        <input id="siteUrl" type="text" placeholder="ví dụ: mrvu.vn" autocomplete="off">
+      </div>
+      <div class="field" style="flex:0 1 170px">
+        <label class="label" for="maxPages">Tối đa</label>
+        <select id="maxPages"><option value="500">500 trang</option><option value="1000" selected>1.000 trang</option><option value="3000">3.000 trang</option></select>
+      </div>
+      <button class="btn primary" id="crawlBtn">Quét website &amp; phân loại</button>
+    </div>
+    <div class="progress" id="crawlProg" hidden><i></i></div>
+    <div class="status" id="crawlStatus" role="status"></div>
+    <div class="row" id="savedRow" hidden>
+      <div class="field" style="flex:1 1 320px">
+        <label class="label" for="savedSite">Website đã quét</label>
+        <select id="savedSite"></select>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="listPanel">
+    <div class="pad" style="display:flex;flex-direction:column;gap:12px;border-bottom:1px solid var(--line)">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center">
+        <h2 id="listTitle">Danh sách trang</h2>
+        <span class="small muted" id="listMeta"></span>
+      </div>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="lbar">
+      <input type="search" id="q" placeholder="Tìm URL…" aria-label="Tìm URL">
+      <div class="row" style="gap:8px;align-items:center">
+        <span class="small muted" id="bulkInfo"></span>
+        <button class="btn sm" id="bulkBtn">Audit các trang đang lọc chưa audit</button>
+      </div>
+    </div>
+    <div class="progress det" id="bulkProg" hidden><i style="width:0"></i></div>
+    <div class="tablebox">
+      <table>
+        <thead><tr><th>STT</th><th>Đường dẫn URL</th><th>Phân loại</th><th>Điểm SEO</th><th>Thao tác</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<div class="shade" id="shade" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Báo cáo audit">
+  <div class="dhead">
+    <div style="min-width:0">
+      <div class="label" id="dType"></div>
+      <div class="u" id="dUrl"></div>
+      <div class="small muted" id="dWhen"></div>
+    </div>
+    <div class="row" style="gap:6px;flex-wrap:nowrap">
+      <button class="btn sm" id="copyReport">Copy báo cáo</button>
+      <button class="btn sm" id="closeBtn" aria-label="Đóng báo cáo">Đóng</button>
+    </div>
+  </div>
+  <div class="dbody" id="dBody"></div>
+</aside>
+<textarea id="clip" aria-hidden="true" tabindex="-1" style="position:fixed;left:-9999px;top:0;width:1px;height:1px"></textarea>
+<div class="toast" id="toast" hidden></div>
+
+<script src="costguard.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const TYPE_VI={home:'Trang chủ',category:'Danh mục',product:'Sản phẩm',post:'Bài viết',other:'Khác'};
+const ST_VI={fail:'Lỗi',warn:'Cảnh báo',pass:'Đạt',info:'Thông tin'};
+let live=false, aiOn=false, site=null, pages=[], filter='all', report=null, onlyIssues=true, busy=false;
+
+function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,3000)}
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function fmtTime(iso){if(!iso)return '';const d=new Date(iso),p=n=>String(n).padStart(2,'0');return `${p(d.getHours())}:${p(d.getMinutes())} ${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`}
+function scls(s){return s>=80?'s-good':s>=50?'s-mid':'s-bad'}
+function copy(text,msg){const ok=()=>toast(msg||'Đã copy');const fb=()=>{const c=$('#clip');c.value=text;c.select();try{document.execCommand('copy');ok()}catch(e){toast('Trình duyệt chặn copy')}};
+  navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(text).then(ok,fb):fb()}
+async function http(path,opts){const r=await fetch(path,Object.assign({headers:{'Content-Type':'application/json'}},opts||{}));
+  const j=await r.json().catch(()=>({error:'Phản hồi không hợp lệ từ máy chủ'}));if(!r.ok||j.error)throw new Error(j.error||('Lỗi '+r.status));return j}
+
+/* ============ Chế độ mẫu (bản xem trước, không có máy chủ) ============ */
+const DEMO={domain:'mrvu.vn'};
+function h32(s){let h=2166136261;for(const c of s){h^=c.codePointAt(0);h=Math.imul(h,16777619)}return h>>>0}
+function demoPages(){
+  const B='https://mrvu.vn/';const list=[[B,'home'],[B+'quat-tran/','category'],[B+'quat-tran-den/','category'],[B+'tin-tuc/','category']];
+  ['quat-tran-hien-dai','quat-tran-co-dien','quat-tran-doc-la','quat-tran-dien-co-thong-nhat','quat-tran-kaiyo-5-canh','quat-tran-mr-vu-mv-01','quat-tran-den-led-phong-khach','quat-tran-go-tu-nhien','quat-tran-tre-em','quat-tran-cong-nghiep']
+    .forEach(s=>list.push([B+'san-pham/'+s+'.html','product']));
+  ['cach-chon-quat-tran-cho-phong-khach','lap-dat-quat-tran-dung-ky-thuat','quat-tran-co-ton-dien-khong','so-sanh-quat-tran-dc-va-ac','ve-sinh-quat-tran-tai-nha','quat-tran-den-co-nen-mua']
+    .forEach(s=>list.push([B+'tin-tuc/'+s+'.html','post']));
+  ['lien-he','gioi-thieu','chinh-sach-bao-hanh','huong-dan-mua-hang'].forEach(s=>list.push([B+s+'.html','other']));
+  return list.map(([url,type],i)=>({id:i+1,url,type,source:'sitemap',score:null,audited_at:null}));
+}
+function demoReport(p,keyword){
+  const r=n=>(h32(p.url+keyword+n)%100)/100;const kw=keyword||'';
+  const C=(group,label,status,value,fix)=>({group,label,status,value,fix});
+  const name=p.url.split('/').filter(Boolean).pop().replace(/\.html$/,'').replace(/-/g,' ');
+  const title=p.type==='home'?'Quạt trần MrVu - Quạt trần đèn chính hãng':name.charAt(0).toUpperCase()+name.slice(1);
+  const checks=[
+    C('Kỹ thuật','Mã phản hồi HTTP','pass','200',''),
+    C('Kỹ thuật','HTTPS','pass','Có',''),
+    C('Kỹ thuật','Cho phép Google index',r(1)<.08?'fail':'pass',r(1)<.08?'noindex, follow':'Không chặn','Trang đang có noindex nên sẽ không xuất hiện trên Google. Gỡ noindex trong thẻ meta robots / plugin SEO nếu trang này cần lên top.'),
+    C('Kỹ thuật','Thẻ canonical',r(2)<.3?'warn':'pass',r(2)<.3?'Không có':p.url,`Thêm <link rel="canonical" href="${p.url}"> vào <head> để tránh trùng lặp nội dung do tham số URL.`),
+    C('Kỹ thuật','Thẻ viewport (hiển thị di động)','pass','width=device-width, initial-scale=1',''),
+    C('Kỹ thuật','Thời gian phản hồi máy chủ',r(3)<.4?'warn':'pass',(0.3+r(3)*1.6).toFixed(2)+' giây','Máy chủ phản hồi chậm. Bật cache trang (page cache), dùng CDN, nâng cấp hosting hoặc tối ưu truy vấn cơ sở dữ liệu.'),
+    C('Kỹ thuật','Cấu trúc URL','pass','Gọn, dễ đọc',''),
+    C('Tiêu đề & heading','Độ dài title',title.length<30?'warn':'pass',title.length+' ký tự: '+title,'Title quá ngắn, bỏ phí chỗ hiển thị. Viết 50–60 ký tự gồm từ khóa chính + lợi ích/thương hiệu.'),
+    C('Tiêu đề & heading','Meta description',r(4)<.45?'fail':'pass',r(4)<.45?'Không có':'142 ký tự','Viết meta description 120–160 ký tự: tóm tắt trang, chứa từ khóa, có lời kêu gọi (ví dụ: Xem giá, Gọi ngay).'),
+    C('Tiêu đề & heading','Thẻ H1',r(5)<.35?'warn':'pass',r(5)<.35?'2 thẻ H1: '+title+' | Hotline 0909 xxx xxx':title,'Chỉ giữ 1 H1. Các H1 còn lại (thường do logo, tiêu đề widget) đổi thành H2 hoặc thẻ div.'),
+    C('Tiêu đề & heading','Cấu trúc heading',r(6)<.5?'warn':'pass',r(6)<.5?'9 heading, 2 H2; nhảy cấp: H2→H4':'12 heading, 4 H2','Heading cần theo thứ tự H1 → H2 → H3, không nhảy cấp, không để rỗng.'),
+    C('Nội dung & từ khóa','Độ dài nội dung',p.type==='product'&&r(7)<.6?'fail':'pass',(p.type==='post'?1240:p.type==='product'?Math.round(90+r(7)*400):420)+' tiếng','Nội dung mỏng khó cạnh tranh. Bổ sung thông số, ưu nhược điểm, hướng dẫn, câu hỏi thường gặp…'),
+  ];
+  if(kw){checks.push(C('Nội dung & từ khóa','Từ khóa trong title',title.toLowerCase().includes(kw)?'pass':'fail',title.toLowerCase().includes(kw)?'Có':'Không',`Đưa "${kw}" vào title, càng gần đầu càng tốt.`),
+    C('Nội dung & từ khóa','Mật độ từ khóa','pass','7 lần, 1.20%',''))}
+  else checks.push(C('Nội dung & từ khóa','Từ khóa chính','info','Chưa nhập','Nhập từ khóa chính của trang rồi audit lại để kiểm tra title, H1, URL, mật độ từ khóa.'));
+  checks.push(
+    C('Hình ảnh','Ảnh thiếu alt',r(8)<.6?'fail':'pass',r(8)<.6?'6/9 ảnh: qt-01.jpg, qt-02.jpg, banner.png':'0/9 ảnh','Thêm thuộc tính alt mô tả nội dung ảnh (có từ khóa khi phù hợp).'),
+    C('Hình ảnh','Định dạng ảnh hiện đại','warn','0/9 ảnh WebP/AVIF','Chuyển ảnh JPG/PNG sang WebP để nhẹ hơn 25–35%.'),
+    C('Liên kết','Liên kết nội bộ','pass','24 đường dẫn khác nhau',''),
+    C('Liên kết','Liên kết hỏng',r(9)<.3?'fail':'pass',r(9)<.3?'1 hỏng / đã kiểm 30\n404 https://mrvu.vn/khuyen-mai-tet.html':'0 hỏng / đã kiểm 30','Sửa hoặc gỡ các liên kết hỏng. Nếu trang đích đã đổi địa chỉ, đặt chuyển hướng 301 sang trang mới.'),
+    C('Dữ liệu cấu trúc','Schema phù hợp loại trang','warn','Chưa có schema. Thiếu: '+({home:'Organization, WebSite',product:'Product, BreadcrumbList',post:'Article, BreadcrumbList'}[p.type]||'BreadcrumbList'),'Dán đoạn Schema mẫu bên dưới vào trang (trong <head> hoặc qua plugin SEO).'),
+    C('Chia sẻ mạng xã hội','Thẻ Open Graph (Facebook, Zalo)',r(10)<.5?'warn':'pass',r(10)<.5?'Thiếu og:image':'Đủ','Thêm og:title, og:description, og:image để link chia sẻ hiện đúng ảnh và tiêu đề.'));
+  const W={fail:8,warn:2};let score=100;checks.forEach(c=>score-=W[c.status]||0);
+  const counts={fail:0,warn:0,pass:0};checks.forEach(c=>counts[c.status]!=null&&counts[c.status]++);
+  const schemaObj={'@context':'https://schema.org','@graph':[{'@type':'BreadcrumbList','itemListElement':[{'@type':'ListItem',position:1,name:'Trang chủ',item:'https://mrvu.vn/'},{'@type':'ListItem',position:2,name:title,item:p.url}]}]};
+  if(p.type==='product')schemaObj['@graph'].push({'@type':'Product',name:title,image:'LINK_ẢNH_SẢN_PHẨM',brand:{'@type':'Brand',name:'THƯƠNG_HIỆU'},offers:{'@type':'Offer',url:p.url,priceCurrency:'VND',price:'GIÁ_BÁN',availability:'https://schema.org/InStock'}});
+  return {url:p.url,final_url:p.url,page_type:p.type,keyword:kw,score:Math.max(0,score),checks,counts,
+    schema:'<script type="application/ld+json">\n'+JSON.stringify(schemaObj,null,2)+'\n<\/script>',audited_at:new Date().toISOString(),page_id:p.id,ai:null,demo:true,extract:{title}};
+}
+function demoAI(rep){const t=rep.extract.title;return{main_keyword:rep.keyword||t.toLowerCase(),secondary_keywords:['giá '+t.toLowerCase(),t.toLowerCase()+' chính hãng','mua '+t.toLowerCase()+' ở đâu','lắp đặt quạt trần'],
+  titles:[t+' Chính Hãng, Giá Tốt | MrVu',t+' - Bảo Hành 5 Năm, Lắp Miễn Phí','Mua '+t+' Giá Rẻ, Giao Nhanh Toàn Quốc'],
+  meta_descriptions:[t+' chính hãng tại MrVu: động cơ bền, chạy êm, tiết kiệm điện. Bảo hành 5 năm, giao lắp miễn phí. Gọi ngay để nhận báo giá!','Xem giá và mẫu '+t.toLowerCase()+' mới nhất. Tư vấn chọn sải cánh theo diện tích phòng, lắp đặt tận nơi, đổi trả 7 ngày.'],
+  h1:t+' chính hãng',outline:['H2: Đặc điểm nổi bật','H2: Thông số kỹ thuật','H2: Phù hợp với không gian nào?','H3: Phòng khách','H3: Phòng ngủ','H2: Bảng giá & chính sách bảo hành','H2: Câu hỏi thường gặp'],
+  content_gaps:['Bảng thông số (sải cánh, công suất, số tốc độ, độ ồn)','Hướng dẫn chọn sải cánh theo diện tích phòng','Ảnh thực tế sau khi lắp đặt'],
+  faq:[{q:t+' có tốn điện không?',a:'Loại động cơ DC tiêu thụ khoảng 30–35W, thấp hơn nhiều so với điều hòa.'},{q:'Trần nhà thấp có lắp được không?',a:'Được, nên chọn loại ốp trần sát, khoảng cách cánh tới sàn tối thiểu 2,3 m.'}],
+  priority_fixes:['Viết meta description có từ khóa chính','Thêm alt cho toàn bộ ảnh sản phẩm','Bổ sung schema Product kèm giá','Mở rộng nội dung lên trên 300 tiếng'],demo:true}}
+function dl(){try{return JSON.parse(localStorage.getItem('kho-audit-demo-v1'))||null}catch(e){return null}}
+function ds(v){try{localStorage.setItem('kho-audit-demo-v1',JSON.stringify(v))}catch(e){}}
+async function mock(path,opts){
+  const b=opts&&opts.body?JSON.parse(opts.body):{};let st=dl()||{pages:demoPages(),reports:{}};let out;
+  await new Promise(r=>setTimeout(r,path.includes('run')?600:path.includes('ai')?900:120));
+  if(path==='api/audit/sites')out={items:[{id:1,domain:DEMO.domain,count:st.pages.length,crawled_at:new Date().toISOString(),method:'sitemap'}]};
+  else if(path.startsWith('api/audit/pages'))out={site:{id:1,domain:DEMO.domain,count:st.pages.length,crawled_at:new Date().toISOString(),method:'sitemap'},items:st.pages};
+  else if(path==='api/audit/crawl'){out={job_id:'demo'}}
+  else if(path.startsWith('api/audit/job/'))out={status:'done',site_id:1,found:st.pages.length,message:`Bản xem trước chỉ có dữ liệu mẫu của ${DEMO.domain} (${st.pages.length} trang). Bản cài trên máy sẽ quét website thật.`};
+  else if(path==='api/audit/run'){const p=st.pages.find(x=>x.id===b.page_id);const rep=demoReport(p,(b.keyword||'').toLowerCase().trim());p.score=rep.score;p.audited_at=rep.audited_at;st.reports[p.id]=rep;out=rep}
+  else if(path.startsWith('api/audit/report/')){out=st.reports[+path.split('/').pop()];if(!out)throw new Error('Trang này chưa được audit')}
+  else if(path==='api/audit/ai'){const rep=st.reports[b.page_id];out=demoAI(rep);rep.ai=out}
+  ds(st);return JSON.parse(JSON.stringify(out));
+}
+const api=(p,o)=>live?http(p,o):mock(p,o);
+
+/* ============ Quét website ============ */
+$('#crawlBtn').addEventListener('click',async()=>{
+  const url=$('#siteUrl').value.trim();const s=$('#crawlStatus');
+  if(!url){s.className='status bad';s.textContent='Nhập địa chỉ website, ví dụ: mrvu.vn';return}
+  $('#crawlBtn').disabled=true;$('#crawlProg').hidden=false;s.className='status';s.textContent='Đang mở website…';
+  try{
+    const {job_id}=await api('api/audit/crawl',{method:'POST',body:JSON.stringify({url,max_pages:+$('#maxPages').value})});
+    let j;do{await new Promise(r=>setTimeout(r,1000));j=await api('api/audit/job/'+job_id);
+      s.textContent=j.message+(j.status==='running'&&j.found?` (${j.found} trang)`:'')}while(j.status==='running');
+    if(j.status==='error')throw new Error(j.message);
+    s.textContent=j.message+' Bấm "Audit" ở từng trang để phân tích.';
+    await loadSites(j.site_id);
+  }catch(e){s.className='status bad';s.textContent=e.message}
+  finally{$('#crawlBtn').disabled=false;$('#crawlProg').hidden=true}
+});
+async function loadSites(pick){
+  const items=(await api('api/audit/sites')).items;$('#savedRow').hidden=!items.length;
+  $('#savedSite').innerHTML=items.map(x=>`<option value="${x.id}">${esc(x.domain)} · ${x.count} trang · quét ${fmtTime(x.crawled_at)}</option>`).join('');
+  if(pick)$('#savedSite').value=String(pick);
+  if(items.length)await loadPages(+$('#savedSite').value);else render();
+}
+$('#savedSite').addEventListener('change',()=>loadPages(+$('#savedSite').value));
+async function loadPages(id){const r=await api('api/audit/pages?site_id='+id);site=r.site;pages=r.items;render()}
+
+/* ============ Danh sách ============ */
+function visible(){const q=$('#q').value.trim().toLowerCase();return pages.filter(p=>(filter==='all'||p.type===filter)&&(!q||p.url.toLowerCase().includes(q)))}
+function render(){
+  const c={all:pages.length,home:0,category:0,product:0,post:0,other:0};pages.forEach(p=>c[p.type]++);
+  $('#chips').innerHTML=[['all','Tất cả'],['home','Trang chủ'],['category','Danh mục'],['product','Sản phẩm'],['post','Bài viết'],['other','Khác']]
+    .map(([k,l])=>`<button class="chip ${filter===k?'on':''}" data-f="${k}">${l} (${c[k]})</button>`).join('');
+  $('#listTitle').innerHTML=site?`Trang của ${esc(site.domain)}${live?'':' <span class="demo-flag">dữ liệu mẫu</span>'}`:'Danh sách trang';
+  const done=pages.filter(p=>p.score!=null);
+  $('#listMeta').textContent=site?`${done.length}/${pages.length} trang đã audit`+(done.length?` · điểm TB ${Math.round(done.reduce((a,b)=>a+b.score,0)/done.length)}`:''):'';
+  const v=visible();const todo=v.filter(p=>p.score==null).length;
+  $('#bulkBtn').disabled=busy||!todo;$('#bulkInfo').textContent=todo?`${Math.min(todo,50)} trang sẽ được audit`:'';
+  $('#tbody').innerHTML=v.length?v.map((p,i)=>`<tr class="${p.type==='home'?'home':''}">
+    <td class="stt">${i+1}</td>
+    <td class="u">${p.type==='home'?'<span class="tag">TRANG CHỦ</span>':''}<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.url)}</a></td>
+    <td><span class="type">${TYPE_VI[p.type]}</span></td>
+    <td>${p.score!=null?`<span class="score ${scls(p.score)}">${p.score}</span>`:'<span class="small muted">Chưa audit</span>'}</td>
+    <td>${p.score!=null?`<button class="btn sm" data-view="${p.id}">Xem báo cáo</button>`:`<button class="btn sm primary" data-run="${p.id}">Audit</button>`}</td></tr>`).join('')
+    :`<tr><td colspan="5" class="empty">${pages.length?'Không có trang nào khớp bộ lọc.':'Nhập địa chỉ website rồi bấm <b>Quét website &amp; phân loại</b>. Danh sách trang sẽ hiện ở đây.'}</td></tr>`;
+}
+$('#chips').addEventListener('click',e=>{const b=e.target.closest('[data-f]');if(b){filter=b.dataset.f;render()}});
+$('#q').addEventListener('input',render);
+$('#tbody').addEventListener('click',e=>{
+  const r=e.target.closest('[data-run]');if(r){runAudit(+r.dataset.run,'',r);return}
+  const v=e.target.closest('[data-view]');if(v)viewReport(+v.dataset.view);
+});
+async function runAudit(id,keyword,btn){
+  if(btn){btn.disabled=true;btn.textContent='Đang audit…'}
+  try{const rep=await api('api/audit/run',{method:'POST',body:JSON.stringify({page_id:id,keyword})});
+    const p=pages.find(x=>x.id===id);if(p){p.score=rep.score;p.audited_at=rep.audited_at;p.type=rep.page_type}
+    render();openDrawer(rep);
+  }catch(e){toast(e.message);if(btn){btn.disabled=false;btn.textContent='Audit'}}
+}
+async function viewReport(id){try{openDrawer(await api('api/audit/report/'+id))}catch(e){toast(e.message)}}
+$('#bulkBtn').addEventListener('click',async()=>{
+  const todo=visible().filter(p=>p.score==null).slice(0,50);if(!todo.length)return;
+  busy=true;render();$('#bulkProg').hidden=false;let ok=0,fail=0;
+  for(const [i,p] of todo.entries()){
+    $('#bulkInfo').textContent=`Đang audit ${i+1}/${todo.length}…`;
+    try{const rep=await api('api/audit/run',{method:'POST',body:JSON.stringify({page_id:p.id,keyword:'',check_links:false})});p.score=rep.score;p.audited_at=rep.audited_at;p.type=rep.page_type;ok++}catch(e){fail++}
+    $('#bulkProg i').style.width=((i+1)/todo.length*100)+'%';render();$('#bulkInfo').textContent=`Đang audit ${i+1}/${todo.length}…`;
+  }
+  busy=false;$('#bulkProg').hidden=true;render();toast(`Đã audit ${ok} trang`+(fail?`, ${fail} trang lỗi tải`:'')+'. Audit hàng loạt bỏ qua bước kiểm tra link hỏng cho nhanh.');
+});
+
+/* ============ Báo cáo ============ */
+function ring(score){const r=34,c=2*Math.PI*r,col=score>=80?'var(--ok)':score>=50?'var(--warn)':'var(--bad)';
+  return `<svg class="ring" width="86" height="86" viewBox="0 0 86 86" role="img" aria-label="Điểm ${score}/100"><circle cx="43" cy="43" r="${r}" fill="none" stroke="var(--line)" stroke-width="8"/>
+  <circle cx="43" cy="43" r="${r}" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${c*score/100} ${c}" transform="rotate(-90 43 43)"/>
+  <text x="43" y="49" text-anchor="middle" font-size="22" font-weight="700" fill="var(--ink)">${score}</text></svg>`}
+function openDrawer(rep){report=rep;$('#shade').hidden=false;$('#drawer').hidden=false;document.body.classList.add('lock');drawReport();$('#dBody').scrollTop=0;$('#closeBtn').focus()}
+function closeDrawer(){$('#shade').hidden=true;$('#drawer').hidden=true;document.body.classList.remove('lock')}
+$('#closeBtn').addEventListener('click',closeDrawer);$('#shade').addEventListener('click',closeDrawer);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#drawer').hidden)closeDrawer()});
+function drawReport(){
+  const r=report;$('#dType').textContent=TYPE_VI[r.page_type]||'';$('#dUrl').textContent=r.final_url||r.url;
+  $('#dWhen').textContent='Audit lúc '+fmtTime(r.audited_at)+(r.keyword?` · từ khóa: ${r.keyword}`:'');
+  const groups=[];r.checks.forEach(c=>{let g=groups.find(x=>x.name===c.group);if(!g){g={name:c.group,items:[]};groups.push(g)}g.items.push(c)});
+  const order={fail:0,warn:1,info:2,pass:3};
+  let html=`<div class="panel pad summary">${ring(r.score)}<div style="display:flex;flex-direction:column;gap:8px;min-width:0;flex:1">
+    <div class="counts"><span class="cnt fail">${r.counts.fail} lỗi</span><span class="cnt warn">${r.counts.warn} cảnh báo</span><span class="cnt pass">${r.counts.pass} đạt</span></div>
+    <label class="small" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="onlyIssues" ${onlyIssues?'checked':''}> Chỉ hiện mục cần sửa</label></div></div>
+  <div class="panel pad kwrow"><div class="field"><label class="label" for="kw">Từ khóa chính của trang</label><input id="kw" type="text" value="${esc(r.keyword||'')}" placeholder="ví dụ: quạt trần hiện đại"></div>
+    <button class="btn primary" id="reaudit">Audit lại</button></div>`;
+  groups.forEach(g=>{const items=g.items.filter(c=>!onlyIssues||c.status==='fail'||c.status==='warn').sort((a,b)=>order[a.status]-order[b.status]);
+    if(!items.length)return;const bad=g.items.filter(c=>c.status==='fail').length,w=g.items.filter(c=>c.status==='warn').length;
+    html+=`<section class="panel group"><h3><span>${esc(g.name)}</span><span class="small muted">${bad?bad+' lỗi':''}${bad&&w?' · ':''}${w?w+' cảnh báo':''}${!bad&&!w?'Đạt hết':''}</span></h3>`+
+      items.map(c=>`<div class="check"><span class="st ${c.status}">${ST_VI[c.status]}</span><div style="min-width:0"><div class="lb">${esc(c.label)}</div><div class="val">${esc(c.value)}</div></div>
+      ${(c.status==='fail'||c.status==='warn'||c.status==='info')&&c.fix?`<div class="fix"><b>Cách sửa:</b> ${esc(c.fix)}</div>`:''}</div>`).join('')+'</section>'});
+  if(onlyIssues&&!r.counts.fail&&!r.counts.warn)html+='<div class="panel pad muted">Không có mục nào cần sửa. Bỏ tick "Chỉ hiện mục cần sửa" để xem toàn bộ.</div>';
+  html+=`<section class="panel pad" style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap"><h3>Schema mẫu cho ${esc((TYPE_VI[r.page_type]||'').toLowerCase())}</h3><button class="btn sm" id="copySchema">Copy schema</button></div>
+    <p class="small muted" style="margin:0">Thay các chỗ VIẾT_HOA bằng thông tin thật rồi dán vào &lt;head&gt; của trang (hoặc ô Schema/Custom code của plugin SEO). Kiểm tra lại bằng Rich Results Test của Google.</p>
+    <pre class="code">${esc(r.schema)}</pre></section>
+  <section class="panel pad" id="aiBox" style="display:flex;flex-direction:column;gap:12px"></section>`;
+  $('#dBody').innerHTML=html;drawAI();
+}
+$('#dBody').addEventListener('change',e=>{if(e.target.id==='onlyIssues'){onlyIssues=e.target.checked;const y=$('#dBody').scrollTop;drawReport();$('#dBody').scrollTop=y}});
+$('#dBody').addEventListener('click',async e=>{
+  const t=e.target;
+  if(t.id==='reaudit'){t.disabled=true;t.textContent='Đang audit…';await runAudit(report.page_id,$('#kw').value.trim());return}
+  if(t.id==='copySchema'){copy(report.schema,'Đã copy schema');return}
+  if(t.id==='aiBtn'){if(window.CostGuard){const g=await CostGuard.check('audit_ai',{});if(!g.ok)return}t.disabled=true;t.textContent='AI đang phân tích… (khoảng 20–40 giây)';
+    try{report.ai=await api('api/audit/ai',{method:'POST',body:JSON.stringify({page_id:report.page_id})});drawAI();window.CostGuard&&CostGuard.after()}
+    catch(err){toast(err.message);t.disabled=false;t.textContent='Gợi ý tối ưu bằng AI'}return}
+  const cp=t.closest('[data-copy]');if(cp){copy(cp.dataset.copy,'Đã copy');return}
+});
+function opts(list){return `<div class="opts">${list.map(s=>`<div class="opt"><span>${esc(s)}</span><span style="display:flex;gap:8px;align-items:center"><span class="n">${s.length} ký tự</span><button class="btn sm" data-copy="${esc(s)}">Copy</button></span></div>`).join('')}</div>`}
+function drawAI(){
+  const box=$('#aiBox');if(!box)return;const a=report.ai;
+  if(!a){box.innerHTML=`<h3>Gợi ý tối ưu bằng AI</h3>
+    <p class="small muted" style="margin:0">AI đọc nội dung trang và các lỗi ở trên, rồi đề xuất title, meta description, H1, dàn ý, nội dung còn thiếu và FAQ kèm schema.${aiOn||!live?'':' <b>Cần đặt ANTHROPIC_API_KEY trong biến môi trường để dùng.</b>'}</p>
+    <div><button class="btn primary" id="aiBtn" ${live&&!aiOn?'disabled':''}>Gợi ý tối ưu bằng AI</button></div>`;return}
+  const L=x=>(x||[]).length;
+  box.innerHTML=`<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><h3>Gợi ý tối ưu bằng AI</h3>${a.demo?'<span class="demo-flag">ví dụ mẫu</span>':''}</div>
+    ${a.main_keyword?`<div><div class="label">Từ khóa chính nên nhắm</div><div style="font-weight:600">${esc(a.main_keyword)}</div>${L(a.secondary_keywords)?`<div class="small muted">Từ khóa phụ: ${a.secondary_keywords.map(esc).join(', ')}</div>`:''}</div>`:''}
+    ${L(a.titles)?`<div><div class="label" style="margin-bottom:6px">Title đề xuất</div>${opts(a.titles)}</div>`:''}
+    ${L(a.meta_descriptions)?`<div><div class="label" style="margin-bottom:6px">Meta description đề xuất</div>${opts(a.meta_descriptions)}</div>`:''}
+    ${a.h1?`<div><div class="label" style="margin-bottom:6px">H1 đề xuất</div>${opts([a.h1])}</div>`:''}
+    ${L(a.priority_fixes)?`<div><div class="label">Nên làm trước</div><ol class="ai-list">${a.priority_fixes.map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div>`:''}
+    ${L(a.outline)?`<div><div class="label">Dàn ý đề xuất</div><ul class="ai-list">${a.outline.map(x=>`<li${/^H3/.test(x)?' style="margin-left:18px"':''}>${esc(x)}</li>`).join('')}</ul></div>`:''}
+    ${L(a.content_gaps)?`<div><div class="label">Nội dung còn thiếu</div><ul class="ai-list">${a.content_gaps.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
+    ${L(a.faq)?`<div><div class="label">Câu hỏi thường gặp (FAQ)</div><ul class="ai-list">${a.faq.map(f=>`<li><b>${esc(f.q)}</b><br>${esc(f.a)}</li>`).join('')}</ul></div>`:''}
+    ${a.faq_schema?`<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;justify-content:space-between;align-items:center"><div class="label">Schema FAQ</div><button class="btn sm" data-copy="${esc(a.faq_schema)}">Copy</button></div><pre class="code">${esc(a.faq_schema)}</pre></div>`:''}
+    <div><button class="btn sm" id="aiBtn">Tạo lại gợi ý</button></div>`;
+}
+$('#copyReport').addEventListener('click',()=>{
+  const r=report;if(!r)return;const lines=[`BÁO CÁO AUDIT SEO ON-PAGE`,`URL: ${r.final_url||r.url}`,`Loại trang: ${TYPE_VI[r.page_type]} · Điểm: ${r.score}/100 · ${fmtTime(r.audited_at)}`,r.keyword?`Từ khóa chính: ${r.keyword}`:'',''];
+  ['fail','warn'].forEach(s=>{const it=r.checks.filter(c=>c.status===s);if(!it.length)return;lines.push(s==='fail'?'== LỖI CẦN SỬA ==':'== CẢNH BÁO ==');
+    it.forEach((c,i)=>lines.push(`${i+1}. [${c.group}] ${c.label}: ${c.value}`,`   → ${c.fix}`));lines.push('')});
+  if(r.ai){lines.push('== GỢI Ý AI ==');if(r.ai.titles)lines.push('Title: '+r.ai.titles[0]);if(r.ai.meta_descriptions)lines.push('Meta: '+r.ai.meta_descriptions[0]);if(r.ai.h1)lines.push('H1: '+r.ai.h1);lines.push('')}
+  lines.push('== SCHEMA MẪU ==',r.schema);
+  copy(lines.filter((l,i)=>l!==''||lines[i-1]!=='').join('\n'),'Đã copy báo cáo — dán vào Zalo/Docs để gửi người sửa');
+});
+
+/* ============ Khởi động ============ */
+(async()=>{
+  try{const c=new AbortController();setTimeout(()=>c.abort(),20000);const j=await (await fetch('api/health',{signal:c.signal})).json();
+    if(j&&j.ok){live=true;aiOn=!!j.ai;$('#mode').className='mode live';$('#modeText').textContent=aiOn?'Sẵn sàng · đã bật AI':'Sẵn sàng · chưa bật AI'}}catch(e){}
+  if(!live){$('#modeText').textContent='Bản xem trước — dữ liệu mẫu';$('#siteUrl').value=DEMO.domain}
+  try{await loadSites();if(!live&&pages.length&&!pages.some(p=>p.score!=null)){
+      for(const id of [1,5,15]){const rep=await api('api/audit/run',{method:'POST',body:JSON.stringify({page_id:id,keyword:id===5?'quạt trần hiện đại':''})});const p=pages.find(x=>x.id===id);p.score=rep.score;p.audited_at=rep.audited_at}
+      render()}}catch(e){$('#crawlStatus').className='status bad';$('#crawlStatus').textContent=e.message}
+})();
+render();
+})();
+</script>
+</body>
+</html>

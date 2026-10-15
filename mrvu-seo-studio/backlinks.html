@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Backlink</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: thanh chọn website + nguồn dữ liệu; bốn thẻ Tổng quan / Backlink của bạn / Cơ hội từ đối thủ / Theo dõi liên hệ; chi tiết cơ hội mở ở ngăn phải */
+:root{
+  --bg:#f2f4f3; --surface:#ffffff; --sunk:#f7f9f8; --ink:#17221f; --muted:#5b6965; --line:#dce3e0;
+  --accent:#0d6957; --accent-ink:#ffffff; --accent-soft:#e0efea;
+  --ok:#2c7a4b; --ok-soft:#e3f2e8; --bad:#b9441a; --bad-soft:#fbe9e1; --warn:#9a6a12; --warn-soft:#f8efd9; --info:#3f6fa8; --info-soft:#e4edf8;
+  --line-chart:#3f7fc8; --area:rgba(63,127,200,.12); --code:#f4f6f5; --shade:rgba(15,25,22,.35);
+  --f-body:"Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+  --r:10px; color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1412; --surface:#151d1a; --sunk:#111816; --ink:#e4ebe8; --muted:#94a39e; --line:#25302c;
+  --accent:#4dbea6; --accent-ink:#06201a; --accent-soft:#163029;
+  --ok:#6fc690; --ok-soft:#16301f; --bad:#f0905f; --bad-soft:#3a2219; --warn:#e2b75a; --warn-soft:#352a14; --info:#8db5e8; --info-soft:#1a2738;
+  --line-chart:#6ea3e3; --area:rgba(110,163,227,.14); --code:#0b100f; --shade:rgba(0,0,0,.55); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1412; --surface:#151d1a; --sunk:#111816; --ink:#e4ebe8; --muted:#94a39e; --line:#25302c;
+  --accent:#4dbea6; --accent-ink:#06201a; --accent-soft:#163029;
+  --ok:#6fc690; --ok-soft:#16301f; --bad:#f0905f; --bad-soft:#3a2219; --warn:#e2b75a; --warn-soft:#352a14; --info:#8db5e8; --info-soft:#1a2738;
+  --line-chart:#6ea3e3; --area:rgba(110,163,227,.14); --code:#0b100f; --shade:rgba(0,0,0,.55); color-scheme:dark}
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+body.lock{overflow:hidden}
+[hidden]{display:none!important}
+.wrap{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.nav{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:-4px}
+.nav .tab{padding:8px 12px;color:var(--muted);text-decoration:none;font-weight:600;font-size:13px;border-bottom:2px solid transparent;margin-bottom:-1px}
+.nav .tab:hover{color:var(--ink)}
+.nav .tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-size:24px;font-weight:700;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:16px;margin:0} h3{font-size:14px;margin:0}
+.sub{color:var(--muted);margin:2px 0 0;max-width:72ch}
+.mode{font-size:12px;font-weight:600;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);display:inline-flex;gap:6px;align-items:center}
+.mode i{width:8px;height:8px;border-radius:50%;background:var(--warn)} .mode.live i{background:var(--ok)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.pad{padding:16px}
+.phead{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+.label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.hint{font-size:12px;color:var(--muted)}
+input[type=text],input[type=search],input[type=number],select,textarea{font:inherit;color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+textarea{resize:vertical;min-height:80px}
+input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px;vertical-align:middle}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.btn{font:inherit;font-weight:600;border-radius:8px;padding:8px 14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)} .btn.primary:hover{filter:brightness(1.07)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn.sm{padding:5px 10px;font-size:13px}
+.link{border:0;background:none;color:var(--accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:2px 4px;border-radius:4px}
+.sitebar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:end}
+@media (max-width:760px){.sitebar{grid-template-columns:1fr}}
+.comps{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{font:inherit;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
+.seg button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.seg .n{font-weight:500;opacity:.75;margin-left:4px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;background:var(--line);border-radius:var(--r);overflow:hidden;border:1px solid var(--line)}
+.tile{background:var(--surface);padding:14px 16px}
+.tile b{display:block;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
+.tile span{font-size:12px;color:var(--muted)}
+.tile .d{font-size:12px;font-weight:600;margin-left:6px}
+.up{color:var(--ok)} .down{color:var(--bad)}
+.two{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px}
+@media (max-width:900px){.two{grid-template-columns:1fr}}
+.chartbox{padding:8px 16px 16px;overflow-x:auto}
+.bars{display:flex;flex-direction:column;gap:8px;padding:14px 16px}
+.bar{display:grid;grid-template-columns:170px minmax(0,1fr) 36px;gap:10px;align-items:center;font-size:13px}
+.bar .t{height:8px;background:var(--sunk);border-radius:4px;overflow:hidden} .bar .t i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.bar b{text-align:right;font-variant-numeric:tabular-nums}
+.minilist{list-style:none;margin:0;padding:0}
+.minilist li{display:flex;justify-content:space-between;gap:10px;padding:8px 16px;border-top:1px solid var(--line);font-size:13px}
+.tbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--sunk)}
+.tbar select,.tbar input[type=search]{width:auto;min-width:150px}
+.tbar label.ck{display:inline-flex;gap:6px;align-items:center;font-size:13px;cursor:pointer}
+.tablebox{overflow:auto;max-height:640px}
+table{border-collapse:collapse;width:100%;min-width:820px}
+th,td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{position:sticky;top:0;background:var(--surface);font-size:12px;font-weight:600;color:var(--muted);z-index:1;white-space:nowrap}
+td.num{text-align:right;font-variant-numeric:tabular-nums} th.num{text-align:right}
+tr:hover td{background:var(--sunk)}
+td a{color:var(--ink);font-weight:600;text-decoration:none} td a:hover{color:var(--accent);text-decoration:underline}
+.sm-muted{display:block;font-size:12px;color:var(--muted);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.c-ok{background:var(--ok-soft);color:var(--ok)} .c-bad{background:var(--bad-soft);color:var(--bad)} .c-warn{background:var(--warn-soft);color:var(--warn)} .c-info{background:var(--info-soft);color:var(--info)} .c-mute{background:var(--sunk);color:var(--muted);border:1px solid var(--line)}
+.rank{display:inline-flex;justify-content:center;min-width:34px;font-weight:700;font-variant-numeric:tabular-nums;padding:2px 6px;border-radius:6px;background:var(--sunk);border:1px solid var(--line)}
+.rank.hi{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.empty{padding:36px 16px;text-align:center;color:var(--muted)}
+.err{background:var(--bad-soft);color:var(--bad);border-radius:8px;padding:10px 12px;font-size:13px}
+.note{background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--muted)} .note b{color:var(--ink)}
+.status{font-size:13px;color:var(--accent);font-weight:500}
+.demo-flag{white-space:nowrap;font-size:11px;font-weight:600;color:var(--warn);background:var(--warn-soft);padding:2px 8px;border-radius:999px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;font-size:13px;font-weight:500;z-index:40;max-width:calc(100% - 32px)}
+.shade{position:fixed;inset:0;background:var(--shade);z-index:20}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(760px,100%);background:var(--bg);z-index:21;display:flex;flex-direction:column;border-left:1px solid var(--line);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-right:env(safe-area-inset-right,0px)}
+.dhead{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--surface)}
+.dbody{overflow:auto;padding:18px;display:flex;flex-direction:column;gap:14px;flex:1}
+.ex{padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:13px;display:flex;flex-direction:column;gap:2px}
+.ex a{color:var(--ink);font-weight:600;word-break:break-all}
+pre.msg{margin:0;background:var(--code);border:1px solid var(--line);border-radius:8px;padding:12px;font-family:var(--f-body);font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav" aria-label="Công cụ">
+    <span style="font-weight:700;font-size:14px;padding:8px 14px 8px 0;margin-right:6px;border-right:1px solid var(--line);color:var(--ink);white-space:nowrap;align-self:center">Mr.Vũ SEO Studio</span>
+    <a class="tab" href="./">Tra cứu Volume</a>
+    <a class="tab" href="rank.html">Rank Tracker</a>
+    <a class="tab" href="audit.html">Audit On-page</a>
+    <a class="tab" href="autopost.html">Autopost</a>
+    <a class="tab" href="geo.html">AI Overview (GEO)</a>
+    <a class="tab on" href="backlinks.html" aria-current="page">Backlink</a>
+    <a class="tab" href="gsc.html">Search Console &amp; GA4</a>
+  </nav>
+  <header>
+    <div>
+      <h1>Backlink</h1>
+      <p class="sub">Theo dõi website nào đang trỏ link về bạn, link mới và link mất; tìm những nơi đang đặt link cho đối thủ mà chưa có bạn, rồi để AI soạn tin xin đặt link.</p>
+    </div>
+    <span class="mode" id="mode"><i></i><span id="modeText">Đang kiểm tra kết nối…</span></span>
+  </header>
+
+  <section class="panel pad" style="display:flex;flex-direction:column;gap:12px">
+    <div class="sitebar">
+      <div class="field"><label class="label" for="site">Website</label><select id="site"></select></div>
+      <div class="row"><button class="btn" id="editSite">Sửa đối thủ</button><button class="btn" id="newSite">+ Thêm website</button></div>
+    </div>
+    <div class="comps" id="comps"></div>
+    <form id="siteForm" hidden class="panel pad" style="display:flex;flex-direction:column;gap:10px;background:var(--sunk)" novalidate>
+      <div class="field"><label class="label" for="fDomain">Tên miền của bạn</label><input id="fDomain" type="text" placeholder="mrvu.vn"></div>
+      <div class="field"><label class="label" for="fComps">Website đối thủ (mỗi dòng một tên miền, tối đa 10)</label><textarea id="fComps" placeholder="quattrankaiyo.vn&#10;dienmaycholon.vn"></textarea>
+        <span class="hint">Mẹo: lấy các website hay đứng trên bạn ở tab Rank Tracker.</span></div>
+      <div class="err" id="fErr" hidden></div>
+      <div class="row"><button class="btn primary" type="submit">Lưu</button><button class="btn" type="button" id="fCancel">Hủy</button></div>
+    </form>
+    <div class="row" style="justify-content:space-between">
+      <div class="row">
+        <button class="btn primary" id="refresh">Cập nhật backlink (DataForSEO)</button>
+        <label class="btn" for="csv" style="cursor:pointer">Nhập file Search Console</label><input id="csv" type="file" accept=".csv,text/csv" hidden>
+      </div>
+      <span class="hint" id="lastAt"></span>
+    </div>
+    <div class="status" id="status" role="status"></div>
+    <div class="err" id="err" hidden></div>
+  </section>
+
+  <div class="seg" id="seg">
+    <button data-v="ov" class="on">Tổng quan</button>
+    <button data-v="mine">Backlink của bạn<span class="n" id="nMine"></span></button>
+    <button data-v="gap">Cơ hội từ đối thủ<span class="n" id="nGap"></span></button>
+    <button data-v="track">Theo dõi liên hệ<span class="n" id="nTrack"></span></button>
+  </div>
+
+  <section id="v-ov" style="display:flex;flex-direction:column;gap:16px"></section>
+
+  <section id="v-mine" hidden class="panel">
+    <div class="tbar">
+      <input type="search" id="mQ" placeholder="Tìm tên miền…" aria-label="Tìm tên miền">
+      <select id="mCat" aria-label="Loại nguồn"></select>
+      <label class="ck"><input type="checkbox" id="mNew"> Chỉ link mới</label>
+      <label class="ck"><input type="checkbox" id="mLost"> Xem link đã mất</label>
+      <span class="hint" id="mMeta" style="margin-left:auto"></span>
+    </div>
+    <div class="tablebox"><table><thead id="mHead"></thead><tbody id="mBody"></tbody></table></div>
+  </section>
+
+  <section id="v-gap" hidden class="panel">
+    <div class="phead"><div><h2>Nơi đặt link cho đối thủ nhưng chưa có bạn</h2><span class="hint" id="gMeta"></span></div>
+      <button class="btn primary" id="gRun">Tìm cơ hội từ đối thủ</button></div>
+    <div class="tbar">
+      <input type="search" id="gQ" placeholder="Tìm tên miền…" aria-label="Tìm tên miền">
+      <select id="gCat" aria-label="Loại nguồn"></select>
+      <label class="ck"><input type="checkbox" id="gMulti"> Link cho từ 2 đối thủ</label>
+      <label class="ck"><input type="checkbox" id="gSpam" checked> Ẩn nguồn spam</label>
+      <span class="hint" id="gCount" style="margin-left:auto"></span>
+    </div>
+    <div class="tablebox"><table>
+      <thead><tr><th>Website</th><th>Loại</th><th class="num">Uy tín</th><th>Đang link cho</th><th>Trạng thái</th><th></th></tr></thead>
+      <tbody id="gBody"></tbody></table></div>
+  </section>
+
+  <section id="v-track" hidden class="panel">
+    <div class="phead"><h2>Tiến độ liên hệ xin link</h2><span class="hint" id="tMeta"></span></div>
+    <div class="tablebox"><table>
+      <thead><tr><th>Website</th><th>Trạng thái</th><th>Ghi chú</th><th>Cập nhật</th><th></th></tr></thead>
+      <tbody id="tBody"></tbody></table></div>
+  </section>
+</div>
+
+<div class="shade" id="shade" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Chi tiết cơ hội">
+  <div class="dhead"><div style="min-width:0"><div class="label" id="dCat"></div><h2 id="dDomain" style="word-break:break-all"></h2></div><button class="btn sm" id="dClose">Đóng</button></div>
+  <div class="dbody" id="dBody"></div>
+</aside>
+<textarea id="clip" aria-hidden="true" tabindex="-1" style="position:fixed;left:-9999px;top:0;width:1px;height:1px"></textarea>
+<div class="toast" id="toast" hidden></div>
+
+<script src="costguard.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const ST={new:['c-mute','Chưa liên hệ'],contacted:['c-info','Đã liên hệ'],waiting:['c-warn','Đang chờ phản hồi'],won:['c-ok','Đã có link'],rejected:['c-bad','Từ chối'],skip:['c-mute','Bỏ qua']};
+let live=false, sites=[], site=null, ov=null, gapItems=[], view='ov', cur=null;
+function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,3200)}
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function nf(n){return n==null?'—':Number(n).toLocaleString('vi-VN')}
+function fmt(iso){if(!iso)return '';const d=new Date(iso),p=n=>String(n).padStart(2,'0');return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`}
+function copy(text,msg){const ok=()=>toast(msg||'Đã copy');const fb=()=>{const c=$('#clip');c.value=text;c.select();try{document.execCommand('copy');ok()}catch(e){toast('Trình duyệt chặn copy')}};
+  navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(text).then(ok,fb):fb()}
+function rank(r){return r==null?'<span class="hint">—</span>':`<span class="rank ${r>=40?'hi':''}">${r}</span>`}
+async function http(path,opts){const r=await fetch(path,Object.assign({headers:{'Content-Type':'application/json'}},opts||{}));
+  const j=await r.json().catch(()=>({error:'Phản hồi không hợp lệ từ máy chủ'}));if(!r.ok||j.error)throw new Error(j.error||('Lỗi '+r.status));return j}
+function showErr(m){$('#err').textContent=m||'';$('#err').hidden=!m}
+
+/* ================= Dữ liệu mẫu ================= */
+const CATS=['Báo / tin tức','Website / blog ngành','Diễn đàn','Danh bạ / review','Mạng xã hội / blog miễn phí','Sàn / rao vặt','Cơ quan / trường học'];
+function demoState(){const day=n=>new Date(Date.now()-n*864e5).toISOString();
+  const mine=[['vnexpress.net',0,78,3],['noithatviet.vn',1,41,12],['otofun.net',2,52,4],['trangvang.vn',3,47,2],['facebook.com',4,96,18],['blog-xaydung.com',1,24,6],['lamchame.com',2,44,3],['youtube.com',4,99,5],
+    ['nhadepso.vn',1,33,9],['kientrucviet.com',1,29,4],['foody.vn',3,58,1],['diadiemvietnam.vn',3,21,2],['tinhte.vn',2,61,2],['pinterest.com',4,93,7],['chotot.com',5,63,1],['xaydungso.vn',1,27,5],['tuvannoithat.net',1,19,3],['nld.com.vn',0,70,1],['quatdien.info',1,15,8],['news-moi.vn',0,18,1]]
+    .map(([domain,c,rank,backlinks],i)=>({domain,category:CATS[c],rank,backlinks,first_seen:fmt(day(400-i*18)).split('/').reverse().join('-'),spam:i%7===0?12:3,nofollow:c===4,is_new:i>=18,
+      link:{url_from:`https://${domain}/${['bai-viet','threads','review','p'][i%4]}/quat-tran-${i}`,url_to:i%3?'https://mrvu.vn/san-pham/quat-tran-hien-dai.aspx':'https://mrvu.vn/',anchor:['MrVu','quạt trần MrVu','mrvu.vn','quạt trần hiện đại','tại đây'][i%5],dofollow:c!==4&&i%5!==3,title:''}}));
+  const hist=[11,12,14,15,17,19,20].map((n,i)=>({at:day((6-i)*30),source:'api',referring_domains:n,backlinks:640+i*70,rank:31+i}));
+  const gap=[['dantri.com.vn',0,82,2],['kenh14.vn',0,74,1],['cafef.vn',0,71,1],['tuvan-nhadep.com',1,38,2],['diendan-xaydung.net',2,31,2],['webtretho.com',2,57,1],['nhadep24h.vn',1,35,2],['top10quat.vn',3,22,2],['review-dienmay.vn',3,30,1],
+    ['kientruc.edu.vn',6,48,1],['thegioinoithat.vn',1,40,1],['muaban.net',5,45,1],['batdongsan.com.vn',1,66,1],['dienlanh-tphcm.com',1,18,1],['blogspot.com',4,90,2],['spam-links.xyz',1,4,1]]
+    .map(([domain,c,rank,n])=>({domain,category:CATS[c],rank,backlinks:5+n*3,spam:domain.includes('spam')?85:6,competitors:['quattrankaiyo.vn','dienmaycholon.vn'].slice(0,n),status:'new',note:'',has_ex:false,has_draft:false}));
+  gap[0].status='contacted';gap[0].note='Đã gửi email cho ban biên tập 14/10';gap[3].status='won';gap[3].note='Đã lên link trong bài tổng hợp';gap[6].status='waiting';
+  return {site:{id:1,domain:'mrvu.vn',competitors:['quattrankaiyo.vn','dienmaycholon.vn'],gap_at:day(1)},hist,mine,lost:[{domain:'old-blog.vn',rank:22,lost_date:fmt(day(9)).split('/').reverse().join('-'),backlinks:3},{domain:'raovat123.net',rank:9,lost_date:fmt(day(20)).split('/').reverse().join('-'),backlinks:1}],gap,opps:{}}}
+function dget(){try{const v=JSON.parse(localStorage.getItem('kho-bl-demo-v1'));if(v&&v.site)return v}catch(e){}return demoState()}
+function dset(v){try{localStorage.setItem('kho-bl-demo-v1',JSON.stringify(v))}catch(e){}}
+async function mock(path,opts){const b=opts&&opts.body?JSON.parse(opts.body):{};const S=dget();let out;await new Promise(r=>setTimeout(r,120));
+  const seg=path.split('?')[0].split('/').slice(2);const q=new URLSearchParams(path.split('?')[1]||'');
+  if(seg[0]==='sites'&&(!opts||!opts.method||opts.method==='GET'))out={items:[Object.assign({last_at:S.hist[S.hist.length-1].at},S.site)]};
+  else if(seg[0]==='sites'&&opts.method==='POST'){S.site.competitors=b.competitors.map(x=>x.replace(/^https?:\/\//,'').replace(/^www\./,'').split('/')[0]).filter(Boolean);out=S.site}
+  else if(seg[0]==='overview'){const cats={};S.mine.forEach(d=>cats[d.category]=(cats[d.category]||0)+1);const h=S.hist[S.hist.length-1];
+    out={site:S.site,latest:{at:h.at,source:'api',summary:{rank:h.rank,backlinks:h.backlinks,referring_domains:S.mine.length,referring_main_domains:S.mine.length,nofollow_links:182,backlinks_spam_score:6,broken_backlinks:3},cost:0.11,compared_with:S.hist[S.hist.length-2].at,new_count:S.mine.filter(d=>d.is_new).length,lost_count:S.lost.length},
+      domains:S.mine,lost:S.lost,categories:cats,history:S.hist}}
+  else if(seg[0]==='refresh'||seg[0]==='gap'&&opts&&opts.method==='POST'){out={job_id:'demo'}}
+  else if(seg[0]==='job'){await new Promise(r=>setTimeout(r,900));out={status:'done',message:'Xong',result:{}}}
+  else if(seg[0]==='gap')out={items:S.gap,at:S.site.gap_at,competitors:S.site.competitors};
+  else if(seg[0]==='import')throw new Error('Bản xem trước không nhập được file. Hãy dùng bản cài trên máy.');
+  else if(seg[0]==='examples'){const g=S.gap.find(x=>x.domain===b.domain);out={items:g.competitors.map((c,i)=>({competitor:c,url_from:`https://${b.domain}/top-10-quat-tran-dep-${2026-i}`,url_to:`https://${c}/`,anchor:['quạt trần đẹp','tham khảo tại đây'][i%2],title:`Top 10 mẫu quạt trần đẹp nhất ${2026-i}`,dofollow:true,first_seen:'2026-05-02'}))};g.has_ex=true;(S.opps[b.domain]=S.opps[b.domain]||{}).examples=out.items}
+  else if(seg[0]==='outreach'){await new Promise(r=>setTimeout(r,900));const g=S.gap.find(x=>x.domain===b.domain);
+    out={approach:'Đề xuất bổ sung vào bài tổng hợp',why:`${b.domain} có bài “Top 10 mẫu quạt trần đẹp” đang đặt link cho ${g.competitors.join(' và ')}. Mẫu quạt gỗ của MrVu là lựa chọn khác biệt để họ cập nhật bài.`,target_page:'https://mrvu.vn/san-pham/quat-tran-go-tu-nhien.aspx',
+      anchor_ideas:['quạt trần gỗ tự nhiên','mẫu quạt trần của MrVu','MrVu'],contact_hint:'Trang “Liên hệ” ở chân trang, hoặc email ban biên tập mục Nhà đẹp',
+      email_subject:'Gợi ý mẫu quạt trần gỗ cho bài “Top 10 quạt trần đẹp”',
+      email_body:'Chào anh/chị biên tập viên,\n\nEm là [TÊN] từ MrVu (mrvu.vn), đơn vị chuyên quạt trần tại TP.HCM. Em vừa đọc bài “Top 10 mẫu quạt trần đẹp nhất 2026” và thấy bài tổng hợp rất kỹ.\n\nNếu anh/chị có cập nhật bài, bên em xin gợi ý thêm dòng quạt trần gỗ tự nhiên, phù hợp nhà phong cách Đông Dương mà danh sách hiện chưa có. Em có thể gửi ảnh thực tế và thông số chi tiết để anh/chị tiện tham khảo.\n\nCảm ơn anh/chị đã dành thời gian.\n[TÊN] – [SĐT]',
+      zalo_message:'Chào anh/chị, em bên MrVu (quạt trần). Em thấy bài Top 10 quạt trần đẹp rất hay, nếu có cập nhật em xin gợi ý thêm mẫu quạt gỗ tự nhiên, em gửi ảnh và thông số được ạ.',content_idea:'',demo:true};
+    g.has_draft=true;(S.opps[b.domain]=S.opps[b.domain]||{}).draft=out}
+  else if(seg[0]==='opp'&&(!opts||!opts.method)){const d=q.get('domain'),g=S.gap.find(x=>x.domain===d)||{},o=S.opps[d]||{};out={status:g.status||'new',note:g.note||'',examples:o.examples||null,draft:o.draft||null}}
+  else if(seg[0]==='opp'){const g=S.gap.find(x=>x.domain===b.domain);if(g){if(b.status)g.status=b.status;g.note=b.note;g.updated_at=new Date().toISOString()}out={ok:true}}
+  dset(S);return JSON.parse(JSON.stringify(out))}
+const api=(p,o)=>live?http(p,o):mock(p,o);
+
+/* ================= Website ================= */
+async function loadSites(pick){sites=(await api('api/bl/sites')).items;
+  $('#site').innerHTML=sites.length?sites.map(s=>`<option value="${s.id}">${esc(s.domain)}</option>`).join(''):'<option value="">Chưa có website — bấm “+ Thêm website”</option>';
+  if(pick)$('#site').value=pick;site=sites.find(s=>s.id==$('#site').value)||null;
+  $('#comps').innerHTML=site?(site.competitors.length?'<span class="hint">Đối thủ:</span>'+site.competitors.map(c=>`<span class="chip c-mute">${esc(c)}</span>`).join(''):'<span class="hint">Chưa có đối thủ. Bấm “Sửa đối thủ” để thêm, dùng cho mục Cơ hội.</span>'):'';
+  ['refresh','editSite','gRun'].forEach(id=>$('#'+id).disabled=!site);
+  if(!sites.length)openForm(true);
+  if(site)await loadAll()}
+$('#site').addEventListener('change',()=>loadSites($('#site').value).catch(e=>showErr(e.message)));
+function openForm(isNew){$('#siteForm').hidden=false;$('#fErr').hidden=true;$('#fDomain').disabled=!isNew;$('#fDomain').value=isNew?'':site.domain;$('#fComps').value=isNew?'':site.competitors.join('\n');$('#siteForm').dataset.new=isNew?'1':'';(isNew?$('#fDomain'):$('#fComps')).focus()}
+$('#newSite').addEventListener('click',()=>openForm(true));$('#editSite').addEventListener('click',()=>site&&openForm(false));$('#fCancel').addEventListener('click',()=>$('#siteForm').hidden=true);
+$('#siteForm').addEventListener('submit',async e=>{e.preventDefault();const isNew=!!$('#siteForm').dataset.new;
+  const body={domain:isNew?$('#fDomain').value:site.domain,competitors:$('#fComps').value.split(/[\n,]/).map(x=>x.trim()).filter(Boolean),id:isNew?undefined:site.id};
+  try{const r=await api('api/bl/sites',{method:'POST',body:JSON.stringify(body)});$('#siteForm').hidden=true;toast('Đã lưu');await loadSites(r.id||site.id)}catch(err){$('#fErr').textContent=err.message;$('#fErr').hidden=false}});
+
+async function poll(jid){let j;do{await new Promise(r=>setTimeout(r,1000));j=await api('api/bl/job/'+jid);$('#status').textContent=j.message}while(j.status==='running');if(j.status==='error')throw new Error(j.message);return j.result}
+$('#refresh').addEventListener('click',async()=>{if(!site)return;showErr('');
+  if(window.CostGuard){const last=ov&&ov.latest&&ov.latest.source==='api'?ov.latest.at:null;const g=await CostGuard.check('bl_refresh',{days_since:last?Math.floor((Date.now()-new Date(last))/864e5):null});if(!g.ok)return}
+  const b=$('#refresh');b.disabled=true;
+  try{const {job_id}=await api('api/bl/refresh',{method:'POST',body:JSON.stringify({site_id:site.id})});const r=await poll(job_id);
+    $('#status').textContent=r&&r.cost!=null?`Đã cập nhật · chi phí ${r.cost.toFixed(3)} USD`:'Đã cập nhật';await loadAll()}catch(e){showErr(e.message);$('#status').textContent=''}finally{b.disabled=false}});
+$('#csv').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f||!site)return;showErr('');
+  try{const text=await f.text();const r=await api('api/bl/import',{method:'POST',body:JSON.stringify({site_id:site.id,text})});$('#status').textContent=`Đã nhập ${r.domains} website trỏ link từ file ${f.name}`;await loadAll()}catch(err){showErr(err.message)}});
+
+/* ================= Tải dữ liệu ================= */
+async function loadAll(){window.CostGuard&&CostGuard.after();ov=await api('api/bl/overview?site_id='+site.id);const g=await api('api/bl/gap?site_id='+site.id);gapItems=g.items;
+  $('#lastAt').textContent=ov.latest?`Dữ liệu lúc ${fmt(ov.latest.at)} · nguồn ${ov.latest.source==='gsc'?'Search Console':'DataForSEO'}`:'';
+  $('#gMeta').textContent=g.at?`Phân tích lúc ${fmt(g.at)} · so với ${g.competitors.length} đối thủ · tốn khoảng ${(0.02*g.competitors.length).toFixed(2)} USD + phí dòng mỗi lần chạy`:`Chạy để so với ${g.competitors.length} đối thủ (khoảng ${(0.02*Math.max(1,g.competitors.length)).toFixed(2)} USD + phí dòng)`;
+  const cats=[...new Set([...(ov.domains||[]).map(d=>d.category),...gapItems.map(d=>d.category)])];
+  ['#mCat','#gCat'].forEach(s=>{const v=$(s).value;$(s).innerHTML='<option value="">Mọi loại nguồn</option>'+cats.map(c=>`<option>${esc(c)}</option>`).join('');$(s).value=v});
+  $('#nMine').textContent=ov.domains?ov.domains.length:'';$('#nGap').textContent=gapItems.length||'';$('#nTrack').textContent=gapItems.filter(g=>g.status!=='new').length||'';
+  renderOv();renderMine();renderGap();renderTrack()}
+
+/* ================= Tổng quan ================= */
+function chart(h){if(h.length<2)return '<p class="hint" style="margin:8px 0">Cập nhật thêm vài lần (ví dụ mỗi tuần) để thấy xu hướng.</p>';
+  const W=640,H=200,L=36,R=14,T=12,B=26,iw=W-L-R,ih=H-T-B,vals=h.map(x=>x.referring_domains||0),mx=Math.max(...vals),mn=Math.min(...vals),top=Math.ceil((mx+1)/5)*5,bot=Math.max(0,Math.floor((mn-1)/5)*5);
+  const X=i=>L+i*iw/(h.length-1),Y=v=>T+ih-(v-bot)/(top-bot||1)*ih;const pts=vals.map((v,i)=>`${X(i)},${Y(v)}`).join(' ');
+  let s=`<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="Số website trỏ link theo thời gian" style="min-width:420px">`;
+  [bot,(bot+top)/2,top].forEach(t=>{s+=`<line x1="${L}" x2="${W-R}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--line)"/><text x="${L-6}" y="${Y(t)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${Math.round(t)}</text>`});
+  s+=`<polygon points="${X(0)},${Y(bot)} ${pts} ${X(h.length-1)},${Y(bot)}" fill="var(--area)"/><polyline points="${pts}" fill="none" stroke="var(--line-chart)" stroke-width="2.2" stroke-linejoin="round"/>`;
+  h.forEach((x,i)=>{s+=`<circle cx="${X(i)}" cy="${Y(vals[i])}" r="${i===h.length-1?4.5:3}" fill="var(--line-chart)" stroke="var(--surface)" stroke-width="1.5"><title>${fmt(x.at)}: ${vals[i]}</title></circle>`;
+    if(h.length<=8||i%Math.ceil(h.length/8)===0||i===h.length-1)s+=`<text x="${X(i)}" y="${H-6}" text-anchor="middle" font-size="11" fill="var(--muted)">${fmt(x.at).slice(0,5)}</text>`});
+  return s+`<text x="${X(h.length-1)-8}" y="${Y(vals[vals.length-1])-10}" text-anchor="end" font-size="12" font-weight="700" fill="var(--line-chart)">${vals[vals.length-1]}</text></svg>`}
+function renderOv(){const box=$('#v-ov');
+  if(!site){box.innerHTML='<section class="panel empty">Thêm website của bạn để bắt đầu.</section>';return}
+  if(!ov.latest){box.innerHTML=`<section class="panel empty" style="display:flex;flex-direction:column;gap:10px;align-items:center">
+    <b style="color:var(--ink)">Chưa có dữ liệu backlink cho ${esc(site.domain)}</b>
+    <span>Bấm <b>Cập nhật backlink</b> để lấy từ DataForSEO (khoảng 0,1 USD mỗi lần; tài khoản cần kích hoạt Backlinks API, nạp tối thiểu 100 USD/tháng).</span>
+    <span>Hoặc miễn phí: Google Search Console → <b>Liên kết</b> → <b>Trang web liên kết hàng đầu</b> → <b>Xuất</b> → CSV, rồi bấm <b>Nhập file Search Console</b>.</span></section>`;return}
+  const s=ov.latest.summary,h=ov.history.filter(x=>x.source===ov.latest.source),prev=h.length>1?h[h.length-2]:null;
+  const delta=(k)=>prev&&prev[k]!=null&&s[k]!=null&&s[k]!==prev[k]?`<span class="d ${s[k]>prev[k]?'up':'down'}">${s[k]>prev[k]?'+':''}${nf(s[k]-prev[k])}</span>`:'';
+  const nof=s.backlinks&&s.nofollow_links!=null?Math.round(s.nofollow_links/s.backlinks*100):null;
+  let html=`<div class="tiles">
+    <div class="tile"><b>${nf(s.referring_domains)}${delta('referring_domains')}</b><span>website trỏ link</span></div>
+    <div class="tile"><b>${nf(s.backlinks)}${delta('backlinks')}</b><span>tổng số backlink</span></div>
+    <div class="tile"><b>${s.rank??'—'}${delta('rank')}</b><span>uy tín tên miền (/100)</span></div>
+    <div class="tile"><b>${nof==null?'—':(100-nof)+'%'}</b><span>link dofollow</span></div>
+    <div class="tile"><b class="up">+${ov.latest.new_count}</b><span>website mới${ov.latest.compared_with?' từ '+fmt(ov.latest.compared_with):''}</span></div>
+    <div class="tile"><b class="${ov.latest.lost_count?'down':''}">−${ov.latest.lost_count}</b><span>website đã mất link</span></div></div>`;
+  const cats=Object.entries(ov.categories).sort((a,b)=>b[1]-a[1]),mx=Math.max(1,...cats.map(c=>c[1]));
+  html+=`<div class="two"><section class="panel"><div class="phead"><h2>Số website trỏ link theo thời gian</h2><span class="hint">${h.length} lần cập nhật</span></div><div class="chartbox">${chart(h)}</div></section>
+    <section class="panel"><div class="phead"><h2>Nguồn link theo loại</h2></div><div class="bars">${cats.map(([c,n])=>`<div class="bar"><span>${esc(c)}</span><span class="t"><i style="width:${n/mx*100}%"></i></span><b>${n}</b></div>`).join('')}</div></section></div>`;
+  const nw=ov.domains.filter(d=>d.is_new).slice(0,8),ls=ov.lost.slice(0,8);
+  html+=`<div class="two"><section class="panel"><div class="phead"><h2>Website mới trỏ link</h2></div>${nw.length?`<ul class="minilist">${nw.map(d=>`<li><span><b>${esc(d.domain)}</b> <span class="hint">${esc(d.category)}</span></span>${rank(d.rank)}</li>`).join('')}</ul>`:'<p class="empty" style="padding:20px">Không có website mới so với lần trước.</p>'}</section>
+    <section class="panel"><div class="phead"><h2>Website đã mất link</h2><span class="hint">Liên hệ lại hoặc kiểm tra trang đích</span></div>${ls.length?`<ul class="minilist">${ls.map(d=>`<li><span><b>${esc(d.domain)}</b> <span class="hint">mất ${esc(d.lost_date||'')}</span></span>${rank(d.rank)}</li>`).join('')}</ul>`:'<p class="empty" style="padding:20px">Không mất link nào.</p>'}</section></div>`;
+  if(s.broken_backlinks)html+=`<div class="note"><b>${nf(s.broken_backlinks)} backlink đang trỏ tới trang lỗi</b> trên website của bạn. Xem tab Audit để tìm trang 404, rồi đặt chuyển hướng 301 về trang phù hợp để giữ lại sức mạnh của các link này.</div>`;
+  if(ov.latest.source==='gsc')html+=`<div class="note">Dữ liệu từ Search Console chỉ có tên miền và số link, không có uy tín tên miền, anchor hay link mất. Nhập file mới mỗi tháng để so sánh.</div>`;
+  box.innerHTML=html}
+
+/* ================= Backlink của bạn ================= */
+function renderMine(){if(!ov||!ov.latest){$('#mHead').innerHTML='';$('#mBody').innerHTML='<tr><td class="empty">Chưa có dữ liệu.</td></tr>';$('#mMeta').textContent='';return}
+  const q=$('#mQ').value.trim().toLowerCase(),cat=$('#mCat').value;
+  if($('#mLost').checked){$('#mHead').innerHTML='<tr><th>Website đã mất link</th><th class="num">Uy tín</th><th class="num">Số link trước đó</th><th>Ngày mất</th></tr>';
+    const v=ov.lost.filter(d=>!q||d.domain.includes(q));$('#mMeta').textContent=v.length+' website';
+    $('#mBody').innerHTML=v.length?v.map(d=>`<tr><td><b>${esc(d.domain)}</b></td><td class="num">${rank(d.rank)}</td><td class="num">${nf(d.backlinks)}</td><td>${esc(d.lost_date||'')}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Không có link nào bị mất.</td></tr>';return}
+  $('#mHead').innerHTML='<tr><th>Website trỏ link</th><th>Loại</th><th class="num">Uy tín</th><th class="num">Số link</th><th>Anchor → trang đích</th><th>Thuộc tính</th><th>Thấy từ</th></tr>';
+  const v=ov.domains.filter(d=>(!q||d.domain.includes(q))&&(!cat||d.category===cat)&&(!$('#mNew').checked||d.is_new));$('#mMeta').textContent=`${v.length}/${ov.domains.length} website`;
+  $('#mBody').innerHTML=v.length?v.map(d=>{const l=d.link;return `<tr><td>${l?`<a href="${esc(l.url_from)}" target="_blank" rel="noopener">${esc(d.domain)}</a>`:`<b>${esc(d.domain)}</b>`}${d.is_new?' <span class="chip c-ok">Mới</span>':''}</td>
+    <td><span class="hint">${esc(d.category)}</span></td><td class="num">${rank(d.rank)}</td><td class="num">${nf(d.backlinks)}</td>
+    <td>${l?`<b>${esc(l.anchor||'(không có chữ)')}</b><span class="sm-muted">${esc((l.url_to||'').replace(/^https?:\/\//,''))}</span>`:'<span class="hint">—</span>'}</td>
+    <td>${l?(l.dofollow?'<span class="chip c-ok">dofollow</span>':'<span class="chip c-mute">nofollow</span>'):d.nofollow?'<span class="chip c-mute">nofollow</span>':'<span class="hint">—</span>'}</td><td class="hint">${esc(d.first_seen||'')}</td></tr>`}).join('')
+    :'<tr><td colspan="7" class="empty">Không có website nào khớp bộ lọc.</td></tr>'}
+['#mQ','#mCat','#mNew','#mLost'].forEach(s=>$(s).addEventListener('input',renderMine));
+
+/* ================= Cơ hội ================= */
+function renderGap(){const q=$('#gQ').value.trim().toLowerCase(),cat=$('#gCat').value;
+  const v=gapItems.filter(g=>(!q||g.domain.includes(q))&&(!cat||g.category===cat)&&(!$('#gMulti').checked||g.competitors.length>=2)&&(!$('#gSpam').checked||(g.spam??0)<50));
+  $('#gCount').textContent=gapItems.length?`${v.length}/${gapItems.length} website`:'';
+  $('#gBody').innerHTML=v.length?v.map(g=>`<tr><td><b>${esc(g.domain)}</b>${g.has_draft?' <span class="chip c-info">Đã soạn tin</span>':''}</td><td><span class="hint">${esc(g.category)}</span></td><td class="num">${rank(g.rank)}</td>
+    <td>${g.competitors.map(c=>`<span class="chip c-mute">${esc(c)}</span>`).join(' ')}</td><td><span class="chip ${ST[g.status][0]}">${ST[g.status][1]}</span></td>
+    <td><button class="btn sm" data-open="${esc(g.domain)}">Xem &amp; soạn tin</button></td></tr>`).join('')
+    :`<tr><td colspan="6" class="empty">${gapItems.length?'Không có website nào khớp bộ lọc.':site&&site.competitors.length?'Bấm <b>Tìm cơ hội từ đối thủ</b> để so sánh backlink của bạn với đối thủ.':'Thêm website đối thủ (nút “Sửa đối thủ” ở trên) rồi bấm <b>Tìm cơ hội từ đối thủ</b>.'}</td></tr>`}
+['#gQ','#gCat','#gMulti','#gSpam'].forEach(s=>$(s).addEventListener('input',renderGap));
+$('#gRun').addEventListener('click',async()=>{if(!site)return;if(!site.competitors.length){toast('Thêm đối thủ trước');openForm(false);return}showErr('');
+  if(window.CostGuard){const g=await CostGuard.check('bl_gap',{competitors:site.competitors.length,no_snapshot:!(ov&&ov.latest)});if(!g.ok)return}
+  const b=$('#gRun');b.disabled=true;
+  try{const {job_id}=await api('api/bl/gap',{method:'POST',body:JSON.stringify({site_id:site.id})});await poll(job_id);$('#status').textContent='Đã tìm xong cơ hội từ đối thủ';await loadAll();show('gap')}catch(e){showErr(e.message);$('#status').textContent=''}finally{b.disabled=false}});
+$('#gBody').addEventListener('click',e=>{const b=e.target.closest('[data-open]');if(b)openOpp(b.dataset.open)});
+
+/* ================= Chi tiết cơ hội ================= */
+async function openOpp(domain){const g=gapItems.find(x=>x.domain===domain)||{domain,category:'',competitors:[],rank:null};
+  const o=await api(`api/bl/opp?site_id=${site.id}&domain=${encodeURIComponent(domain)}`);cur={g,o};
+  $('#dDomain').textContent=domain;$('#dCat').textContent=`${g.category} · uy tín ${g.rank??'—'}/100`;drawOpp();
+  $('#shade').hidden=false;$('#drawer').hidden=false;document.body.classList.add('lock');$('#dBody').scrollTop=0}
+function drawOpp(){const {g,o}=cur,d=o.draft;let h='';
+  h+=`<section class="panel pad" style="display:flex;flex-direction:column;gap:10px"><div class="row" style="justify-content:space-between"><h3>Website này đang đặt link cho</h3><span>${g.competitors.map(c=>`<span class="chip c-mute">${esc(c)}</span>`).join(' ')}</span></div>
+    ${o.examples?(o.examples.length?o.examples.map(x=>`<div class="ex"><a href="${esc(x.url_from)}" target="_blank" rel="noopener">${esc(x.title||x.url_from)}</a><span class="hint">${esc(x.url_from)}</span>
+      <span>Anchor <b>${esc(x.anchor||'(không có chữ)')}</b> → ${esc(x.url_to)} ${x.dofollow?'<span class="chip c-ok">dofollow</span>':'<span class="chip c-mute">nofollow</span>'}</span></div>`).join(''):'<span class="hint">Không tìm thấy link cụ thể (có thể đã bị gỡ).</span>')
+      :`<div class="row"><button class="btn" id="loadEx">Xem đối thủ được đặt link ở bài nào</button><span class="hint">khoảng 0,02 USD mỗi đối thủ</span></div>`}</section>`;
+  h+=`<section class="panel pad" style="display:flex;flex-direction:column;gap:10px"><div class="row" style="justify-content:space-between"><h3>Tin nhắn xin đặt link</h3>${d&&d.demo?'<span class="demo-flag">ví dụ mẫu</span>':''}</div>`;
+  if(!d)h+=`<p class="hint" style="margin:0">AI đọc trang đang đặt link cho đối thủ, chọn trang phù hợp trên website của bạn và soạn email + tin nhắn Zalo. Nên bấm “Xem đối thủ được đặt link ở bài nào” trước để AI có ngữ cảnh.</p><div><button class="btn primary" id="draft">Soạn tin bằng AI</button></div>`;
+  else h+=`<div><div class="label">Cách tiếp cận</div><b>${esc(d.approach)}</b><div class="hint" style="font-size:13px">${esc(d.why)}</div></div>
+    <div class="row" style="gap:20px"><div><div class="label">Trang nên được link tới</div><a href="${esc(d.target_page)}" target="_blank" rel="noopener" style="color:var(--accent);word-break:break-all">${esc(d.target_page)}</a></div>
+    <div><div class="label">Anchor gợi ý</div>${(d.anchor_ideas||[]).map(a=>`<span class="chip c-mute">${esc(a)}</span>`).join(' ')}</div></div>
+    <div><div class="label">Tìm liên hệ ở đâu</div>${esc(d.contact_hint)}</div>
+    <div style="display:flex;flex-direction:column;gap:6px"><div class="row" style="justify-content:space-between"><div class="label">Email</div><button class="btn sm" data-copy="${esc(d.email_subject+'\n\n'+d.email_body)}">Copy email</button></div>
+      <b>${esc(d.email_subject)}</b><pre class="msg">${esc(d.email_body)}</pre></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><div class="row" style="justify-content:space-between"><div class="label">Zalo / Messenger</div><button class="btn sm" data-copy="${esc(d.zalo_message)}">Copy</button></div><pre class="msg">${esc(d.zalo_message)}</pre></div>
+    ${d.content_idea?`<div><div class="label">Ý tưởng nội dung</div><pre class="msg">${esc(d.content_idea)}</pre></div>`:''}
+    <div><button class="btn sm" id="draft">Soạn lại</button></div>`;
+  h+=`</section><section class="panel pad" style="display:flex;flex-direction:column;gap:10px"><h3>Theo dõi</h3>
+    <div class="field"><label class="label" for="oSt">Trạng thái</label><select id="oSt">${Object.entries(ST).map(([k,v])=>`<option value="${k}" ${o.status===k?'selected':''}>${v[1]}</option>`).join('')}</select></div>
+    <div class="field"><label class="label" for="oNote">Ghi chú</label><textarea id="oNote" placeholder="ví dụ: đã gửi email cho chị Lan, hẹn trả lời thứ 6">${esc(o.note||'')}</textarea></div>
+    <div><button class="btn primary" id="saveOpp">Lưu</button></div></section>
+    <div class="note"><b>Lưu ý:</b> xin link bằng giá trị thật (nội dung hữu ích, bổ sung bài viết, hợp tác). Không mua link dofollow hay hứa trao đổi link qua lại; nếu đăng bài PR trả phí, link cần gắn nhãn sponsored theo hướng dẫn của Google.</div>`;
+  $('#dBody').innerHTML=h}
+function closeOpp(){$('#shade').hidden=true;$('#drawer').hidden=true;document.body.classList.remove('lock');cur=null}
+$('#dClose').addEventListener('click',closeOpp);$('#shade').addEventListener('click',closeOpp);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#drawer').hidden)closeOpp()});
+$('#dBody').addEventListener('click',async e=>{const t=e.target;
+  const c=t.closest('[data-copy]');if(c){copy(c.dataset.copy);return}
+  if(t.id==='loadEx'){if(window.CostGuard){const g=await CostGuard.check('bl_examples',{competitors:cur.g.competitors.length});if(!g.ok)return}t.disabled=true;t.textContent='Đang tìm…';try{cur.o.examples=(await api('api/bl/examples',{method:'POST',body:JSON.stringify({site_id:site.id,domain:cur.g.domain})})).items;drawOpp()}catch(err){toast(err.message);t.disabled=false;t.textContent='Xem đối thủ được đặt link ở bài nào'}return}
+  if(t.id==='draft'){if(window.CostGuard){const g=await CostGuard.check('ai_outreach',{});if(!g.ok)return}t.disabled=true;t.textContent='AI đang soạn…';try{cur.o.draft=await api('api/bl/outreach',{method:'POST',body:JSON.stringify({site_id:site.id,domain:cur.g.domain})});cur.g.has_draft=true;drawOpp();renderGap()}catch(err){toast(err.message);t.disabled=false;t.textContent='Soạn tin bằng AI'}return}
+  if(t.id==='saveOpp'){const st=$('#oSt').value,note=$('#oNote').value;try{await api('api/bl/opp',{method:'POST',body:JSON.stringify({site_id:site.id,domain:cur.g.domain,status:st,note})});
+    Object.assign(cur.o,{status:st,note});Object.assign(cur.g,{status:st,note,updated_at:new Date().toISOString()});toast('Đã lưu');renderGap();renderTrack();$('#nTrack').textContent=gapItems.filter(g=>g.status!=='new').length||''}catch(err){toast(err.message)}}});
+
+/* ================= Theo dõi ================= */
+function renderTrack(){const v=gapItems.filter(g=>g.status!=='new');const won=v.filter(g=>g.status==='won').length;
+  $('#tMeta').textContent=v.length?`${v.length} website · ${won} đã có link`:'';
+  $('#tBody').innerHTML=v.length?v.map(g=>`<tr><td><b>${esc(g.domain)}</b><span class="sm-muted">${esc(g.category)}</span></td><td><span class="chip ${ST[g.status][0]}">${ST[g.status][1]}</span></td>
+    <td style="max-width:420px">${esc(g.note||'')}</td><td class="hint">${g.updated_at?fmt(g.updated_at):''}</td><td><button class="btn sm" data-open="${esc(g.domain)}">Mở</button></td></tr>`).join('')
+    :'<tr><td colspan="5" class="empty">Chưa liên hệ website nào. Vào <b>Cơ hội từ đối thủ</b>, mở một website và đổi trạng thái sau khi gửi tin.</td></tr>'}
+$('#tBody').addEventListener('click',e=>{const b=e.target.closest('[data-open]');if(b)openOpp(b.dataset.open)});
+
+/* ================= Điều hướng & khởi động ================= */
+$('#seg').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(b)show(b.dataset.v)});
+function show(v){view=v;document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));['ov','mine','gap','track'].forEach(x=>$('#v-'+x).hidden=x!==v)}
+(async()=>{
+  try{const c=new AbortController();setTimeout(()=>c.abort(),1500);const j=await (await fetch('api/health',{signal:c.signal})).json();
+    if(j&&j.ok){live=true;if(j.configured){$('#mode').className='mode live';$('#modeText').textContent='Sẵn sàng · DataForSEO'}else $('#modeText').textContent='Chưa có DataForSEO · dùng được file Search Console'}}catch(e){}
+  if(!live)$('#modeText').textContent='Bản xem trước — dữ liệu mẫu';
+  try{await loadSites()}catch(e){showErr(e.message)}
+})();
+})();
+</script>
+</body>
+</html>

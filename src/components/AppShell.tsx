@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, Package, Boxes, ShoppingCart, Users, UserCog,
   BarChart3, Building2, Fan, LogOut, Settings, ShieldCheck, ChevronDown,
-  CalendarDays, BookOpen, History, MessageCircle, HeartHandshake, CalendarClock, Banknote, Wrench,
+  CalendarDays, BookOpen, History, MessageCircle, HeartHandshake, CalendarClock, Banknote, Wrench, Search,
 } from "lucide-react";
 import { type ReactNode, useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -43,6 +43,8 @@ const nav: NavItem[] = [
   { to: "/payroll", label: "Bảng lương", icon: Banknote, permission: "manage_payroll" },
   // Đụng tới token gửi tin tốn tiền → chỉ admin.
   { to: "/zalo", label: "Zalo OA", icon: MessageCircle, permission: "admin" },
+  // Công cụ SEO dùng khóa API trả phí → chỉ admin (bên trong còn đăng nhập Google riêng).
+  { to: "/seo", label: "SEO Studio", icon: Search, permission: "admin" },
 ];
 
 

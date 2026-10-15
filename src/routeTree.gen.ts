@@ -24,11 +24,13 @@ import { Route as ProductsRouteImport } from './routes/products'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as RosterRouteImport } from './routes/roster'
 import { Route as ScheduleRouteImport } from './routes/schedule'
+import { Route as SeoRouteImport } from './routes/seo'
 import { Route as WarrantyRouteImport } from './routes/warranty'
 import { Route as CustomersIndexRouteImport } from './routes/customers/index'
 import { Route as CustomersIdRouteImport } from './routes/customers/$id'
 import { Route as OrdersIndexRouteImport } from './routes/orders/index'
 import { Route as OrdersIdRouteImport } from './routes/orders/$id'
+import { Route as SeoStudioSplatRouteImport } from './routes/seo-studio/$'
 import { Route as ZaloIndexRouteImport } from './routes/zalo/index'
 import { Route as ZaloCallbackRouteImport } from './routes/zalo/callback'
 import { Route as ApiJobsDrainRouteImport } from './routes/api/jobs/drain'
@@ -108,6 +110,11 @@ const ScheduleRoute = ScheduleRouteImport.update({
   path: '/schedule',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SeoRoute = SeoRouteImport.update({
+  id: '/seo',
+  path: '/seo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WarrantyRoute = WarrantyRouteImport.update({
   id: '/warranty',
   path: '/warranty',
@@ -131,6 +138,11 @@ const OrdersIndexRoute = OrdersIndexRouteImport.update({
 const OrdersIdRoute = OrdersIdRouteImport.update({
   id: '/orders/$id',
   path: '/orders/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SeoStudioSplatRoute = SeoStudioSplatRouteImport.update({
+  id: '/seo-studio/$',
+  path: '/seo-studio/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ZaloIndexRoute = ZaloIndexRouteImport.update({
@@ -165,9 +177,11 @@ export interface FileRoutesByFullPath {
   '/reports': typeof ReportsRoute
   '/roster': typeof RosterRoute
   '/schedule': typeof ScheduleRoute
+  '/seo': typeof SeoRoute
   '/warranty': typeof WarrantyRoute
   '/customers/$id': typeof CustomersIdRoute
   '/orders/$id': typeof OrdersIdRoute
+  '/seo-studio/$': typeof SeoStudioSplatRoute
   '/zalo/callback': typeof ZaloCallbackRoute
   '/customers/': typeof CustomersIndexRoute
   '/orders/': typeof OrdersIndexRoute
@@ -190,9 +204,11 @@ export interface FileRoutesByTo {
   '/reports': typeof ReportsRoute
   '/roster': typeof RosterRoute
   '/schedule': typeof ScheduleRoute
+  '/seo': typeof SeoRoute
   '/warranty': typeof WarrantyRoute
   '/customers/$id': typeof CustomersIdRoute
   '/orders/$id': typeof OrdersIdRoute
+  '/seo-studio/$': typeof SeoStudioSplatRoute
   '/zalo/callback': typeof ZaloCallbackRoute
   '/customers': typeof CustomersIndexRoute
   '/orders': typeof OrdersIndexRoute
@@ -216,9 +232,11 @@ export interface FileRoutesById {
   '/reports': typeof ReportsRoute
   '/roster': typeof RosterRoute
   '/schedule': typeof ScheduleRoute
+  '/seo': typeof SeoRoute
   '/warranty': typeof WarrantyRoute
   '/customers/$id': typeof CustomersIdRoute
   '/orders/$id': typeof OrdersIdRoute
+  '/seo-studio/$': typeof SeoStudioSplatRoute
   '/zalo/callback': typeof ZaloCallbackRoute
   '/customers/': typeof CustomersIndexRoute
   '/orders/': typeof OrdersIndexRoute
@@ -243,9 +261,11 @@ export interface FileRouteTypes {
     | '/reports'
     | '/roster'
     | '/schedule'
+    | '/seo'
     | '/warranty'
     | '/customers/$id'
     | '/orders/$id'
+    | '/seo-studio/$'
     | '/zalo/callback'
     | '/customers/'
     | '/orders/'
@@ -268,9 +288,11 @@ export interface FileRouteTypes {
     | '/reports'
     | '/roster'
     | '/schedule'
+    | '/seo'
     | '/warranty'
     | '/customers/$id'
     | '/orders/$id'
+    | '/seo-studio/$'
     | '/zalo/callback'
     | '/customers'
     | '/orders'
@@ -293,9 +315,11 @@ export interface FileRouteTypes {
     | '/reports'
     | '/roster'
     | '/schedule'
+    | '/seo'
     | '/warranty'
     | '/customers/$id'
     | '/orders/$id'
+    | '/seo-studio/$'
     | '/zalo/callback'
     | '/customers/'
     | '/orders/'
@@ -319,9 +343,11 @@ export interface RootRouteChildren {
   ReportsRoute: typeof ReportsRoute
   RosterRoute: typeof RosterRoute
   ScheduleRoute: typeof ScheduleRoute
+  SeoRoute: typeof SeoRoute
   WarrantyRoute: typeof WarrantyRoute
   CustomersIdRoute: typeof CustomersIdRoute
   OrdersIdRoute: typeof OrdersIdRoute
+  SeoStudioSplatRoute: typeof SeoStudioSplatRoute
   ZaloCallbackRoute: typeof ZaloCallbackRoute
   CustomersIndexRoute: typeof CustomersIndexRoute
   OrdersIndexRoute: typeof OrdersIndexRoute
@@ -436,6 +462,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ScheduleRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/seo': {
+      id: '/seo'
+      path: '/seo'
+      fullPath: '/seo'
+      preLoaderRoute: typeof SeoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/warranty': {
       id: '/warranty'
       path: '/warranty'
@@ -469,6 +502,13 @@ declare module '@tanstack/react-router' {
       path: '/orders/$id'
       fullPath: '/orders/$id'
       preLoaderRoute: typeof OrdersIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/seo-studio/$': {
+      id: '/seo-studio/$'
+      path: '/seo-studio/$'
+      fullPath: '/seo-studio/$'
+      preLoaderRoute: typeof SeoStudioSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/zalo/': {
@@ -511,9 +551,11 @@ const rootRouteChildren: RootRouteChildren = {
   ReportsRoute: ReportsRoute,
   RosterRoute: RosterRoute,
   ScheduleRoute: ScheduleRoute,
+  SeoRoute: SeoRoute,
   WarrantyRoute: WarrantyRoute,
   CustomersIdRoute: CustomersIdRoute,
   OrdersIdRoute: OrdersIdRoute,
+  SeoStudioSplatRoute: SeoStudioSplatRoute,
   ZaloCallbackRoute: ZaloCallbackRoute,
   CustomersIndexRoute: CustomersIndexRoute,
   OrdersIndexRoute: OrdersIndexRoute,

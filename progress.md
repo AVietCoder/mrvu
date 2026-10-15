@@ -64,8 +64,9 @@ Biến môi trường (tên, KHÔNG đọc / in giá trị): `VITE_SUPABASE_URL`
 | v23 | Bảo hành: `products.warranty_months`, `factories`, `warranty_tickets`, `factory_claims`, `warranty_activities` (RLS deny-all). |
 
 | **v24** ⏳ | Bảo hành hai mức: `products.warranty_motor_months` (120), `warranty_tickets.warranty_motor_months`, `warranty_tickets.fault_part`. **Chưa chạy lúc viết** — code chịu được (đọc / ghi cột v24 riêng, `getWarrantyMetaFn().migratedV24`) |
+| **v25** ⏳ | SEO Studio: 28 bảng `seo_*` (RLS deny-all, server đọc/ghi qua `SEO_DATABASE_URL`), bucket Storage `seo-images`; phần pg_cron `seo-autopost` ở cuối file chạy riêng sau khi deploy. **Chưa chạy lúc viết** (đã chạy thử 2 lần liên tiếp trên Postgres 18 cục bộ). |
 
-Migration tiếp theo đặt tên **v25**.
+Migration tiếp theo đặt tên **v26**.
 
 ---
 
@@ -157,6 +158,19 @@ Migration tiếp theo đặt tên **v25**.
 - Trang chi tiết khách có mục "Lịch sử bảo hành" (`WarrantyHistory`).
 - Hằng số nhãn: `WARRANTY_STAGES`, `WARRANTY_FINAL_ACTIONS`, `WARRANTY_ISSUE_TYPES`, `FACTORY_SOLUTIONS`, `FACTORY_RETURN_STATUSES` trong `types.ts`.
 
+### 4.10 SEO Studio (chỉ admin) — `src/lib/seo-studio/*`, `src/routes/seo-studio/$.ts`, `src/routes/seo.tsx` (migration v25)
+- Chuyển từ công cụ Python `mrvu-seo-studio/` (tài liệu `TAI_LIEU_SAN_PHAM.md`): 7 tab Volume · Rank · Audit · Autopost · AI Overview (GEO) · Backlink · Search Console + GA4, cùng chi phí / ngân sách. **Giữ nguyên hợp đồng API** của bản Python nên 7 trang HTML gốc chạy gần như nguyên vẹn: bản chép đã chỉnh nằm ở `src/lib/seo-studio/pages/` (sửa ở đây, KHÔNG sửa `mrvu-seo-studio/`), nạp bằng `?raw`.
+- **Đường đi**: menu "SEO Studio" (`/seo`, `permission: "admin"`) = khung iframe tới `/seo-studio/` (`?p=` mở đúng tab). `/seo-studio/*` là HTTP route thật → `dispatch()` trong `app.ts`: bỏ tiền tố → `/cron` (secret) → `/auth/*` → `auth.guard` → chia cho module như `do_GET/POST/DELETE` của `app.py`. Mỗi module có `handle(h, method, path)`, `h.query / h.read_json() / h.send_json()`.
+- **Bảo vệ**: cửa thật là **đăng nhập Google** (`auth.ts`, OIDC, cookie `mvs_session` Path=/seo-studio, bảng `seo_auth_sessions` chỉ lưu sha256; mỗi request kiểm lại email còn trong `SEO_ALLOWED_EMAILS`). Chưa cấu hình Google → chặn hết (trừ `SEO_DEV_NO_AUTH=1` trên localhost). Trang đăng nhập nằm trong iframe sẽ mở Google ở cửa sổ chính rồi quay về `/seo?p=…`.
+- **CSDL**: `core.ts` dùng `postgres` (Supabase pooler, `prepare:false`); SQL giữ gần nguyên bản (`?` → `$n`, mảng → danh sách cho `IN (?)`). Tham số jsonb phải viết `?::text::jsonb` (viết `?::jsonb` thì postgres.js mã hoá JSON hai lần). Tên cột `"fetch"` (từ khoá Postgres) phải để trong ngoặc kép. `config.json` cũ → dòng `seo_config` key `config` (jsonb).
+- **Khoá API chỉ lấy từ env** (`loadConfig`); giao diện không lưu khoá. Mật khẩu WordPress / token Custom API và file khoá Google tải lên được **mã hoá AES-GCM** bằng `SEO_SECRET_KEY`.
+- **Tác vụ dài trên Vercel** (`jobs.ts`): thay luồng nền bằng bảng `seo_jobs`; mỗi lần trang hỏi `…/job/<id>` server chạy MỘT bước (~40 giây với vòng lặp, khoá `locked_until` chống chạy trùng). Đóng trang thì tác vụ dừng, mở lại chạy tiếp. Các bước: crawl Audit (init → sitemaps → crawl → save), viết bài (plan → article → publish), GEO (serp → page → comps → ai → save), Backlink (4 lệnh gọi; gap theo nhóm 4 đối thủ), Search Console sync (mỗi truy vấn một bước, ghi `seo_gsc_stage`, bước `commit` thay dữ liệu trong 1 giao dịch), kiểm index (theo thời gian).
+- `vite.config.ts`: `nitro({ vercel: { functionRules: { "/seo-studio/**": { maxDuration: SEO_MAX_DURATION || 300 } } } })` → Vercel tạo hàm riêng `seo-studio/[...].func` (đã kiểm bằng `NITRO_PRESET=vercel`). Cần **Fluid Compute** (mặc định dự án mới) cho 300 giây ở gói Hobby; tắt thì đặt `SEO_MAX_DURATION=60`. Thêm alias `fs → node:fs` vì dự án có gói npm giả tên `fs` làm hỏng `postgres`.
+- **Lịch tự đăng bài**: pg_cron gọi `POST /seo-studio/cron` (header `x-job-secret` = `SEO_JOB_SECRET`) mỗi phút → `autopost.schedulerTick()` chạy MỘT bước: ưu tiên tác vụ tự động dở dang, không thì chọn website đến lượt (khung giờ VN, số bài/ngày, giãn cách ≥ 20 phút). **Giới hạn admin** (Cài đặt chi phí): `autopost_daily_max` (tổng bài lịch/ngày, mặc định 10), `crawl_max_pages` (mặc định 2000, tối thiểu 10), tự dừng khi vượt ngân sách. Từ khoá kẹt "Đang viết" > 30 phút tự chuyển lỗi.
+- **Claude**: `apis.ts` dùng `@anthropic-ai/sdk`, luôn streaming, mô hình `claude-sonnet-5-5` (env `SEO_ANTHROPIC_MODEL`), thử refusal fallback (`server-side-fallback-2026-07-01`) và tự bỏ nếu bị từ chối; ghi chi phí theo token thật vào `seo_spend`.
+- Thư viện ảnh Autopost: Supabase Storage bucket `seo-images` + bảng `seo_ap_library` (tải lên / xoá trong tab Cài đặt AI & biến, tối đa 3,5 MB/ảnh).
+- Khác bản Python có chủ đích: crawl tôn trọng `Disallow` của robots.txt; nhập CSV backlink báo đúng khi lỡ chọn file "Trang được liên kết hàng đầu"; khoá service account từ env `GOOGLE_SERVICE_ACCOUNT_JSON` (JSON hoặc base64) hoặc tải lên (mã hoá).
+
 ---
 
 ## 5. Cách kiểm thử đã dùng (không có test tự động)
@@ -166,6 +180,7 @@ Migration tiếp theo đặt tên **v25**.
 - **Xem giao diện thật không cần mật khẩu**: chạy `npx vite dev --port 4180`, mở Chrome headless (`--remote-debugging-port`) và điều khiển qua CDP bằng `WebSocket` có sẵn của Node 22; đặt phiên vào `localStorage["qt_session"] = { session: { user, token }, saved_at }` bằng `Page.addScriptToEvaluateOnNewDocument` rồi `Page.captureScreenshot`. Trong Git Bash phải đặt `MSYS_NO_PATHCONV=1` khi truyền tham số dạng `/reports` (nếu không bị đổi thành đường dẫn Windows). Lỗi "Hydration failed" hiện ở MỌI trang (server không có phiên, client có) — có sẵn, React tự dựng lại.
 - Các hàm tự chấm công đã được tách thân (`getMyAttendance`, `setMyAttendance`) để test được.
 - Dữ liệu thật: nếu phải ghi thử, **chụp lại trạng thái trước và khôi phục** (bản ghi, quyền, activity_logs).
+- **SEO Studio** (15/10/2026): Postgres 18 có sẵn trên máy (`C:/Program Files/PostgreSQL/18/bin`) → `initdb` cụm tạm ở cổng 55432 (tạo role `anon`, `authenticated` + bảng `storage.buckets` giả để chạy v25 nguyên văn), website / WordPress / Custom API / Google token / Claude (SSE, qua `ANTHROPIC_BASE_URL`) giả lập bằng `http.createServer`, gọi thẳng `dispatch(new Request(...))`. 113 mục đạt, gồm so khớp với bản Python (`py -3.11`, đặt `PYTHONIOENCODING=utf-8`): crawl, điểm + từng tiêu chí Audit, 5 loại cơ hội + tổng quan Search Console, đọc trang + kiểm cấu trúc GEO. **Chưa gọi API trả phí thật** (chưa có khoá).
 - Excel: xuất file trong script (giả lập `document` / `URL.createObjectURL`), đọc lại bằng exceljs + HyperFormula để so từng công thức với số app tính.
 
 ---
@@ -178,7 +193,8 @@ Migration tiếp theo đặt tên **v25**.
 4. Hồ sơ lương có ô "Chức vụ / bộ phận" gõ tay riêng, chưa liên kết với `users.position_id`.
 5. Tạo tài khoản cho "Ani", "My" rồi gắn lại lead cũ nếu muốn.
 6. Bảo mật: session phía server thay cho `actorId` (ưu tiên trước cho dữ liệu lương).
-7. **Bảo hành (4.9)** — còn lại:
+7. **SEO Studio (4.10)** — chủ dự án cần: chạy v25; đặt biến env (mẫu ở `.env.example`); tạo OAuth client Google (redirect `https://<miền>/seo-studio/auth/callback`); kiểm Fluid Compute đang bật; deploy rồi chạy phần pg_cron cuối v25. Sau đó thử với lượng nhỏ (3 từ volume, 2 từ rank, 1 GEO, 1 bài nháp). Thư mục `mrvu-seo-studio/` chỉ còn là bản tham khảo (không được build).
+8. **Bảo hành (4.9)** — còn lại:
    - Đã kiểm trên dữ liệu thật 02/10/2026 (50 mục, dữ liệu thử đã xoá): mã phiếu / mã yêu cầu tăng và không trùng khi tạo song song, hạn BH theo mẫu, quy tắc tiền linh kiện, SLA 24h, phân quyền theo chi nhánh, đại lý, gắn đơn, tạo lịch, nhà máy, báo cáo. **Chưa mở giao diện trên trình duyệt.**
    - **Chủ dự án chạy `sql_migration_v24_warranty_two_tier.sql`**, rồi kiểm phần ghi của hai mức (lưu `fault_part`, đặt hạn động cơ ở Cài đặt). Trước v24 đã kiểm: quy tắc hai mức, ô chọn đại lý, điền sẵn từ đơn, và việc lưu phiếu không hỏng khi thiếu cột.
    - Zalo cho bảo hành: **chủ dự án chọn CHƯA làm**. OA có 3 mẫu ZNS bật (mua hàng 622226, sinh nhật 642321, "Thông báo nhắc đến lịch hẹn" 642205); mẫu 642205 lời văn cố định là nhắc **bảo trì định kỳ** (CSKH → Bảo dưỡng) nên không dùng cho phiếu bảo hành. Khi cần: đăng ký mẫu mới, thêm loại vào `TEMPLATE_KINDS` (`src/routes/zalo/index.tsx`) + hàm enqueue kiểu `enqueue-care.ts`.
