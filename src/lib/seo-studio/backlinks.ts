@@ -372,7 +372,7 @@ Chỉ trả về JSON hợp lệ:
   "zalo_message": "bản rút gọn cho Zalo/Messenger, dưới 60 chữ",
   "content_idea": "nếu là bài khách/bổ sung nội dung: đề xuất tiêu đề + 3 ý chính, ngược lại để rỗng"
 }`;
-  const [txt, usage] = await claude(cfg, prompt, 2500, null, "ai_outreach");
+  const [txt, usage] = await claude(cfg, prompt, 4000, null, "ai_outreach");
   const out = extractJson(txt);
   out.usage = usage;
   await saveOpp(siteId, domain, { draft_json: JSON.stringify(out) });

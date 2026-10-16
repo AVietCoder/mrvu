@@ -44,7 +44,8 @@ let _client: any = null;
 function client(key: string) {
   if (!_client || _client.apiKey !== key) {
     // Một lần gọi viết bài có thể mất vài phút; thử lại tối đa 1 lần để không vượt giới hạn thời gian của Vercel.
-    _client = new Anthropic({ apiKey: key, timeout: 280_000, maxRetries: 1 });
+    // authToken: null → không để biến ANTHROPIC_AUTH_TOKEN (nếu có trên máy) gửi kèm header lạ.
+    _client = new Anthropic({ apiKey: key, authToken: null, timeout: 280_000, maxRetries: 1 });
   }
   return _client;
 }
@@ -79,7 +80,9 @@ export async function claude(cfg: any, prompt: string, maxTokens = 4000, system:
       } else throw e;
     }
   } catch (e: any) {
-    if (e instanceof Anthropic.AuthenticationError) throw new SeoError("Khóa Claude API không đúng.");
+    if (e instanceof Anthropic.AuthenticationError) {
+      throw new SeoError(`Anthropic từ chối khóa Claude máy chủ đang dùng (ANTHROPIC_API_KEY …${key.slice(-4)}). Đối chiếu 4 ký tự cuối với khóa trong console.anthropic.com → API Keys; sửa biến môi trường trên Vercel rồi Redeploy (chạy trên máy thì khởi động lại npm run dev).`);
+    }
     if (e instanceof Anthropic.APIError && /credit balance/i.test(String(e.message))) {
       throw new SeoError("Tài khoản Claude (Anthropic) đã hết credit. Vào console.anthropic.com → Settings → Billing để nạp thêm (đúng tổ chức chứa ANTHROPIC_API_KEY), đợi vài phút rồi thử lại.");
     }

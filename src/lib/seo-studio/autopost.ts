@@ -101,7 +101,7 @@ Xác định đúng ý định tìm kiếm của người dùng khi gõ từ kh�
   "internal_links": [{"url": "URL lấy từ danh sách", "anchor": "chữ neo tự nhiên"}]
 }
 Chọn 2-4 link nội bộ thật sự liên quan; nếu danh sách trống thì để mảng rỗng.`;
-  const [planTxt, u1] = await claude(cfg, planPrompt, 2500, null, "autopost_write");
+  const [planTxt, u1] = await claude(cfg, planPrompt, 5000, null, "autopost_write");
   const plan = extractJson(planTxt, "AI trả về dàn ý không đúng định dạng, hãy thử lại.");
   const allowed = new Set(links);
   plan.internal_links = (plan.internal_links || []).filter((l: any) => allowed.has(l?.url)).slice(0, 4);

@@ -578,7 +578,7 @@ ${varsTxt || "- (không có)"}
 
 Yêu cầu: title 50-60 ký tự, từ khóa chính ở đầu, có yếu tố khiến người tìm muốn bấm (con số, lợi ích, năm, giải đáp trực tiếp); meta 120-155 ký tự, trả lời đúng ý định tìm kiếm, có lời kêu gọi. Không bịa giá, khuyến mãi.
 Chỉ trả về JSON: {"diagnosis": "vì sao CTR thấp (1-2 câu)", "titles": ["3 phương án"], "metas": ["2 phương án"]}`;
-  const out = await aiJson(prompt, 1500, "gsc_title");
+  const out = await aiJson(prompt, 3000, "gsc_title");
   out.current = { title, meta: desc };
   await saveAi("title", page, out);
   return out;
@@ -616,7 +616,7 @@ Chỉ trả về JSON:
   "items": [{"week": 1, "type": "new|update|merge", "title": "tiêu đề bài đề xuất", "main_keyword": "...", "supporting_keywords": ["..."],
              "target_url": "URL cần cập nhật/gộp (rỗng nếu bài mới)", "reason": "lý do dựa trên số liệu", "outline": ["H2: ..."], "impact": "cao|trung bình|thấp"}]}`;
   ctx.progress("AI đang lập kế hoạch…");
-  const out = await aiJson(prompt, 7000, "gsc_plan");
+  const out = await aiJson(prompt, 14000, "gsc_plan");
   await saveAi("plan", "", out);
   return { done: { items: (out.items || []).length } };
 });
@@ -693,7 +693,7 @@ Chỉ trả về JSON:
   "data_gaps": ["dữ liệu còn thiếu nên bổ sung"]}
 priorities: 6-10 việc, sắp theo thứ tự nên làm.`;
   ctx.progress("AI đang viết báo cáo tư vấn…");
-  const out = await aiJson(prompt, 6000, "gsc_report");
+  const out = await aiJson(prompt, 10000, "gsc_report");
   out.domain = dom;
   return { done: { id: await saveAi("report", "", out) } };
 });

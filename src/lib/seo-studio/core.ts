@@ -12,6 +12,7 @@
  *                     lưu ở bảng seo_config.
  */
 import postgres from "postgres";
+import { jsonrepair } from "jsonrepair";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 export class SeoError extends Error {}
@@ -48,16 +49,29 @@ export function squash(s: any): string {
 export function vnNum(n: number): string {
   return Math.round(Number(n) || 0).toLocaleString("en-US").replace(/,/g, ".");
 }
-/** Lấy đối tượng JSON đầu tiên trong văn bản AI trả về (re.search(r"\{.*\}", txt, re.S)). */
+/**
+ * Lấy đối tượng JSON trong văn bản AI trả về (bản gốc: re.search(r"\{.*\}", txt, re.S)).
+ * Đọc thẳng không được thì sửa tự động (jsonrepair): bỏ ```json, dấu phẩy thừa, xuống dòng /
+ * dấu nháy chưa thoát trong chuỗi, và JSON bị cắt giữa chừng (đóng ngoặc còn thiếu).
+ */
 export function extractJson(txt: string, msg = "AI trả về nội dung không đúng định dạng, hãy thử lại.") {
-  const a = txt.indexOf("{");
+  const a = String(txt || "").indexOf("{");
+  if (a < 0) throw new SeoError(msg);
   const b = txt.lastIndexOf("}");
-  if (a < 0 || b <= a) throw new SeoError(msg);
-  try {
-    return JSON.parse(txt.slice(a, b + 1));
-  } catch {
-    throw new SeoError(msg);
+  if (b > a) {
+    try {
+      return JSON.parse(txt.slice(a, b + 1));
+    } catch {}
   }
+  for (const part of [b > a ? txt.slice(a, b + 1) : null, txt.slice(a).replace(/```\s*$/, "")]) {
+    if (!part) continue;
+    try {
+      const out = JSON.parse(jsonrepair(part));
+      if (out && typeof out === "object" && !Array.isArray(out)) return out;
+    } catch {}
+  }
+  console.error("[seo ai] JSON không đọc được:", txt.length, "ký tự, đuôi:", JSON.stringify(txt.slice(-200)));
+  throw new SeoError(msg);
 }
 /** list(dict.fromkeys(xs)) */
 export function uniq<T>(xs: T[]): T[] {

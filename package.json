@@ -60,6 +60,7 @@
     "exceljs": "^4.4.0",
     "fs": "^0.0.1-security",
     "input-otp": "^1.4.2",
+    "jsonrepair": "^3.15.0",
     "lucide-react": "^0.575.0",
     "mongodb": "^6.21.0",
     "multer": "^2.1.1",

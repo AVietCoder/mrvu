@@ -180,7 +180,7 @@ Chỉ trả về JSON hợp lệ:
   "better_title": "đề xuất title mới nếu cần, hoặc rỗng"
 }
 fixes: 4-8 việc, sắp theo mức ảnh hưởng. faq: 3-5 câu, ưu tiên câu trong People also ask.`;
-  const [txt, usage] = await claude(cfg, prompt, 6000, null, "geo");
+  const [txt, usage] = await claude(cfg, prompt, 10000, null, "geo");
   const out = extractJson(txt);
   out.usage = usage;
   return out;

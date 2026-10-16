@@ -520,7 +520,7 @@ Chỉ trả về một đối tượng JSON hợp lệ, không giải thích th�
   "priority_fixes": ["3-6 việc nên làm trước, sắp theo mức ảnh hưởng"]
 }
 Chỉ dựa vào nội dung trang; không bịa giá, thông số hay thông tin liên hệ.`;
-  const [txt, usage] = await claude(cfg, prompt, 4000, null, "audit_ai");
+  const [txt, usage] = await claude(cfg, prompt, 8000, null, "audit_ai");
   const out = extractJson(txt);
   if (out.faq?.length) out.faq_schema = faqSchema(out.faq);
   out.usage = usage;
