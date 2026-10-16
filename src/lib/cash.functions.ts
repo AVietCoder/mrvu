@@ -11,6 +11,7 @@ import {
   now,
 } from "./supabase";
 import { recalculateCustomerDebt } from "./customers.functions";
+import { branchDelta, systemDelta, voucherBranchIds } from "./cash-math";
 
 function extractRelatedCustomerIds(v: any): string[] {
   return Array.from(
@@ -120,26 +121,6 @@ export const searchCashPage = createServerFn({ method: "GET" }).handler(
       const b = (isThu ? gCust(v.payer_customer_id) : gCust(v.receiver_customer_id)) || "—";
       return { a, b };
     };
-    const voucherBranchIds = (v: any): string[] => {
-      if (!v.from_kind && !v.to_kind) return v.branch_id ? [v.branch_id] : [];
-      const ids: string[] = [];
-      if (v.from_kind === "branch" && v.from_id) ids.push(v.from_id);
-      if (v.to_kind === "branch" && v.to_id) ids.push(v.to_id);
-      return ids;
-    };
-    const branchDelta = (v: any, bId: string): number => {
-      const amt = Number(v.amount) || 0;
-      const isThu = v.type === "thu";
-      if (!v.from_kind && !v.to_kind) {
-        if (v.branch_id === bId) return isThu ? amt : -amt;
-        return 0;
-      }
-      let d = 0;
-      if (v.from_kind === "branch" && v.from_id === bId) d += isThu ? amt : -amt;
-      if (v.to_kind === "branch" && v.to_id === bId) d += isThu ? -amt : amt;
-      return d;
-    };
-
     const currentFund = fund === "all" ? null : fund;
 
     // Số liệu (CHỈ phiếu active) — logic branchStats cũ, bổ sung khoảng ngày:
@@ -160,14 +141,16 @@ export const searchCashPage = createServerFn({ method: "GET" }).handler(
       }
       stats = { thu, chi, ton: tonAll };
     } else {
+      // "Tất cả" = cộng các chi nhánh. Phiếu chuyển tiền giữa hai chi nhánh có
+      // systemDelta = 0 → không tính vào thu, chi hay tồn (trước đây bị cộng như
+      // phiếu thu/chi thường → tồn "Tất cả" lệch so với tổng các chi nhánh).
       let thu = 0, chi = 0, tonAll = 0;
       for (const v of active) {
-        const amt = Number(v.amount || 0);
-        const signed = v.type === "thu" ? amt : -amt;
-        tonAll += signed;
+        const d = systemDelta(v);
+        tonAll += d;
         if (!inDateRange(v)) continue;
-        if (v.type === "thu") thu += amt;
-        else chi += amt;
+        if (d > 0) thu += d;
+        else if (d < 0) chi += -d;
       }
       stats = { thu, chi, ton: tonAll };
     }

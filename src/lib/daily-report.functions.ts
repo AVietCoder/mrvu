@@ -3,6 +3,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { getSupabaseAdmin } from "./zalo/admin-client";
 import { fetchAllPaged } from "./reports.functions";
 import { todayVN } from "./date-vn";
+// Cùng cách tính với Sổ quỹ (cash.functions.ts).
+import { branchDelta, systemDelta, voucherBranchIds } from "./cash-math";
 
 /**
  * BÁO CÁO 1 NGÀY — mọi chỉ số của một ngày (giờ Việt Nam) trên một màn hình.
@@ -46,23 +48,6 @@ async function safe<T>(p: Promise<T[]>, onMissing: () => void): Promise<T[]> {
   }
 }
 
-// Sao y Sổ quỹ (cash.functions.ts): phiếu thuộc chi nhánh nào, cộng / trừ quỹ bao nhiêu.
-const voucherBranchIds = (v: any): string[] => {
-  if (!v.from_kind && !v.to_kind) return v.branch_id ? [v.branch_id] : [];
-  const ids: string[] = [];
-  if (v.from_kind === "branch" && v.from_id) ids.push(v.from_id);
-  if (v.to_kind === "branch" && v.to_id) ids.push(v.to_id);
-  return ids;
-};
-const branchDelta = (v: any, bId: string): number => {
-  const amt = num(v.amount);
-  const isThu = v.type === "thu";
-  if (!v.from_kind && !v.to_kind) return v.branch_id === bId ? (isThu ? amt : -amt) : 0;
-  let d = 0;
-  if (v.from_kind === "branch" && v.from_id === bId) d += isThu ? amt : -amt;
-  if (v.to_kind === "branch" && v.to_id === bId) d += isThu ? -amt : amt;
-  return d;
-};
 
 export async function buildDailyReport(args: { date?: string; branchId?: string }) {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(args?.date ?? "")) ? String(args.date) : todayVN();
@@ -158,8 +143,9 @@ export async function buildDailyReport(args: { date?: string; branchId?: string 
   const byType = new Map<string, { type: string; name: string; count: number; amount: number }>();
   const inScope = vouchers.filter((v: any) => !branchId || voucherBranchIds(v).includes(branchId));
   for (const v of inScope) {
-    // Không lọc chi nhánh: thu/chi theo loại phiếu. Có lọc: theo mức cộng / trừ quỹ của chi nhánh đó.
-    const delta = branchId ? branchDelta(v, branchId) : v.type === "thu" ? num(v.amount) : -num(v.amount);
+    // Có lọc: mức cộng / trừ quỹ của chi nhánh đó. Không lọc: tác động lên toàn công ty
+    // (chuyển tiền giữa hai chi nhánh = 0 → không tính là thu hay chi).
+    const delta = branchId ? branchDelta(v, branchId) : systemDelta(v);
     if (!delta) continue;
     const side = delta > 0 ? cash.thu : cash.chi;
     const amt = Math.abs(delta);
