@@ -991,8 +991,10 @@ function Page() {
         )}
         <div className={`space-y-4 transition-opacity ${cashSwitching ? "opacity-40 pointer-events-none" : ""}`}>
         {(isLoading || (cashLoading && !cashData)) && (
-          <div className="py-12 flex items-center justify-center gap-2 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />Đang tải dữ liệu...
+          <div className="py-12 flex justify-center">
+            <div className="flex items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm shadow-md">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />Đang tải dữ liệu…
+            </div>
           </div>
         )}
         {!cashLoading && totalFiltered === 0 && (
