@@ -114,6 +114,53 @@ export async function fetchAllRows<T = any>(
   return all;
 }
 
+/**
+ * Như fetchAllRows nhưng tải các trang 1000 dòng SONG SONG (đếm trước rồi gọi cùng lúc)
+ * → nhanh hơn nhiều với bảng vài nghìn dòng. Sắp thêm theo `id` để các trang không
+ * chồng / sót; nếu trang cuối vẫn đầy (có dòng mới chen vào) thì tải tiếp tuần tự;
+ * bỏ dòng trùng theo id.
+ */
+export async function fetchAllRowsParallel<T = any>(
+  table: string,
+  options?: { select?: string; orderBy?: string; ascending?: boolean },
+): Promise<T[]> {
+  const PAGE = 1000;
+  const page = (i: number) => {
+    let q = supabase.from(table).select(options?.select ?? "*");
+    if (options?.orderBy) q = q.order(options.orderBy, { ascending: options.ascending ?? true });
+    return q.order("id", { ascending: true }).range(i * PAGE, i * PAGE + PAGE - 1);
+  };
+  const { count, error } = await supabase.from(table).select("id", { count: "exact", head: true });
+  if (error) throw new Error(error.message);
+  const n = Math.max(1, Math.ceil((count ?? 0) / PAGE));
+  const parts = await Promise.all(Array.from({ length: n }, (_, i) => page(i)));
+  const rows: any[] = [];
+  for (const p of parts) {
+    if (p.error) throw new Error(p.error.message);
+    rows.push(...(p.data ?? []));
+  }
+  for (let i = n, last = parts[n - 1].data ?? []; last.length === PAGE; i++) {
+    const p = await page(i);
+    if (p.error) throw new Error(p.error.message);
+    last = p.data ?? [];
+    rows.push(...last);
+  }
+  const seen = new Set();
+  return rows.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true))) as T[];
+}
+
+/** Lấy các dòng theo danh sách id (chia lô để URL không quá dài, các lô chạy song song). */
+export async function fetchRowsByIds<T = any>(table: string, ids: string[], select = "*"): Promise<T[]> {
+  const uniq = Array.from(new Set(ids.filter(Boolean)));
+  const chunks: string[][] = [];
+  for (let i = 0; i < uniq.length; i += 150) chunks.push(uniq.slice(i, i + 150));
+  const parts = await Promise.all(chunks.map((c) => supabase.from(table).select(select).in("id", c)));
+  return parts.flatMap((p) => {
+    if (p.error) throw new Error(p.error.message);
+    return (p.data ?? []) as T[];
+  });
+}
+
 export async function fetchRow<T = any>(table: string, options?: QueryOptions): Promise<T | null> {
   const rows = await fetchRows<T>(table, { ...options, limit: 1 });
   return rows[0] ?? null;

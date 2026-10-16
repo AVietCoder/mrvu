@@ -4,6 +4,8 @@ import {
   supabase,
   fetchRows,
   fetchAllRows,
+  fetchAllRowsParallel,
+  fetchRowsByIds,
   insertRow,
   updateWhere,
   deleteWhere,
@@ -86,12 +88,18 @@ export const searchCashPage = createServerFn({ method: "GET" }).handler(
       return true;
     };
 
-    const [vouchers, branches, users, customers] = await Promise.all([
-      fetchAllRows("cash_vouchers", { orderBy: "created_at", ascending: false }),
+    // Tải phiếu song song theo trang; tên khách CHỈ lấy cho những khách có trong phiếu
+    // (trước đây tải cả ~17.000 khách mỗi lần đổi bộ lọc → chậm 4–5 giây).
+    const [vouchers, branches, users] = await Promise.all([
+      fetchAllRowsParallel("cash_vouchers", { orderBy: "created_at", ascending: false }),
       fetchRows("branches", { orderBy: "name" }),
       fetchRows("users", { select: "id, full_name", orderBy: "full_name" }),
-      fetchAllRows("customers", { select: "id, name, company_name", orderBy: "created_at", ascending: false }),
     ]);
+    const customers = await fetchRowsByIds(
+      "customers",
+      (vouchers as any[]).flatMap(extractRelatedCustomerIds),
+      "id, name, company_name",
+    );
 
     const branchName = new Map((branches as any[]).map((b) => [b.id, b.name]));
     const userName = new Map((users as any[]).map((u) => [u.id, u.full_name]));

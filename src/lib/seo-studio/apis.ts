@@ -80,6 +80,9 @@ export async function claude(cfg: any, prompt: string, maxTokens = 4000, system:
     }
   } catch (e: any) {
     if (e instanceof Anthropic.AuthenticationError) throw new SeoError("Khóa Claude API không đúng.");
+    if (e instanceof Anthropic.APIError && /credit balance/i.test(String(e.message))) {
+      throw new SeoError("Tài khoản Claude (Anthropic) đã hết credit. Vào console.anthropic.com → Settings → Billing để nạp thêm (đúng tổ chức chứa ANTHROPIC_API_KEY), đợi vài phút rồi thử lại.");
+    }
     if (e instanceof Anthropic.APIError && e.status) throw new SeoError(`Claude API lỗi ${e.status}: ${e.error?.error?.message || e.message}`);
     if (e instanceof Anthropic.APIConnectionError) throw new SeoError("Không kết nối được Claude API.");
     throw e;

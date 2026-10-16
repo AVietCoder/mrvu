@@ -473,7 +473,7 @@ function Page() {
 
   // Trang phiếu + số liệu (thu/chi/số dư) tính ở SERVER theo bộ lọc hiện tại.
   // Đổi bộ lọc/trang → đổi query key → chỉ tải đúng 1 trang.
-  const { data: cashData, isLoading: cashLoading } = useQuery({
+  const { data: cashData, isLoading: cashLoading, isPlaceholderData: cashSwitching } = useQuery({
     queryKey: ["cash", "page", page, fund, filterBranch, filterType, filterVoucherType, filterBank, filterDateFrom, filterDateTo, debouncedSearch, canViewAll, (user?.branch_ids ?? []).join(",")],
     queryFn: () =>
       cashFn({
@@ -834,11 +834,12 @@ function Page() {
           })}
         </div>
 
-        {/* ── Stats ── */}
+        {/* ── Stats ── (cashSwitching: đang tải số liệu của bộ lọc mới, vẫn hiện số cũ nên làm mờ + vòng xoay) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="rounded-xl border bg-card p-3 shadow-sm">
+          <div className="rounded-xl border bg-card p-3 shadow-sm relative">
             <div className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
               <Building2 className="h-3.5 w-3.5" />Chi nhánh
+              {cashSwitching && <Loader2 className="h-3.5 w-3.5 ml-auto animate-spin text-primary" aria-label="Đang tải" />}
             </div>
             <select
               className="w-full text-sm font-medium bg-transparent outline-none cursor-pointer"
@@ -857,7 +858,7 @@ function Page() {
               <TrendingUp className="h-3.5 w-3.5 text-green-500" />
               Tổng thu{fund !== "all" ? ` (${fund === "tien_mat" ? "Tiền mặt" : "Ngân hàng"})` : ""}
             </div>
-            <div className="font-bold text-green-600 text-base sm:text-lg tabular-nums">
+            <div className={`font-bold text-green-600 text-base sm:text-lg tabular-nums transition-opacity ${cashSwitching ? "opacity-30 animate-pulse" : ""}`}>
               +{moneyFmt(branchStats.thu)}
             </div>
           </div>
@@ -866,7 +867,7 @@ function Page() {
               <TrendingDown className="h-3.5 w-3.5 text-red-500" />
               Tổng chi{fund !== "all" ? ` (${fund === "tien_mat" ? "Tiền mặt" : "Ngân hàng"})` : ""}
             </div>
-            <div className="font-bold text-red-600 text-base sm:text-lg tabular-nums">
+            <div className={`font-bold text-red-600 text-base sm:text-lg tabular-nums transition-opacity ${cashSwitching ? "opacity-30 animate-pulse" : ""}`}>
               -{moneyFmt(branchStats.chi)}
             </div>
           </div>
@@ -875,7 +876,7 @@ function Page() {
               <Wallet className="h-3.5 w-3.5 text-blue-500" />
               Tồn quỹ{fund !== "all" ? ` (${fund === "tien_mat" ? "Tiền mặt" : "Ngân hàng"})` : ""}
             </div>
-            <div className={`font-bold text-base sm:text-lg tabular-nums ${branchStats.ton >= 0 ? "text-blue-600" : "text-red-600"}`}>
+            <div className={`font-bold text-base sm:text-lg tabular-nums transition-opacity ${branchStats.ton >= 0 ? "text-blue-600" : "text-red-600"} ${cashSwitching ? "opacity-30 animate-pulse" : ""}`}>
               {moneyFmt(branchStats.ton)}
             </div>
           </div>
@@ -979,8 +980,20 @@ function Page() {
         </div>
 
         {/* ── Card list (mobile-first) / Table (desktop) ── */}
-        {isLoading && (
-          <div className="py-12 text-center text-muted-foreground">Đang tải dữ liệu...</div>
+        {/* Đổi chi nhánh / bộ lọc: giữ danh sách cũ nhưng làm mờ + hiện vòng xoay cho tới khi có dữ liệu mới. */}
+        <div className="relative space-y-4" aria-busy={cashSwitching || cashLoading}>
+        {cashSwitching && (
+          <div className="absolute inset-x-0 top-0 z-10 flex justify-center pt-10 pointer-events-none">
+            <div className="flex items-center gap-2 rounded-full border bg-card px-4 py-2 text-sm shadow-md">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />Đang tải số liệu…
+            </div>
+          </div>
+        )}
+        <div className={`space-y-4 transition-opacity ${cashSwitching ? "opacity-40 pointer-events-none" : ""}`}>
+        {(isLoading || (cashLoading && !cashData)) && (
+          <div className="py-12 flex items-center justify-center gap-2 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />Đang tải dữ liệu...
+          </div>
         )}
         {!cashLoading && totalFiltered === 0 && (
           <div className="py-12 text-center text-muted-foreground">Chưa có phiếu nào</div>
@@ -1248,6 +1261,8 @@ function Page() {
             label="phiếu"
           />
         )}
+        </div>
+        </div>
       </div>
 
       {/* ════ Create dialog ════ */}
