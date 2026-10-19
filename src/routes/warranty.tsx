@@ -13,8 +13,9 @@ import { User, Store, Factory, Hourglass, BarChart3, Settings } from "lucide-rea
 const TABS = [
   { key: "retail", label: "Khách lẻ", icon: User, admin: false },
   { key: "dealer", label: "Đại lý", icon: Store, admin: false },
-  { key: "factory", label: "Nhà máy", icon: Factory, admin: true },
-  { key: "awaiting", label: "Chờ NM trả hàng", icon: Hourglass, admin: true },
+  // "factory": admin hoặc nhân viên có quyền "Bảo hành nhà máy" (warranty_factory).
+  { key: "factory", label: "Nhà máy", icon: Factory, admin: "factory" },
+  { key: "awaiting", label: "Chờ NM trả hàng", icon: Hourglass, admin: "factory" },
   { key: "report", label: "Báo cáo", icon: BarChart3, admin: false },
   { key: "settings", label: "Cài đặt", icon: Settings, admin: true },
 ] as const;
@@ -31,7 +32,7 @@ export const Route = createFileRoute("/warranty")({
 
 /**
  * Quản lý bảo hành: phiếu của khách lẻ / đại lý (theo chi nhánh được gán) và
- * hàng lỗi gửi nhà máy (chỉ admin).
+ * hàng lỗi gửi nhà máy (admin + nhân viên có quyền "Bảo hành nhà máy").
  */
 function WarrantyPage() {
   const search = Route.useSearch();
@@ -41,7 +42,8 @@ function WarrantyPage() {
   // Phiếu vừa bấm "Gửi nhà máy" → chuyển sang tab Nhà máy và mở form điền sẵn.
   const [factoryFrom, setFactoryFrom] = useState<any>(null);
 
-  const tabs = TABS.filter((t) => !t.admin || isAdmin);
+  const canFactory = isAdmin || Boolean(metaHook.meta?.me?.canFactory);
+  const tabs = TABS.filter((t) => !t.admin || isAdmin || (t.admin === "factory" && canFactory));
   const tab: TabKey = tabs.some((t) => t.key === search.tab) ? (search.tab as TabKey) : "retail";
   const go = (key: TabKey) => navigate({ search: key === "retail" ? {} : { tab: key } });
 
@@ -77,10 +79,10 @@ function WarrantyPage() {
           kind={tab}
           metaHook={metaHook}
           openTicketId={search.ticket}
-          onSendFactory={isAdmin ? (t: any) => { setFactoryFrom(t); go("factory"); } : undefined}
+          onSendFactory={canFactory ? (t: any) => { setFactoryFrom(t); go("factory"); } : undefined}
         />
       )}
-      {(tab === "factory" || tab === "awaiting") && isAdmin && (
+      {(tab === "factory" || tab === "awaiting") && canFactory && (
         <ClaimsTab
           key={tab}
           mode={tab === "awaiting" ? "awaiting" : "all"}

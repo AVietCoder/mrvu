@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CustomerName } from "@/components/CustomerName";
-import { WARRANTY_FAULT_PARTS, WARRANTY_FINAL_ACTIONS, WARRANTY_STAGES, warrantyActionLabel, warrantyIssueLabel } from "@/lib/types";
+import { WARRANTY_FAULT_PARTS, WARRANTY_FINAL_ACTIONS, WARRANTY_NO_PRICE_ACTIONS, WARRANTY_STAGES, warrantyActionLabel, warrantyIssueLabel } from "@/lib/types";
 import { Loader2, Phone, MapPin, Pencil, Trash2, AlarmClock, Factory, CalendarPlus, ShoppingCart, Link2, Unlink } from "lucide-react";
 import { toast } from "sonner";
 import { StageBadge, WarrantyBadge, ReturnBadge, AttachmentList, money, dmy, dmyTime, shortStaff, todayVN } from "./shared";
@@ -154,12 +154,12 @@ export function TicketDetail({ ticketId, open, onClose, onEdit, onSendFactory, m
                   </div>
                 )}
                 <Row label="Kết quả xử lý cuối">{t.final_action ? warrantyActionLabel(t.final_action) : <span className="font-normal text-muted-foreground">Chưa có</span>}</Row>
-                <Row label="Giá linh kiện mua">{Number(t.spare_part_price) > 0 ? `${money(t.spare_part_price)}đ` : t.final_action === "free_support" ? "Miễn phí" : "—"}</Row>
+                <Row label="Giá linh kiện mua">{Number(t.spare_part_price) > 0 ? `${money(t.spare_part_price)}đ` : t.final_action === "free_support" ? "Miễn phí" : t.final_action === "customer_declined" ? "Không thu" : "—"}</Row>
               </div>
 
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={() => onEdit(t)}><Pencil className="mr-1.5 h-4 w-4" />Sửa phiếu</Button>
-                {me?.isAdmin && onSendFactory && (
+                {(me?.isAdmin || me?.canFactory) && onSendFactory && (
                   <Button variant="outline" size="sm" onClick={() => onSendFactory(t)}><Factory className="mr-1.5 h-4 w-4" />Gửi nhà máy</Button>
                 )}
                 {me?.canSchedule && !data.schedule && (
@@ -293,14 +293,14 @@ export function TicketDetail({ ticketId, open, onClose, onEdit, onSendFactory, m
                   <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
                     <div className="min-w-[200px]">
                       <Label>Kết quả xử lý cuối *</Label>
-                      <select className="mt-1.5 h-10 w-full rounded-md border bg-background px-3" value={action} onChange={(e) => { setAction(e.target.value); if (e.target.value === "free_support") setPrice(""); }}>
+                      <select className="mt-1.5 h-10 w-full rounded-md border bg-background px-3" value={action} onChange={(e) => { setAction(e.target.value); if (WARRANTY_NO_PRICE_ACTIONS.includes(e.target.value)) setPrice(""); }}>
                         <option value="">— Chọn —</option>
                         {WARRANTY_FINAL_ACTIONS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
                       </select>
                     </div>
                     <div>
                       <Label>Giá linh kiện mua{action === "buy_part" ? " *" : ""}</Label>
-                      <Input className="mt-1.5 w-40" inputMode="numeric" placeholder={action === "free_support" ? "Miễn phí" : "0"} disabled={action === "free_support"} value={price ? money(price) : ""} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))} />
+                      <Input className="mt-1.5 w-40" inputMode="numeric" placeholder={action === "free_support" ? "Miễn phí" : action === "customer_declined" ? "Không thu" : "0"} disabled={WARRANTY_NO_PRICE_ACTIONS.includes(action)} value={price ? money(price) : ""} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))} />
                     </div>
                     <Button
                       disabled={!action || busy === "done"}

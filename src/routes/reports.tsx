@@ -7,6 +7,7 @@ import { SalesByCustomer } from "@/components/SalesByCustomer";
 import { DailyReport } from "@/components/DailyReport";
 import { AppShell, Card, fmt } from "@/components/AppShell";
 import { useAuth } from "@/context/AuthContext";
+import { SalesQtyReport } from "@/components/SalesQtyReport";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -147,15 +148,19 @@ function PeriodReport({ tabs }: { tabs: ReactNode }) {
     { label: "7 ngày", days: 6, key: "7d" },
     { label: "30 ngày", days: 29, key: "30d" },
     { label: "90 ngày", days: 89, key: "90d" },
+    { label: "Tháng này", days: -1, key: "mtd" },
+    { label: "Quý này", days: -1, key: "qtd" },
     { label: "Năm nay", days: -1, key: "ytd" },
   ];
 
   function applyPreset(p: typeof presets[0]) {
     setActivePreset(p.key);
-    if (p.key === "ytd") {
-      const y = new Date().getFullYear();
-      setFromDate(`${y}-01-01`);
-      setToDate(todayStr());
+    if (p.key === "ytd" || p.key === "mtd" || p.key === "qtd") {
+      const t = todayStr(); // YYYY-MM-DD giờ VN
+      const y = t.slice(0, 4), m = Number(t.slice(5, 7));
+      const startMonth = p.key === "ytd" ? 1 : p.key === "qtd" ? Math.floor((m - 1) / 3) * 3 + 1 : m;
+      setFromDate(`${y}-${String(startMonth).padStart(2, "0")}-01`);
+      setToDate(t);
     } else {
       setFromDate(daysAgoStr(p.days));
       setToDate(todayStr());
@@ -600,6 +605,9 @@ function PeriodReport({ tabs }: { tabs: ReactNode }) {
               )}
             </Card>
           </div>
+
+          {/* Báo cáo hàng bán: số lượng theo Tuần / Tháng / Quý / Năm trong khoảng ngày đang chọn */}
+          <SalesQtyReport data={data} fromDate={fromDate} toDate={toDate} />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>

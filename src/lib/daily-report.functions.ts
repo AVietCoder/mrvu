@@ -140,7 +140,7 @@ export async function buildDailyReport(args: { date?: string; branchId?: string 
     chi: { tien_mat: 0, ngan_hang: 0, total: 0, count: 0 },
     internalThu: 0, internalChi: 0,
   };
-  const byType = new Map<string, { type: string; name: string; count: number; amount: number }>();
+  const byType = new Map<string, { type: string; name: string; count: number; amount: number; vouchers: any[] }>();
   const inScope = vouchers.filter((v: any) => !branchId || voucherBranchIds(v).includes(branchId));
   for (const v of inScope) {
     // Có lọc: mức cộng / trừ quỹ của chi nhánh đó. Không lọc: tác động lên toàn công ty
@@ -160,9 +160,11 @@ export async function buildDailyReport(args: { date?: string; branchId?: string 
       else cash.internalChi += amt;
     }
     const key = `${delta > 0 ? "thu" : "chi"}|${name}`;
-    const row = byType.get(key) ?? { type: delta > 0 ? "thu" : "chi", name, count: 0, amount: 0 };
+    const row = byType.get(key) ?? { type: delta > 0 ? "thu" : "chi", name, count: 0, amount: 0, vouchers: [] };
     row.count++;
     row.amount += amt;
+    // Từng phiếu để bấm mở trong Sổ quỹ.
+    row.vouchers.push({ id: v.id, code: v.code, amount: amt, fund, note: String(v.note ?? "").slice(0, 120), created_at: v.created_at });
     byType.set(key, row);
   }
 

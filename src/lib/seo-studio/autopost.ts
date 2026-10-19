@@ -70,10 +70,33 @@ async function linkCandidates(site: any) {
   return [...new Set(out)].slice(0, 150);
 }
 
-async function writePlan(site: any, keyword: string, cfg: any) {
+/** Định hướng từ mục Gợi ý chủ đề (topics.ts): từ khóa phụ, góc viết, bài trụ cột, trang cần gắn link. */
+export function briefText(brief: any) {
+  if (!brief) return "";
+  const lines = ["Định hướng bài viết (từ phân tích chủ đề và đối thủ, hãy bám theo):"];
+  if (brief.keywords?.length) lines.push("- Từ khóa phụ cần phủ tự nhiên trong bài (H2/H3, đoạn văn): " + brief.keywords.join("; "));
+  if (brief.title) lines.push(`- Tiêu đề tham khảo: ${brief.title}`);
+  if (brief.angle) lines.push(`- Góc viết: ${brief.angle}`);
+  if (brief.type === "pillar") lines.push("- Đây là BÀI TRỤ CỘT: bao quát toàn bộ chủ đề, mỗi khía cạnh một H2, độ sâu cao hơn bình thường.");
+  else if (brief.pillar) lines.push(`- Đây là bài vệ tinh của chủ đề trụ cột "${brief.pillar}": tập trung sâu một khía cạnh, không lan man.`);
+  if (brief.competitors?.length) lines.push("- Đối thủ đã viết chủ đề này: " + brief.competitors.join(", ") + ". Bài phải đầy đủ, cụ thể và hữu ích hơn.");
+  if (brief.link_target) lines.push(`- Bắt buộc có 1 link nội bộ tới trang: ${brief.link_target}`);
+  return lines.join("\n");
+}
+const briefOf = (kw: any) => {
+  try {
+    return JSON.parse(kw?.brief_json || "null");
+  } catch {
+    return null;
+  }
+};
+
+async function writePlan(site: any, keyword: string, cfg: any, brief: any = null) {
   const varsTxt = variablesText(cfg);
   const extra = applyVars(site.extra_prompt || "", cfg);
   const links = await linkCandidates(site);
+  if (brief?.link_target && !links.includes(brief.link_target)) links.unshift(brief.link_target);
+  const btxt = briefText(brief);
   const words = parseInt(site.word_target) || 1200;
   const planPrompt = `Bạn là biên tập viên SEO tiếng Việt. Lập kế hoạch một bài viết chuẩn SEO cho website ${site.url}.
 
@@ -82,6 +105,7 @@ Từ khóa chính: "${keyword}"
 Thông tin doanh nghiệp (dùng khi phù hợp, không bịa thêm):
 ${varsTxt || "- (không có)"}
 ${extra ? "Yêu cầu riêng của website: " + extra : ""}
+${btxt}
 
 Danh sách URL có sẵn trên website (chỉ được chọn link nội bộ từ danh sách này, đoán chủ đề qua đường dẫn):
 ${links.slice(0, 120).join("\n") || "(không có)"}
@@ -108,7 +132,8 @@ Chọn 2-4 link nội bộ thật sự liên quan; nếu danh sách trống thì
   return { plan, u1 };
 }
 
-async function writeBody(site: any, keyword: string, cfg: any, plan: any, u1: any) {
+async function writeBody(site: any, keyword: string, cfg: any, plan: any, u1: any, brief: any = null) {
+  const btxt = briefText(brief);
   const varsTxt = variablesText(cfg);
   const extra = applyVars(site.extra_prompt || "", cfg);
   const words = parseInt(site.word_target) || 1200;
@@ -124,6 +149,7 @@ ${(plan.outline || []).join("\n")}
 Thông tin doanh nghiệp (chỉ dùng thông tin có ở đây, không bịa giá, thông số, số điện thoại):
 ${varsTxt || "- (không có)"}
 ${extra ? "Yêu cầu riêng: " + extra : ""}
+${btxt}
 Chèn tự nhiên các liên kết nội bộ sau vào thân bài (giữ nguyên href):
 ${linkTxt || "(không có)"}
 
@@ -304,7 +330,16 @@ async function publishCustom(site: any, post: any, imgs: any[]) {
 
 // ================================================================ Quy trình
 // Mật khẩu WordPress / token Custom API lưu MÃ HÓA (bản gốc lưu thô trong SQLite).
-const openSecret = (v: any) => (v && String(v).startsWith("v1:") ? decrypt(v) : v);
+// Không giải mã được (SEO_SECRET_KEY đã đổi) → coi như chưa có mật khẩu, không làm hỏng cả danh sách.
+const SECRET_LOST = "⚠ khoá mã hoá đã đổi, cần nhập lại…";
+const openSecret = (v: any) => {
+  if (!(v && String(v).startsWith("v1:"))) return v;
+  try {
+    return decrypt(v);
+  } catch {
+    return null;
+  }
+};
 const sealSecret = (v: any) => (v ? encrypt(String(v)) : v);
 async function getSite(sid: any) {
   const s = await one("SELECT * FROM seo_ap_sites WHERE id=?", [sid]);
@@ -342,7 +377,7 @@ registerStep("ap_write", async (job, ctx) => {
   try {
     if (st.step === "plan") {
       await setKw(st.kid, "writing");
-      const { plan, u1 } = await writePlan(site, kw.keyword, cfg);
+      const { plan, u1 } = await writePlan(site, kw.keyword, cfg, briefOf(kw));
       st.plan = plan;
       st.u1 = u1;
       st.step = "article";
@@ -350,7 +385,7 @@ registerStep("ap_write", async (job, ctx) => {
       return;
     }
     if (st.step === "article") {
-      const art = await writeBody(site, kw.keyword, cfg, st.plan, st.u1);
+      const art = await writeBody(site, kw.keyword, cfg, st.plan, st.u1, briefOf(kw));
       const ins = await run(
         `INSERT INTO seo_ap_posts(site_id, keyword_id, keyword, title, slug, meta_title, meta_description, excerpt,
          tags_json, html, images_json, status, usage_json, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
@@ -475,7 +510,10 @@ const fieldVal = (b: any, f: string) => {
   }
   return v === undefined ? null : v;
 };
-const sitePublic = (s: any) => ({ ...s, secret: mask(openSecret(s.secret)) });
+const sitePublic = (s: any) => {
+  const plain = openSecret(s.secret);
+  return { ...s, secret: s.secret && plain === null ? SECRET_LOST : mask(plain) };
+};
 
 export async function handle(h: any, method: string, path: string) {
   const qs = h.query;

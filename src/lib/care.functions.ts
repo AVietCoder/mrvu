@@ -130,6 +130,24 @@ export const getCareListFn = createServerFn({ method: "GET" }).handler(
     // Tên công ty hiện dưới tên khách (khách có tên công ty).
     const companyOf = await companyNamesOf(((listRes as any).data ?? []).map((r: any) => r.customer_id));
 
+    // Sinh nhật: nhân viên tạo khách — để biết khách của ai mà nhắn chúc mừng.
+    const creatorOf = new Map<string, string>();
+    if (kind === "birthday") {
+      const custIds = [...new Set(((listRes as any).data ?? []).map((r: any) => r.customer_id).filter(Boolean))] as string[];
+      const byUser = new Map<string, string[]>();
+      for (let i = 0; i < custIds.length; i += 300) {
+        const { data: cs } = await db.from("customers").select("id, created_by, created_by_name").in("id", custIds.slice(i, i + 300));
+        for (const c of cs ?? []) {
+          if (c.created_by_name) creatorOf.set(c.id, c.created_by_name);
+          else if (c.created_by) byUser.set(c.created_by, [...(byUser.get(c.created_by) ?? []), c.id]);
+        }
+      }
+      if (byUser.size) {
+        const { data: us } = await db.from("users").select("id, full_name").in("id", [...byUser.keys()]);
+        for (const u of us ?? []) for (const cid of byUser.get(u.id) ?? []) creatorOf.set(cid, u.full_name);
+      }
+    }
+
     const rows = ((listRes as any).data ?? []).map((r: any) => {
       const phoneOk = Boolean(normalizeVnPhone(r.phone));
       const emailOk = Boolean(String(r.email || "").trim());
@@ -137,6 +155,7 @@ export const getCareListFn = createServerFn({ method: "GET" }).handler(
         ...r,
         staff_names: [...new Set((r.order_ids ?? []).map((id: string) => staffByOrder.get(id)).filter(Boolean))],
         customer_company: companyOf.get(r.customer_id) ?? null,
+        creator_name: creatorOf.get(r.customer_id) ?? null,
         // Tính sẵn ở server để UI không phải lặp lại logic chuẩn hoá SĐT.
         can_zalo: phoneOk,
         can_email: emailOk,

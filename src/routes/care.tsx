@@ -284,7 +284,10 @@ function Page() {
                     <th className="py-2 pr-3">SĐT</th>
                     <th className="py-2 pr-3">Email</th>
                     {isBirthday ? (
-                      <th className="py-2 pr-3">Ngày sinh</th>
+                      <>
+                        <th className="py-2 pr-3">Ngày sinh</th>
+                        <th className="py-2 pr-3">NV tạo khách</th>
+                      </>
                     ) : (
                       <>
                         <th className="py-2 pr-3">Sản phẩm</th>
@@ -326,12 +329,15 @@ function Page() {
                         </td>
                         <td className="py-2 pr-3 text-xs">{r.email || "—"}</td>
                         {isBirthday ? (
-                          <td className="py-2 pr-3">
-                            {formatBirthday(r.birthday)}
-                            {r.age != null && hasRealBirthYear(r.birthday) && (
-                              <span className="text-muted-foreground"> ({r.age} tuổi)</span>
-                            )}
-                          </td>
+                          <>
+                            <td className="py-2 pr-3">
+                              {formatBirthday(r.birthday)}
+                              {r.age != null && hasRealBirthYear(r.birthday) && (
+                                <span className="text-muted-foreground"> ({r.age} tuổi)</span>
+                              )}
+                            </td>
+                            <td className="py-2 pr-3 text-xs">{r.creator_name || <span className="text-muted-foreground">—</span>}</td>
+                          </>
                         ) : (
                           <>
                             <td className="py-2 pr-3">

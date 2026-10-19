@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
 import { deleteWhere, fetchAllRows, fetchRows, insertRow, now, supabase, uid, updateWhere, logActivity } from "./supabase";
+import { getSupabaseAdmin } from "./zalo/admin-client";
 
 // ── listSchedules — ĐÃ TỐI ƯU ────────────────────────────────────────────────
 // Cũ: tải TOÀN BỘ customers (có thể vài nghìn dòng), orders, order_items,
@@ -71,6 +72,40 @@ export const getScheduleDisplayRefs = createServerFn({ method: "GET" }).handler(
   ]);
   // order_items chỉ tải khi in hóa đơn (xem getOrderItemsForPrint)
   return { customers, orders, products };
+});
+
+// ── getScheduleProducts — Hàng hóa của từng lịch (cột "Hàng hóa" + nội dung Copy) ──
+// Lịch gắn đơn → các dòng hàng của đơn; lịch bảo hành tạo từ phiếu → mẫu quạt của phiếu.
+// Trả { [schedule_id]: [{ name, qty }] } — chỉ tải dòng hàng của các đơn có gắn lịch.
+export const getScheduleProducts = createServerFn({ method: "GET" }).handler(async () => {
+  const [schedules, products] = await Promise.all([
+    fetchAllRows<any>("schedules", { select: "id, order_id" }),
+    fetchAllRows<any>("products", { select: "id, name" }),
+  ]);
+  const pName = new Map(products.map((p: any) => [p.id, p.name]));
+  const orderIds = [...new Set(schedules.map((x: any) => x.order_id).filter(Boolean))] as string[];
+  const itemsOf = new Map<string, { name: string; qty: number }[]>();
+  const batches: string[][] = [];
+  for (let i = 0; i < orderIds.length; i += 300) batches.push(orderIds.slice(i, i + 300));
+  const parts = await Promise.all(batches.map((ids) => supabase.from("order_items").select("order_id, product_id, qty").in("order_id", ids)));
+  for (const p of parts) {
+    if (p.error) throw new Error(p.error.message);
+    for (const it of p.data ?? []) {
+      const list = itemsOf.get(it.order_id) ?? [];
+      const name = pName.get(it.product_id) ?? "(hàng đã xoá)";
+      const same = list.find((x) => x.name === name);
+      if (same) same.qty += Number(it.qty || 0);
+      else list.push({ name, qty: Number(it.qty || 0) });
+      itemsOf.set(it.order_id, list);
+    }
+  }
+  const out: Record<string, { name: string; qty: number }[]> = {};
+  for (const sc of schedules) if (sc.order_id && itemsOf.has(sc.order_id)) out[sc.id] = itemsOf.get(sc.order_id)!;
+  // Lịch bảo hành tạo từ phiếu (warranty_tickets.schedule_id) — chưa chạy v23 thì bỏ qua.
+  // (bảng bảo hành chặn đọc bằng khoá thường → dùng service role)
+  const { data: tickets } = await getSupabaseAdmin().from("warranty_tickets").select("schedule_id, product_model").not("schedule_id", "is", null);
+  for (const t of tickets ?? []) if (t.schedule_id && t.product_model && !out[t.schedule_id]) out[t.schedule_id] = [{ name: t.product_model, qty: 1 }];
+  return out;
 });
 
 // ── getOrderItemsForPrint — Tải order_items CHỈ KHI in hóa đơn ──────────────

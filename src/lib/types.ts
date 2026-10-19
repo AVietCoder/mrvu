@@ -126,6 +126,7 @@ export type Permission =
   | "customer_care"       // Gửi Zalo/Email chăm sóc KH (danh sách thì ai cũng xem được)
   | "manage_roster"       // Quản lý lịch trực — chỉ chi nhánh mình quản lý (xem thì ai cũng xem được)
   | "manage_payroll"      // Quản lý lương nhân sự — chỉ NV admin phân ở tab "Phân việc"
+  | "warranty_factory"    // Tạo / xem / cập nhật phiếu bảo hành gửi nhà máy (danh mục NM, cài đặt, báo cáo NM: chỉ admin)
   | "self_attendance";    // (không còn dùng — mọi nhân viên đều tự chấm công được; giữ để dữ liệu cũ hợp lệ)
 
 export const ALL_PERMISSIONS: { key: Permission; label: string; desc: string }[] = [
@@ -144,6 +145,7 @@ export const ALL_PERMISSIONS: { key: Permission; label: string; desc: string }[]
   { key: "view_cash_all",     label: "Xem sổ quỹ toàn bộ",        desc: "Xem & tạo phiếu thu/chi của tất cả chi nhánh" },
   { key: "customer_care",     label: "Gửi tin chăm sóc KH",       desc: "Gửi Zalo/Email sinh nhật & nhắc bảo dưỡng (tin Zalo tốn phí)" },
   { key: "manage_roster",     label: "Quản lý lịch trực",         desc: "Xếp ca, đánh dấu nghỉ cho các chi nhánh mình được gán" },
+  { key: "warranty_factory",  label: "Bảo hành nhà máy",          desc: "Tạo, xem, cập nhật phiếu gửi nhà máy và xác nhận nhà máy đã trả hàng (xoá phiếu, danh mục nhà máy: chỉ admin)" },
   { key: "manage_payroll",    label: "Quản lý lương nhân sự",     desc: "Sửa lương cơ bản, DS bán hàng, ngân hàng, chấm công, chốt & chi lương — của chính mình + những NV admin phân cho ở Bảng lương → Phân việc" },
 ];
 
@@ -213,7 +215,11 @@ export const WARRANTY_FINAL_ACTIONS: { key: string; label: string }[] = [
   { key: "free_support", label: "Hỗ trợ miễn phí" },
   { key: "replace_new",  label: "Thay mới" },
   { key: "repair",       label: "Sửa chữa" },
+  // v26: khách không đồng ý thay / sửa → vẫn hoàn tất được phiếu, không thu tiền linh kiện.
+  { key: "customer_declined", label: "Khách không đồng ý thay / sửa chữa" },
 ];
+/** Kết quả xử lý không thu tiền linh kiện (ô giá bị khoá, lưu 0). */
+export const WARRANTY_NO_PRICE_ACTIONS = ["free_support", "customer_declined"];
 // Bộ phận lỗi (v24) — quyết định tính theo hạn bảo hành ĐỘNG CƠ hay PHỤ KIỆN. Chưa chọn = chưa xác định.
 export const WARRANTY_FAULT_PARTS: { key: string; label: string }[] = [
   { key: "motor",     label: "Động cơ" },

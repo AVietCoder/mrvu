@@ -98,6 +98,54 @@ td.when{font-size:12px;color:var(--muted);white-space:nowrap}
 .kindpick label{flex:1 1 220px;display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--sunk)}
 .kindpick label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
 .kindpick b{display:block}
+/* gợi ý chủ đề */
+.tp-form{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px 16px}
+.tp-form .tp-comps{grid-column:1/-1}
+.tp-c3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (max-width:700px){.tp-form{grid-template-columns:1fr}.tp-c3{grid-template-columns:1fr}}
+.tp-mine{padding:8px 10px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);font-size:13px;min-height:38px;overflow-wrap:anywhere}
+.tp-mine b{color:var(--ink)}
+.tp-opts{display:flex;flex-direction:column;gap:10px}
+.tp-mode label{padding:10px 12px}
+.tp-mode .hint{display:block}
+.tp-auto{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:start;font-size:13px;cursor:pointer}
+.tp-auto>input{margin-top:3px}
+.tp-auto input[type=number]{width:64px;padding:4px 6px;display:inline-block;margin:0 2px}
+.tp-hist{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.tp-hist button{display:flex;width:100%;gap:12px;justify-content:space-between;align-items:center;text-align:left;font:inherit;font-size:13px;color:var(--ink);background:var(--surface);border:0;border-bottom:1px solid var(--line);padding:9px 12px;cursor:pointer;flex-wrap:wrap}
+.tp-hist button:last-child{border-bottom:0}
+.tp-hist button:hover{background:var(--sunk)}
+.tp-hist .hint{font-variant-numeric:tabular-nums}
+.tp-progress{display:flex;gap:10px;align-items:center;padding:12px 16px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:sp 0.9s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:3s}}
+.tp-sum{padding:14px 16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.tp-sum p{margin:0;max-width:90ch}
+.tp-stats{display:flex;gap:6px 18px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.tp-stats b{color:var(--ink);font-variant-numeric:tabular-nums}
+.tp-warn{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:10px 12px;font-size:13px;display:flex;flex-direction:column;gap:8px}
+.tp-warn b{color:inherit}
+.tp-bar{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;padding:10px 16px;border-top:1px solid var(--line);background:var(--sunk)}
+.tp-filter{display:flex;gap:6px;flex-wrap:wrap}
+.tp-filter button{font:inherit;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
+.tp-filter button.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.tp-t td{vertical-align:top}
+.tp-t td.ck{width:36px}
+.tp-score{display:flex;flex-direction:column;gap:4px;width:58px}
+.tp-score b{font-size:16px;font-variant-numeric:tabular-nums;line-height:1}
+.tp-score i{display:block;height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.tp-score i u{display:block;height:100%;background:var(--accent)}
+.tp-kw{font-weight:700}
+.tp-title{color:var(--muted);font-size:13px;margin-top:2px}
+.tp-sub{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.tp-sub span{font-size:11px;padding:1px 7px;border-radius:999px;background:var(--sunk);border:1px solid var(--line);color:var(--muted)}
+.c-pillar{background:var(--accent-soft);color:var(--accent)}
+.tp-num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.tp-angle{font-size:13px;max-width:320px}
+.tp-angle .hint{display:block;margin-top:4px}
+.tp-comp{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:2px}
+.brief{display:block;font-size:12px;color:var(--accent);margin-top:2px;max-width:420px}
 .fs{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
 .fs legend{font-weight:700;font-size:14px;padding:0;margin-bottom:4px}
 .divider{border:0;border-top:1px solid var(--line);margin:4px 0}
@@ -233,16 +281,50 @@ pre.code{margin:0;background:var(--code);border:1px solid var(--line);border-rad
 
   <!-- ============ TỪ KHÓA ============ -->
   <section id="v-kws" hidden style="display:flex;flex-direction:column;gap:18px">
-    <div class="panel pad" style="display:flex;flex-direction:column;gap:12px">
+    <div class="panel pad">
       <div class="grid">
         <div class="field"><label class="label" for="kSite">Website</label><select id="kSite"></select></div>
       </div>
-      <div class="field"><label class="label" for="kInput">Thêm từ khóa (mỗi dòng một từ, mỗi từ thành một bài)</label>
+    </div>
+
+    <!-- Gợi ý chủ đề -->
+    <div class="panel" id="tpPanel">
+      <div class="phead">
+        <div><h2>Gợi ý chủ đề từ đối thủ</h2><span class="hint">AI đọc website của bạn và tối đa 3 đối thủ, tìm chủ đề họ có mà bạn chưa có, gom thành bài và chấm điểm ưu tiên.</span></div>
+        <button class="btn sm" id="tpHistBtn" type="button">Lần phân tích trước <span class="hint" id="tpHistN"></span></button>
+      </div>
+      <div class="pad" style="display:flex;flex-direction:column;gap:14px">
+        <div class="tp-form">
+          <div class="field"><label class="label" for="tpSeed">Chủ đề muốn phát triển</label>
+            <input type="text" id="tpSeed" placeholder="Ví dụ: quạt trần" autocomplete="off"></div>
+          <div class="field"><label class="label">Website của bạn</label><div class="tp-mine" id="tpMine">—</div></div>
+          <div class="field tp-comps"><label class="label" for="tpC1">Đối thủ (tối đa 3 tên miền)</label>
+            <div class="tp-c3"><input type="text" id="tpC1" placeholder="doithu1.vn" autocomplete="off"><input type="text" id="tpC2" placeholder="doithu2.vn" autocomplete="off"><input type="text" id="tpC3" placeholder="doithu3.vn" autocomplete="off"></div></div>
+        </div>
+        <div class="tp-opts">
+          <div class="kindpick tp-mode">
+            <label><input type="radio" name="tpMode" value="full" checked><span><b>Đầy đủ</b><span class="hint">Có volume, độ khó và từ khóa đối thủ đang lên Top Google (DataForSEO + AI).</span></span></label>
+            <label><input type="radio" name="tpMode" value="free"><span><b>Tiết kiệm</b><span class="hint">Chỉ đọc sitemap đối thủ và Search Console, AI gom nhóm. Không có volume.</span></span></label>
+          </div>
+          <label class="tp-auto"><input type="checkbox" id="tpAuto"> <span>Tự thêm <input type="number" id="tpTop" min="1" max="20" value="5" aria-label="Số chủ đề tự thêm"> chủ đề điểm cao nhất (từ 50 điểm, chưa có bài) vào hàng chờ</span></label>
+        </div>
+        <div class="row" style="justify-content:space-between">
+          <span class="hint" id="tpMsg"></span>
+          <button class="btn primary" id="tpRun" type="button">Phân tích chủ đề</button>
+        </div>
+        <div id="tpHist" hidden class="tp-hist"></div>
+      </div>
+      <div id="tpResult" hidden></div>
+    </div>
+
+    <div class="panel pad" style="display:flex;flex-direction:column;gap:12px">
+      <div class="field"><label class="label" for="kInput">Hoặc tự nhập từ khóa (mỗi dòng một từ, mỗi từ thành một bài)</label>
         <textarea id="kInput" spellcheck="false" placeholder="cách chọn quạt trần phòng khách&#10;quạt trần có tốn điện không&#10;lắp quạt trần trần thạch cao"></textarea></div>
       <div class="row" style="justify-content:space-between">
         <span class="hint">Mẹo: lấy từ khóa từ tab Tra cứu Volume, ưu tiên từ dài, ý định tìm hiểu rõ ràng.</span>
         <button class="btn primary" id="kAdd">Thêm vào hàng chờ</button>
       </div>
+      <div id="kFit" hidden class="tp-warn"></div>
     </div>
     <div class="panel">
       <div class="phead"><h2 id="kTitle">Hàng chờ từ khóa</h2><span class="hint" id="kMeta"></span></div>
@@ -388,12 +470,62 @@ async function mock(path,opts){
   else if(seg[0]==='logs')out={items:S.logs.map(l=>Object.assign({},l,{site_name:sname(l.site_id)}))};
   ds(S);return JSON.parse(JSON.stringify(out));
 }
-const api=(p,o)=>live?http(p,o):mock(p,o);
+/* Dữ liệu mẫu cho Gợi ý chủ đề */
+function tpDl(){try{const v=JSON.parse(localStorage.getItem('kho-tp-demo-v1'));if(v&&v.runs)return v}catch(e){}return {seq:0,runs:[]}}
+function tpDs(v){try{localStorage.setItem('kho-tp-demo-v1',JSON.stringify(v))}catch(e){}}
+function tpDemo(site,seed,comps,mode){const C=comps.length?comps:['doithu-a.vn'],c=i=>C.slice(0,Math.min(C.length,i));const fan=/qu[aạ]t/i.test(seed);
+  const raw=fan?[
+    ['quạt trần loại nào tốt','pillar','',['nên mua quạt trần hãng nào','top quạt trần tốt nhất','quạt trần bền nhất'],'Bảng xếp hạng quạt trần tốt nhất năm nay: so sánh hãng, động cơ, giá','Danh sách so sánh có bảng thông số, tiêu chí chọn rõ ràng; đối thủ chỉ liệt kê sản phẩm, thiếu tiêu chí','commercial',3,6600,38,c(3),null,'https://mrvu.vn/danh-muc/quat-tran.html'],
+    ['quạt trần dc và ac','cluster','quạt trần loại nào tốt',['quạt trần động cơ dc là gì','quạt trần dc có bền không','quạt dc tiết kiệm điện bao nhiêu'],'Quạt trần DC và AC: khác nhau thế nào, nên chọn loại nào?','So sánh bảng 8 tiêu chí (điện năng, độ ồn, giá, tuổi thọ); thêm ví dụ tính tiền điện 1 năm','commercial',3,2900,24,c(2),null,'https://mrvu.vn/danh-muc/quat-tran-dc.html'],
+    ['cách chọn quạt trần theo diện tích phòng','cluster','quạt trần loại nào tốt',['sải cánh quạt trần bao nhiêu là đủ','phòng 20m2 dùng quạt trần bao nhiêu','kích thước quạt trần'],'Cách chọn quạt trần theo diện tích phòng (có bảng sải cánh)','Bảng tra nhanh diện tích → sải cánh → công suất; công cụ này đối thủ chưa có','informational',3,1900,18,c(2),null,''],
+    ['quạt trần trang trí phòng khách','cluster','quạt trần loại nào tốt',['quạt trần đèn phòng khách','mẫu quạt trần phòng khách đẹp'],'50+ mẫu quạt trần trang trí phòng khách đẹp, hợp từng phong cách','Gallery theo phong cách nội thất (hiện đại, tân cổ điển, Indochine), kèm gợi ý kích thước','commercial',2,4400,31,c(3),null,'https://mrvu.vn/danh-muc/quat-tran-den.html'],
+    ['lắp quạt trần thạch cao','cluster','cách lắp đặt quạt trần',['móc treo quạt trần thạch cao','lắp quạt trần trần thạch cao có an toàn không'],'Lắp quạt trần trên trần thạch cao: cách làm an toàn từng bước','Hướng dẫn có ảnh từng bước, lỗi thường gặp, khi nào cần thợ','informational',2,1300,15,c(1),null,''],
+    ['cách lắp đặt quạt trần','pillar','',['sơ đồ đấu dây quạt trần','lắp quạt trần có điều khiển','khoảng cách quạt trần đến sàn'],'Cách lắp đặt quạt trần đúng kỹ thuật (kèm sơ đồ đấu dây)','Bài trụ cột gom mọi câu hỏi lắp đặt; nối sang các bài trần thạch cao, trần bê tông','informational',2,2400,20,c(2),null,'https://mrvu.vn/dich-vu/lap-dat-quat-tran.html'],
+    ['quạt trần kêu to','cluster','cách lắp đặt quạt trần',['quạt trần bị rung','quạt trần quay chậm','sửa quạt trần tại nhà'],'Quạt trần kêu to, bị rung: 7 nguyên nhân và cách khắc phục','Dạng bảng triệu chứng → nguyên nhân → cách xử lý; ít đối thủ viết kỹ','informational',2,1600,12,c(1),null,''],
+    ['quạt trần có tốn điện không','cluster','quạt trần loại nào tốt',['quạt trần bao nhiêu w','1 giờ quạt trần tốn bao nhiêu điện'],'Quạt trần có tốn điện không?','',  'informational',1,2100,10,c(2),'Đã có bài: "Quạt trần có tốn điện không? Cách tính tiền điện chính xác"',''],
+    ['cách chọn quạt trần phòng khách','cluster','quạt trần loại nào tốt',[],'Cách chọn quạt trần phòng khách','','informational',1,880,14,c(1),'Đã có trong hàng chờ / bài đã viết',''],
+    ['vệ sinh quạt trần','cluster','cách lắp đặt quạt trần',['cách tháo cánh quạt trần','vệ sinh quạt trần không cần thang'],'Cách vệ sinh quạt trần nhanh, không cần tháo','Mẹo dụng cụ, tần suất vệ sinh; video ngắn','informational',1,720,8,c(1),null,''],
+  ]:[
+    [seed+' là gì','pillar','',['tìm hiểu '+seed,seed+' có tác dụng gì'],seed.charAt(0).toUpperCase()+seed.slice(1)+' là gì? Tổng quan từ A đến Z','Bài trụ cột định nghĩa, phân loại, ứng dụng; đối thủ mới viết rời rạc','informational',3,1800,22,c(2),null,''],
+    ['cách chọn '+seed,'cluster',seed+' là gì',['kinh nghiệm chọn '+seed,'chọn '+seed+' loại nào'],'Cách chọn '+seed+' phù hợp: 6 tiêu chí quan trọng','Checklist tiêu chí kèm bảng so sánh','commercial',3,1200,19,c(3),null,''],
+    [seed+' loại nào tốt','cluster',seed+' là gì',['top '+seed,seed+' tốt nhất'],'Top '+seed+' tốt nhất hiện nay','Bảng xếp hạng có tiêu chí rõ ràng','commercial',2,900,27,c(2),null,''],
+    ['giá '+seed,'cluster',seed+' là gì',['bảng giá '+seed],'Bảng giá '+seed+' mới nhất và yếu tố ảnh hưởng giá','Khoảng giá theo phân khúc, không bịa giá cụ thể','transactional',2,700,25,c(1),null,''],
+    ['bảo trì '+seed,'cluster',seed+' là gì',['vệ sinh '+seed],'Bảo trì '+seed+' đúng cách để dùng bền','Lịch bảo trì theo tháng/quý','informational',1,300,9,c(1),null,''],
+  ];
+  const clusters=raw.map(([main,type,pillar,kws,title,angle,intent,pr,vol,kd,cp,covered,link],i)=>({id:i+1,main_keyword:main,keywords:kws,title,angle,intent,type,pillar,competitors:cp,covered,link_target:link,
+    reason:covered?'':'Đối thủ đã có bài, website của bạn chưa có: khoảng trống nên lấp sớm.',volume:mode==='free'?null:vol,kd:mode==='free'?null:kd,priority:pr,gsc:i===2?{impr:640,pos:18.4}:null,added:false,
+    score:covered?Math.min(30,Math.round(40-i)):Math.max(20,Math.round(100-i*8-(mode==='free'?3:0)))}));
+  return {seed,domain:hostJs(site.url),site_name:site.name,competitors:comps,mode,demo:true,
+    site_fit:fan||!/qu[aạ]t/i.test(site.name+site.url)?{ok:true,note:fan?'Chủ đề quạt trần khớp với lĩnh vực của website.':''}:{ok:false,note:'Website đang viết về quạt trần, chủ đề này khác lĩnh vực.'},
+    summary:fan?'Đối thủ phủ mạnh nhóm "chọn mua" và "lắp đặt" quạt trần, trong khi website mới có bài về điện năng. Nên viết 2 bài trụ cột (loại nào tốt, cách lắp đặt) rồi tới các bài vệ tinh trỏ về chúng.':`Tìm thấy ${clusters.length} chủ đề quanh "${seed}". Ưu tiên bài trụ cột trước rồi tới các bài vệ tinh.`,
+    clusters,notes:mode==='free'?['Chế độ tiết kiệm: không có volume, điểm dựa trên số đối thủ đã viết và đánh giá của AI.']:[],
+    stats:{my_pages:84,my_source:'audit',gsc_queries:150,competitor_posts:Object.fromEntries(C.map((d,i)=>[d,[126,88,61][i]])),candidates:mode==='free'?0:214,my_ranked:mode==='free'?0:37}}}
+async function mockTp(path,opts){const m=(opts&&opts.method)||'GET',b=opts&&opts.body?JSON.parse(opts.body):{};const T=tpDl();let out;
+  const seg=path.split('?')[0].split('/').slice(2);const q=new URLSearchParams(path.split('?')[1]||'');await new Promise(r=>setTimeout(r,80));
+  if(seg[0]==='analyze'){const S=dl(),site=S.sites.find(s=>s.id===b.site_id);const res=tpDemo(site,b.seed,b.competitors||[],b.mode);res.id=++T.seq;res.site_id=b.site_id;res.created_at=new Date().toISOString();
+    res.cost_usd=b.mode==='free'?0.088:0.33;T.runs.unshift(res);
+    if(b.auto_add&&res.site_fit.ok){const ids=res.clusters.filter(c=>!c.covered&&c.score>=50).slice(0,b.auto_top||5).map(c=>c.id);res.auto_added=tpAddDemo(res,ids).added}
+    tpDs(T);out={job_id:'tp-'+res.id}}
+  else if(seg[0]==='job'){for(const msg of ['Đang đọc sitemap đối thủ…','Đang lấy từ khóa đối thủ đang lên Top…','AI đang gom nhóm và chấm điểm chủ đề…'])await new Promise(r=>setTimeout(r,450));
+    out={status:'done',message:'Xong',result:T.runs.find(r=>r.id===+seg[1].split('-')[1])}}
+  else if(seg[0]==='runs'){const sid=+q.get('site_id');out={items:T.runs.filter(r=>!sid||r.site_id===sid).map(r=>({id:r.id,created_at:r.created_at,site_id:r.site_id,seed:r.seed,competitors:r.competitors,mode:r.mode,cost_usd:r.cost_usd,
+    clusters:r.clusters.length,gaps:r.clusters.filter(c=>!c.covered).length,added:r.clusters.filter(c=>c.added).length}))}}
+  else if(seg[0]==='run'){out=T.runs.find(r=>r.id===+seg[1])}
+  else if(seg[0]==='add'){const r=T.runs.find(x=>x.id===b.run_id);out=tpAddDemo(r,b.ids);tpDs(T)}
+  else if(seg[0]==='fit'){const S=dl(),s=S.sites.find(x=>x.id===b.site_id)||{};const voc=foldJs(s.name+' '+s.url+' '+S.kws.filter(k=>k.site_id===s.id).map(k=>k.keyword).join(' '));
+    const bad=b.keywords.filter(k=>!foldJs(k).split(' ').filter(w=>w.length>2&&!['cach','chon','khong','nao','loai','cho','nha'].includes(w)).some(w=>voc.includes(w)));
+    out={checked:true,mismatched:bad,note:bad.length?`${bad.length}/${b.keywords.length} từ khóa không khớp nội dung hiện có của website ${s.name}. Kiểm tra lại đã chọn đúng website chưa, để tránh AI viết bài lệch chủ đề.`:''}}
+  return JSON.parse(JSON.stringify(out||{error:'Không có'}))}
+function tpAddDemo(r,ids){const S=dl();let added=0,skipped=0;r.clusters.forEach(c=>{if(!ids.includes(c.id))return;c.added=true;
+  if(S.kws.some(k=>k.site_id===r.site_id&&k.keyword===c.main_keyword)){skipped++;return}
+  S.kws.push({id:++S.seq,site_id:r.site_id,keyword:c.main_keyword,status:'pending',updated_at:new Date().toISOString(),brief_json:JSON.stringify({keywords:c.keywords,title:c.title,angle:c.angle,type:c.type,pillar:c.pillar,link_target:c.link_target,competitors:c.competitors})});added++});
+  ds(S);return {added,skipped}}
+const api=(p,o)=>live?http(p,o):(p.startsWith('api/tp/')?mockTp(p,o):mock(p,o));
 
 /* ================= Điều hướng ================= */
 $('#seg').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(b)show(b.dataset.v)});
 function show(v){view=v;document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
-  ['sites','kws','posts','settings','logs'].forEach(x=>$('#v-'+x).hidden=x!==v);
+  ['sites','kws','posts','settings','logs'].forEach(x=>$('#v-'+x).hidden=x!==v);if(v==='kws')loadTp().catch(()=>{});
   ({sites:loadSites,kws:loadKws,posts:loadPosts,settings:loadSettings,logs:loadLogs})[v]().catch(e=>toast(e.message))}
 
 /* ================= Websites ================= */
@@ -451,12 +583,13 @@ $('#siteForm').addEventListener('submit',async e=>{e.preventDefault();const err=
 
 /* ================= Từ khóa ================= */
 async function loadKws(){if(!sites.length)await loadSites();const sid=+$('#kSite').value;kws=sid?(await api('api/ap/keywords?site_id='+sid)).items:[];renderKws()}
+function briefOf(k){try{return k.brief_json?JSON.parse(k.brief_json):null}catch(e){return null}}
 function renderKws(){const s=sites.find(x=>x.id==$('#kSite').value);
   const c=st=>kws.filter(k=>k.status===st).length;$('#nKws').textContent=c('pending')||'';
   $('#kTitle').textContent=s?'Hàng chờ của '+s.name:'Hàng chờ từ khóa';
   $('#kMeta').textContent=kws.length?`${c('pending')} chờ · ${c('written')} đã viết · ${c('published')} đã đăng${c('error')?' · '+c('error')+' lỗi':''}`:'';
   $('#kBody').innerHTML=kws.length?kws.map((k,i)=>{const j=jobs[k.id];const st=j?'writing':k.status;return `<tr>
-    <td class="stt">${i+1}</td><td><b>${esc(k.keyword)}</b></td>
+    <td class="stt">${i+1}</td><td><b>${esc(k.keyword)}</b>${(b=>b?`<span class="brief" title="${esc((b.keywords||[]).join('; '))}">Từ Gợi ý chủ đề${b.type==='pillar'?' · bài trụ cột':''}${b.keywords&&b.keywords.length?' · +'+b.keywords.length+' từ phụ':''}${b.angle?' · '+esc(b.angle.slice(0,70))+(b.angle.length>70?'…':''):''}</span>`:'')(briefOf(k))}</td>
     <td><span class="chip c-${st}">${ST[st]}</span>${j?`<span class="sub-msg">${esc(j)}</span>`:''}${k.status==='error'&&!j?`<span class="sub-msg bad">${esc(k.error)}</span>`:''}</td>
     <td>${k.post_title?`<button class="link" data-post="${k.post_id}" style="text-align:left">${esc(k.post_title)}</button>`:'<span class="hint">—</span>'}</td>
     <td class="when">${fmt(k.updated_at)}</td>
@@ -464,10 +597,17 @@ function renderKws(){const s=sites.find(x=>x.id==$('#kSite').value);
       k.status==='written'?`<button class="btn sm" data-post="${k.post_id}">Xem bài</button>`:k.remote_url?`<a class="btn sm" href="${esc(k.remote_url)}" target="_blank" rel="noopener">Mở bài</a>`:''}
       ${j?'':`<button class="link danger" data-kdel="${k.id}">Xóa</button>`}</div></td></tr>`}).join('')
     :`<tr><td colspan="6" class="empty">${sites.length?'Chưa có từ khóa. Dán danh sách ở trên rồi bấm <b>Thêm vào hàng chờ</b>.':'Thêm website trước ở mục Websites.'}</td></tr>`}
-$('#kSite').addEventListener('change',()=>loadKws().catch(e=>toast(e.message)));
+$('#kSite').addEventListener('change',()=>{tpCur=null;renderTp();$('#kFit').hidden=true;loadKws().catch(e=>toast(e.message));loadTp()});
+async function addKws(sid,list){
+  const r=await api('api/ap/keywords',{method:'POST',body:JSON.stringify({site_id:sid,keywords:list})});$('#kInput').value='';toast(`Đã thêm ${r.added} từ khóa`+(r.added<list.length?` (${list.length-r.added} từ đã có sẵn)`:''));$('#kFit').hidden=true;loadKws()}
 $('#kAdd').addEventListener('click',async()=>{const list=$('#kInput').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);const sid=+$('#kSite').value;
   if(!sid){toast('Thêm website trước');return}if(!list.length){toast('Nhập ít nhất một từ khóa');return}
-  const r=await api('api/ap/keywords',{method:'POST',body:JSON.stringify({site_id:sid,keywords:list})});$('#kInput').value='';toast(`Đã thêm ${r.added} từ khóa`+(r.added<list.length?` (${list.length-r.added} từ đã có sẵn)`:''));loadKws()});
+  const f=await fitCheck(sid,list);const s=tpSite()||{};
+  if(f.checked&&f.mismatched.length&&f.mismatched.length*2>=list.length){const box=$('#kFit');box.hidden=false;
+    box.innerHTML=`<b>Từ khóa có vẻ lệch chủ đề của website ${esc(s.name||'')}.</b><span>${esc(f.note)}</span><span>Không khớp: ${f.mismatched.slice(0,8).map(esc).join(' · ')}${f.mismatched.length>8?' …':''}</span>
+      <div class="row"><button class="btn sm primary" id="kFitYes" type="button">Vẫn thêm vào ${esc(s.name||'website này')}</button><button class="btn sm" id="kFitNo" type="button">Hủy, để chọn lại website</button></div>`;
+    $('#kFitYes').onclick=()=>addKws(sid,list).catch(e=>toast(e.message));$('#kFitNo').onclick=()=>{box.hidden=true;$('#kSite').focus()};return}
+  addKws(sid,list).catch(e=>toast(e.message))});
 $('#kBody').addEventListener('click',e=>{
   const p=e.target.closest('[data-post]');if(p){openPost(+p.dataset.post);return}
   const w=e.target.closest('[data-write],[data-writepub]');if(w){write(+(w.dataset.write||w.dataset.writepub),!!w.dataset.writepub);return}
@@ -481,6 +621,83 @@ async function write(kid,publish){
     const pid=await poll(job_id,m=>{jobs[kid]=m;renderKws()});delete jobs[kid];await loadKws();window.CostGuard&&CostGuard.after();
     toast(publish?'Đã viết và đăng bài':'Đã viết xong, mở bài để đọc lại trước khi đăng');if(!publish)openPost(pid);
   }catch(e){delete jobs[kid];await loadKws();toast(e.message)}}
+
+/* ================= Gợi ý chủ đề ================= */
+let tpRuns=[], tpCur=null, tpFilter='gap', tpSel=new Set(), tpBusy=false;
+const INTENT={informational:'Tìm hiểu',commercial:'Cân nhắc mua',transactional:'Mua ngay',navigational:'Điều hướng'};
+const foldJs=s=>String(s||'').toLowerCase().replace(/đ/g,'d').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+const hostJs=u=>{u=String(u||'').trim().toLowerCase();if(!u)return '';if(!/^https?:\/\//.test(u))u='https://'+u;try{let h=new URL(u).hostname;return h.replace(/^www\./,'')}catch(e){return ''}};
+const tpRate=()=>(window.CostGuard&&CostGuard.sum&&CostGuard.sum.rate)||26000;
+function tpSite(){return sites.find(x=>x.id==$('#kSite').value)}
+function tpComps(){return [...new Set(['#tpC1','#tpC2','#tpC3'].map(id=>hostJs($(id).value)).filter(d=>d&&d.includes('.')))]}
+function tpMode(){return document.querySelector('input[name=tpMode]:checked').value}
+function tpParams(){const comps=tpComps(),seed=foldJs($('#tpSeed').value),s=tpSite();
+  const same=tpRuns.find(r=>r.site_id===(s&&s.id)&&foldJs(r.seed)===seed&&[...r.competitors].sort().join()===[...comps].sort().join());
+  return {competitors:comps.length,mode:tpMode(),recent_days:same?Math.floor((Date.now()-new Date(same.created_at))/864e5):null}}
+function tpLabel(){if(window.CostGuard&&!tpBusy)CostGuard.label($('#tpRun'),'topics',tpParams(),'Phân tích chủ đề')}
+async function loadTp(){if(!sites.length)await loadSites();const s=tpSite();
+  $('#tpMine').innerHTML=s?`<b>${esc(hostJs(s.url.replace(/\/api\/.*$/,'')))}</b> · ${esc(s.name)}`:'Thêm website trước ở mục Websites';
+  try{tpRuns=(await api('api/tp/runs'+(s?'?site_id='+s.id:''))).items}catch(e){tpRuns=[]}
+  $('#tpHistN').textContent=tpRuns.length?'('+tpRuns.length+')':'';renderHist();tpLabel()}
+function renderHist(){$('#tpHist').innerHTML=tpRuns.length?tpRuns.map(r=>`<button type="button" data-run="${r.id}"><span><b>${esc(r.seed)}</b> <span class="hint">· ${r.competitors.length?esc(r.competitors.join(', ')):'không có đối thủ'} · ${r.mode==='free'?'tiết kiệm':'đầy đủ'}</span></span>
+  <span class="hint">${r.clusters} chủ đề · ${r.gaps} khoảng trống · ${r.added} đã thêm · ${window.CostGuard?CostGuard.vnd((r.cost_usd||0)*tpRate()):''} · ${fmt(r.created_at)}</span></button>`).join(''):'<div class="empty" style="padding:16px">Chưa có lần phân tích nào cho website này.</div>'}
+$('#tpHistBtn').addEventListener('click',()=>{$('#tpHist').hidden=!$('#tpHist').hidden});
+$('#tpHist').addEventListener('click',async e=>{const b=e.target.closest('[data-run]');if(!b)return;try{tpCur=await api('api/tp/run/'+b.dataset.run);tpSel.clear();tpFilter='gap';$('#tpHist').hidden=true;renderTp()}catch(err){toast(err.message)}});
+['#tpC1','#tpC2','#tpC3','#tpSeed'].forEach(id=>$(id).addEventListener('change',tpLabel));
+document.querySelectorAll('input[name=tpMode]').forEach(x=>x.addEventListener('change',tpLabel));
+async function tpPoll(jid){let j;do{await new Promise(r=>setTimeout(r,1500));j=await api('api/tp/job/'+jid);tpProgress(j.message)}while(j.status==='running');if(j.status==='error')throw new Error(j.message);return j.result}
+function tpProgress(m){const box=$('#tpResult');box.hidden=false;box.innerHTML=`<div class="tp-progress" role="status"><span class="spin"></span><span>${esc(m||'Đang phân tích…')}</span></div>`}
+$('#tpRun').addEventListener('click',async()=>{const s=tpSite(),seed=$('#tpSeed').value.trim(),comps=tpComps();
+  if(!s){toast('Thêm website trước');return}if(!seed){toast('Nhập chủ đề muốn phát triển');$('#tpSeed').focus();return}
+  if(comps.includes(hostJs(s.url))){toast('Đối thủ trùng với website của bạn');return}
+  if(!comps.length)$('#tpMsg').textContent='Không có đối thủ: chỉ phân tích từ chủ đề và website của bạn.';
+  let mode=tpMode();
+  if(window.CostGuard){const g=await CostGuard.check('topics',tpParams());if(!g.ok)return;if(g.options&&g.options.free_mode)mode='free'}
+  tpBusy=true;$('#tpRun').disabled=true;$('#tpRun').textContent='Đang phân tích…';tpProgress('Đang bắt đầu…');
+  try{const {job_id}=await api('api/tp/analyze',{method:'POST',body:JSON.stringify({site_id:s.id,seed,competitors:comps,mode,auto_add:$('#tpAuto').checked,auto_top:+$('#tpTop').value||5})});
+    tpCur=await tpPoll(job_id);tpSel.clear();tpFilter='gap';renderTp();window.CostGuard&&CostGuard.after();
+    if(tpCur.auto_added){toast(`Đã tự thêm ${tpCur.auto_added} chủ đề vào hàng chờ`);loadKws()}
+  }catch(e){$('#tpResult').hidden=false;$('#tpResult').innerHTML=`<div class="pad"><div class="err">${esc(e.message)}</div></div>`}
+  finally{tpBusy=false;$('#tpRun').disabled=false;await loadTp()}});
+function tpRows(){const c=tpCur.clusters;return tpFilter==='gap'?c.filter(x=>!x.covered):tpFilter==='covered'?c.filter(x=>x.covered):c}
+function renderTp(){const r=tpCur,box=$('#tpResult');if(!r){box.hidden=true;return}box.hidden=false;
+  const gaps=r.clusters.filter(c=>!c.covered),cov=r.clusters.length-gaps.length,st=r.stats||{};
+  const rows=tpRows(),vol=r.mode!=='free';
+  box.innerHTML=`<div class="tp-sum">
+    ${!r.site_fit.ok?`<div class="tp-warn"><b>Chủ đề có vẻ không hợp với website ${esc(r.site_name)}.</b><span>${esc(r.site_fit.note)}</span></div>`:''}
+    <div><span class="label">Kết quả · ${esc(r.seed)}${r.competitors.length?' · so với '+esc(r.competitors.join(', ')):''}</span>${r.demo?' <span class="demo-flag">Dữ liệu mẫu</span>':''}</div>
+    ${r.summary?`<p>${esc(r.summary)}</p>`:''}${r.site_fit.ok&&r.site_fit.note?`<p class="hint">${esc(r.site_fit.note)}</p>`:''}
+    <div class="tp-stats"><span>Website của bạn: <b>${st.my_pages??0}</b> trang</span>${Object.entries(st.competitor_posts||{}).map(([d,n])=>`<span>${esc(d)}: <b>${n}</b> bài</span>`).join('')}
+      ${vol?`<span>Từ khóa ứng viên: <b>${st.candidates??0}</b></span>`:''}<span>Search Console: <b>${st.gsc_queries??0}</b> truy vấn</span><span>Chi phí: <b>${window.CostGuard?CostGuard.vnd((r.cost_usd||0)*tpRate()):'—'}</b></span></div>
+    ${(r.notes||[]).length?`<div class="note">${r.notes.map(esc).join('<br>')}</div>`:''}</div>
+  <div class="tp-bar"><div class="tp-filter" role="group" aria-label="Lọc chủ đề">
+      <button type="button" data-f="gap" class="${tpFilter==='gap'?'on':''}">Khoảng trống (${gaps.length})</button>
+      <button type="button" data-f="covered" class="${tpFilter==='covered'?'on':''}">Đã có bài (${cov})</button>
+      <button type="button" data-f="all" class="${tpFilter==='all'?'on':''}">Tất cả (${r.clusters.length})</button></div>
+    <div class="row"><span class="hint" id="tpSelN">${tpSel.size?'Đã chọn '+tpSel.size:''}</span><button class="btn primary sm" id="tpAdd" type="button" ${tpSel.size?'':'disabled'}>Thêm vào hàng chờ</button></div></div>
+  <div class="tablebox"><table class="tp-t"><thead><tr><th><input type="checkbox" id="tpAll" aria-label="Chọn tất cả"></th><th>Điểm</th><th>Chủ đề bài viết</th>${vol?'<th>Volume</th>':''}<th>Ý định</th><th>Đối thủ đã viết</th><th>Góc viết</th><th>Trạng thái</th></tr></thead><tbody>
+  ${rows.length?rows.map(c=>`<tr><td class="ck">${c.added?'':`<input type="checkbox" data-ck="${c.id}" ${tpSel.has(c.id)?'checked':''} aria-label="Chọn ${esc(c.main_keyword)}">`}</td>
+    <td><div class="tp-score"><b>${c.score}</b><i><u style="width:${c.score}%"></u></i><span class="hint">${c.priority===3?'Viết ngay':c.priority===2?'Nên viết':'Viết sau'}</span></div></td>
+    <td><div class="tp-kw">${esc(c.main_keyword)} <span class="chip ${c.type==='pillar'?'c-pillar':'c-pending'}">${c.type==='pillar'?'Trụ cột':'Vệ tinh'}</span></div>
+      <div class="tp-title">${esc(c.title)}</div>${c.pillar&&c.type!=='pillar'?`<div class="hint">Trỏ về bài trụ cột: ${esc(c.pillar)}</div>`:''}
+      ${c.keywords.length?`<div class="tp-sub">${c.keywords.map(k=>`<span>${esc(k)}</span>`).join('')}</div>`:''}</td>
+    ${vol?`<td class="tp-num">${c.volume!=null?c.volume.toLocaleString('vi-VN'):'—'}${c.kd!=null?`<div class="hint">Độ khó ${c.kd}</div>`:''}</td>`:''}
+    <td><span class="hint">${INTENT[c.intent]||esc(c.intent)}</span>${c.gsc?`<div class="hint">Đã có ${c.gsc.impr.toLocaleString('vi-VN')} hiển thị, vị trí ${c.gsc.pos}</div>`:''}</td>
+    <td><div class="tp-comp">${c.competitors.length?c.competitors.map(esc).join('<br>'):'—'}</div></td>
+    <td><div class="tp-angle">${esc(c.angle)}${c.reason?`<span class="hint">${esc(c.reason)}</span>`:''}${c.link_target?`<span class="hint">Gắn link: ${esc(c.link_target.replace(/^https?:\/\//,''))}</span>`:''}</div></td>
+    <td>${c.added?'<span class="chip c-ok">Đã thêm</span>':c.covered?`<span class="chip c-warn">Đã có</span><span class="sub-msg">${esc(c.covered)}</span>`:'<span class="chip c-info">Khoảng trống</span>'}</td></tr>`).join('')
+    :`<tr><td colspan="8" class="empty">${tpFilter==='gap'?'Không còn khoảng trống: website đã phủ các chủ đề tìm thấy.':'Không có chủ đề.'}</td></tr>`}</tbody></table></div>`}
+$('#tpResult').addEventListener('click',async e=>{
+  const f=e.target.closest('[data-f]');if(f){tpFilter=f.dataset.f;renderTp();return}
+  if(e.target.id==='tpAll'){tpRows().filter(c=>!c.added).forEach(c=>e.target.checked?tpSel.add(c.id):tpSel.delete(c.id));renderTp();return}
+  const ck=e.target.closest('[data-ck]');if(ck){const id=+ck.dataset.ck;ck.checked?tpSel.add(id):tpSel.delete(id);$('#tpSelN').textContent=tpSel.size?'Đã chọn '+tpSel.size:'';$('#tpAdd').disabled=!tpSel.size;return}
+  if(e.target.id==='tpAdd'){if(!tpCur.site_fit.ok&&!e.target.dataset.sure){e.target.dataset.sure='1';e.target.textContent='Chủ đề lệch website · bấm lần nữa để thêm';return}
+    try{const r=await api('api/tp/add',{method:'POST',body:JSON.stringify({run_id:tpCur.id,ids:[...tpSel]})});
+      toast(`Đã thêm ${r.added} chủ đề vào hàng chờ`+(r.skipped?` (${r.skipped} từ đã có sẵn)`:''));tpCur=await api('api/tp/run/'+tpCur.id);tpSel.clear();renderTp();loadKws();loadTp()}catch(err){toast(err.message)}}
+});
+
+/* Kiểm tra từ khóa nhập tay có lệch chủ đề website không (miễn phí) */
+async function fitCheck(sid,list){try{return await api('api/tp/fit',{method:'POST',body:JSON.stringify({site_id:sid,keywords:list})})}catch(e){return {checked:false,mismatched:[]}}}
 
 /* ================= Bài viết ================= */
 async function loadPosts(){if(!sites.length)await loadSites();const sid=$('#pSite').value;posts=(await api('api/ap/posts'+(sid?'?site_id='+sid:''))).items;$('#nPosts').textContent=posts.length||'';

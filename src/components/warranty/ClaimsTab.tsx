@@ -17,7 +17,7 @@ import { ClaimForm, ClaimReturnDialog } from "./ClaimForm";
 const SELECT = "h-10 rounded-md border bg-background px-3 text-sm";
 
 /**
- * Yêu cầu bảo hành gửi nhà máy (chỉ admin).
+ * Yêu cầu bảo hành gửi nhà máy (admin + quyền "Bảo hành nhà máy").
  *   mode = "all"      → mọi yêu cầu, lọc theo ngày tiếp nhận.
  *   mode = "awaiting" → tab "Chờ NM trả hàng": hàng nhà máy nhận đổi mới nhưng
  *                       chưa gửi trả (mọi thời gian, chờ lâu nhất lên đầu).

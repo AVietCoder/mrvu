@@ -84,8 +84,12 @@ function addFound(st: any, u: string, src: string) {
   if (!(u in st.found)) st.found[u] = src;
 }
 
-registerStep("audit_crawl", async (job, ctx) => {
-  const st = job.state;
+/**
+ * Một bước quét website (init → sitemaps → crawl) trên trạng thái `st`, chạy trong ngân sách thời gian
+ * của bước. Trả true khi đã quét xong (st.phase === "save"; trang tìm được nằm ở st.found).
+ * Dùng chung cho tab Audit và Gợi ý chủ đề (topics.ts) — chỉ quét, không lưu.
+ */
+export async function crawlStep(st: any, ctx: any): Promise<boolean> {
   const left = () => (ctx.deadline - Date.now()) / 1000;
   if (st.phase === "init") {
     const home = await fetchPage(normalizeStart(st.start));
@@ -110,7 +114,7 @@ registerStep("audit_crawl", async (job, ctx) => {
     st.seen_sm = [];
     st.phase = "sitemaps";
     ctx.extra.found = Object.keys(st.found).length;
-    return;
+    return false;
   }
   if (st.phase === "sitemaps") {
     while (st.queue.length && st.seen_sm.length < 60 && Object.keys(st.found).length < st.max && left() > 5) {
@@ -132,7 +136,7 @@ registerStep("audit_crawl", async (job, ctx) => {
     }
     ctx.extra.found = Object.keys(st.found).length;
     const finished = !st.queue.length || st.seen_sm.length >= 60 || Object.keys(st.found).length >= st.max;
-    if (!finished) return;
+    if (!finished) return false;
     st.method = "sitemap";
     if (Object.keys(st.found).length <= 1) {
       // không có sitemap: bò theo liên kết
@@ -141,7 +145,7 @@ registerStep("audit_crawl", async (job, ctx) => {
       st.frontier = [st.base];
       st.phase = "crawl";
     } else st.phase = "save";
-    return;
+    return false;
   }
   if (st.phase === "crawl") {
     const cap = Math.min(st.max, 300);
@@ -165,8 +169,17 @@ registerStep("audit_crawl", async (job, ctx) => {
       await new Promise((r) => setTimeout(r, 200));
     }
     ctx.extra.found = Object.keys(st.found).length;
-    if (st.frontier.length && st.visited.length < cap) return;
+    if (st.frontier.length && st.visited.length < cap) return false;
     st.phase = "save";
+    return false;
+  }
+  return st.phase === "save";
+}
+
+registerStep("audit_crawl", async (job, ctx) => {
+  const st = job.state;
+  if (st.phase !== "save") {
+    await crawlStep(st, ctx);
     return;
   }
   if (st.phase === "save") {

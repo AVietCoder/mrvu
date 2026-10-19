@@ -66,7 +66,9 @@ Biến môi trường (tên, KHÔNG đọc / in giá trị): `VITE_SUPABASE_URL`
 | **v24** ⏳ | Bảo hành hai mức: `products.warranty_motor_months` (120), `warranty_tickets.warranty_motor_months`, `warranty_tickets.fault_part`. **Chưa chạy lúc viết** — code chịu được (đọc / ghi cột v24 riêng, `getWarrantyMetaFn().migratedV24`) |
 | **v25** ⏳ | SEO Studio: 28 bảng `seo_*` (RLS deny-all, server đọc/ghi qua `SEO_DATABASE_URL`), bucket Storage `seo-images`; phần pg_cron `seo-autopost` ở cuối file chạy riêng sau khi deploy. **Chưa chạy lúc viết** (đã chạy thử 2 lần liên tiếp trên Postgres 18 cục bộ). |
 
-Migration tiếp theo đặt tên **v26**.
+| **v26** ⏳ (`sql_migration_v26.sql`) | `user_sessions` (phiên đăng nhập + thiết bị, RLS deny-all); `warranty_tickets.final_action` thêm `customer_declined`; nếu đã có bảng SEO: `seo_ap_keywords.brief_json` + `seo_tp_runs`. **Chưa chạy lúc viết** (đã chạy thử 2 lần trên Postgres cục bộ). Trước v26: ghi kết quả "Khách không đồng ý" báo lỗi rõ, thẻ thiết bị đăng nhập hiện nhắc chạy v26, đăng nhập vẫn bình thường. |
+
+Migration tiếp theo đặt tên **v27**.
 
 ---
 
@@ -171,6 +173,17 @@ Migration tiếp theo đặt tên **v26**.
 - **Claude**: `apis.ts` dùng `@anthropic-ai/sdk`, luôn streaming, mô hình `claude-sonnet-5-5` (env `SEO_ANTHROPIC_MODEL`), thử refusal fallback (`server-side-fallback-2026-07-01`) và tự bỏ nếu bị từ chối; ghi chi phí theo token thật vào `seo_spend`.
 - Thư viện ảnh Autopost: Supabase Storage bucket `seo-images` + bảng `seo_ap_library` (tải lên / xoá trong tab Cài đặt AI & biến, tối đa 3,5 MB/ảnh).
 - Khác bản Python có chủ đích: crawl tôn trọng `Disallow` của robots.txt; nhập CSV backlink báo đúng khi lỡ chọn file "Trang được liên kết hàng đầu"; khoá service account từ env `GOOGLE_SERVICE_ACCOUNT_JSON` (JSON hoặc base64) hoặc tải lên (mã hoá).
+
+### 4.11 Cập nhật 19/10/2026 (superupdate.docx + Gợi ý chủ đề)
+- **Bảo hành**: kết quả cuối thêm "Khách không đồng ý thay / sửa chữa" (`customer_declined`, cùng nhóm không thu tiền với `free_support` — `WARRANTY_NO_PRICE_ACTIONS`). Quyền mới **`warranty_factory` "Bảo hành nhà máy"**: tạo / xem / cập nhật phiếu nhà máy + tab Nhà máy, Chờ NM trả hàng, nút "Gửi nhà máy" (`canFactory` / `assertFactory`). Xoá phiếu NM, danh mục nhà máy, cài đặt, báo cáo NM vẫn chỉ admin. (Lỗi "không chọn được nhà máy" là do tài khoản Hồng Nga không phải admin → danh sách nhà máy trả rỗng; cần admin tick quyền mới cho Nga.)
+- **Chăm sóc KH → Sinh nhật**: cột "NV tạo khách" (`customers.created_by_name`, thiếu thì tra `users`).
+- **Tổng quan**: `StaffBirthdayCard` (sinh nhật nhân viên hôm nay + trong tháng, `getStaffBirthdaysFn` — lúc viết CHƯA nhân viên nào có ngày sinh nên chỉ admin thấy lời nhắc nhập ở trang Nhân viên); admin: `ActiveSessionsCard` — tài khoản đang online (hoạt động ≤ 5 phút) / mọi phiên, thiết bị (trình duyệt, HĐH, IP), "Đăng xuất thiết bị này".
+- **Phiên đăng nhập** (`src/lib/server/sessions.ts`, `team.functions.ts`): `loginFn` ghi `user_sessions` (sha256 token, UA, IP); `AuthContext` gửi nhịp 2 phút / lần + khi quay lại tab (`sessionHeartbeatFn`), phiên cũ tự có bản ghi ở nhịp đầu; admin thu hồi → nhịp kế tiếp trả `revoked` → client đăng xuất. Đây chỉ là theo dõi / thu hồi; xác thực vẫn là `actorId` như cũ (mục 6.6).
+- **Báo cáo ngày**: bấm nhóm thu / chi → danh sách phiếu; bấm mã phiếu → `/cash?q=<mã>&fund=…&date=…` (Sổ quỹ nhận `validateSearch` q / fund / date).
+- **Doanh thu theo kỳ → Báo cáo hàng bán** (`SalesQtyReport`): số lượng thuần theo Tuần / Tháng / Quý / Năm trong khoảng đang chọn + theo mặt hàng, CSV; thêm preset "Tháng này", "Quý này". "Phụ kiện & dịch vụ" = hàng `count_in_total = false` (gồm Công lắp đặt, Phụ thu, Bảo hành VIP).
+- **Lịch làm việc**: cột "Hàng hóa" (Danh sách), dòng 📦 (Thời khóa biểu), thẻ điện thoại và nội dung Copy đều có hàng — `getScheduleProducts` (dòng hàng của đơn gắn lịch, hoặc mẫu quạt của phiếu bảo hành có `schedule_id`; tải riêng ~2,5 giây, ~100 KB).
+- **SEO Studio — Gợi ý chủ đề** (`topics.ts`, từ `topics.py` trong `mrvu-seo-studio.zip` 19/10): API `/api/tp/*` (analyze / job / runs / run / add / fit). Tác vụ nhiều bước: website mình (dữ liệu Audit, không có thì quét bằng `crawlStep` tách ra từ `audit.ts` rồi lưu lại) → từng đối thủ → DataForSEO Labs (đầy đủ) → Claude → chấm điểm (khớp Python) → lưu `seo_tp_runs`, tự thêm hàng chờ kèm `brief_json`. `autopost.ts` đưa brief vào prompt dàn ý + bài (`briefText`). Chi phí: `dfs_labs_task/item`, `tp_recent_days`, nhóm "Gợi ý chủ đề". Trang `autopost.html` / `costguard.js` mới đã gộp 3 chiều (git merge-file) với bản chỉnh POS.
+- Mật khẩu website Autopost không giải mã được (đổi `SEO_SECRET_KEY`) → không còn làm hỏng danh sách, hiện "cần nhập lại".
 
 ---
 

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AsyncSearchableSelect } from "@/components/AsyncSearchableSelect";
-import { WARRANTY_FAULT_PARTS, WARRANTY_FINAL_ACTIONS, WARRANTY_ISSUE_TYPES, WARRANTY_STAGES } from "@/lib/types";
+import { WARRANTY_FAULT_PARTS, WARRANTY_FINAL_ACTIONS, WARRANTY_ISSUE_TYPES, WARRANTY_NO_PRICE_ACTIONS, WARRANTY_STAGES } from "@/lib/types";
 import { Loader2, UserCheck, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 import { useWarrantyMeta, ProductPicker, AttachmentsField, WarrantyBadge, dmy, money, nowLocalInput, toLocalInput } from "./shared";
@@ -306,7 +306,7 @@ export function TicketFormBody({ kind = "retail", ticket, initial, onSaved, onCa
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <Label>Kết quả xử lý cuối</Label>
-            <select className={SELECT} value={f.final_action} onChange={(e) => set({ final_action: e.target.value, ...(e.target.value === "free_support" ? { spare_part_price: "" } : {}) })}>
+            <select className={SELECT} value={f.final_action} onChange={(e) => set({ final_action: e.target.value, ...(WARRANTY_NO_PRICE_ACTIONS.includes(e.target.value) ? { spare_part_price: "" } : {}) })}>
               <option value="">— Chưa có —</option>
               {WARRANTY_FINAL_ACTIONS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
             </select>
@@ -314,8 +314,8 @@ export function TicketFormBody({ kind = "retail", ticket, initial, onSaved, onCa
           <div>
             <Label>Giá linh kiện mua{f.final_action === "buy_part" ? " *" : ""}</Label>
             <Input
-              className="mt-1.5" inputMode="numeric" placeholder={f.final_action === "free_support" ? "Miễn phí" : "0"}
-              disabled={f.final_action === "free_support"}
+              className="mt-1.5" inputMode="numeric" placeholder={f.final_action === "free_support" ? "Miễn phí" : f.final_action === "customer_declined" ? "Không thu" : "0"}
+              disabled={WARRANTY_NO_PRICE_ACTIONS.includes(f.final_action)}
               value={f.spare_part_price ? money(f.spare_part_price) : ""}
               onChange={(e) => set({ spare_part_price: e.target.value.replace(/\D/g, "") })}
             />

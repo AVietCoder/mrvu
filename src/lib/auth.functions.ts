@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
+import { recordLogin } from "./server/sessions";
 import type { AuthSession, Permission, User } from "./types";
 import {
   deleteWhere,
@@ -42,6 +43,8 @@ export const loginFn = createServerFn({ method: "POST" })
     if (!row) throw new Error("Sai tên đăng nhập hoặc mật khẩu");
     const user = await loadUser(row);
     const session: AuthSession = { user, token: uid() + uid() };
+    // Ghi phiên + thiết bị (v26) để admin xem / đăng xuất từ xa. Lỗi không chặn đăng nhập.
+    await recordLogin(user.id, session.token).catch(() => undefined);
     await logActivity({ action: "login", detail: `${user.full_name} (${user.username}) đăng nhập`, employee_id: user.id });
     return session;
   });

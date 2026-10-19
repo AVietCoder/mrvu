@@ -21,7 +21,7 @@ const EMPTY = {
 const SELECT = "mt-1.5 h-10 w-full rounded-md border bg-background px-3 disabled:opacity-70";
 
 /**
- * Thêm / sửa yêu cầu bảo hành gửi nhà máy (chỉ admin). claim = null → thêm mới;
+ * Thêm / sửa yêu cầu bảo hành gửi nhà máy (admin + quyền "Bảo hành nhà máy"; xoá: chỉ admin). claim = null → thêm mới;
  * `fromTicket` = phiếu khách lẻ / đại lý để điền sẵn mẫu quạt, mô tả lỗi, ảnh.
  */
 export function ClaimForm({ open, claim, fromTicket, metaHook, onClose, onSaved }: any) {
@@ -97,7 +97,7 @@ export function ClaimForm({ open, claim, fromTicket, metaHook, onClose, onSaved 
 
         <div className="space-y-4 text-sm">
           {(meta?.factories ?? []).length === 0 && (
-            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">Chưa có nhà máy nào trong danh mục — thêm ở tab <strong>Cài đặt</strong> trước.</div>
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900">Chưa có nhà máy nào trong danh mục — {meta?.me?.isAdmin ? <>thêm ở tab <strong>Cài đặt</strong> trước.</> : "nhờ quản trị viên thêm ở tab Cài đặt."}</div>
           )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
@@ -194,7 +194,7 @@ export function ClaimForm({ open, claim, fromTicket, metaHook, onClose, onSaved 
           )}
 
           <div className="flex items-center gap-2 border-t pt-3">
-            {!isNew && (
+            {!isNew && meta?.me?.isAdmin && (
               <Button
                 variant="outline" className="text-destructive" disabled={busy === "del"}
                 onClick={async () => {

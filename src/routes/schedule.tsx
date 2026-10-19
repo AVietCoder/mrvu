@@ -12,6 +12,7 @@ import {
   searchOrdersForSchedule, searchCustomersForSchedule,
   updateSchedule,
   getScheduleDisplayRefs,
+  getScheduleProducts,
   getOrderItemsForPrint,
 } from "@/lib/schedule.functions";
 import { buildInvoiceHtml } from "@/lib/print-invoice";
@@ -152,7 +153,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
   const [approving, setApproving] = useState(false);
   const [expandedAttLines, setExpandedAttLines] = useState<string[]>([]);
 
-  const { data } = useQuery({ queryKey: ["schedules"], queryFn: () => listFn(), staleTime: 60_000, gcTime: 10 * 60_000 });
+  const { data, dataUpdatedAt: schedulesUpdatedAt } = useQuery({ queryKey: ["schedules"], queryFn: () => listFn(), staleTime: 60_000, gcTime: 10 * 60_000 });
   // ── TỐI ƯU: ref data (customers/orders/products) tải riêng, song song ────────
   // Cũ: listSchedules() tải tất cả trong 1 request → payload hàng MB.
   // Mới: lịch cốt lõi tải trước, ref data tải song song với staleTime dài hơn
@@ -163,6 +164,26 @@ async function refreshQuery(queryKey: readonly unknown[]) {
     staleTime: 5 * 60_000,   // ref data ổn định hơn → cache 5 phút
     gcTime: 15 * 60_000,
   });
+  // Hàng hóa của từng lịch (từ đơn gắn lịch / phiếu bảo hành) — cột "Hàng hóa" + nội dung Copy.
+  // Tải lại mỗi khi danh sách lịch tải lại (vd. vừa gắn đơn cho lịch).
+  const getProductsFn = useServerFn(getScheduleProducts);
+  const { data: schedProducts } = useQuery({
+    queryKey: ["schedule-products", schedulesUpdatedAt],
+    queryFn: () => getProductsFn(),
+    staleTime: 60_000,
+    placeholderData: (prev: any) => prev,
+  });
+  const productsOf = (s: any): { name: string; qty: number }[] => (schedProducts as any)?.[s.id] ?? [];
+  const productLines = (s: any) => {
+    const ps = productsOf(s);
+    return ps.length ? ["• Hàng hóa:", ...ps.map((p) => `  - ${p.name} × ${p.qty}`)] : [];
+  };
+  const productShort = (s: any) => {
+    const ps = productsOf(s);
+    if (!ps.length) return "";
+    const head = ps.slice(0, 2).map((p) => `${p.name} ×${p.qty}`).join(", ");
+    return ps.length > 2 ? `${head} +${ps.length - 2} món` : head;
+  };
   const { data: diffData } = useQuery({ queryKey: ["work-difficulties"], queryFn: () => listDiff() });
   const { data: wtData } = useQuery({ queryKey: ["work-types"], queryFn: () => listWT() });
   const { data: siteSettings } = useQuery({ queryKey: ["site_settings"], queryFn: () => getSettingsFn() });
@@ -729,6 +750,9 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                         )}
                         {customer && (canApprove || isAdmin) && <div className="text-xs text-muted-foreground mb-1">👤 {customer.name}{customer.company_name ? <span className="block pl-5">🏢 {customer.company_name}</span> : null}</div>}
                         {s.address && <div className="text-xs text-muted-foreground mb-1">📍 {s.address}</div>}
+                        {productsOf(s).length > 0 && (
+                          <div className="mb-1 text-xs text-muted-foreground">📦 {productsOf(s).map((p) => <span key={p.name} className="mr-1 inline-block rounded bg-muted px-1.5 py-0.5 text-foreground">{p.name} ×{p.qty}</span>)}</div>
+                        )}
                         {assignees.length > 0 && <div className="flex flex-wrap gap-1 mb-2">{assignees.map((a: any) => { const u = usersById.get(String(a.user_id)); return <span key={a.user_id} className="text-xs bg-muted rounded-full px-2 py-0.5">{u?.full_name ?? a.user_id}</span>; })}</div>}
                         {isTech && techPay !== null && techPay > 0 && <div className="text-sm font-semibold text-green-600 mb-2">💰 Tiền công: {fmtMoney(techPay)}</div>}
                         {s.assigned_by && (() => {
@@ -778,6 +802,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                 if (linkedOrder) {
                   orderItemLines.push(`• Đơn hàng: ${linkedOrder.code} — ${fmtMoney(linkedOrder.total)}`);
                 }
+                orderItemLines.push(...productLines(s));
                 return [ "📋 Nội dung đơn hàng:", "", `• Tiêu đề: ${s.title}`, `• Công việc: ${SCHEDULE_TYPES.find((t) => t.value === s.type)?.label ?? s.type}`, workType ? `• Loại hình công việc: ${workType.name}` : null, `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`, customer ? `• Khách hàng: ${customer.name}${customer.company_name ? " (" + customer.company_name + ")" : ""}${customer.phone ? " — " + customer.phone : ""}` : null, s.address ? `• Địa chỉ: ${s.address}` : null, ...orderItemLines, assigner ? `• Người giao việc: ${assigner.full_name}` : null, creator ? `• Người tạo lịch: ${creator.full_name}` : null, assignees.length > 0 ? `• Người thực hiện:` : null, ...assigneeLines, s.note ? `• Ghi chú: ${s.note}` : null, `• Trạng thái: ${STATUS_LABELS[s.status]?.label ?? s.status}`].filter((v) => v !== null).join("\n");
               }
               return (
@@ -789,6 +814,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                   {branchNames.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{branchNames.map((name) => <span key={name} className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">{name}</span>)}</div>}
                   <div className="mt-3 space-y-1.5 text-sm">
                     {!isTech && !canApprove && <div className="text-muted-foreground">Khách hàng: <span className="text-foreground">{customer?.name ?? "—"}</span></div>}
+                    {productsOf(s).length > 0 && <div className="text-muted-foreground">Hàng hóa: <span className="text-foreground">{productsOf(s).map((p) => `${p.name} ×${p.qty}`).join(", ")}</span></div>}
                     <div className="text-muted-foreground">Phụ trách: <span className="text-foreground">{assignees.length > 0 ? assignees.map((a: any) => usersById.get(String(a.user_id))?.full_name ?? "?").join(", ") : "Chưa phân công"}</span></div>
                     <div className="text-muted-foreground">Người tạo: <span className="text-foreground">{creator?.full_name ?? "—"}</span></div>
                     {assigner && <div className="text-muted-foreground">Giao việc: <span className="text-foreground">{assigner.full_name}</span></div>}
@@ -815,7 +841,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
               <table className="w-full text-sm min-w-[720px]">
                 <thead className="text-left text-muted-foreground border-b">
                   <tr><th className="py-2 pr-3">Tiêu đề</th><th className="pr-3">Ngày</th><th className="pr-3">Chi nhánh</th>
-                  <th className="pr-3">Khách hàng</th><th className="pr-3">Người phụ trách</th><th className="pr-3">Người tạo</th><th className="pr-3">Trạng thái</th>{isTech && <th className="pr-3">Tiền công</th>}<th></th></tr>
+                  <th className="pr-3">Khách hàng</th><th className="pr-3">Hàng hóa</th><th className="pr-3">Người phụ trách</th><th className="pr-3">Người tạo</th><th className="pr-3">Trạng thái</th>{isTech && <th className="pr-3">Tiền công</th>}<th></th></tr>
                 </thead>
                 <tbody>
                   {pagedSchedules.map((s: any) => {
@@ -831,15 +857,16 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                         <td className="pr-3 text-xs whitespace-nowrap">{s.scheduled_date?.slice(0,10)} {s.scheduled_time}</td>
                         <td className="pr-3"><div className="flex flex-wrap gap-1">{branchNames.length > 0 ? branchNames.map((name) => <span key={name} className="text-xs rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">{name}</span>) : <span className="text-xs text-muted-foreground">—</span>}</div></td>
                         <td className="pr-3 text-muted-foreground text-sm">{customer?.name ?? "—"}</td>
+                        <td className="pr-3 text-xs max-w-[220px]" title={productsOf(s).map((p) => `${p.name} × ${p.qty}`).join(", ")}>{productShort(s) ? <span className="line-clamp-2">{productShort(s)}</span> : <span className="text-muted-foreground">—</span>}</td>
                         <td className="pr-3"><div className="flex flex-wrap gap-1">{assignees.map((a: any) => { const u = usersById.get(String(a.user_id)); return <span key={a.user_id} className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">{u?.full_name ?? "?"}</span>; })}{assignees.length === 0 && <span className="text-xs text-muted-foreground">Chưa phân công</span>}</div></td>
                         <td className="pr-3">{creator ? <span className="text-xs bg-orange-100 text-orange-700 rounded-full px-2 py-0.5">{creator.full_name}</span> : <span className="text-xs text-muted-foreground">—</span>}</td>
-                        <td className="pr-3"><span className={`text-xs rounded-full px-2 py-0.5 ${status?.color}`}>{status?.label}</span></td>
+                        <td className="pr-3"><span className={`whitespace-nowrap text-xs rounded-full px-2 py-0.5 ${status?.color}`}>{status?.label}</span></td>
                         {isTech && <td className="pr-3 text-green-600 font-medium text-sm">{techPay ? fmtMoney(techPay) : "—"}</td>}
                         <td onClick={(e) => e.stopPropagation()}>{canApprove && s.status === "pending" && <Button size="sm" variant="outline" onClick={() => openApprove(s)}>Duyệt</Button>}</td>
                       </tr>
                     );
                   })}
-                  {mySchedules.length === 0 && <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">Không có lịch nào</td></tr>}
+                  {mySchedules.length === 0 && <tr><td colSpan={10} className="py-8 text-center text-muted-foreground">Không có lịch nào</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -1516,6 +1543,7 @@ async function refreshQuery(queryKey: readonly unknown[]) {
                   if (linkedOrder) {
                     orderItemLines.push(`• Đơn hàng: ${linkedOrder.code} — ${fmtMoney(linkedOrder.total)}`);
                   }
+                  orderItemLines.push(...productLines(s));
                   const assigneeLines: string[] = assignees.length > 0 ? assignees.map((a: any) => { const u = usersById.get(String(a.user_id)); return `  - ${u?.full_name ?? a.user_id}`; }) : [];
                   const msgContent = [ "📋 Nội dung đơn hàng:", "", `• Tiêu đề: ${s.title}`, workType ? `• Loại hình công việc: ${workType.name}` : null, `• Ngày lắp: ${s.scheduled_date?.slice(0, 10) ?? "—"}${s.scheduled_time ? " " + s.scheduled_time : ""}`, customer ? `• Khách hàng: ${customer.name}${customer.company_name ? " (" + customer.company_name + ")" : ""}${customer.phone ? " — " + customer.phone : ""}` : null, s.address ? `• Địa chỉ: ${s.address}` : null, ...orderItemLines, assigner ? `• Người giao việc: ${assigner.full_name}` : null, creator ? `• Người tạo lịch: ${creator.full_name}` : null, assignees.length > 0 ? `• Người thực hiện:` : null, ...assigneeLines, s.note ? `• Ghi chú: ${s.note}` : null, `• Trạng thái: ${STATUS_LABELS[s.status]?.label ?? s.status}`].filter((v) => v !== null).join("\n");
                   function copyMsg() { navigator.clipboard.writeText(msgContent).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }

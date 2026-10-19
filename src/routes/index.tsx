@@ -9,6 +9,8 @@ import { MySalaryCard } from "@/components/MySalaryCard";
 import { MyAttendanceCard } from "@/components/MyAttendanceCard";
 import { FollowUpCard } from "@/components/FollowUpCard";
 import { WarrantyAlertCard } from "@/components/WarrantyAlertCard";
+import { StaffBirthdayCard } from "@/components/StaffBirthdayCard";
+import { ActiveSessionsCard } from "@/components/ActiveSessionsCard";
 import { ShieldOff, ShoppingCart, Users, Package, BarChart2, Warehouse, CalendarDays, Settings, CreditCard, ChevronRight } from "lucide-react";
 
 import {
@@ -121,6 +123,10 @@ function Dashboard() {
               </Link>
             ))}
           </div>
+          {/* Admin: tài khoản đang đăng nhập + thiết bị, đăng xuất từ xa (v26). */}
+          {user && isAdmin && <ActiveSessionsCard userId={user.id} />}
+          {/* Sinh nhật nhân viên hôm nay + trong tháng (ai cũng thấy). */}
+          <StaffBirthdayCard isAdmin={isAdmin} />
           {/* Khách tiềm năng tới hẹn chăm (ai cũng thấy phần của mình; không có thì ẩn). */}
           {user && <FollowUpCard userId={user.id} />}
           {/* Bảo hành: phiếu quá 24h chưa phản hồi + hàng nhà máy quá hạn gửi trả (admin). */}

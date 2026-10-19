@@ -16,6 +16,7 @@ import * as backlinks from "./backlinks";
 import * as costs from "./costs";
 import * as geo from "./geo";
 import * as gsc from "./gsc";
+import * as topics from "./topics";
 
 import indexHtml from "./pages/index.html?raw";
 import rankHtml from "./pages/rank.html?raw";
@@ -227,6 +228,7 @@ async function doGET(h: any, path: string) {
   if (path.startsWith("/api/geo/")) return geo.handle(h, "GET", path);
   if (path.startsWith("/api/bl/")) return backlinks.handle(h, "GET", path);
   if (path.startsWith("/api/gsc/")) return gsc.handle(h, "GET", path);
+  if (path.startsWith("/api/tp/")) return topics.handle(h, "GET", path);
   if (path.startsWith("/api/cost/")) return costs.handle(h, "GET", path);
   if (path in PAGES) {
     let [body, type] = PAGES[path];
@@ -274,6 +276,7 @@ async function doDELETE(h: any, path: string) {
   if (path.startsWith("/api/geo/")) return geo.handle(h, "DELETE", path);
   if (path.startsWith("/api/bl/")) return backlinks.handle(h, "DELETE", path);
   if (path.startsWith("/api/gsc/")) return gsc.handle(h, "DELETE", path);
+  if (path.startsWith("/api/tp/")) return topics.handle(h, "DELETE", path);
   if (path.startsWith("/api/cost/")) return costs.handle(h, "DELETE", path);
   if (path.startsWith("/api/rank/tracked/")) {
     const tid = path.split("/").pop();
@@ -293,6 +296,7 @@ async function doPOST(h: any, path: string) {
   if (path.startsWith("/api/geo/")) return geo.handle(h, "POST", path);
   if (path.startsWith("/api/bl/")) return backlinks.handle(h, "POST", path);
   if (path.startsWith("/api/gsc/")) return gsc.handle(h, "POST", path);
+  if (path.startsWith("/api/tp/")) return topics.handle(h, "POST", path);
   if (path.startsWith("/api/cost/")) return costs.handle(h, "POST", path);
   if (path === "/api/rank/add") return rankAdd(h);
   if (path === "/api/audit/crawl") return audit.auditCrawl(h);

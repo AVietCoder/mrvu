@@ -7,6 +7,10 @@ import {
   touchSession,
   SESSION_KEY,
 } from "@/lib/auth";
+import { endSessionFn, sessionHeartbeatFn } from "@/lib/team.functions";
+
+// Nhịp "đang dùng POS" gửi về máy chủ để admin thấy ai đang online / thiết bị nào (v26).
+const HEARTBEAT_MS = 2 * 60_000;
 
 const ACTIVE_BRANCH_KEY = "mrvu_active_branch";
 
@@ -77,6 +81,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  // Nhịp hoạt động: lúc mở app, mỗi 2 phút khi tab đang hiện, và khi quay lại tab.
+  // Admin đã "đăng xuất thiết bị này" → máy chủ trả revoked → thoát ngay.
+  useEffect(() => {
+    if (!session?.token || !session.user?.id) return;
+    let stopped = false;
+    const beat = async () => {
+      if (stopped || document.visibilityState !== "visible") return;
+      try {
+        const r: any = await (sessionHeartbeatFn as any)({ data: { userId: session.user.id, token: session.token } });
+        if (r?.revoked && !stopped) {
+          clearSession();
+          clearActiveBranch();
+          setSession(null);
+          _setActiveBranchId(undefined);
+          window.alert("Phiên đăng nhập trên thiết bị này đã được quản trị viên đăng xuất.");
+        }
+      } catch {}
+    };
+    beat();
+    const t = window.setInterval(beat, HEARTBEAT_MS);
+    const onVis = () => { if (document.visibilityState === "visible") beat(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { stopped = true; window.clearInterval(t); document.removeEventListener("visibilitychange", onVis); };
+  }, [session?.token, session?.user?.id]);
+
   function login(s: AuthSession) {
     saveSession(s);
     setSession(s);
@@ -89,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
+    if (session?.token) (endSessionFn as any)({ data: { token: session.token } }).catch(() => undefined);
     clearSession();
     clearActiveBranch();
     setSession(null);

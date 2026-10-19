@@ -28,6 +28,12 @@ import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute("/cash")({
+  // Mở sẵn bộ lọc từ nơi khác (vd. Báo cáo ngày → bấm phiếu): ?q=<mã phiếu / từ khoá>&fund=tien_mat|ngan_hang|all&date=YYYY-MM-DD
+  validateSearch: (s: Record<string, unknown>): { q?: string; fund?: "tien_mat" | "ngan_hang" | "all"; date?: string } => ({
+    ...(typeof s.q === "string" && s.q ? { q: s.q } : {}),
+    ...(s.fund === "tien_mat" || s.fund === "ngan_hang" || s.fund === "all" ? { fund: s.fund } : {}),
+    ...(typeof s.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.date) ? { date: s.date } : {}),
+  }),
   head: () => ({ meta: [{ title: "Sổ quỹ — Mr.Vũ" }] }),
   component: Page,
 });
@@ -436,12 +442,13 @@ function Page() {
     );
   }
 
-  const [fund, setFund] = useState<FundTab>("tien_mat");
+  const urlSearch = Route.useSearch();
+  const [fund, setFund] = useState<FundTab>((urlSearch.fund as FundTab) ?? "tien_mat");
   const [filterBranch, setFilterBranch] = useState<string>(() => {
     if (isAdmin || user?.permissions.includes("view_cash_all")) return "";
     return activeBranchId ?? user?.branch_ids?.[0] ?? "";
   });
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(urlSearch.q ?? "");
   // Debounce tìm kiếm sổ quỹ: chỉ lọc lại sau khi ngừng gõ. Tổng thu/chi và kết
   // quả lọc giữ nguyên — chỉ giảm số lần quét danh sách phiếu khi dữ liệu lớn.
   const debouncedSearch = useDebouncedValue(search, 250);
@@ -449,8 +456,8 @@ function Page() {
   const [filterVoucherType, setFilterVoucherType] = useState<string>(""); // lọc theo danh mục thu/chi
   const [filterBank, setFilterBank] = useState<string>("");  // lọc theo STK ngân hàng (note chứa số TK)
   // ✅ Lọc theo khoảng ngày — tìm lại phiếu thu/chi nhanh thay vì lướt cả năm
-  const [filterDateFrom, setFilterDateFrom] = useState<string>("");
-  const [filterDateTo, setFilterDateTo] = useState<string>("");
+  const [filterDateFrom, setFilterDateFrom] = useState<string>(urlSearch.date ?? "");
+  const [filterDateTo, setFilterDateTo] = useState<string>(urlSearch.date ?? "");
   // ⚡ Phân trang phía client để KHÔNG render hàng nghìn dòng cùng lúc (gây đơ
   // trình duyệt). Tổng thu/chi/số dư vẫn tính trên TOÀN BỘ tập đã lọc ở memo
   // riêng → số liệu tiền không bị ảnh hưởng bởi phân trang.

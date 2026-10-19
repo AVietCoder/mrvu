@@ -13,6 +13,8 @@ export const DEFAULT_PRICES: Record<string, number> = {
   dfs_paa_click: 0.00015, // mở rộng People also ask
   dfs_bl_request: 0.02, // Backlinks API mỗi lần gọi
   dfs_bl_row: 0.00003, // Backlinks API mỗi dòng
+  dfs_labs_task: 0.01, // DataForSEO Labs mỗi lần gọi (gợi ý chủ đề)
+  dfs_labs_item: 0.0001, // DataForSEO Labs mỗi dòng trả về
   claude_in: 2.0, // USD / 1 triệu token đầu vào (Claude Sonnet 5.5)
   claude_out: 10.0, // USD / 1 triệu token đầu ra
 };
@@ -24,6 +26,7 @@ export const DEFAULT_BUDGET: Record<string, any> = {
   rank_recent_days: 6, // bỏ qua từ khóa vừa quét trong N ngày
   geo_recent_days: 7, // cảnh báo phân tích GEO trùng trong N ngày
   bl_recent_days: 7, // cảnh báo cập nhật backlink dày hơn N ngày
+  tp_recent_days: 30, // cảnh báo phân tích gợi ý chủ đề trùng trong N ngày
   // Thêm khi chuyển vào POS (Vercel): admin giới hạn để không vượt thông số máy chủ
   crawl_max_pages: 2000, // số trang tối đa mỗi lần quét website (Audit)
   autopost_daily_max: 10, // tổng số bài lịch tự động được viết mỗi ngày (mọi website)
@@ -32,17 +35,20 @@ export const DEFAULT_BUDGET: Record<string, any> = {
 export const AI_TOKENS: Record<string, [number, number]> = {
   audit_ai: [5000, 1500], geo: [12000, 2000], ai_outreach: [4000, 900],
   gsc_title: [1500, 600], gsc_plan: [8000, 5000], gsc_report: [12000, 3000],
+  topics: [14000, 6000],
 };
 export const MODULE: Record<string, string> = {
   volume: "Tra cứu Volume", rank: "Rank Tracker", audit_ai: "Audit On-page", autopost_write: "Autopost",
   geo: "AI Overview", bl_refresh: "Backlink", bl_gap: "Backlink", bl_examples: "Backlink", ai_outreach: "Backlink",
   gsc_title: "Search Console", gsc_plan: "Search Console", gsc_report: "Search Console",
+  topics: "Gợi ý chủ đề",
 };
 export const LABEL: Record<string, string> = {
   volume: "Tra volume", rank: "Quét thứ hạng", audit_ai: "Gợi ý AI cho trang", autopost_write: "AI viết bài",
   geo: "Phân tích AI Overview", bl_refresh: "Cập nhật backlink", bl_gap: "Tìm cơ hội từ đối thủ",
   bl_examples: "Xem link mẫu của đối thủ", ai_outreach: "AI soạn tin xin link", gsc_title: "AI viết lại title",
   gsc_plan: "AI lập kế hoạch nội dung", gsc_report: "AI viết báo cáo tư vấn",
+  topics: "Phân tích gợi ý chủ đề",
 };
 
 export async function settings(cfg?: any): Promise<[any, any, number]> {
@@ -72,7 +78,8 @@ export async function record(module: string, action: string, usd: number, detail
 
 export async function recordDfs(path: string, cost: number) {
   let m: string, a: string;
-  if (path.includes("keywords_data")) [m, a] = ["Tra cứu Volume", "volume"];
+  if (path.includes("dataforseo_labs") || path.includes("keywords_for_")) [m, a] = ["Gợi ý chủ đề", "topics"];
+  else if (path.includes("keywords_data")) [m, a] = ["Tra cứu Volume", "volume"];
   else if (path.includes("/serp/") && path.includes("advanced")) [m, a] = ["AI Overview", "geo"];
   else if (path.includes("/serp/")) [m, a] = ["Rank Tracker", "rank"];
   else if (path.includes("/backlinks/")) [m, a] = ["Backlink", "backlinks"];
@@ -157,6 +164,25 @@ export async function estimate(action: string, prm: any = {}) {
   } else if (action === "bl_examples") {
     const c = Math.min(3, parseInt(prm.competitors || 1) || 1);
     add(`${c} lần tìm link mẫu`, c * (p.dfs_bl_request + 5 * p.dfs_bl_row));
+  } else if (action === "topics") {
+    const c = Math.max(0, Math.min(3, parseInt(prm.competitors || 0) || 0));
+    let data = 0;
+    if ((prm.mode || "full") !== "free") {
+      const seed = 2 * (p.dfs_labs_task + 150 * p.dfs_labs_item);
+      const comp = c * (p.dfs_labs_task + 300 * p.dfs_labs_item);
+      const mine = p.dfs_labs_task + 300 * p.dfs_labs_item;
+      add("Từ khóa liên quan đến chủ đề (2 lần gọi DataForSEO)", seed);
+      if (c) add(`Từ khóa đối thủ đang lên Top: ${c} đối thủ × tối đa 300 từ`, comp);
+      add("Từ khóa website của bạn đang có thứ hạng", mine);
+      data = seed + comp + mine;
+    }
+    parts.push({ label: `Đọc sitemap ${c} đối thủ + website của bạn + Search Console`, usd: 0 });
+    add("Claude gom nhóm, chấm điểm, gợi ý góc viết (ước tính)", aiCost(...AI_TOKENS.topics, p));
+    if (data) options.push({ id: "free_mode", checked: false, saving_usd: data, label: "Chế độ tiết kiệm: bỏ dữ liệu volume, chỉ đọc sitemap đối thủ và Search Console" });
+    if (prm.recent_days !== undefined && prm.recent_days !== null && prm.recent_days < (s.tp_recent_days ?? 30)) {
+      warns.push({ level: "warn", text: `Đã phân tích chủ đề này với cùng đối thủ ${prm.recent_days ? prm.recent_days + " ngày trước" : "hôm nay"}. Đối thủ ít thay đổi trong vài tuần, nên mở lại kết quả cũ ở mục Lần phân tích trước.` });
+    }
+    tips.push("Kết quả được lưu lại: mở lại lần phân tích cũ không tốn thêm tiền. Mỗi chủ đề phân tích 1 lần/tháng là đủ.");
   } else if (AI_TOKENS[action]) {
     add(LABEL[action] + " (ước tính)", aiCost(...AI_TOKENS[action], p));
   } else {

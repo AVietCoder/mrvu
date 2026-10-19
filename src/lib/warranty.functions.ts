@@ -9,6 +9,7 @@ import {
   OPEN_WARRANTY_STAGES,
   WARRANTY_FAULT_PARTS,
   WARRANTY_FINAL_ACTIONS,
+  WARRANTY_NO_PRICE_ACTIONS,
   WARRANTY_ISSUE_TYPES,
   WARRANTY_STAGES,
 } from "./types";
@@ -69,6 +70,11 @@ const canSee = (s: Scope, t: any) => s.isAdmin || s.branchIds.has(t.branch_id);
 function assertAdmin(s: Scope) {
   if (!s.isAdmin) throw new Error("Chỉ quản trị viên được quản lý bảo hành với nhà máy và cài đặt bảo hành");
 }
+/** Phiếu gửi nhà máy: admin hoặc nhân viên có quyền "warranty_factory". Danh mục / cài đặt / báo cáo NM vẫn chỉ admin. */
+const canFactory = (s: Scope) => s.isAdmin || s.perms.has("warranty_factory");
+function assertFactory(s: Scope) {
+  if (!canFactory(s)) throw new Error('Bạn chưa có quyền "Bảo hành nhà máy" — nhờ quản trị viên cấp ở trang Nhân viên');
+}
 function applyScope(q: any, s: Scope) {
   if (s.isAdmin) return q;
   const ids = [...s.branchIds];
@@ -83,6 +89,7 @@ const isMissingTable = (error: any) =>
   /does not exist|schema cache/i.test(error.message ?? "");
 function tableError(error: any) {
   if (!error) return;
+  if (/final_action_check/.test(error.message ?? "")) throw new Error("Chưa chạy sql_migration_v26.sql — chưa lưu được kết quả \"Khách không đồng ý thay / sửa chữa\"");
   throw new Error(isMissingTable(error) ? NOT_MIGRATED : error.message);
 }
 
@@ -231,7 +238,7 @@ export const getWarrantyMetaFn = createServerFn({ method: "GET" }).handler(async
     db().from("user_branches").select("user_id, branch_id"),
     db().from("user_permissions").select("user_id").eq("permission", "technician"),
     db().from("products").select("id, name, sku, is_hidden, warranty_months").order("name"),
-    s.isAdmin ? db().from("factories").select("*").order("name") : Promise.resolve({ data: [] }),
+    canFactory(s) ? db().from("factories").select("*").order("name") : Promise.resolve({ data: [] }),
   ]);
   const migrated = !pr.error && !(fa as any).error;
   const pr24 = await db().from("products").select("id, warranty_motor_months");
@@ -256,6 +263,7 @@ export const getWarrantyMetaFn = createServerFn({ method: "GET" }).handler(async
     factories: (((fa as any).data ?? []) as any[]),
     me: {
       isAdmin: s.isAdmin,
+      canFactory: canFactory(s),
       branchIds: [...s.branchIds],
       canSchedule: s.isAdmin || s.perms.has("create_schedule") || s.perms.has("approve_schedule"),
     },
@@ -519,7 +527,7 @@ export const upsertTicketFn = createServerFn({ method: "POST" }).handler(async (
   // ── Kết quả xử lý + tiền linh kiện ──
   const action: string | null = data.final_action === undefined ? existing?.final_action ?? null : data.final_action || null;
   let price = Math.max(0, Math.round(Number(data.spare_part_price === undefined ? existing?.spare_part_price : data.spare_part_price) || 0));
-  if (action === "free_support") price = 0; // hỗ trợ miễn phí → không thu tiền linh kiện
+  if (WARRANTY_NO_PRICE_ACTIONS.includes(action)) price = 0; // hỗ trợ miễn phí → không thu tiền linh kiện
   checkAction(action, price);
 
   const stage: string = data.stage || existing?.stage || "new";
@@ -600,7 +608,7 @@ export const setTicketStageFn = createServerFn({ method: "POST" }).handler(
     if (!WARRANTY_STAGES.some((x) => x.key === data.stage)) throw new Error("Trạng thái phiếu không hợp lệ");
     const action = data.final_action === undefined ? t.final_action ?? null : data.final_action || null;
     let price = Math.max(0, Math.round(Number(data.spare_part_price === undefined ? t.spare_part_price : data.spare_part_price) || 0));
-    if (action === "free_support") price = 0;
+    if (WARRANTY_NO_PRICE_ACTIONS.includes(action)) price = 0;
     checkAction(action, price);
     if (data.stage === "done" && !action) throw new Error('Chọn "Kết quả xử lý" trước khi hoàn tất phiếu');
     const patch: any = {
@@ -825,7 +833,7 @@ function claimQuery(a: ClaimListArgs) {
 }
 
 export const listClaimsFn = createServerFn({ method: "GET" }).handler(async ({ data }: { data: ClaimListArgs }) => {
-  assertAdmin(await scopeOf(data?.actorId));
+  assertFactory(await scopeOf(data?.actorId));
   const page = Math.max(1, Number(data.page) || 1);
   const pageSize = Math.min(200, Math.max(1, Number(data.pageSize) || 30));
   const fm = await factoryMap();
@@ -860,7 +868,7 @@ export const listClaimsFn = createServerFn({ method: "GET" }).handler(async ({ d
 
 export const upsertClaimFn = createServerFn({ method: "POST" }).handler(async ({ data }: { data: any }) => {
   const s = await scopeOf(data?.actorId);
-  assertAdmin(s);
+  assertFactory(s);
   const existing = data.id ? await loadClaim(data.id) : null;
 
   const factoryId = data.factory_id || existing?.factory_id;
@@ -929,7 +937,7 @@ export const upsertClaimFn = createServerFn({ method: "POST" }).handler(async ({
 export const confirmClaimReturnedFn = createServerFn({ method: "POST" }).handler(
   async ({ data }: { data: { actorId?: string; id: string; returned_date?: string; shipping_note?: string } }) => {
     const s = await scopeOf(data?.actorId);
-    assertAdmin(s);
+    assertFactory(s);
     const c = await loadClaim(data.id);
     const returnedDate = isDate(data.returned_date) ? data.returned_date : todayVN();
     if (returnedDate > todayVN()) throw new Error("Ngày nhận hàng không thể ở tương lai");
@@ -945,7 +953,7 @@ export const confirmClaimReturnedFn = createServerFn({ method: "POST" }).handler
 );
 
 export const getClaimFn = createServerFn({ method: "GET" }).handler(async ({ data }: { data: { actorId?: string; id: string } }) => {
-  assertAdmin(await scopeOf(data?.actorId));
+  assertFactory(await scopeOf(data?.actorId));
   const c = await loadClaim(data.id);
   const [fm, acts, tk] = await Promise.all([
     factoryMap(),
@@ -990,7 +998,7 @@ export async function warrantyAlerts(actorId?: string) {
 
   let claims: any[] = [];
   let awaitingCount = 0;
-  if (s.isAdmin) {
+  if (canFactory(s)) {
     const [fm, cs] = await Promise.all([
       factoryMap().catch(() => new Map()),
       db().from("factory_claims").select("*").eq("return_status", "waiting").not("factory_solution", "is", null).order("solution_at", { ascending: true }).limit(500),

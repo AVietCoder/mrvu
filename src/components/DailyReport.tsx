@@ -12,8 +12,9 @@ import { SCHEDULE_TYPES, customerSourceLabel, warrantyStageOf } from "@/lib/type
 import { todayVN, addDaysVN, formatDateVN } from "@/lib/date-vn";
 import {
   ChevronLeft, ChevronRight, RefreshCw, Loader2, TrendingUp, ShoppingBag, ClipboardList, Fan, Puzzle,
-  UserPlus, Wrench, CalendarDays, ArrowDownToLine, ArrowUpFromLine, Wallet, Landmark,
+  UserPlus, Wrench, CalendarDays, ArrowDownToLine, ArrowUpFromLine, Wallet, Landmark, ChevronDown, ExternalLink,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 
 const money = (n: any) => new Intl.NumberFormat("vi-VN").format(Math.round(Number(n) || 0));
 const WEEKDAYS = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
@@ -43,8 +44,10 @@ function Tile({ label, value, unit, sub, Icon, tone = "bg-slate-100 text-slate-7
 }
 
 /** Thu hoặc chi: tổng, tách tiền mặt / ngân hàng, và từng loại phiếu. */
-function CashCard({ title, side, rows, internal, Icon, tone }: any) {
+function CashCard({ title, side, rows, internal, Icon, tone, date }: any) {
   const max = Math.max(1, ...rows.map((r: any) => r.amount));
+  // Bấm một nhóm → hiện từng phiếu; bấm mã phiếu → mở Sổ quỹ lọc đúng phiếu đó.
+  const [open, setOpen] = useState<string | null>(null);
   return (
     <Panel>
       <div className="flex items-center gap-3 border-b px-4 py-3">
@@ -53,7 +56,14 @@ function CashCard({ title, side, rows, internal, Icon, tone }: any) {
           <div className="text-sm text-muted-foreground">{title}</div>
           <div className="text-2xl font-bold tabular-nums">{money(side.total)}<span className="ml-1 text-base font-semibold text-muted-foreground">đ</span></div>
         </div>
-        <div className="text-right text-xs text-muted-foreground">{side.count} phiếu</div>
+        <div className="text-right text-xs text-muted-foreground">
+          {side.count} phiếu
+          {side.count > 0 && (
+            <Link to="/cash" search={{ date, fund: "all" } as any} className="mt-0.5 flex items-center justify-end gap-1 text-primary hover:underline">
+              Mở Sổ quỹ <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
+        </div>
       </div>
       <div className="grid grid-cols-2 divide-x border-b text-sm">
         <div className="flex items-center gap-2 px-4 py-2.5"><Wallet className="h-4 w-4 text-muted-foreground" /><span className="text-muted-foreground">Tiền mặt</span><strong className="ml-auto tabular-nums">{money(side.tien_mat)}</strong></div>
@@ -62,12 +72,36 @@ function CashCard({ title, side, rows, internal, Icon, tone }: any) {
       <div className="divide-y text-sm">
         {rows.length === 0 && <div className="px-4 py-5 text-center text-muted-foreground">Không có phiếu nào</div>}
         {rows.map((r: any) => (
-          <div key={r.name} className="px-4 py-2">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="truncate">{r.name} <span className="text-xs text-muted-foreground">· {r.count} phiếu</span></span>
-              <span className="shrink-0 font-medium tabular-nums">{money(r.amount)}</span>
-            </div>
-            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary/70" style={{ width: `${(r.amount / max) * 100}%` }} /></div>
+          <div key={r.name}>
+            <button type="button" className="block w-full px-4 py-2 text-left hover:bg-muted/40" onClick={() => setOpen(open === r.name ? null : r.name)} aria-expanded={open === r.name}>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-1">
+                  <ChevronDown className={`h-3.5 w-3.5 shrink-0 self-center text-muted-foreground transition-transform ${open === r.name ? "rotate-180" : ""}`} />
+                  <span className="truncate">{r.name} <span className="text-xs text-muted-foreground">· {r.count} phiếu</span></span>
+                </span>
+                <span className="shrink-0 font-medium tabular-nums">{money(r.amount)}</span>
+              </div>
+              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary/70" style={{ width: `${(r.amount / max) * 100}%` }} /></div>
+            </button>
+            {open === r.name && (
+              <div className="space-y-1 bg-muted/30 px-4 py-2">
+                {(r.vouchers ?? []).map((v: any) => (
+                  <Link
+                    key={v.id}
+                    to="/cash"
+                    search={{ q: v.code, fund: v.fund, date } as any}
+                    className="flex items-center gap-2 rounded-md border bg-card px-2.5 py-1.5 text-xs hover:border-primary/50 hover:bg-primary/5"
+                    title="Mở phiếu trong Sổ quỹ"
+                  >
+                    <span className="font-mono font-semibold text-primary">{v.code}</span>
+                    {v.fund === "ngan_hang" ? <Landmark className="h-3 w-3 shrink-0 text-muted-foreground" /> : <Wallet className="h-3 w-3 shrink-0 text-muted-foreground" />}
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">{v.note || "—"}</span>
+                    <span className="shrink-0 font-medium tabular-nums">{money(v.amount)}</span>
+                    <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -199,8 +233,8 @@ export function DailyReport() {
 
           {/* Thu / chi theo loại phiếu */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <CashCard title="Tiền thu về" side={d.cash.thu} rows={d.cash.byType.filter((r: any) => r.type === "thu")} internal={d.cash.internalThu} Icon={ArrowDownToLine} tone="bg-emerald-100 text-emerald-700" />
-            <CashCard title="Tiền chi ra" side={d.cash.chi} rows={d.cash.byType.filter((r: any) => r.type === "chi")} internal={d.cash.internalChi} Icon={ArrowUpFromLine} tone="bg-rose-100 text-rose-700" />
+            <CashCard title="Tiền thu về" side={d.cash.thu} rows={d.cash.byType.filter((r: any) => r.type === "thu")} internal={d.cash.internalThu} date={date} Icon={ArrowDownToLine} tone="bg-emerald-100 text-emerald-700" />
+            <CashCard title="Tiền chi ra" side={d.cash.chi} rows={d.cash.byType.filter((r: any) => r.type === "chi")} internal={d.cash.internalChi} date={date} Icon={ArrowUpFromLine} tone="bg-rose-100 text-rose-700" />
           </div>
 
           {/* Chi tiết đơn */}
