@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body { @apply bg-neutral-100 text-neutral-900 font-sans antialiased; }
+  button { @apply select-none; }
+}
+
+@layer components {
+  .btn { @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-primary { @apply btn bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800; }
+  .btn-secondary { @apply btn border border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50; }
+  .input { @apply min-h-[44px] w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm placeholder:text-neutral-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200; }
+  .card { @apply rounded-xl border border-neutral-200 bg-white shadow-sm; }
+}

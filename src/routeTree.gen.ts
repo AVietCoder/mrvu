@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as BranchesRouteImport } from './routes/branches'
+import { Route as CafeRouteImport } from './routes/cafe'
 import { Route as CareRouteImport } from './routes/care'
 import { Route as CashRouteImport } from './routes/cash'
 import { Route as ChangePasswordRouteImport } from './routes/change-password'
@@ -53,6 +54,11 @@ const AdminRoute = AdminRouteImport.update({
 const BranchesRoute = BranchesRouteImport.update({
   id: '/branches',
   path: '/branches',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CafeRoute = CafeRouteImport.update({
+  id: '/cafe',
+  path: '/cafe',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CareRoute = CareRouteImport.update({
@@ -166,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/activity': typeof ActivityRoute
   '/admin': typeof AdminRoute
   '/branches': typeof BranchesRoute
+  '/cafe': typeof CafeRoute
   '/care': typeof CareRoute
   '/cash': typeof CashRoute
   '/change-password': typeof ChangePasswordRoute
@@ -193,6 +200,7 @@ export interface FileRoutesByTo {
   '/activity': typeof ActivityRoute
   '/admin': typeof AdminRoute
   '/branches': typeof BranchesRoute
+  '/cafe': typeof CafeRoute
   '/care': typeof CareRoute
   '/cash': typeof CashRoute
   '/change-password': typeof ChangePasswordRoute
@@ -221,6 +229,7 @@ export interface FileRoutesById {
   '/activity': typeof ActivityRoute
   '/admin': typeof AdminRoute
   '/branches': typeof BranchesRoute
+  '/cafe': typeof CafeRoute
   '/care': typeof CareRoute
   '/cash': typeof CashRoute
   '/change-password': typeof ChangePasswordRoute
@@ -250,6 +259,7 @@ export interface FileRouteTypes {
     | '/activity'
     | '/admin'
     | '/branches'
+    | '/cafe'
     | '/care'
     | '/cash'
     | '/change-password'
@@ -277,6 +287,7 @@ export interface FileRouteTypes {
     | '/activity'
     | '/admin'
     | '/branches'
+    | '/cafe'
     | '/care'
     | '/cash'
     | '/change-password'
@@ -304,6 +315,7 @@ export interface FileRouteTypes {
     | '/activity'
     | '/admin'
     | '/branches'
+    | '/cafe'
     | '/care'
     | '/cash'
     | '/change-password'
@@ -332,6 +344,7 @@ export interface RootRouteChildren {
   ActivityRoute: typeof ActivityRoute
   AdminRoute: typeof AdminRoute
   BranchesRoute: typeof BranchesRoute
+  CafeRoute: typeof CafeRoute
   CareRoute: typeof CareRoute
   CashRoute: typeof CashRoute
   ChangePasswordRoute: typeof ChangePasswordRoute
@@ -383,6 +396,13 @@ declare module '@tanstack/react-router' {
       path: '/branches'
       fullPath: '/branches'
       preLoaderRoute: typeof BranchesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cafe': {
+      id: '/cafe'
+      path: '/cafe'
+      fullPath: '/cafe'
+      preLoaderRoute: typeof CafeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/care': {
@@ -540,6 +560,7 @@ const rootRouteChildren: RootRouteChildren = {
   ActivityRoute: ActivityRoute,
   AdminRoute: AdminRoute,
   BranchesRoute: BranchesRoute,
+  CafeRoute: CafeRoute,
   CareRoute: CareRoute,
   CashRoute: CashRoute,
   ChangePasswordRoute: ChangePasswordRoute,

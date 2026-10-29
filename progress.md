@@ -187,6 +187,13 @@ Migration tiếp theo đặt tên **v27**.
 
 ---
 
+### 4.12 MR.VŨ COFFEE POS ở `/cafe` — `mrvu-coffee-pos/`, `src/routes/cafe.ts`, `scripts/build-cafe.mjs` (28/10/2026)
+- **Ứng dụng RIÊNG**, chỉ chung domain: Supabase project riêng (đăng nhập, database, RLS, Storage, Edge Function `create-staff`), không đụng bảng / user / quyền của web chính. Đọc `mrvu-coffee-pos/README.md` + `docs/` để biết nghiệp vụ và cách cài Supabase cho POS.
+- POS là SPA Vite (React 18, Tailwind 3, HashRouter → màn hình nằm sau `#`, vd `/cafe#/pos`). `npm run build` chạy `scripts/build-cafe.mjs` trước: `npm ci` trong `mrvu-coffee-pos/` (khi cần), `tsc -b`, rồi `vite build --base /cafe/` ra `public/cafe/` (gitignore, không commit). Build riêng: `npm run build:cafe`.
+- `src/routes/cafe.ts` trả `public/cafe/index.html` cho `/cafe` và `/cafe/` (nhúng lúc build, `no-cache`, `noindex`); assets `/cafe/assets/*` phục vụ tĩnh. Ở `npm run dev` Vite tự phục vụ `public/cafe/` → phải build POS ít nhất 1 lần.
+- Biến env của POS là **`VITE_CAFE_SUPABASE_URL` / `VITE_CAFE_SUPABASE_ANON_KEY`** (đã đổi tên từ `VITE_SUPABASE_*` để không dùng nhầm Supabase của web chính). Script gỡ mọi `VITE_*` khác khỏi môi trường build POS. Thiếu biến thì vẫn build được, `/cafe` hiện "Chưa cấu hình Supabase".
+- Sửa POS: làm trong `mrvu-coffee-pos/` theo quy ước của nó (`npm run verify` trong thư mục đó). eslint / prettier của web chính bỏ qua thư mục này.
+
 ## 5. Cách kiểm thử đã dùng (không có test tự động)
 
 - **Gọi hàm server ngoài runtime**: handler `createServerFn` không gọi được trực tiếp (thiếu Start context). Cách làm: tạo file tạm `src/lib/.xxtest.ts` = nội dung file gốc + `export { hamNoiBo as __x }` (hoặc thay `createServerFn(...).handler(` bằng `(`), nạp bằng `vite.createServer({ configFile:false, resolve:{alias:{"@":"src"}}, server:{middlewareMode:true}, appType:"custom" })` + `ssrLoadModule`, đọc `.env` vào `process.env`. Nhớ xoá file tạm.

@@ -16,6 +16,10 @@ dist-ssr
 .nitro
 *.local
 
+# MR.VŨ COFFEE POS: bản build sinh ra lúc `npm run build` (scripts/build-cafe.mjs), không commit
+public/cafe/
+mrvu-coffee-pos.zip
+
 # Secrets — .env TỪNG BỊ COMMIT (xem sql_migration_v8_zalo_zns.sql).
 # Giữ .env.example để biết cần những biến gì, KHÔNG bao giờ commit .env.
 .env
