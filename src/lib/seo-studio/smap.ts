@@ -164,6 +164,18 @@ async function loadStage(jobId: string): Promise<Map<string, any>> {
   const rows = await q("SELECT ukey, data_json FROM seo_smap_stage WHERE job_id=? ORDER BY n", [jobId]);
   return new Map(rows.map((r: any) => [r.ukey, JSON.parse(r.data_json)]));
 }
+/**
+ * Ghi nhiều dòng bằng một lệnh (tối đa 300 dòng/lệnh). Ghi từng dòng qua pooler Supabase tốn một vòng mạng
+ * mỗi lệnh: website ~1.000 trang vượt giới hạn 300 giây của Vercel, bước bị cắt ngang và chạy lại mãi.
+ * tpl: mẫu một dòng, ví dụ "(?,?,1)"; với UPDATE … FROM (VALUES …) phải ép kiểu từng ô (?::bigint).
+ * pre/post: giá trị cho các dấu ? trong head/tail.
+ */
+async function bulk(head: string, tpl: string, rows: any[][], tail = "", t?: any, pre: any[] = [], post: any[] = []) {
+  for (let i = 0; i < rows.length; i += 300) {
+    const chunk = rows.slice(i, i + 300);
+    await run(`${head} VALUES ${chunk.map(() => tpl).join(",")} ${tail}`, [...pre, ...chunk.flat(), ...post], t);
+  }
+}
 
 function linkGraph(home: string, pages: Map<string, any>) {
   const inl = new Map<string, Set<string>>(), anchorsIn = new Map<string, any[]>(), broken = new Map<string, any[]>();
@@ -639,26 +651,27 @@ registerStep("smap_cycle", (job, ctx) => moduleAs("smap_cycle", async () => {
     const g = st.gsc_ok ? await gscMaps() : { pg: new Map(), qm: new Map(), ga: new Map() };
     const ts = now();
     st.ts = ts;
+    const rows: any[][] = [];
+    for (const [k, v] of crawl) {
+      if (v.redirect_to || v.stub) continue;
+      const gp = g.pg.get(k) || {};
+      const gdata = { cur: gp.cur ?? null, prev: gp.prev ?? null, old: gp.old ?? null, queries: g.qm.get(k) || [] };
+      const gav = g.ga.get(pathKey(v.url)) || {};
+      rows.push([sid, k, v.url, v.type, v.status, v.final_url, v.in_sitemap ? 1 : 0, v.title ?? "", v.h1 ?? "", v.words ?? null, v.noindex ? 1 : 0,
+        v.canonical ?? "", depth.get(k) ?? null, inl.get(k)?.size || 0, (v.anchors || []).length, JSON.stringify((v.anchors || []).map((a: any) => a[0])),
+        JSON.stringify((anchorsIn.get(k) || []).slice(0, 60)), JSON.stringify(broken.get(k) || []), JSON.stringify(gdata), JSON.stringify(gav),
+        JSON.stringify((st.ranks[k] || []).slice(0, 10)), ts, ts]);
+    }
     await tx(async (t: any) => {
       await run("UPDATE seo_smap_pages SET active=0 WHERE site_id=?", [sid], t);
-      for (const [k, v] of crawl) {
-        if (v.redirect_to || v.stub) continue;
-        const gp = g.pg.get(k) || {};
-        const gdata = { cur: gp.cur ?? null, prev: gp.prev ?? null, old: gp.old ?? null, queries: g.qm.get(k) || [] };
-        const gav = g.ga.get(pathKey(v.url)) || {};
-        await run(`INSERT INTO seo_smap_pages(site_id, ukey, url, type, status, final_url, in_sitemap, title, h1, words, noindex, canonical, depth,
-                   inlinks, outlinks, links_json, anchors_in_json, broken_json, gsc_json, ga_json, ranks_json, last_seen, first_seen, active)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
-                   ON CONFLICT (site_id, ukey) DO UPDATE SET url=EXCLUDED.url, type=EXCLUDED.type, status=EXCLUDED.status, final_url=EXCLUDED.final_url,
-                   in_sitemap=EXCLUDED.in_sitemap, title=EXCLUDED.title, h1=EXCLUDED.h1, words=EXCLUDED.words, noindex=EXCLUDED.noindex,
-                   canonical=EXCLUDED.canonical, depth=EXCLUDED.depth, inlinks=EXCLUDED.inlinks, outlinks=EXCLUDED.outlinks, links_json=EXCLUDED.links_json,
-                   anchors_in_json=EXCLUDED.anchors_in_json, broken_json=EXCLUDED.broken_json, gsc_json=EXCLUDED.gsc_json, ga_json=EXCLUDED.ga_json,
-                   ranks_json=EXCLUDED.ranks_json, last_seen=EXCLUDED.last_seen, active=1`,
-          [sid, k, v.url, v.type, v.status, v.final_url, v.in_sitemap ? 1 : 0, v.title ?? "", v.h1 ?? "", v.words ?? null, v.noindex ? 1 : 0,
-            v.canonical ?? "", depth.get(k) ?? null, inl.get(k)?.size || 0, (v.anchors || []).length, JSON.stringify((v.anchors || []).map((a: any) => a[0])),
-            JSON.stringify((anchorsIn.get(k) || []).slice(0, 60)), JSON.stringify(broken.get(k) || []), JSON.stringify(gdata), JSON.stringify(gav),
-            JSON.stringify((st.ranks[k] || []).slice(0, 10)), ts, ts], t);
-      }
+      await bulk(`INSERT INTO seo_smap_pages(site_id, ukey, url, type, status, final_url, in_sitemap, title, h1, words, noindex, canonical, depth,
+                  inlinks, outlinks, links_json, anchors_in_json, broken_json, gsc_json, ga_json, ranks_json, last_seen, first_seen, active)`,
+        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)", rows,
+        `ON CONFLICT (site_id, ukey) DO UPDATE SET url=EXCLUDED.url, type=EXCLUDED.type, status=EXCLUDED.status, final_url=EXCLUDED.final_url,
+         in_sitemap=EXCLUDED.in_sitemap, title=EXCLUDED.title, h1=EXCLUDED.h1, words=EXCLUDED.words, noindex=EXCLUDED.noindex,
+         canonical=EXCLUDED.canonical, depth=EXCLUDED.depth, inlinks=EXCLUDED.inlinks, outlinks=EXCLUDED.outlinks, links_json=EXCLUDED.links_json,
+         anchors_in_json=EXCLUDED.anchors_in_json, broken_json=EXCLUDED.broken_json, gsc_json=EXCLUDED.gsc_json, ga_json=EXCLUDED.ga_json,
+         ranks_json=EXCLUDED.ranks_json, last_seen=EXCLUDED.last_seen, active=1`, t);
     });
     await run("DELETE FROM seo_smap_stage WHERE job_id=?", [job.id]);
     st.ranks = {};
@@ -886,40 +899,32 @@ registerStep("smap_cycle", (job, ctx) => moduleAs("smap_cycle", async () => {
     }
     const [sugg, hubs] = linkSuggestions(pmap);
     await tx(async (t: any) => {
-      for (const p of pages) {
-        await run("UPDATE seo_smap_pages SET index_json=?, issues_json=?, value=? WHERE id=?",
-          [p.index ? JSON.stringify(p.index) : null, JSON.stringify(pageIssues(p, cids)), pageValue(p), p.id], t);
-      }
+      await bulk("UPDATE seo_smap_pages p SET index_json=v.ix, issues_json=v.iss, value=v.val FROM (", "(?::bigint,?::text,?::text,?::double precision)",
+        pages.map((p: any) => [p.id, p.index ? JSON.stringify(p.index) : null, JSON.stringify(pageIssues(p, cids)), pageValue(p)]),
+        ") v(id, ix, iss, val) WHERE p.id=v.id", t);
       const old = new Map((await q("SELECT from_id, to_id, status FROM seo_smap_links WHERE site_id=?", [sid], t)).map((r: any) => [r.from_id + ":" + r.to_id, r.status]));
       const linked = new Set<string>();
       for (const p of pages) for (const k of p.links) if (byKey.has(k)) linked.add(p.id + ":" + byKey.get(k));
-      for (const [k, s] of old) {
-        if (linked.has(k) && s !== "done") {
-          const [f, to] = k.split(":");
-          await run("UPDATE seo_smap_links SET status='done', updated_at=? WHERE site_id=? AND from_id=? AND to_id=?", [ts, sid, f, to], t);
-        }
-      }
+      const done = [...old].filter(([k, s]) => linked.has(k) && s !== "done").map(([k]) => k.split(":"));
+      await bulk("UPDATE seo_smap_links l SET status='done', updated_at=? FROM (", "(?::bigint,?::bigint)", done,
+        ") v(f, t) WHERE l.site_id=? AND l.from_id=v.f AND l.to_id=v.t", t, [ts], [sid]);
       await run("DELETE FROM seo_smap_links WHERE site_id=? AND status='todo'", [sid], t);
-      for (const s of sugg) {
-        if (["skip", "done"].includes(old.get(s.from_id + ":" + s.to_id))) continue;
-        await run(`INSERT INTO seo_smap_links(site_id, from_id, to_id, anchor, reason, kind, priority, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,'todo',?,?)
-                   ON CONFLICT (site_id, from_id, to_id) DO UPDATE SET anchor=EXCLUDED.anchor, reason=EXCLUDED.reason, kind=EXCLUDED.kind,
-                   priority=EXCLUDED.priority, status='todo', place_json=NULL, created_at=EXCLUDED.created_at, updated_at=EXCLUDED.updated_at`,
-          [sid, s.from_id, s.to_id, s.anchor, s.reason, s.kind, s.priority, ts, ts], t);
-      }
+      await bulk("INSERT INTO seo_smap_links(site_id, from_id, to_id, anchor, reason, kind, priority, status, created_at, updated_at)", "(?,?,?,?,?,?,?,'todo',?,?)",
+        sugg.filter((s) => !["skip", "done"].includes(old.get(s.from_id + ":" + s.to_id)))
+          .map((s) => [sid, s.from_id, s.to_id, s.anchor, s.reason, s.kind, s.priority, ts, ts]),
+        `ON CONFLICT (site_id, from_id, to_id) DO UPDATE SET anchor=EXCLUDED.anchor, reason=EXCLUDED.reason, kind=EXCLUDED.kind,
+         priority=EXCLUDED.priority, status='todo', place_json=NULL, created_at=EXCLUDED.created_at, updated_at=EXCLUDED.updated_at`, t);
     });
     pages = await loadPages(sid);
     const prev = await one("SELECT id FROM seo_smap_cycles WHERE site_id=? ORDER BY id DESC LIMIT 1", [sid]);
     const cid = (await run("INSERT INTO seo_smap_cycles(site_id, at, auto) VALUES (?,?,?) RETURNING id", [sid, ts, st.auto ? 1 : 0])).rows[0].id;
-    await tx(async (t: any) => {
-      for (const p of pages) {
+    await tx((t: any) => bulk("INSERT INTO seo_smap_snaps(cycle_id, page_id, clicks, impr, pos, seo, geo, perf, inlinks, status, primary_kw, rank)", "(?,?,?,?,?,?,?,?,?,?,?,?)",
+      pages.map((p: any) => {
         const c = p.gsc?.cur || {};
-        await run(`INSERT INTO seo_smap_snaps(cycle_id, page_id, clicks, impr, pos, seo, geo, perf, inlinks, status, primary_kw, rank) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-                   ON CONFLICT (cycle_id, page_id) DO UPDATE SET clicks=EXCLUDED.clicks, impr=EXCLUDED.impr, pos=EXCLUDED.pos, seo=EXCLUDED.seo, geo=EXCLUDED.geo,
-                   perf=EXCLUDED.perf, inlinks=EXCLUDED.inlinks, status=EXCLUDED.status, primary_kw=EXCLUDED.primary_kw, rank=EXCLUDED.rank`,
-          [cid, p.id, c.clicks ?? null, c.impr ?? null, c.pos ?? null, p.seo, p.geo_score, p.psi?.perf ?? null, p.inlinks, p.status, p.primary_kw, rankOf(p)], t);
-      }
-    });
+        return [cid, p.id, c.clicks ?? null, c.impr ?? null, c.pos ?? null, p.seo, p.geo_score, p.psi?.perf ?? null, p.inlinks, p.status, p.primary_kw, rankOf(p)];
+      }),
+      `ON CONFLICT (cycle_id, page_id) DO UPDATE SET clicks=EXCLUDED.clicks, impr=EXCLUDED.impr, pos=EXCLUDED.pos, seo=EXCLUDED.seo, geo=EXCLUDED.geo,
+       perf=EXCLUDED.perf, inlinks=EXCLUDED.inlinks, status=EXCLUDED.status, primary_kw=EXCLUDED.primary_kw, rank=EXCLUDED.rank`, t));
     st.cid = cid;
     st.diff = await compare(prev ? prev.id : null, pages);
     st.summ = await summary(sid, pages, groups, hubs);
@@ -1301,6 +1306,9 @@ export async function handle(h: any, method: string, path: string) {
       const s2 = parseInt(b.site_id) || 0;
       if (!(await getSite(s2))) return h.send_json({ error: "Không tìm thấy website." }, 400);
       if (await runningCycle(s2)) return h.send_json({ error: "Website này đang được phân tích." }, 409);
+      // chu kỳ cũ bị gián đoạn (đóng trang, lỗi giữa chừng) → đánh dấu lỗi để bước init xóa dữ liệu tạm của nó
+      await run(`UPDATE seo_jobs SET status='error', message='Bị gián đoạn, đã chạy lại chu kỳ mới.', locked_until=NULL, updated_at=now()
+                 WHERE kind='smap_cycle' AND status='running' AND (state->>'sid')::bigint=?`, [s2]);
       return h.send_json({ job_id: await startJob("smap_cycle", newCycleState(s2, b.options || {}, false), "Đang bắt đầu…") });
     }
     if (method === "GET" && is("job", "*")) return h.send_json(await advance(seg[1]));
