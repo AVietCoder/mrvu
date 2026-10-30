@@ -68,7 +68,9 @@ Biến môi trường (tên, KHÔNG đọc / in giá trị): `VITE_SUPABASE_URL`
 
 | **v26** ⏳ (`sql_migration_v26.sql`) | `user_sessions` (phiên đăng nhập + thiết bị, RLS deny-all); `warranty_tickets.final_action` thêm `customer_declined`; nếu đã có bảng SEO: `seo_ap_keywords.brief_json` + `seo_tp_runs`. **Chưa chạy lúc viết** (đã chạy thử 2 lần trên Postgres cục bộ). Trước v26: ghi kết quả "Khách không đồng ý" báo lỗi rõ, thẻ thiết bị đăng nhập hiện nhắc chạy v26, đăng nhập vẫn bình thường. |
 
-Migration tiếp theo đặt tên **v27**.
+| **v27** ⏳ (`sql_migration_v27_seo_ban_do_website.sql`) | SEO Studio — Câu hỏi AI (`seo_aiq_projects/questions/runs/checks/advice`) + Bản đồ website (`seo_smap_sites/pages/cycles/snaps/links` + `seo_smap_stage` dữ liệu tạm khi quét), RLS deny-all. Cần v25 trước. **Chưa chạy lúc viết** (đã chạy thử 2 lần liên tiếp trên Postgres 18 cục bộ). Trước v27: 2 tab mới báo "Chưa chạy sql_migration_v27…", các tab khác và cron vẫn chạy. |
+
+Migration tiếp theo đặt tên **v28**.
 
 ---
 
@@ -187,6 +189,16 @@ Migration tiếp theo đặt tên **v27**.
 
 ---
 
+### 4.13 SEO Studio — Bản đồ website + Câu hỏi AI (30/10/2026) — `src/lib/seo-studio/smap.ts`, `aiq.ts` (migration v27)
+- Nguồn: `mrvu-seo-studio-new/mrvu-seo-studio/` (`smap.py`, `aiq.py`, `CAP_NHAT_2026-10-30_BAN_DO_WEBSITE.md` ở thư mục gốc). So với bản 19/10 (`mrvu-seo-studio.zip` trong git): thêm 2 module này; `audit.py`/`geo.py` cho dùng lại trang đã tải; `geo.fetch_serp` thêm độ sâu PAA; `costs.py` thêm giá/ước tính/`module_as`; 8 trang thêm 2 tab menu (gộp 3 chiều vào `pages/`, không xung đột). `autopost.py`, `gsc.py` không đổi.
+- **Câu hỏi AI** (`/api/aiq/*`, `pages/aiq.html`): dự án (tên miền, thương hiệu, lĩnh vực, đối thủ) → tìm câu hỏi (GSC + People Also Ask + Labs + LLM Mentions + Claude) → kiểm tra ChatGPT/Gemini (LLM Scraper), Perplexity (LLM Responses), Google AI Overview (SERP) có nhắc / trích website → tư vấn từng câu (đoạn trả lời, FAQ + JSON-LD) → kế hoạch 90 ngày, kiểm tra kỹ thuật (robots.txt cho bot AI, llms.txt, schema trang chủ), gửi sang Autopost.
+- **Bản đồ website** (`/api/smap/*`, `pages/smap.html`): mỗi chu kỳ là tác vụ `smap_cycle` nhiều bước `init → crawl → fetch → extra → gsync → ranks → write → ai → score → psi → inspect → links → report`; trang đọc được lưu tạm ở `seo_smap_stage` (không nhét vào `seo_jobs.state`), xóa ở bước `write`. Dùng lại `crawlStep` (Audit), `syncStep`/`inspectStep` (gsc.ts, tách ra từ registerStep), `auditPage(…, res)`, `readPage(…, res)`, `rankedKeywords` (topics.ts). Kết quả chấm điểm cũng ghi vào `seo_audit_*` như bản gốc. Số trang bị giới hạn thêm bởi `crawl_max_pages`.
+- **Chi phí theo thao tác**: `costs.moduleAs(action, fn)` (AsyncLocalStorage, thay `threading.local`) — mọi lệnh DataForSEO/Claude trong khối ghi vào module đó; đường dẫn `/ai_optimization/` mặc định là "Câu hỏi AI".
+- **Lịch định kỳ**: `/seo-studio/cron` → nếu Autopost không chạy gì (`skipped`) thì `periodicTick()` (app.ts): chạy tiếp một bước của tác vụ tự động `aiq_check`/`smap_cycle` đang dở; phút %15 == 7 thì xem dự án/website đến hạn (`auto_check`/`auto` + `auto_days`, không vượt ngân sách) để bắt đầu. "Đang chạy" = tác vụ running cập nhật ≤ 10 phút.
+- **Khóa PageSpeed**: env `GOOGLE_PSI_API_KEY`, hoặc nhập ở Bản đồ website → Cài đặt (lưu **mã hóa** `seo_config.psi_api_key_enc`, bản gốc lưu thô `psi_api_key`). Không có khóa vẫn đo được nhưng chậm, dễ bị 429.
+- Khác bản gốc có chủ đích: PageSpeed chờ tối đa 60 giây/lần (bản gốc 120) để bước không vượt giới hạn Vercel; kế hoạch GEO không lỗi khi chưa có lần kiểm tra nào (bản gốc lỗi `NoneType`).
+- Đã kiểm (30/10/2026, Postgres 18 cục bộ + fetch giả lập website/DataForSEO/PageSpeed/Claude SSE; tất cả mục kiểm đạt): toàn bộ API 2 tab, 2 chu kỳ liên tiếp (biến động, link đã chèn tự "Đã làm", từ khóa đã chốt giữ nguyên, chỉ gán AI cho trang mới), cron chạy hết chu kỳ tự động, chi phí ghi đúng module, ước tính chi phí. **Chưa gọi API thật và chưa mở giao diện trên trình duyệt.**
+
 ### 4.12 MR.VŨ COFFEE POS ở `/cafe` — `mrvu-coffee-pos/`, `src/routes/cafe.ts`, `scripts/build-cafe.mjs` (28/10/2026)
 - **Ứng dụng RIÊNG**, chỉ chung domain: Supabase project riêng (đăng nhập, database, RLS, Storage, Edge Function `create-staff`), không đụng bảng / user / quyền của web chính. Đọc `mrvu-coffee-pos/README.md` + `docs/` để biết nghiệp vụ và cách cài Supabase cho POS.
 - POS là SPA Vite (React 18, Tailwind 3, HashRouter → màn hình nằm sau `#`, vd `/cafe#/pos`). `npm run build` chạy `scripts/build-cafe.mjs` trước: `npm ci` trong `mrvu-coffee-pos/` (khi cần), `tsc -b`, rồi `vite build --base /cafe/` ra `public/cafe/` (gitignore, không commit). Build riêng: `npm run build:cafe`.
@@ -214,6 +226,7 @@ Migration tiếp theo đặt tên **v27**.
 4. Hồ sơ lương có ô "Chức vụ / bộ phận" gõ tay riêng, chưa liên kết với `users.position_id`.
 5. Tạo tài khoản cho "Ani", "My" rồi gắn lại lead cũ nếu muốn.
 6. Bảo mật: session phía server thay cho `actorId` (ưu tiên trước cho dữ liệu lương).
+7b. **Bản đồ website + Câu hỏi AI (4.13)** — chủ dự án cần: chạy v27; (tùy chọn) đặt `GOOGLE_PSI_API_KEY` hoặc nhập khóa ở tab; thử lần đầu với website nhỏ / số trang tối đa thấp và đọc phần Ghi chú trong Tổng quan.
 7. **SEO Studio (4.10)** — chủ dự án cần: chạy v25; đặt biến env (mẫu ở `.env.example`); tạo OAuth client Google (redirect `https://<miền>/seo-studio/auth/callback`); kiểm Fluid Compute đang bật; deploy rồi chạy phần pg_cron cuối v25. Sau đó thử với lượng nhỏ (3 từ volume, 2 từ rank, 1 GEO, 1 bài nháp). Thư mục `mrvu-seo-studio/` chỉ còn là bản tham khảo (không được build).
 8. **Bảo hành (4.9)** — còn lại:
    - Đã kiểm trên dữ liệu thật 02/10/2026 (50 mục, dữ liệu thử đã xoá): mã phiếu / mã yêu cầu tăng và không trùng khi tạo song song, hạn BH theo mẫu, quy tắc tiền linh kiện, SLA 24h, phân quyền theo chi nhánh, đại lý, gắn đơn, tạo lịch, nhà máy, báo cáo. **Chưa mở giao diện trên trình duyệt.**

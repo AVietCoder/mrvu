@@ -73,6 +73,29 @@ export function extractJson(txt: string, msg = "AI trả về nội dung không 
   console.error("[seo ai] JSON không đọc được:", txt.length, "ký tự, đuôi:", JSON.stringify(txt.slice(-200)));
   throw new SeoError(msg);
 }
+/** ThreadPoolExecutor(max_workers=n).map(fn, items) của bản Python: chạy song song tối đa n việc, giữ thứ tự kết quả. */
+export async function pool<T, R>(items: T[], n: number, fn: (x: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (i < items.length) {
+      const k = i++;
+      out[k] = await fn(items[k]);
+    }
+  }));
+  return out;
+}
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** json.loads an toàn (hàm jl của bản Python). */
+export function jl(s: any, d: any = null) {
+  if (!s) return d;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return d;
+  }
+}
+
 /** list(dict.fromkeys(xs)) */
 export function uniq<T>(xs: T[]): T[] {
   return [...new Set(xs)];

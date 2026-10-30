@@ -14,7 +14,7 @@ import { registerStep, startJob, STEP_BUDGET_MS } from "./jobs";
 import { settings } from "./costs";
 import { PageParser, bareHost, cleanUrl, decode, fetchPage, header, netloc, sameSite, schemaTypes, unescapeHtml, urlParts, urljoin } from "./web";
 
-const SKIP_EXT = /\.(jpg|jpeg|png|gif|webp|avif|svg|ico|bmp|pdf|zip|rar|7z|gz|mp4|mp3|webm|avi|mov|doc|docx|xls|xlsx|ppt|pptx|css|js|json|xml|txt|woff2?|ttf|eot)$/i;
+export const SKIP_EXT = /\.(jpg|jpeg|png|gif|webp|avif|svg|ico|bmp|pdf|zip|rar|7z|gz|mp4|mp3|webm|avi|mov|doc|docx|xls|xlsx|ppt|pptx|css|js|json|xml|txt|woff2?|ttf|eot)$/i;
 export const TYPE_VI: Record<string, string> = { home: "Trang chủ", category: "Danh mục", product: "Sản phẩm", post: "Bài viết", other: "Khác" };
 
 // ---------------------------------------------------------------- tiện ích URL
@@ -225,10 +225,10 @@ function detectType(guess: string, types: Set<string>, meta: any) {
   return guess;
 }
 
-export async function auditPage(url: string, pageType = "other", keyword = "", otherTitles: Set<string> = new Set(), checkLinks = true) {
+export async function auditPage(url: string, pageType = "other", keyword = "", otherTitles: Set<string> = new Set(), checkLinks = true, res: any = null) {
   const t0 = Date.now();
   const deadline = t0 + 45_000;
-  const res = await fetchPage(url);
+  res = res || (await fetchPage(url)); // Bản đồ website truyền sẵn trang đã tải (mỗi trang chỉ tải 1 lần)
   const checks: any[] = [];
   const [G_TECH, G_HEAD, G_CONTENT, G_IMG, G_LINK, G_SCHEMA, G_SOCIAL] = ["Kỹ thuật", "Tiêu đề & heading", "Nội dung & từ khóa", "Hình ảnh", "Liên kết", "Dữ liệu cấu trúc", "Chia sẻ mạng xã hội"];
   if (res.status === 0) throw new SeoError(`Không tải được trang: ${res.error || "lỗi kết nối"}`);

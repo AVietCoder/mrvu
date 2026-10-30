@@ -25,7 +25,7 @@ function expCtr(pos: any) {
   return CTR_CURVE[p] ?? (p <= 15 ? 0.012 : p <= 20 ? 0.007 : 0.003);
 }
 
-async function meta(key: string, value?: any) {
+export async function meta(key: string, value?: any) {
   if (value !== undefined) {
     await run("INSERT INTO seo_gsc_meta(key, value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", [key, JSON.stringify(value)]);
     return value;
@@ -164,12 +164,12 @@ function addDays(iso: string, n: number) {
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
-function periods(): Record<string, [string, string]> {
+export function periods(): Record<string, [string, string]> {
   const end = addDays(todayVN(), -3);
   return { cur: [addDays(end, -27), end], prev: [addDays(end, -55), addDays(end, -28)], old: [addDays(end, -118), addDays(end, -91)], daily: [addDays(end, -119), end] };
 }
 
-async function cfgSite(): Promise<[string, string]> {
+export async function cfgSite(): Promise<[string, string]> {
   const cfg = await loadConfig();
   if (!cfg.gsc_site) throw new SeoError("Chưa chọn website Search Console ở mục Kết nối.");
   return [cfg.gsc_site, String(cfg.ga_property || "").trim()];
@@ -198,7 +198,8 @@ async function stage(syncId: string, kind: string, period: string, rows: any[]) 
 }
 const slimRows = (rows: any[]) => rows.map((r) => ({ k: r.keys, c: r.clicks, i: r.impressions, r: r.ctr, p: r.position }));
 
-registerStep("gsc_sync", async (job, ctx) => {
+/** Một bước đồng bộ (tác vụ gsc_sync; Bản đồ website cũng gọi khi dữ liệu đã cũ). */
+export async function syncStep(job: any, ctx: any) {
   const st = job.state;
   const [site, prop] = [st.site, st.prop];
   const P = st.periods;
@@ -272,7 +273,17 @@ registerStep("gsc_sync", async (job, ctx) => {
     return { done: info };
   }
   throw new SeoError("Trạng thái đồng bộ không hợp lệ");
-});
+}
+registerStep("gsc_sync", syncStep);
+
+/** Trạng thái ban đầu của một lần đồng bộ; dọn dữ liệu tạm của các lần cũ bị dừng giữa chừng. */
+export async function newSyncState() {
+  const [site, prop] = await cfgSite();
+  await run(`DELETE FROM seo_gsc_stage WHERE sync_id NOT IN (SELECT COALESCE(state->>'sync_id', state->'gsync'->>'sync_id') FROM seo_jobs
+    WHERE kind IN ('gsc_sync','smap_cycle') AND status='running' AND COALESCE(state->>'sync_id', state->'gsync'->>'sync_id') IS NOT NULL
+      AND updated_at > now() - interval '1 hour')`);
+  return { step: "rows_cur", site, prop, periods: periods(), sync_id: hex(8), max_rows: 50000 };
+}
 
 // ================================================================ Phân tích
 async function aggQueries(period = "cur") {
@@ -469,7 +480,8 @@ async function quality() {
 }
 
 // ---------------------------------------------------------------- Index (theo lô, mỗi bước ~40 giây)
-registerStep("gsc_inspect", async (job, ctx) => {
+/** Một lô kiểm tra index ~40 giây (tác vụ gsc_inspect; Bản đồ website cũng dùng). */
+export async function inspectStep(job: any, ctx: any) {
   const st = job.state;
   const [site] = await cfgSite();
   while (st.done < st.urls.length && Date.now() < ctx.deadline) {
@@ -497,7 +509,8 @@ registerStep("gsc_inspect", async (job, ctx) => {
   }
   if (st.done >= st.urls.length) return { done: { checked: st.done } };
   ctx.progress(`Đang kiểm tra index ${st.done + 1}/${st.urls.length}…`);
-});
+}
+registerStep("gsc_inspect", inspectStep);
 
 async function indexCandidates(limit = 50): Promise<[string[], string[]]> {
   const pc = await pageMap("cur");
@@ -785,11 +798,7 @@ export async function handle(h: any, method: string, path: string) {
       return h.send_json(res);
     }
     if (method === "POST" && is("sync")) {
-      const [site, prop] = await cfgSite();
-      // Dọn dữ liệu tạm của các lần đồng bộ cũ (bị dừng giữa chừng)
-      await run(`DELETE FROM seo_gsc_stage WHERE sync_id NOT IN (SELECT state->>'sync_id' FROM seo_jobs
-        WHERE kind='gsc_sync' AND status='running' AND state->>'sync_id' IS NOT NULL AND updated_at > now() - interval '1 hour')`);
-      const jid = await startJob("gsc_sync", { step: "rows_cur", site, prop, periods: periods(), sync_id: hex(8), max_rows: 50000 }, SYNC_MSG.rows_cur);
+      const jid = await startJob("gsc_sync", await newSyncState(), SYNC_MSG.rows_cur);
       return h.send_json({ job_id: jid });
     }
     if (is("job", "*")) return h.send_json(await advance(seg[1]));

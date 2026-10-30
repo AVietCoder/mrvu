@@ -43,10 +43,10 @@
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
 
   /* ---------- Dữ liệu mẫu cho bản xem trước ---------- */
-  const P = { dfs_volume_task: .09, dfs_serp_page: .002, dfs_aio_extra: .002, dfs_paa_click: .00015, dfs_bl_request: .02, dfs_bl_row: .00003, dfs_labs_task: .01, dfs_labs_item: .0001, claude_in: 2, claude_out: 10 };
-  const SET = { budget_month_vnd: 300000, confirm_over_vnd: 5000, warn_pct: 80, auto_stop: true, rank_recent_days: 6, geo_recent_days: 7, bl_recent_days: 7, tp_recent_days: 30 };
-  const AIT = { audit_ai: [5000, 1500], geo: [12000, 2000], ai_outreach: [4000, 900], gsc_title: [1500, 600], gsc_plan: [8000, 5000], gsc_report: [12000, 3000], topics: [14000, 6000] };
-  const LABEL = { volume: 'Tra volume', rank: 'Quét thứ hạng', audit_ai: 'Gợi ý AI cho trang', autopost_write: 'AI viết bài', geo: 'Phân tích AI Overview', bl_refresh: 'Cập nhật backlink', bl_gap: 'Tìm cơ hội từ đối thủ', bl_examples: 'Xem link mẫu của đối thủ', ai_outreach: 'AI soạn tin xin link', gsc_title: 'AI viết lại title', gsc_plan: 'AI lập kế hoạch nội dung', gsc_report: 'AI viết báo cáo tư vấn', topics: 'Phân tích gợi ý chủ đề' };
+  const P = { dfs_volume_task: .09, dfs_serp_page: .002, dfs_aio_extra: .002, dfs_paa_click: .00015, dfs_bl_request: .02, dfs_bl_row: .00003, dfs_labs_task: .01, dfs_labs_item: .0001, dfs_aiv_task: .01, dfs_aiv_item: .0001, dfs_llmm_task: .1, dfs_llmm_row: .001, dfs_llm_scrape: .004, dfs_llm_resp: .0006, llm_provider_est: .006, claude_in: 2, claude_out: 10 };
+  const SET = { budget_month_vnd: 300000, confirm_over_vnd: 5000, warn_pct: 80, auto_stop: true, rank_recent_days: 6, geo_recent_days: 7, bl_recent_days: 7, tp_recent_days: 30, aiq_recent_days: 14, smap_recent_days: 7 };
+  const AIT = { audit_ai: [5000, 1500], geo: [12000, 2000], ai_outreach: [4000, 900], gsc_title: [1500, 600], gsc_plan: [8000, 5000], gsc_report: [12000, 3000], topics: [14000, 6000], aiq_discover: [16000, 9000], aiq_advise: [7000, 2200], aiq_plan: [14000, 6000], smap_page: [6000, 1800], smap_place: [3000, 400], smap_report: [9000, 2500] };
+  const LABEL = { volume: 'Tra volume', rank: 'Quét thứ hạng', audit_ai: 'Gợi ý AI cho trang', autopost_write: 'AI viết bài', geo: 'Phân tích AI Overview', bl_refresh: 'Cập nhật backlink', bl_gap: 'Tìm cơ hội từ đối thủ', bl_examples: 'Xem link mẫu của đối thủ', ai_outreach: 'AI soạn tin xin link', gsc_title: 'AI viết lại title', gsc_plan: 'AI lập kế hoạch nội dung', gsc_report: 'AI viết báo cáo tư vấn', topics: 'Phân tích gợi ý chủ đề', aiq_discover: 'Tìm câu hỏi người dùng hỏi AI', aiq_check: 'Kiểm tra câu trả lời của AI', aiq_advise: 'AI tư vấn tối ưu câu hỏi', aiq_plan: 'AI lập kế hoạch GEO', smap_cycle: 'Phân tích toàn website', smap_report: 'AI báo cáo website', smap_page: 'AI tư vấn một trang', smap_place: 'AI tìm vị trí đặt link' };
   const RATE = 26000;
   let demoSpent = 1.84; // USD đã dùng trong tháng (mẫu)
   function demoSummary() {
@@ -78,6 +78,25 @@
       if (data) options.push({ id: 'free_mode', checked: false, saving_usd: data, label: 'Chế độ tiết kiệm: bỏ dữ liệu volume, chỉ đọc sitemap đối thủ và Search Console' });
       if (prm.recent_days != null && prm.recent_days < SET.tp_recent_days) warnings.push({ level: 'warn', text: `Đã phân tích chủ đề này với cùng đối thủ ${prm.recent_days ? prm.recent_days + ' ngày trước' : 'hôm nay'}. Đối thủ ít thay đổi trong vài tuần, nên mở lại kết quả cũ ở mục Lần phân tích trước.` });
       tips.push('Kết quả được lưu lại: mở lại lần phân tích cũ không tốn thêm tiền. Mỗi chủ đề phân tích 1 lần/tháng là đủ.') }
+    else if (action === 'aiq_discover') { const n = Math.max(1, prm.topics || 1), q = prm.serp_per_topic || 4;
+      add(`Câu hỏi Google (People Also Ask, tìm kiếm liên quan): ${n} lĩnh vực × ${q} lần tìm`, n * q * (P.dfs_serp_page + P.dfs_aio_extra + 4 * P.dfs_paa_click));
+      if (prm.labs !== false) add(`Gợi ý từ khóa dạng câu hỏi: ${n} lĩnh vực`, n * (P.dfs_labs_task + 300 * P.dfs_labs_item));
+      const mm = n * (P.dfs_llmm_task + 100 * P.dfs_llmm_row); if (prm.mentions !== false) add(`Câu hỏi trên AI có nhắc lĩnh vực (LLM Mentions): ${n} lần × tối đa 100 dòng`, mm);
+      if (prm.ai_volume !== false) add('Lượng tìm kiếm trên AI cho tối đa 300 câu', P.dfs_aiv_task + 300 * P.dfs_aiv_item);
+      parts.push({ label: 'Câu hỏi từ Search Console của bạn', usd: 0 }); add('Claude bổ sung câu hỏi theo từng kiểu khách, gom nhóm, chấm ưu tiên (ước tính)', ai(...AIT.aiq_discover));
+      if (prm.mentions !== false) options.push({ id: 'no_mentions', checked: false, saving_usd: mm, label: 'Bỏ nguồn LLM Mentions (dữ liệu Việt Nam có thể ít)' }) }
+    else if (action === 'aiq_check') { const n = prm.questions || 0, pls = prm.platforms || ['chatgpt', 'gemini', 'perplexity', 'google'];
+      const per = { chatgpt: ['ChatGPT', P.dfs_llm_scrape], gemini: ['Gemini', P.dfs_llm_scrape], perplexity: ['Perplexity', P.dfs_llm_resp + P.llm_provider_est], google: ['Google AI Overview', P.dfs_serp_page + P.dfs_aio_extra] };
+      pls.forEach(k => { if (per[k]) add(`${per[k][0]}: ${n} câu hỏi`, n * per[k][1]) }); parts.push({ label: 'Dò thương hiệu, nguồn trích dẫn trong câu trả lời (tại máy)', usd: 0 });
+      if (prm.recent_days != null && prm.recent_days < SET.aiq_recent_days) warnings.push({ level: 'warn', text: `Lần kiểm tra trước ${prm.recent_days ? 'mới cách ' + prm.recent_days + ' ngày' : 'là hôm nay'}. Câu trả lời của AI thay đổi theo tuần; kiểm tra 2–4 tuần một lần là đủ để thấy xu hướng.` });
+      tips.push('Mỗi lần kiểm tra chỉ chọn các câu hỏi đang theo dõi (ưu tiên cao). Kết quả lưu lại để so sánh theo thời gian.') }
+    else if (action === 'aiq_advise') { const n = Math.max(1, prm.questions || 1); add(`Claude tư vấn tối ưu ${n} câu hỏi (ước tính)`, n * ai(...AIT.aiq_advise)) }
+    else if (action === 'smap_cycle') { const n = prm.pages || 300, an = prm.ai_pages != null ? prm.ai_pages : n;
+      parts.push({ label: `Quét ${n} trang, liên kết nội bộ, chấm điểm SEO/GEO (tại máy)`, usd: 0 }); parts.push({ label: 'Search Console, GA4, kiểm tra index, tốc độ PageSpeed (Google, miễn phí)', usd: 0 });
+      if (prm.labs !== false) add('Từ khóa website đang có thứ hạng (DataForSEO Labs, tối đa 1.000 từ)', P.dfs_labs_task + 1000 * P.dfs_labs_item);
+      if (an) add(`Claude gán từ khóa, nhóm chủ đề cho ${an} trang (ước tính)`, an * ai(180, 115)); add('Claude viết báo cáo và việc cần làm (ước tính)', ai(...AIT.smap_report));
+      if (prm.recent_days != null && prm.recent_days < SET.smap_recent_days) warnings.push({ level: 'warn', text: `Lần phân tích trước ${prm.recent_days ? 'mới cách ' + prm.recent_days + ' ngày' : 'là hôm nay'}. Số liệu Search Console thay đổi chậm; phân tích mỗi 2–4 tuần là hợp lý.` });
+      tips.push('Lần phân tích sau chỉ gán lại từ khóa cho trang mới, nên rẻ hơn nhiều. Chọn "Gán lại toàn bộ" khi đổi chiến lược từ khóa.') }
     else add(LABEL[action] + ' (ước tính)', ai(...AIT[action]));
     const spent = demoSummary().spent_usd, bu = SET.budget_month_vnd / RATE, after = spent + u, pct = after / bu * 100, v = u * RATE;
     if (after > bu) warnings.unshift({ level: 'bad', text: 'Lần này sẽ làm vượt ngân sách tháng.' }); else if (pct >= SET.warn_pct) warnings.unshift({ level: 'warn', text: `Sau lần này đã dùng ${pct.toFixed(0)}% ngân sách tháng.` });
@@ -156,6 +175,7 @@
     [`Cảnh báo phân tích AI Overview trùng trong ${s.geo_recent_days} ngày`, 'Kết quả cũ được lưu trong Lịch sử, mở lại miễn phí. Từ khóa không có AI Overview thì không gọi AI.'],
     [`Cảnh báo cập nhật backlink dày hơn ${s.bl_recent_days} ngày`, 'Backlink thay đổi chậm. Dùng file Search Console nếu muốn miễn phí hoàn toàn.'],
     [`Cảnh báo phân tích gợi ý chủ đề trùng trong ${s.tp_recent_days ?? 30} ngày`, 'Kết quả lưu lại, mở lại miễn phí. Chế độ tiết kiệm chỉ đọc sitemap đối thủ và Search Console, không tốn tiền dữ liệu.'],
+    [`Cảnh báo kiểm tra câu trả lời AI lặp lại trong ${s.aiq_recent_days ?? 14} ngày`, 'Câu trả lời của AI thay đổi theo tuần; kiểm tra 2–4 tuần một lần là đủ. Chỉ kiểm tra câu hỏi đang theo dõi.'],
     [`Hỏi trước mỗi lần dùng từ ${vnd(s.confirm_over_vnd)}`, `Cảnh báo khi dùng ${s.warn_pct}% ngân sách; báo đỏ khi vượt.`],
     [s.auto_stop ? 'Tự dừng lịch Autopost khi vượt ngân sách' : 'Lịch Autopost vẫn chạy khi vượt ngân sách (đang tắt tự dừng)', 'Viết bài là khoản tốn nhất khi chạy tự động.'],
     ['Lưu lại mọi kết quả AI', 'Gợi ý title, báo cáo, phân tích GEO, tin xin link đều lưu; xem lại không tốn phí.'],
@@ -188,7 +208,7 @@
           <label style="flex-direction:row;align-items:center;gap:8px;color:var(--ink)"><input type="checkbox" id="cgStop" ${S.auto_stop ? 'checked' : ''} style="accent-color:var(--accent)"> Tự dừng lịch Autopost khi vượt ngân sách</label>
         </div>
         <details><summary class="cg-sub" style="cursor:pointer">Bảng giá đang dùng (chỉnh khi nhà cung cấp đổi giá hoặc bạn đổi model AI)</summary>
-          <div class="cg-grid" style="margin-top:10px">${[['dfs_volume_task', 'Tra volume / lần (USD)'], ['dfs_serp_page', 'Thứ hạng / trang 10 kết quả'], ['dfs_aio_extra', 'Thêm AI Overview / lần'], ['dfs_bl_request', 'Backlinks / lần gọi'], ['dfs_bl_row', 'Backlinks / dòng'], ['dfs_labs_task', 'Gợi ý chủ đề / lần gọi'], ['dfs_labs_item', 'Gợi ý chủ đề / dòng'], ['claude_in', 'Claude đầu vào / 1 triệu token'], ['claude_out', 'Claude đầu ra / 1 triệu token']]
+          <div class="cg-grid" style="margin-top:10px">${[['dfs_volume_task', 'Tra volume / lần (USD)'], ['dfs_serp_page', 'Thứ hạng / trang 10 kết quả'], ['dfs_aio_extra', 'Thêm AI Overview / lần'], ['dfs_bl_request', 'Backlinks / lần gọi'], ['dfs_bl_row', 'Backlinks / dòng'], ['dfs_labs_task', 'Gợi ý chủ đề / lần gọi'], ['dfs_labs_item', 'Gợi ý chủ đề / dòng'], ['dfs_llm_scrape', 'Hỏi ChatGPT/Gemini / câu'], ['llm_provider_est', 'Phí Perplexity ước tính / câu'], ['dfs_llmm_task', 'LLM Mentions / lần gọi'], ['dfs_aiv_task', 'Lượng tìm kiếm AI / lần gọi'], ['claude_in', 'Claude đầu vào / 1 triệu token'], ['claude_out', 'Claude đầu ra / 1 triệu token']]
             .map(([k, l]) => `<label>${l}<input type="text" inputmode="decimal" data-price="${k}" value="${s.prices[k]}"></label>`).join('')}</div></details>
         <div class="cg-sec">Mẹo tiết kiệm đã cài mặc định</div>
         <ol class="cg-tips">${TIPS(S).map(([a, b]) => `<li><b>${esc(a)}.</b> ${esc(b)}</li>`).join('')}</ol>

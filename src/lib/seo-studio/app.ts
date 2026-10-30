@@ -9,6 +9,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { SeoError, hex, loadConfig, nowUtc, one, q, run } from "./core";
 import { dfsPost } from "./apis";
 import { advance, cleanupJobs } from "./jobs";
+import { overBudget } from "./costs";
 import * as auth from "./auth";
 import * as audit from "./audit";
 import * as autopost from "./autopost";
@@ -17,6 +18,8 @@ import * as costs from "./costs";
 import * as geo from "./geo";
 import * as gsc from "./gsc";
 import * as topics from "./topics";
+import * as aiq from "./aiq";
+import * as smap from "./smap";
 
 import indexHtml from "./pages/index.html?raw";
 import rankHtml from "./pages/rank.html?raw";
@@ -25,6 +28,8 @@ import autopostHtml from "./pages/autopost.html?raw";
 import geoHtml from "./pages/geo.html?raw";
 import backlinksHtml from "./pages/backlinks.html?raw";
 import gscHtml from "./pages/gsc.html?raw";
+import smapHtml from "./pages/smap.html?raw";
+import aiqHtml from "./pages/aiq.html?raw";
 import costguardJs from "./pages/costguard.js?raw";
 
 const BASE = auth.BASE;
@@ -39,6 +44,8 @@ const PAGES: Record<string, [string, string]> = {
   "/geo.html": [geoHtml, "text/html"], "/geo": [geoHtml, "text/html"],
   "/backlinks.html": [backlinksHtml, "text/html"], "/backlinks": [backlinksHtml, "text/html"],
   "/gsc.html": [gscHtml, "text/html"], "/gsc": [gscHtml, "text/html"],
+  "/smap.html": [smapHtml, "text/html"], "/smap": [smapHtml, "text/html"],
+  "/aiq.html": [aiqHtml, "text/html"], "/aiq": [aiqHtml, "text/html"],
 };
 
 function json(obj: any, status = 200) {
@@ -225,6 +232,8 @@ async function volume(h: any) {
 // ---------------------------------------------------------------- định tuyến
 async function doGET(h: any, path: string) {
   if (path.startsWith("/api/ap/")) return autopost.handle(h, "GET", path);
+  if (path.startsWith("/api/aiq/")) return aiq.handle(h, "GET", path);
+  if (path.startsWith("/api/smap/")) return smap.handle(h, "GET", path);
   if (path.startsWith("/api/geo/")) return geo.handle(h, "GET", path);
   if (path.startsWith("/api/bl/")) return backlinks.handle(h, "GET", path);
   if (path.startsWith("/api/gsc/")) return gsc.handle(h, "GET", path);
@@ -273,6 +282,8 @@ async function doGET(h: any, path: string) {
 
 async function doDELETE(h: any, path: string) {
   if (path.startsWith("/api/ap/")) return autopost.handle(h, "DELETE", path);
+  if (path.startsWith("/api/aiq/")) return aiq.handle(h, "DELETE", path);
+  if (path.startsWith("/api/smap/")) return smap.handle(h, "DELETE", path);
   if (path.startsWith("/api/geo/")) return geo.handle(h, "DELETE", path);
   if (path.startsWith("/api/bl/")) return backlinks.handle(h, "DELETE", path);
   if (path.startsWith("/api/gsc/")) return gsc.handle(h, "DELETE", path);
@@ -293,6 +304,8 @@ async function doDELETE(h: any, path: string) {
 
 async function doPOST(h: any, path: string) {
   if (path.startsWith("/api/ap/")) return autopost.handle(h, "POST", path);
+  if (path.startsWith("/api/aiq/")) return aiq.handle(h, "POST", path);
+  if (path.startsWith("/api/smap/")) return smap.handle(h, "POST", path);
   if (path.startsWith("/api/geo/")) return geo.handle(h, "POST", path);
   if (path.startsWith("/api/bl/")) return backlinks.handle(h, "POST", path);
   if (path.startsWith("/api/gsc/")) return gsc.handle(h, "POST", path);
@@ -308,6 +321,31 @@ async function doPOST(h: any, path: string) {
 }
 
 // ---------------------------------------------------------------- lịch tự động (pg_cron gọi)
+/**
+ * Kiểm tra AI định kỳ (Câu hỏi AI) và phân tích website định kỳ (Bản đồ website) — thay luồng nền
+ * scheduler_loop của bản Python. Mỗi lần cron chỉ chạy MỘT bước: ưu tiên tác vụ tự động đang dở,
+ * không có thì 15 phút/lần xem dự án / website nào đến hạn để bắt đầu.
+ */
+async function periodicTick() {
+  try {
+    const pending = await one(`SELECT id FROM seo_jobs WHERE kind IN ('aiq_check','smap_cycle') AND status='running' AND auto
+                               AND (locked_until IS NULL OR locked_until < now()) ORDER BY created_at LIMIT 1`);
+    if (pending) {
+      const r = await advance(pending.id);
+      return { periodic: pending.id, status: r.status, message: r.message };
+    }
+    if (new Date().getUTCMinutes() % 15 !== 7) return {};
+    if (await overBudget()) return { periodic_skipped: "vượt ngân sách" };
+    const jid = (await aiq.startDueCheck()) || (await smap.startDueCycle());
+    if (!jid) return {};
+    const r = await advance(jid);
+    return { periodic: jid, status: r.status, message: r.message };
+  } catch (e: any) {
+    if (e?.code === "42P01") return {}; // chưa chạy migration v27
+    throw e;
+  }
+}
+
 function secretMatches(got: string, expected: string) {
   const a = createHash("sha256").update(got).digest();
   const b = createHash("sha256").update(expected).digest();
@@ -321,7 +359,9 @@ async function cron(req: Request) {
   if (!secretMatches(req.headers.get("x-job-secret") ?? "", expected)) return json({ ok: false, error: "Sai secret" }, 401);
   try {
     if (new Date().getUTCMinutes() === 0) await cleanupJobs();
-    return json({ ok: true, ...(await autopost.schedulerTick()) });
+    const ap = await autopost.schedulerTick();
+    // Autopost vừa chạy một bước thì để lượt sau (giữ mỗi lần cron trong giới hạn thời gian).
+    return json({ ok: true, ...ap, ...(ap.skipped ? await periodicTick() : {}) });
   } catch (e: any) {
     if (!(e instanceof SeoError)) console.error("[seo cron]", e);
     return json({ ok: false, error: String(e?.message ?? e) }, 500);

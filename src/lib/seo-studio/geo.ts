@@ -30,10 +30,10 @@ function walk(obj: any, fn: (d: any) => void) {
   }
 }
 
-async function fetchSerp(cfg: any, keyword: string, loc: number, lang: string) {
+export async function fetchSerp(cfg: any, keyword: string, loc: number, lang: string, paaDepth = 1, limit = 8) {
   const [task, cost] = await dfsPost(cfg, "/v3/serp/google/organic/live/advanced", [{
     keyword, location_code: Number(loc), language_code: lang, device: "desktop",
-    depth: 10, load_async_ai_overview: true, people_also_ask_click_depth: 1 }], 150);
+    depth: 10, load_async_ai_overview: true, people_also_ask_click_depth: Number(paaDepth) }], 150);
   const res = (task.result || [{}])[0] || {};
   const items = res.items || [];
   const aioItem = items.find((i: any) => i.type === "ai_overview");
@@ -63,12 +63,12 @@ async function fetchSerp(cfg: any, keyword: string, loc: number, lang: string) {
   for (const i of items) if (i.type === "people_also_ask") for (const el of i.items || []) if (el.title) paa.push(el.title);
   const related: string[] = [];
   for (const i of items) if (i.type === "related_searches") for (const el of i.items || []) related.push(typeof el === "string" ? el : el.title || el.query || "");
-  return { aio, organic, paa: uniq(paa).slice(0, 8), related: uniq(related).filter(Boolean).slice(0, 8), item_types: res.item_types || [], cost };
+  return { aio, organic, paa: uniq(paa).slice(0, limit), related: uniq(related).filter(Boolean).slice(0, limit), item_types: res.item_types || [], cost };
 }
 
 // ---------------------------------------------------------------- 2. Đọc trang
-export async function readPage(url: string, limit = 9000) {
-  const res = await fetchPage(url, 25);
+export async function readPage(url: string, limit = 9000, res: any = null) {
+  res = res || (await fetchPage(url, 25));
   if (res.status !== 200) return { url, error: `HTTP ${res.status || res.error || "lỗi kết nối"}` };
   const html = decode(res);
   const p = new PageParser();

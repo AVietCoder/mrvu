@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bản đồ website</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+<style>
+
+/* Layout: 5 thẻ (Tổng quan, Trang, Từ khóa, Liên kết nội bộ, Cài đặt); chi tiết trang mở ở ngăn bên phải */
+:root{
+  --bg:#f2f4f3; --surface:#ffffff; --sunk:#f7f9f8; --ink:#17221f; --muted:#5b6965; --line:#dce3e0;
+  --accent:#0d6957; --accent-ink:#ffffff; --accent-soft:#e0efea;
+  --ok:#2c7a4b; --ok-soft:#e3f2e8; --bad:#b9441a; --bad-soft:#fbe9e1; --warn:#9a6a12; --warn-soft:#f8efd9; --info:#3f6fa8; --info-soft:#e4edf8;
+  --mine:#fff1c2; --code:#f4f6f5; --shade:rgba(15,25,22,.35);
+  --f-body:"Be Vietnam Pro", "Segoe UI", system-ui, sans-serif; --f-code:ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r:10px; color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1412; --surface:#151d1a; --sunk:#111816; --ink:#e4ebe8; --muted:#94a39e; --line:#25302c;
+  --accent:#4dbea6; --accent-ink:#06201a; --accent-soft:#163029;
+  --ok:#6fc690; --ok-soft:#16301f; --bad:#f0905f; --bad-soft:#3a2219; --warn:#e2b75a; --warn-soft:#352a14; --info:#8db5e8; --info-soft:#1a2738;
+  --mine:#4a3c12; --code:#0b100f; --shade:rgba(0,0,0,.55); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1412; --surface:#151d1a; --sunk:#111816; --ink:#e4ebe8; --muted:#94a39e; --line:#25302c;
+  --accent:#4dbea6; --accent-ink:#06201a; --accent-soft:#163029;
+  --ok:#6fc690; --ok-soft:#16301f; --bad:#f0905f; --bad-soft:#3a2219; --warn:#e2b75a; --warn-soft:#352a14; --info:#8db5e8; --info-soft:#1a2738;
+  --mine:#4a3c12; --code:#0b100f; --shade:rgba(0,0,0,.55); color-scheme:dark}
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+body.lock{overflow:hidden}
+[hidden]{display:none!important}
+.wrap{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.nav{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:-4px}
+.nav .tab{padding:8px 12px;color:var(--muted);text-decoration:none;font-weight:600;font-size:13px;border-bottom:2px solid transparent;margin-bottom:-1px}
+.nav .tab:hover{color:var(--ink)} .nav .tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-size:24px;font-weight:700;margin:0;letter-spacing:-.01em} h2{font-size:16px;margin:0} h3{font-size:14px;margin:0}
+.sub{color:var(--muted);margin:2px 0 0;max-width:78ch}
+.mode{font-size:12px;font-weight:600;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);display:inline-flex;gap:6px;align-items:center}
+.mode i{width:8px;height:8px;border-radius:50%;background:var(--warn)} .mode.live i{background:var(--ok)}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{font:inherit;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
+.seg button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)} .seg .n{font-weight:500;opacity:.75;margin-left:4px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);min-width:0}
+.pad{padding:16px}
+.phead{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+.label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.hint{font-size:12px;color:var(--muted)}
+input[type=text],input[type=number],input[type=search],select,textarea{font:inherit;color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+textarea{resize:vertical;min-height:80px}
+input:focus,select:focus,textarea:focus,button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px;vertical-align:middle}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px 16px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0} .field.full{grid-column:1/-1}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{font:inherit;font-weight:600;border-radius:8px;padding:8px 14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block}
+.btn:hover{border-color:var(--accent)} .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn:disabled{opacity:.55;cursor:not-allowed} .btn.sm{padding:5px 10px;font-size:13px}
+.link{border:0;background:none;color:var(--accent);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:2px 4px;border-radius:4px;text-align:left}
+.link.danger{color:var(--muted)} .link.danger:hover,.link.danger.armed{color:var(--bad)}
+.tablebox{overflow:auto;max-height:680px}
+table{border-collapse:collapse;width:100%;min-width:820px}
+th,td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{position:sticky;top:0;background:var(--surface);font-size:12px;font-weight:600;color:var(--muted);z-index:1;white-space:nowrap}
+tr:hover td{background:var(--sunk)}
+.chip{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap;background:var(--sunk);color:var(--muted);border:1px solid var(--line)}
+.c-ok{background:var(--ok-soft);color:var(--ok);border-color:transparent} .c-bad{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.c-warn{background:var(--warn-soft);color:var(--warn);border-color:transparent} .c-info{background:var(--info-soft);color:var(--info);border-color:transparent}
+.c-acc{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.err{background:var(--bad-soft);color:var(--bad);border-radius:8px;padding:10px 12px;font-size:13px}
+.note{background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--muted)} .note b{color:var(--ink)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;font-size:13px;z-index:70;max-width:calc(100% - 32px)}
+.demo-flag{white-space:nowrap;font-size:11px;font-weight:600;color:var(--warn);background:var(--warn-soft);padding:2px 8px;border-radius:999px}
+.progress{display:flex;gap:10px;align-items:center;font-size:13px;color:var(--muted);padding:10px 0}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:sp .9s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}} @media (prefers-reduced-motion:reduce){.spin{animation-duration:3s}}
+/* tổng quan */
+.kpis{display:grid;grid-template-columns:minmax(220px,1.3fr) repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:1000px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpis .big{grid-column:1/-1}}
+.kpi{padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.kpi .v{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.kpi.big .v{font-size:40px;color:var(--accent)}
+.bar{height:6px;border-radius:3px;background:var(--sunk);border:1px solid var(--line);overflow:hidden} .bar i{display:block;height:100%;background:var(--accent)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px} .two>*{min-width:0}
+@media (max-width:900px){.two{grid-template-columns:1fr}}
+.list{display:flex;flex-direction:column}
+.li{display:grid;grid-template-columns:minmax(0,1fr) 120px 52px;gap:10px;align-items:center;padding:8px 16px;border-bottom:1px solid var(--line);font-size:13px}
+.li:last-child{border-bottom:0} .li .n{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.li.me{background:var(--mine)}
+.li .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.checks{display:flex;flex-direction:column}
+.ck{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);font-size:13px}
+.ck:last-child{border-bottom:0} .ck .ic{font-weight:700} .ck.pass .ic{color:var(--ok)} .ck.warn .ic{color:var(--warn)} .ck.fail .ic{color:var(--bad)}
+.ck .fix{color:var(--muted);font-size:12px;margin-top:2px}
+.todo{display:flex;flex-direction:column;gap:8px;padding:14px 16px}
+.todo div{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--sunk)}
+svg.trend{width:100%;height:150px;display:block}
+/* bảng câu hỏi */
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+.toolbar input[type=search]{max-width:260px} .toolbar select{width:auto;max-width:220px}
+.bulk{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 16px;background:var(--accent-soft);border-bottom:1px solid var(--line)}
+.qt{font-weight:600} .qmeta{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.dots{display:flex;gap:4px}
+.dot{width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:1px solid var(--line);background:var(--sunk);color:var(--muted)}
+.dot.cited{background:var(--ok);color:#fff;border-color:transparent} .dot.mentioned{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
+.dot.no{background:var(--bad-soft);color:var(--bad);border-color:transparent} .dot.na{opacity:.55}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);align-items:center}
+.legend span{display:inline-flex;gap:5px;align-items:center}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.url{font-size:12px;color:var(--muted);word-break:break-all;max-width:240px;display:block}
+/* kiểm tra */
+.runs{display:flex;flex-direction:column}
+.runs button{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;text-align:left;font:inherit;font-size:13px;color:var(--ink);background:var(--surface);border:0;border-bottom:1px solid var(--line);padding:10px 16px;cursor:pointer}
+.runs button.on{background:var(--accent-soft)} .runs button:hover{background:var(--sunk)}
+.plats{display:flex;gap:8px;flex-wrap:wrap}
+.plats label{display:flex;gap:8px;align-items:center;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--sunk);cursor:pointer;font-weight:600;font-size:13px}
+.plats label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.cols{display:grid;grid-template-columns:280px minmax(0,1fr);gap:18px} @media (max-width:900px){.cols{grid-template-columns:1fr}}
+/* ngăn chi tiết */
+.shade{position:fixed;inset:0;background:var(--shade);z-index:20}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(920px,100%);background:var(--bg);z-index:21;display:flex;flex-direction:column;border-left:1px solid var(--line);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.dhead{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--surface)}
+.dhead h2{font-size:17px}
+.dbody{overflow:auto;padding:18px;display:flex;flex-direction:column;gap:16px;flex:1}
+.ptabs{display:flex;gap:6px;flex-wrap:wrap}
+.ptabs button{font:inherit;font-size:13px;font-weight:600;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.ptabs button.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.answer{font-size:14px;line-height:1.65;white-space:pre-wrap;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:12px 14px;max-height:360px;overflow:auto}
+.answer mark{background:var(--mine);color:inherit;padding:0 2px;border-radius:3px} .answer mark.cp{background:var(--bad-soft)}
+.srcs{display:flex;flex-direction:column;gap:4px;font-size:13px} .srcs a{color:var(--accent);word-break:break-all} .srcs .me{background:var(--mine);border-radius:4px;padding:1px 4px}
+.adv{display:flex;flex-direction:column;gap:12px}
+.adv a{color:var(--accent)}
+.adv h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.adv ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.ablock{border:1px solid var(--accent);border-radius:8px;padding:12px 14px;background:var(--accent-soft)}
+.ablock .h{font-weight:700;margin-bottom:4px}
+pre.code{font-family:var(--f-code);font-size:12px;background:var(--code);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow:auto;max-height:240px;margin:0;white-space:pre-wrap;word-break:break-word}
+.plan h3{margin:4px 0 6px}
+.phase{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--sunk)}
+.phase ul{margin:6px 0 0;padding-left:18px}
+
+/* bản đồ website */
+.kpis6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+@media (max-width:1100px){.kpis6{grid-template-columns:repeat(3,minmax(0,1fr))}} @media (max-width:600px){.kpis6{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi .d{font-size:12px;font-weight:600} .d.up{color:var(--ok)} .d.down{color:var(--bad)}
+.sc{display:inline-block;min-width:34px;text-align:center;font-weight:700;font-size:12px;padding:2px 6px;border-radius:6px;font-variant-numeric:tabular-nums}
+.sc.g{background:var(--ok-soft);color:var(--ok)} .sc.y{background:var(--warn-soft);color:var(--warn)} .sc.r{background:var(--bad-soft);color:var(--bad)} .sc.n{background:var(--sunk);color:var(--muted)}
+.runbox{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.runbox .opts{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:13px}
+.runbox select{width:auto}
+.alerts{display:flex;flex-direction:column}
+.al{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--line);font-size:13px}
+.al:last-child{border-bottom:0} .al i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.al.s3 i{background:var(--bad)} .al.s2 i{background:var(--warn)} .al.s0 i{background:var(--ok)}
+.acts-t td{vertical-align:top}
+.issue{font-size:12px;color:var(--muted);display:block;max-width:300px}
+.issue b{color:var(--ink);font-weight:600}
+.k-sub{font-size:12px;color:var(--muted)}
+.lock{font-size:11px;color:var(--accent);font-weight:700}
+.place{background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;margin-top:6px}
+.place del{color:var(--bad)} .place ins{color:var(--ok);text-decoration:none}
+.tree{display:flex;flex-direction:column;gap:12px;padding:14px 16px}
+.cl{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.cl .h{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;background:var(--sunk);border-bottom:1px solid var(--line)}
+.cl .m{display:grid;grid-template-columns:minmax(0,1fr) 90px 70px 60px;gap:8px;padding:6px 12px;border-bottom:1px solid var(--line);font-size:13px;align-items:center}
+.cl .m:last-child{border-bottom:0}
+.cl .m .u{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.metric{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.metric div{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--sunk)}
+.metric b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+.minitab{width:100%;min-width:0;font-size:13px} .minitab td,.minitab th{padding:5px 8px;position:static}
+.guide{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav" aria-label="Công cụ">
+    <span style="font-weight:700;font-size:14px;padding:8px 14px 8px 0;margin-right:6px;border-right:1px solid var(--line);color:var(--ink);white-space:nowrap;align-self:center">Mr.Vũ SEO Studio</span>
+    <a class="tab" href="./">Tra cứu Volume</a>
+    <a class="tab" href="rank.html">Rank Tracker</a>
+    <a class="tab" href="audit.html">Audit On-page</a>
+    <a class="tab on" href="smap.html" aria-current="page">Bản đồ website</a>
+    <a class="tab" href="autopost.html">Autopost</a>
+    <a class="tab" href="geo.html">AI Overview (GEO)</a>
+    <a class="tab" href="aiq.html">Câu hỏi AI</a>
+    <a class="tab" href="backlinks.html">Backlink</a>
+    <a class="tab" href="gsc.html">Search Console &amp; GA4</a>
+  </nav>
+  <header>
+    <div>
+      <h1>Bản đồ website</h1>
+      <p class="sub">Phân tích từng URL: nhắm từ khóa gì, câu hỏi AI nào, đã tối ưu SEO, GEO, tốc độ chưa, liên kết nội bộ ra sao. Lặp lại định kỳ để theo dõi biến động và nhận việc cần làm.</p>
+    </div>
+    <div class="row"><select id="site" aria-label="Website" hidden style="width:auto"></select><span class="mode" id="mode"><i></i><span id="modeText">Đang kiểm tra kết nối…</span></span></div>
+  </header>
+  <div class="seg" id="seg" role="tablist">
+    <button data-v="ov" class="on">Tổng quan</button>
+    <button data-v="pg">Trang <span class="n" id="nPg"></span></button>
+    <button data-v="kw">Từ khóa</button>
+    <button data-v="ln">Liên kết nội bộ <span class="n" id="nLn"></span></button>
+    <button data-v="set">Cài đặt</button>
+  </div>
+
+  <section id="v-ov" style="display:flex;flex-direction:column;gap:18px"></section>
+
+  <section id="v-pg" hidden class="panel">
+    <div class="toolbar">
+      <input type="search" id="pSearch" placeholder="Tìm URL, tiêu đề, từ khóa…" aria-label="Tìm trang">
+      <select id="pRole" aria-label="Loại trang"></select>
+      <select id="pCluster" aria-label="Nhóm chủ đề"></select>
+      <select id="pIssue" aria-label="Vấn đề"><option value="">Mọi vấn đề</option><option value="opp">Cơ hội lên top</option><option value="seo">SEO on-page</option><option value="speed">Tốc độ</option><option value="geo">GEO</option><option value="link">Liên kết nội bộ</option><option value="kw">Trùng từ khóa</option><option value="index">Index / lỗi</option><option value="content">Nội dung mỏng</option><option value="none">Không có vấn đề</option></select>
+      <select id="pSort" aria-label="Sắp xếp"><option value="value">Giá trị khách hàng</option><option value="clicks">Click nhiều</option><option value="impr">Hiển thị nhiều</option><option value="seo">Điểm SEO thấp</option><option value="perf">Tốc độ chậm</option><option value="geo">Điểm GEO thấp</option><option value="issues">Nhiều vấn đề</option></select>
+      <span style="flex:1"></span><span class="hint" id="pCount"></span>
+    </div>
+    <div class="bulk" id="pBulk" hidden><b id="pBulkN"></b><button class="btn sm" id="pRank">Theo dõi thứ hạng từ khóa chính</button></div>
+    <div class="tablebox"><table>
+      <thead><tr><th><input type="checkbox" id="pAll" aria-label="Chọn tất cả"></th><th>Trang</th><th>Từ khóa chính</th><th>Google 28 ngày</th><th title="Điểm SEO on-page">SEO</th><th title="Cấu trúc để AI trích dẫn">GEO</th><th title="PageSpeed di động">Tốc độ</th><th title="Số trang trỏ link tới / độ sâu">Link vào</th><th>Việc cần làm</th></tr></thead>
+      <tbody id="pBody"></tbody></table></div>
+  </section>
+
+  <section id="v-kw" hidden style="display:flex;flex-direction:column;gap:18px"></section>
+  <section id="v-ln" hidden style="display:flex;flex-direction:column;gap:18px"></section>
+
+  <section id="v-set" hidden class="panel">
+    <div class="phead"><div><h2 id="setTitle">Website</h2><span class="hint">Cấu hình phân tích. Search Console và GA4 lấy từ tab Search Console & GA4 (đã kết nối).</span></div></div>
+    <form class="pad grid" id="setForm" novalidate>
+      <div class="field"><label class="label" for="sDomain">Tên miền</label><input type="text" id="sDomain" placeholder="mrvu.vn"></div>
+      <div class="field"><label class="label" for="sMax">Số trang tối đa mỗi lần quét</label><input type="number" id="sMax" min="50" max="3000" value="800"></div>
+      <div class="field"><label class="label" for="sPsi">Đo tốc độ (PageSpeed Insights)</label><select id="sPsi"><option value="smart">Thông minh: 40 trang quan trọng + 3 trang mỗi loại</option><option value="all">Tất cả trang (lâu hơn)</option><option value="off">Không đo</option></select></div>
+      <div class="field"><label class="label" for="sKey">Khóa PageSpeed Insights API</label><input type="text" id="sKey" placeholder="AIza…" autocomplete="off"><span class="hint" id="sKeyHint">Miễn phí. Xem hướng dẫn tạo khóa bên dưới.</span></div>
+      <div class="field"><label class="label">Nguồn dữ liệu</label>
+        <label class="row" style="gap:8px;font-size:13px"><input type="checkbox" id="sLabs" checked> Lấy từ khóa đang có thứ hạng (DataForSEO, khoảng 3.000 đ/lần)</label>
+        <label class="row" style="gap:8px;font-size:13px"><input type="checkbox" id="sInspect" checked> Kiểm tra index 60 trang quan trọng (Search Console, miễn phí)</label></div>
+      <div class="field"><label class="label" for="sAp">Website Autopost (viết bài cho từ khóa chưa có trang)</label><select id="sAp"></select></div>
+      <div class="field"><label class="label">Phân tích định kỳ</label>
+        <label class="row" style="gap:8px;font-size:13px"><input type="checkbox" id="sAuto"> Tự phân tích lại mỗi <input type="number" id="sDays" min="7" max="90" value="30" style="width:70px"> ngày</label>
+        <span class="hint">Chạy khi công cụ đang mở và chưa vượt ngân sách tháng; chỉ gán từ khóa cho trang mới nên rẻ.</span></div>
+      <div class="field full row" style="justify-content:space-between"><button type="button" class="link danger" id="sDel" hidden>Xóa website khỏi Bản đồ</button><span class="err" id="sErr" hidden></span><button class="btn primary" type="submit">Lưu</button></div>
+    </form>
+    <div class="pad" style="border-top:1px solid var(--line)"><h3 style="margin-bottom:8px">Tạo khóa PageSpeed Insights API (khoảng 2 phút)</h3><ol class="guide">
+      <li>Vào <b>console.cloud.google.com</b>, chọn đúng project đã dùng cho Search Console.</li>
+      <li><b>APIs &amp; Services → Library</b>, tìm <b>PageSpeed Insights API</b>, bấm <b>Enable</b>.</li>
+      <li><b>APIs &amp; Services → Credentials → Create credentials → API key</b>. Copy khóa (bắt đầu bằng <code>AIza</code>).</li>
+      <li>Bấm vào khóa vừa tạo → <b>API restrictions → Restrict key</b> → chọn <b>PageSpeed Insights API</b> → Save (để khóa chỉ dùng được cho việc đo tốc độ).</li>
+      <li>Dán khóa vào ô ở trên và bấm <b>Lưu</b>. Miễn phí, khoảng 25.000 lượt đo mỗi ngày.</li></ol></div>
+  </section>
+</div>
+
+<div class="shade" id="shade" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Chi tiết trang">
+  <div class="dhead"><h2 id="dTitle">Trang</h2><button class="btn sm" id="dClose">Đóng</button></div>
+  <div class="dbody" id="dBody"></div>
+</aside>
+<div class="toast" id="toast" hidden></div>
+<textarea id="clip" style="position:fixed;left:-9999px" aria-hidden="true" tabindex="-1"></textarea>
+
+<script src="costguard.js"></script>
+<script>
+(()=>{
+const $=s=>document.querySelector(s);
+const ROLE={home:'Trang chủ',pillar:'Trụ cột',category:'Danh mục',product:'Sản phẩm',post:'Bài viết',support:'Trang phụ',other:'Khác'};
+const INTENT={buy:'Mua',price:'Giá',local:'Mua ở đâu',compare:'So sánh',howto:'Hướng dẫn',problem:'Sự cố',info:'Tìm hiểu',nav:'Điều hướng'};
+const KIND={'lên trụ cột':'Lên trụ cột','xuống bài con':'Xuống bài con','bài → sản phẩm':'Bài → sản phẩm','bài liên quan':'Bài liên quan','cứu trang mồ côi':'Cứu trang mồ côi','rút ngắn độ sâu':'Rút ngắn độ sâu'};
+let live=false,sites=[],S=null,ov=null,pages=[],sel=new Set(),view='ov',apSites=[],lnFilter='todo',lnData=null;
+function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,3400)}
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function fmt(iso){if(!iso)return '';const d=new Date(iso),p=n=>String(n).padStart(2,'0');return `${p(d.getHours())}:${p(d.getMinutes())} ${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`}
+const days=iso=>iso?Math.floor((Date.now()-new Date(iso))/864e5):null;
+const num=v=>v==null?'—':Math.round(v).toLocaleString('vi-VN');
+const short=u=>String(u||'').replace(/^https?:\/\/(www\.)?/,'');
+const vnd=v=>window.CostGuard?CostGuard.vnd(v):Math.round(v).toLocaleString('vi-VN')+' đ';
+const rate=()=>(window.CostGuard&&CostGuard.sum&&CostGuard.sum.rate)||26000;
+const sc=v=>v==null?'<span class="sc n">—</span>':`<span class="sc ${v>=80?'g':v>=50?'y':'r'}">${v}</span>`;
+function delta(a,b,inv){if(a==null||b==null||!b&&!a)return '';const d=a-b;if(Math.abs(d)<(inv?0.5:1))return '';const good=inv?d<0:d>0;return `<span class="d ${good?'up':'down'}" title="${inv?(good?'Vị trí tốt lên':'Vị trí tụt'):''}">${good?'▲':'▼'} ${inv?Math.abs(d).toFixed(1):Math.abs(Math.round(d)).toLocaleString('vi-VN')}</span>`}
+function copy(text,msg){const c=$('#clip');c.value=text;c.select();try{document.execCommand('copy');toast(msg||'Đã copy')}catch(e){toast('Trình duyệt chặn copy')}}
+async function http(path,opts){const r=await fetch(path,Object.assign({headers:{'Content-Type':'application/json'}},opts||{}));
+  const j=await r.json().catch(()=>({error:'Phản hồi không hợp lệ từ máy chủ'}));if(!r.ok||j.error)throw new Error(j.error||('Lỗi '+r.status));return j}
+const api=(p,o)=>live?http(p,o):mock(p,o);
+async function poll(jid,onMsg){let j;do{await new Promise(r=>setTimeout(r,1500));j=await api('api/smap/job/'+jid);onMsg&&onMsg(j.message)}while(j.status==='running');if(j.status==='error')throw new Error(j.message);return j.result}
+function spinner(m){return `<div class="progress" role="status"><span class="spin"></span><span>${esc(m)}</span></div>`}
+
+/* ================= Điều hướng ================= */
+$('#seg').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(b)show(b.dataset.v)});
+function show(v){if(!S&&v!=='set')v='ov';view=v;document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  ['ov','pg','kw','ln','set'].forEach(x=>$('#v-'+x).hidden=x!==v);
+  ({ov:renderOv,pg:loadPages,kw:renderKw,ln:renderLn,set:renderSet})[v]().catch(e=>toast(e.message))}
+async function loadSites(){const r=await api('api/smap/sites');sites=r.items;sites.psiKey=r.psi_key;const cur=S&&S.id;S=sites.find(s=>s.id===cur)||sites[0]||null;
+  $('#site').hidden=sites.length<2;$('#site').innerHTML=sites.map(s=>`<option value="${s.id}">${esc(s.domain)}</option>`).join('')+'<option value="new">+ Website khác</option>';if(S)$('#site').value=S.id}
+$('#site').addEventListener('change',()=>{const v=$('#site').value;if(v==='new'){S=null;show('set');return}S=sites.find(s=>s.id==v);sel.clear();show(view==='set'?'ov':view)});
+
+/* ================= Tổng quan ================= */
+function lineSvg(series,labels,max,unit){const W=600,H=150,pl=40,pb=20,pt=10,n=labels.length;if(n<2)return '<div class="hint pad">Cần ít nhất 2 lần phân tích để vẽ xu hướng.</div>';
+  const M=max||Math.max(1,...series.flatMap(s=>s.v.filter(x=>x!=null)));const xs=i=>pl+i*(W-pl-12)/(n-1),ys=v=>pt+(H-pt-pb)*(1-(v||0)/M);
+  return `<svg class="trend" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img">${[0,.5,1].map(f=>`<line x1="${pl}" x2="${W-12}" y1="${ys(M*f)}" y2="${ys(M*f)}" stroke="var(--line)"/><text x="${pl-6}" y="${ys(M*f)+4}" font-size="11" text-anchor="end" fill="var(--muted)">${Math.round(M*f).toLocaleString('vi-VN')}${unit||''}</text>`).join('')}
+    ${series.map(s=>`<path d="${s.v.map((v,i)=>`${i?'L':'M'}${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join('')}" fill="none" stroke="${s.c}" stroke-width="2.2" vector-effect="non-scaling-stroke"/>${s.v.map((v,i)=>`<circle cx="${xs(i)}" cy="${ys(v)}" r="3" fill="${s.c}"><title>${s.n} ${labels[i]}: ${v}</title></circle>`).join('')}`).join('')}
+    ${labels.map((l,i)=>`<text x="${xs(i)}" y="${H-4}" font-size="10" text-anchor="${i===0?'start':i===n-1?'end':'middle'}" fill="var(--muted)">${l}</text>`).join('')}</svg>
+    <div class="legend pad" style="padding-top:4px">${series.map(s=>`<span><i style="width:12px;height:3px;background:${s.c};display:inline-block"></i>${s.n}</span>`).join('')}</div>`}
+async function renderOv(){const box=$('#v-ov');
+  if(!S){box.innerHTML=`<div class="panel pad" style="display:flex;flex-direction:column;gap:10px;align-items:flex-start"><h2>Bắt đầu</h2><p class="sub">Thêm website (ví dụ mrvu.vn) và khóa PageSpeed Insights, rồi bấm Phân tích toàn website.</p><button class="btn primary" id="goSet">Thêm website</button></div>`;$('#goSet').onclick=()=>show('set');return}
+  box.innerHTML=spinner('Đang tải…');ov=await api('api/smap/overview?site_id='+S.id);const L=ov.last,s=L&&L.summary,rep=L&&L.report;
+  $('#nPg').textContent=s?s.pages:'';$('#nLn').textContent=s&&s.links_todo?s.links_todo:'';
+  const tr=ov.trend,lab=tr.map(t=>{const d=new Date(t.at);return d.getDate()+'/'+(d.getMonth()+1)});
+  box.innerHTML=`${!live?'<div class="note"><span class="demo-flag">Dữ liệu mẫu</span> Bản xem trước. Bản cài trên máy quét mrvu.vn thật, lấy Search Console, GA4, PageSpeed và AI gán từ khóa.</div>':''}
+  <div class="panel pad runbox"><div><h2>Phân tích toàn website</h2><span class="hint">${L?`Lần gần nhất ${fmt(L.at)} (${days(L.at)} ngày trước) · chi phí ${vnd((L.cost_usd||0)*rate())}`:'Chưa phân tích lần nào'}${S.auto?` · tự chạy mỗi ${S.auto_days} ngày`:''}</span></div>
+    <div class="opts"><label class="row" style="gap:6px"><input type="checkbox" id="oFull"> Gán lại từ khóa toàn bộ trang</label>
+      <label class="row" style="gap:6px">Đo tốc độ <select id="oPsi"><option value="">${S.psi_mode==='all'?'Tất cả':S.psi_mode==='off'?'Không đo':'Thông minh'} (mặc định)</option><option value="smart">Thông minh</option><option value="all">Tất cả trang</option><option value="off">Không đo</option></select></label>
+      <button class="btn primary" id="run" ${ov.running?'disabled':''}>${ov.running?'Đang phân tích…':'Phân tích ngay'}</button></div>
+    <div id="runMsg" style="flex-basis:100%" ${ov.running?'':'hidden'}>${ov.running?spinner('Đang phân tích (đang chạy ở máy chủ)…'):''}</div>
+    ${L&&L.notes&&L.notes.length?`<div class="note" style="flex-basis:100%">${L.notes.map(esc).join('<br>')}</div>`:''}</div>
+  ${s?`<div class="kpis6">
+    <div class="panel kpi"><span class="label">Trang</span><span class="v">${s.ok}</span><span class="hint">${s.pages} URL · ${s.errors} lỗi · ${s.noindex} noindex</span></div>
+    <div class="panel kpi"><span class="label">Click Google 28 ngày</span><span class="v">${num(s.clicks)}</span><span class="hint">${delta(s.clicks,s.clicks_prev)||'—'} so với 28 ngày trước · ${num(s.impr)} hiển thị</span></div>
+    <div class="panel kpi"><span class="label">Chuyển đổi GA4 (từ Google)</span><span class="v">${num(s.key_events)}</span><span class="hint">sự kiện chính 28 ngày</span></div>
+    <div class="panel kpi"><span class="label">Điểm SEO TB</span><span class="v">${s.avg_seo??'—'}</span><span class="hint">${s.issues} vấn đề cần xử lý</span></div>
+    <div class="panel kpi"><span class="label">Tốc độ di động TB</span><span class="v">${s.avg_perf??'—'}</span><span class="hint">${s.slow} trang chậm (&lt;50) · đo ${s.perf_measured} trang</span></div>
+    <div class="panel kpi"><span class="label">Hiện diện trên AI</span><span class="v">${ov.aiq&&ov.aiq.visibility!=null?ov.aiq.visibility+'%':'—'}</span><span class="hint">GEO TB ${s.avg_geo??'—'} · <a href="aiq.html">Câu hỏi AI</a></span></div>
+  </div>
+  <div class="two">
+    <div class="panel"><div class="phead"><h2>Cấu trúc & liên kết</h2><button class="btn sm" data-go="ln">Mở</button></div><div class="list">
+      ${[['Trang có từ khóa chính',`${s.with_kw}/${s.ok}`],['Nhóm từ khóa bị trùng (tự cạnh tranh)',s.cannibal],['Trang mồ côi (không có link trỏ tới)',s.orphans],['Trang nằm sâu hơn 3 lần bấm',s.deep],['Trang quan trọng chưa được index',s.not_indexed],['Gợi ý liên kết chưa làm / đã làm',`${s.links_todo} / ${s.links_done}`]].map(([a,b])=>`<div class="li" style="grid-template-columns:minmax(0,1fr) auto"><span>${a}</span><span class="n">${b}</span></div>`).join('')}</div></div>
+    <div class="panel"><div class="phead"><h2>Xu hướng</h2><span class="hint">${tr.length} lần phân tích</span></div><div class="pad" style="padding-bottom:0">${lineSvg([{n:'Click',c:'var(--accent)',v:tr.map(t=>t.clicks||0)}],lab)}</div>
+      <div class="pad" style="padding-top:0">${lineSvg([{n:'SEO',c:'var(--accent)',v:tr.map(t=>t.avg_seo)},{n:'GEO',c:'var(--info)',v:tr.map(t=>t.avg_geo)},{n:'Tốc độ',c:'var(--warn)',v:tr.map(t=>t.avg_perf)}],lab,100)}</div></div>
+  </div>`:''}
+  ${rep?`<div class="panel"><div class="phead"><div><h2>Báo cáo & việc cần làm</h2><span class="hint">AI viết lúc ${fmt(rep.at)}</span></div><span class="chip ${rep.health==='tốt'?'c-ok':rep.health==='cần xử lý'?'c-bad':'c-warn'}">${esc(rep.health)}</span></div>
+    <div class="pad" style="display:flex;flex-direction:column;gap:12px"><p style="font-size:16px;font-weight:600;margin:0">${esc(rep.headline)}</p>
+      <div class="two"><div><h3 class="label">Đang tốt lên</h3><ul style="margin:6px 0 0;padding-left:18px">${(rep.wins||[]).map(x=>`<li>${esc(x)}</li>`).join('')||'<li class="hint">—</li>'}</ul></div>
+        <div><h3 class="label">Vấn đề lớn</h3><ul style="margin:6px 0 0;padding-left:18px">${(rep.problems||[]).map(x=>`<li>${esc(x)}</li>`).join('')||'<li class="hint">—</li>'}</ul></div></div></div>
+    <div class="tablebox"><table class="acts-t" style="min-width:720px"><thead><tr><th>Việc cần làm</th><th>Tác động</th><th>Công sức</th><th>Phụ trách</th><th>Trang</th></tr></thead><tbody>
+      ${(rep.actions||[]).map(a=>`<tr><td><b>${esc(a.title)}</b><div class="hint">${esc(a.why)}</div></td><td><span class="chip ${a.impact==='cao'?'c-bad':a.impact==='vừa'?'c-warn':''}">${esc(a.impact)}</span></td><td>${esc(a.effort)}</td><td>${esc(a.owner)}</td>
+        <td>${(a.pages||[]).slice(0,3).map(u=>{const p=pages.find(x=>x.url===u);return p?`<button class="link" data-page="${p.id}">${esc(short(u))}</button>`:`<span class="url">${esc(short(u))}</span>`}).join('<br>')}</td></tr>`).join('')}</tbody></table></div>
+    ${rep.next_focus?`<div class="pad hint" style="border-top:1px solid var(--line)"><b>Trọng tâm lần tới:</b> ${esc(rep.next_focus)}</div>`:''}</div>`:''}
+  ${L?`<div class="two">
+    <div class="panel"><div class="phead"><h2>Biến động so với lần trước</h2><span class="hint">${L.diff&&L.diff.first?'Lần đầu: chưa có để so sánh':(L.diff.alerts||[]).length+' thay đổi'}</span></div><div class="alerts">
+      ${(L.diff.alerts||[]).slice(0,25).map(a=>`<div class="al s${a.sev}"><i></i><span>${esc(a.text)}</span>${a.page_id?`<button class="link" data-page="${a.page_id}">Xem</button>`:''}</div>`).join('')||'<div class="empty">Không có thay đổi lớn.</div>'}</div></div>
+    <div class="panel"><div class="phead"><h2>Nhóm chủ đề</h2><button class="btn sm" data-go="kw">Bản đồ từ khóa</button></div><div class="list">
+      ${(s.clusters||[]).map(c=>`<div class="li" style="grid-template-columns:minmax(0,1fr) 80px 90px"><span class="t">${esc(c.cluster)} <span class="hint">· ${c.pages} trang</span></span><span class="n">${num(c.clicks)} click</span><span class="n hint">${num(c.impr)} hiển thị</span></div>`).join('')||'<div class="empty">—</div>'}</div></div>
+  </div>`:''}`;
+  box.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>show(b.dataset.go));
+  box.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>openPage(+b.dataset.page));
+  $('#run').onclick=runCycle;if(ov.running)watchRunning()}
+async function runCycle(){const full=$('#oFull').checked,psi=$('#oPsi').value;const L=ov.last,s=L&&L.summary;const n=s?s.pages:300;
+  if(!pages.length&&s)try{pages=(await api('api/smap/pages?site_id='+S.id)).items}catch(e){}
+  const aiN=full||!s?n:Math.max(5,Math.round(n*0.1));
+  if(window.CostGuard){const g=await CostGuard.check('smap_cycle',{pages:n,ai_pages:aiN,labs:!!S.use_labs,recent_days:L?days(L.at):null},{always:true});if(!g.ok)return}
+  const box=$('#runMsg');box.hidden=false;$('#run').disabled=true;box.innerHTML=spinner('Đang bắt đầu…');
+  try{const opts={full_ai:full};if(psi)opts.psi_mode=psi;const r=await poll((await api('api/smap/cycle',{method:'POST',body:JSON.stringify({site_id:S.id,options:opts})})).job_id,m=>box.innerHTML=spinner(m));
+    toast(`Xong: ${r.summary.pages} URL, ${r.alerts} thay đổi`);window.CostGuard&&CostGuard.after();pages=[];await loadSites();renderOv()}catch(e){box.innerHTML=`<div class="err">${esc(e.message)}</div>`;$('#run').disabled=false}}
+async function watchRunning(){const t=setInterval(async()=>{const o=await api('api/smap/overview?site_id='+S.id);if(!o.running){clearInterval(t);if(view==='ov')renderOv()}},5000)}
+
+/* ================= Trang ================= */
+async function loadPages(){if(!S)return;pages=(await api('api/smap/pages?site_id='+S.id)).items;$('#nPg').textContent=pages.length||'';
+  const roles=[...new Set(pages.map(p=>p.role).filter(Boolean))],cl=[...new Set(pages.map(p=>p.cluster).filter(Boolean))].sort();
+  const r0=$('#pRole').value,c0=$('#pCluster').value;$('#pRole').innerHTML='<option value="">Mọi loại trang</option>'+roles.map(r=>`<option value="${r}">${ROLE[r]||r}</option>`).join('');$('#pRole').value=r0;
+  $('#pCluster').innerHTML='<option value="">Mọi nhóm</option>'+cl.map(c=>`<option>${esc(c)}</option>`).join('');if(cl.includes(c0))$('#pCluster').value=c0;renderPages()}
+function rowsP(){const t=$('#pSearch').value.trim().toLowerCase(),r=$('#pRole').value,c=$('#pCluster').value,i=$('#pIssue').value,so=$('#pSort').value;
+  let x=pages.filter(p=>(!r||p.role===r)&&(!c||p.cluster===c)&&(!t||(p.url+' '+(p.title||'')+' '+(p.primary_kw||'')).toLowerCase().includes(t))
+    &&(!i||(i==='none'?!p.issues.length:i==='index'?p.issues.some(z=>z.kind==='index'||z.kind==='tech'):p.issues.some(z=>z.kind===i))));
+  const k={value:p=>-(p.value||0),clicks:p=>-(p.clicks||0),impr:p=>-(p.impr||0),seo:p=>p.seo??999,perf:p=>p.perf??999,geo:p=>p.geo_score??999,issues:p=>-p.issues.length}[so];
+  return x.sort((a,b)=>k(a)-k(b))}
+function renderPages(){const rows=rowsP();$('#pCount').textContent=`${rows.length}/${pages.length} trang`;
+  $('#pBody').innerHTML=rows.length?rows.map(p=>`<tr>
+    <td><input type="checkbox" data-ck="${p.id}" ${sel.has(p.id)?'checked':''} aria-label="Chọn"></td>
+    <td style="min-width:260px;max-width:340px"><button class="link" data-page="${p.id}" style="color:var(--ink);font-weight:600;padding:0">${esc(p.title||short(p.url))}</button>
+      <span class="url">${esc(short(p.url))}</span><div class="qmeta">${p.role?`<span class="chip c-acc">${ROLE[p.role]||p.role}</span>`:''}${p.cluster?`<span class="chip">${esc(p.cluster)}</span>`:''}${p.status!==200?`<span class="chip c-bad">HTTP ${p.status}</span>`:''}${p.noindex?'<span class="chip c-bad">noindex</span>':''}${p.index&&p.index!=='PASS'?'<span class="chip c-bad">Chưa index</span>':''}</div></td>
+    <td style="min-width:180px">${p.primary_kw?`<b>${esc(p.primary_kw)}</b>${p.locked?' <span class="lock" title="Bạn đã chốt từ khóa này">● chốt</span>':''}<div class="k-sub">${p.secondary.length?'+'+p.secondary.length+' từ phụ':''}${p.geo.length?` · ${p.geo.length} câu hỏi AI`:''}${p.intent?' · '+(INTENT[p.intent]||p.intent):''}</div>`:'<span class="hint">—</span>'}</td>
+    <td class="num">${p.clicks!=null?`${num(p.clicks)} click ${delta(p.clicks,p.clicks_prev)}<div class="k-sub">${num(p.impr)} hiển thị · vị trí ${p.pos?p.pos.toFixed(1):'—'} ${delta(p.pos,p.pos_prev,true)}</div>`:'<span class="hint">Chưa có dữ liệu</span>'}</td>
+    <td>${sc(p.seo)}</td><td>${sc(p.geo_score)}</td><td>${sc(p.perf)}${p.lcp?`<div class="k-sub">LCP ${(p.lcp/1000).toFixed(1)}s</div>`:''}</td>
+    <td class="num">${p.inlinks??0}<div class="k-sub">${p.depth!=null?'sâu '+p.depth:'không tới được'}</div></td>
+    <td>${p.issues.length?`<span class="issue"><b>${esc(p.issues[0].text)}</b>${p.issues.length>1?` · +${p.issues.length-1} việc`:''}</span>`:'<span class="chip c-ok">Ổn</span>'}</td></tr>`).join('')
+    :`<tr><td colspan="9" class="empty">${pages.length?'Không có trang khớp bộ lọc.':'Chưa phân tích. Vào Tổng quan, bấm <b>Phân tích ngay</b>.'}</td></tr>`;
+  $('#pAll').checked=rows.length&&rows.every(p=>sel.has(p.id));$('#pBulk').hidden=!sel.size;$('#pBulkN').textContent=`Đã chọn ${sel.size} trang`}
+['#pSearch','#pRole','#pCluster','#pIssue','#pSort'].forEach(id=>$(id).addEventListener('input',renderPages));
+$('#pAll').addEventListener('change',e=>{rowsP().forEach(p=>e.target.checked?sel.add(p.id):sel.delete(p.id));renderPages()});
+$('#pBody').addEventListener('click',e=>{const c=e.target.closest('[data-ck]');if(c){const id=+c.dataset.ck;c.checked?sel.add(id):sel.delete(id);$('#pBulk').hidden=!sel.size;$('#pBulkN').textContent=`Đã chọn ${sel.size} trang`;return}
+  const o=e.target.closest('[data-page]');if(o)openPage(+o.dataset.page)});
+$('#pRank').addEventListener('click',async()=>{const r=await api('api/smap/send-rank',{method:'POST',body:JSON.stringify({site_id:S.id,page_ids:[...sel]})});toast(`Đã thêm ${r.added} từ khóa vào Rank Tracker`);sel.clear();renderPages()});
+
+/* ================= Chi tiết trang ================= */
+function drawer(title,html){$('#dTitle').textContent=title;$('#dBody').innerHTML=html;$('#shade').hidden=false;$('#drawer').hidden=false;document.body.classList.add('lock');$('#dBody').scrollTop=0}
+function closeDrawer(){$('#shade').hidden=true;$('#drawer').hidden=true;document.body.classList.remove('lock')}
+$('#dClose').onclick=closeDrawer;$('#shade').onclick=closeDrawer;document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#drawer').hidden)closeDrawer()});
+function placeHtml(pl){return pl?`<div class="place">${pl.found===false?'<b>Chưa có câu phù hợp, thêm câu mới:</b> ':''}${pl.original?`<div><del>${esc(pl.original)}</del></div>`:''}<div><ins>${esc(pl.new_html)}</ins></div><div class="hint">Vị trí: ${esc(pl.where||'')}</div></div>`:''}
+async function openPage(id){const p=await api('api/smap/page/'+id);const g=p.gsc||{},cur=g.cur||{},prev=g.prev||{},ps=p.psi||{},ga=(p.ga||{}).cur||{};
+  const li=(arr,f)=>arr&&arr.length?`<ul style="margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px">${arr.map(f).join('')}</ul>`:'<span class="hint">—</span>';
+  drawer(p.title||short(p.url),`<div class="row"><a class="url" href="${esc(p.url)}" target="_blank" rel="noopener" style="max-width:none">${esc(p.url)}</a>${p.status!==200?`<span class="chip c-bad">HTTP ${p.status}</span>`:''}${p.noindex?'<span class="chip c-bad">noindex</span>':''}</div>
+    <section class="panel pad" style="display:flex;flex-direction:column;gap:10px"><h3 class="label">Từ khóa & vai trò ${p.kw_locked?'<span class="lock">● đã chốt</span>':'<span class="hint" style="text-transform:none;letter-spacing:0;font-weight:400">· AI gán, sửa để chốt</span>'}</h3>
+      <div class="grid"><div class="field"><label class="label" for="eKw">Từ khóa chính</label><input type="text" id="eKw" value="${esc(p.primary_kw||'')}"></div>
+        <div class="field"><label class="label" for="eSec">Từ phụ (cách nhau dấu phẩy)</label><input type="text" id="eSec" value="${esc((p.secondary||[]).join(', '))}"></div>
+        <div class="field"><label class="label" for="eRole">Vai trò</label><select id="eRole">${Object.entries(ROLE).map(([k,v])=>`<option value="${k}" ${p.role===k?'selected':''}>${v}</option>`).join('')}</select></div>
+        <div class="field"><label class="label" for="eCl">Nhóm chủ đề</label><input type="text" id="eCl" value="${esc(p.cluster||'')}"></div></div>
+      ${p.kw_note?`<div class="note">${esc(p.kw_note)}</div>`:''}
+      <div class="row" style="justify-content:space-between"><span class="hint">Câu hỏi AI trang nên trả lời: ${(p.geo||[]).map(esc).join(' · ')||'—'}</span><span class="row">${p.kw_locked?'<button class="btn sm" id="eUnlock">Để AI gán lại</button>':''}<button class="btn sm primary" id="eSave">Lưu & chốt</button></span></div></section>
+    <section><h3 class="label" style="margin-bottom:6px">Hiệu quả (Google 28 ngày)</h3><div class="metric">
+      <div><span class="hint">Click</span><b>${num(cur.clicks)}</b>${delta(cur.clicks,prev.clicks)}</div><div><span class="hint">Hiển thị</span><b>${num(cur.impr)}</b>${delta(cur.impr,prev.impr)}</div>
+      <div><span class="hint">Vị trí TB</span><b>${cur.pos?cur.pos.toFixed(1):'—'}</b>${delta(cur.pos,prev.pos,true)}</div><div><span class="hint">CTR</span><b>${cur.ctr!=null?(cur.ctr*100).toFixed(1)+'%':'—'}</b></div>
+      <div><span class="hint">Phiên GA4</span><b>${num(ga.sessions)}</b></div><div><span class="hint">Chuyển đổi</span><b>${num(ga.key_events)}</b></div></div>
+      ${(g.queries||[]).length?`<table class="minitab" style="margin-top:8px"><thead><tr><th>Từ khóa Google thật</th><th class="num">Hiển thị</th><th class="num">Click</th><th class="num">Vị trí</th></tr></thead><tbody>${g.queries.slice(0,10).map(q=>`<tr><td>${esc(q[0])}</td><td class="num">${num(q[1])}</td><td class="num">${num(q[2])}</td><td class="num">${q[3]}</td></tr>`).join('')}</tbody></table>`:''}
+      ${(p.ranks||[]).length?`<div class="hint" style="margin-top:6px">Thứ hạng (DataForSEO): ${p.ranks.map(r=>`${esc(r.keyword)} <b>top ${r.pos}</b>${r.volume?` (${num(r.volume)}/tháng)`:''}`).join(' · ')}</div>`:''}</section>
+    <section><h3 class="label">Việc cần làm</h3>${li(p.issues,i=>`<li><span class="chip ${i.sev>=3?'c-bad':i.sev===2?'c-warn':''}">${i.sev>=3?'Gấp':i.sev===2?'Nên làm':'Thêm'}</span> ${esc(i.text)}</li>`)}</section>
+    <section class="adv" id="advBox">${p.advice?advHtml(p.advice):`<div class="note" style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><span>AI tư vấn riêng trang này: title, meta, H1, nội dung cần thêm, đoạn trả lời cho AI, tăng chuyển đổi, tốc độ.</span><button class="btn primary sm" id="eAdv">Tư vấn trang (~${vnd(0.03*rate())})</button></div>`}</section>
+    <div class="two"><section><h3 class="label">SEO on-page ${sc(p.seo)}</h3>${li((p.seo_fails||[]).slice(0,8),f=>`<li><b>${esc(f.label)}</b><div class="hint">${esc(f.fix)}</div></li>`)}</section>
+      <section><h3 class="label">Cấu trúc GEO ${sc(p.geo_score)}</h3>${li(p.geo_fails,f=>`<li><b>${esc(f.label)}</b><div class="hint">${esc(f.fix)}</div></li>`)}</section></div>
+    <section><div class="row" style="justify-content:space-between"><h3 class="label">Tốc độ di động ${sc(ps.perf)}</h3><button class="btn sm" id="ePsi">Đo lại</button></div>
+      ${ps.at?`<div class="metric" style="margin-top:6px"><div><span class="hint">LCP (ảnh/chữ chính hiện)</span><b>${ps.lcp?(ps.lcp/1000).toFixed(1)+'s':'—'}</b></div><div><span class="hint">TBT (độ trễ thao tác)</span><b>${num(ps.tbt)} ms</b></div><div><span class="hint">CLS (xô lệch)</span><b>${ps.cls!=null?ps.cls.toFixed(2):'—'}</b></div><div><span class="hint">Dung lượng</span><b>${num(ps.weight_kb)} KB</b></div></div>
+        ${ps.field?`<div class="hint" style="margin-top:6px">Người dùng thật (Chrome, 28 ngày${ps.field.origin?', toàn website':''}): <b>${ps.field.category==='FAST'?'Nhanh':ps.field.category==='SLOW'?'Chậm':'Trung bình'}</b> · LCP ${ps.field.lcp?(ps.field.lcp/1000).toFixed(1)+'s':'—'} · INP ${ps.field.inp??'—'} ms · CLS ${ps.field.cls??'—'}</div>`:''}
+        ${li(ps.opps,o=>`<li>${esc(o.title)} <span class="hint">· tiết kiệm khoảng ${(o.ms/1000).toFixed(1)}s</span></li>`)}<div class="hint">Đo lúc ${fmt(ps.at)}</div>`:'<div class="hint">Chưa đo trang này.</div>'}</section>
+    <section><h3 class="label">Liên kết nội bộ: ${p.inlinks||0} trang trỏ tới · ${p.outlinks||0} link ra · độ sâu ${p.depth??'—'}</h3>
+      ${(p.sugg_to||[]).length?`<h3 style="margin:8px 0 4px">Nên thêm link TỚI trang này</h3>${p.sugg_to.map(s=>`<div class="note" style="margin-bottom:6px">Từ <a href="${esc(s.from_url)}" target="_blank" rel="noopener">${esc(short(s.from_url))}</a>, chữ neo <b>"${esc(s.anchor)}"</b> <span class="hint">· ${esc(s.reason)}</span> <button class="link" data-place="${s.id}">AI tìm vị trí</button>${placeHtml(s.place)}</div>`).join('')}`:''}
+      ${(p.sugg_from||[]).length?`<h3 style="margin:8px 0 4px">Nên thêm link TỪ trang này tới</h3>${p.sugg_from.map(s=>`<div class="note" style="margin-bottom:6px"><a href="${esc(s.to_url)}" target="_blank" rel="noopener">${esc(short(s.to_url))}</a>, chữ neo <b>"${esc(s.anchor)}"</b> <span class="hint">· ${esc(s.reason)}</span> <button class="link" data-place="${s.id}">AI tìm vị trí</button>${placeHtml(s.place)}</div>`).join('')}`:''}
+      <details style="margin-top:6px"><summary class="hint" style="cursor:pointer">Trang đang trỏ tới (${(p.links_in||[]).length}) và chữ neo</summary>${li(p.links_in,x=>`<li>${esc(short(x.url))} · <i>"${esc(x.anchor)}"</i></li>`)}</details></section>
+    ${(p.history||[]).length>1?`<section><h3 class="label">Lịch sử</h3><table class="minitab"><thead><tr><th>Lần phân tích</th><th class="num">Click</th><th class="num">Vị trí</th><th class="num">SEO</th><th class="num">GEO</th><th class="num">Tốc độ</th><th class="num">Link vào</th></tr></thead><tbody>${p.history.map(h=>`<tr><td>${fmt(h.at)}</td><td class="num">${num(h.clicks)}</td><td class="num">${h.pos?h.pos.toFixed(1):'—'}</td><td class="num">${h.seo??'—'}</td><td class="num">${h.geo??'—'}</td><td class="num">${h.perf??'—'}</td><td class="num">${h.inlinks??'—'}</td></tr>`).join('')}</tbody></table></section>`:''}
+    <div class="row"><a class="btn sm" href="geo.html?url=${encodeURIComponent(p.url)}&kw=${encodeURIComponent(p.primary_kw||'')}">Phân tích GEO</a><a class="btn sm" href="audit.html">Mở Audit On-page</a>${p.primary_kw?'<button class="btn sm" id="eRank">Theo dõi thứ hạng</button>':''}</div>`);
+  const b=x=>$(x);
+  b('#eSave').onclick=async()=>{await api('api/smap/page/'+id,{method:'POST',body:JSON.stringify({primary_kw:$('#eKw').value,secondary:$('#eSec').value.split(',').map(x=>x.trim()).filter(Boolean),role:$('#eRole').value,cluster:$('#eCl').value.trim()})});toast('Đã lưu và chốt từ khóa');if(view==='pg')loadPages();openPage(id)};
+  if(b('#eUnlock'))b('#eUnlock').onclick=async()=>{await api('api/smap/page/'+id,{method:'POST',body:JSON.stringify({locked:false})});toast('Lần phân tích tới AI sẽ gán lại');openPage(id)};
+  if(b('#eAdv'))b('#eAdv').onclick=async e=>{if(window.CostGuard){const gg=await CostGuard.check('smap_page',{});if(!gg.ok)return}e.target.disabled=true;e.target.textContent='AI đang tư vấn…';
+    try{await poll((await api('api/smap/page/'+id+'/advise',{method:'POST',body:'{}'})).job_id);window.CostGuard&&CostGuard.after();openPage(id)}catch(err){toast(err.message);e.target.disabled=false}};
+  if(b('#eReAdv'))b('#eReAdv').onclick=async e=>{e.target.disabled=true;e.target.textContent='AI đang tư vấn…';try{await poll((await api('api/smap/page/'+id+'/advise',{method:'POST',body:'{}'})).job_id);openPage(id)}catch(err){toast(err.message)}};
+  b('#ePsi').onclick=async e=>{e.target.disabled=true;e.target.textContent='Đang đo…';try{await poll((await api('api/smap/page/'+id+'/psi',{method:'POST',body:'{}'})).job_id);openPage(id)}catch(err){toast(err.message);e.target.disabled=false;e.target.textContent='Đo lại'}};
+  if(b('#eRank'))b('#eRank').onclick=async()=>{const r=await api('api/smap/send-rank',{method:'POST',body:JSON.stringify({site_id:S.id,page_ids:[id]})});toast(r.added?'Đã thêm vào Rank Tracker':'Từ khóa đã có trong Rank Tracker')};
+  $('#dBody').querySelectorAll('[data-place]').forEach(x=>x.onclick=()=>place(+x.dataset.place,x,()=>openPage(id)));
+  $('#dBody').querySelectorAll('[data-cp]').forEach(x=>x.onclick=()=>copy(x.dataset.cp,'Đã copy'))}
+function advHtml(a){const li=x=>x&&x.length?`<ul>${x.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`:'<span class="hint">—</span>';
+  return `<div class="row" style="justify-content:space-between"><h3>Tư vấn trang · ${fmt(a.at)}</h3><button class="btn sm" id="eReAdv">Tư vấn lại</button></div><div class="note"><b>${esc(a.verdict)}</b></div>
+    <div class="ablock"><div class="h">Title</div><div>${esc(a.title)} <button class="link" data-cp="${esc(a.title)}">Copy</button></div><div class="h" style="margin-top:6px">Meta description</div><div>${esc(a.meta_description)} <button class="link" data-cp="${esc(a.meta_description)}">Copy</button></div>
+      <div class="h" style="margin-top:6px">H1</div><div>${esc(a.h1)}</div><div class="h" style="margin-top:6px">Đoạn trả lời đặt ngay dưới H1</div><div>${esc(a.answer_paragraph)} <button class="link" data-cp="${esc(a.answer_paragraph)}">Copy</button></div></div>
+    <div class="two"><div><h3>Thêm mục nội dung</h3>${li(a.outline_add)}</div><div><h3>Tăng chuyển đổi</h3>${li(a.conversion)}</div></div>
+    <div class="two"><div><h3>Kỹ thuật, tốc độ</h3>${li(a.tech)}</div><div><h3>Thứ tự làm</h3>${li(a.priority_actions)}</div></div>`}
+async function place(lid,btn,after){if(window.CostGuard){const g=await CostGuard.check('smap_place',{});if(!g.ok)return}btn.disabled=true;btn.textContent='AI đang đọc trang…';
+  try{await poll((await api('api/smap/links/'+lid+'/place',{method:'POST',body:'{}'})).job_id);window.CostGuard&&CostGuard.after();after()}catch(e){toast(e.message);btn.disabled=false;btn.textContent='AI tìm vị trí'}}
+
+/* ================= Từ khóa ================= */
+async function renderKw(){const box=$('#v-kw');box.innerHTML=spinner('Đang tải…');const k=await api('api/smap/keywords?site_id='+S.id);if(!pages.length)pages=(await api('api/smap/pages?site_id='+S.id)).items;
+  const byCl={};k.map.forEach(x=>(byCl[x.cluster||'Chưa phân nhóm']=byCl[x.cluster||'Chưa phân nhóm']||[]).push(x));
+  box.innerHTML=`<div class="panel"><div class="phead"><div><h2>Trùng từ khóa (tự cạnh tranh)</h2><span class="hint">Nhiều trang cùng nhận hiển thị cho một từ khóa, hoặc được gán cùng từ khóa chính. Google không biết chọn trang nào nên cả hai đều khó lên top.</span></div></div>
+    ${k.cannibal.length?`<div class="tablebox"><table style="min-width:700px"><thead><tr><th>Từ khóa</th><th>Các trang đang tranh nhau</th><th>Nên làm</th></tr></thead><tbody>${k.cannibal.map(g=>`<tr><td><b>${esc(g.keyword)}</b><div class="k-sub">${g.source==='gsc'?num(g.impr)+' hiển thị (Search Console)':'Gán trùng từ khóa chính'}</div></td>
+      <td>${g.pages.map(x=>`<div><button class="link" data-page="${x.id}">${esc(short(x.url))}</button> <span class="k-sub">${x.role?ROLE[x.role]+' · ':''}${x.impr!=null?num(x.impr)+' hiển thị, vị trí '+x.pos:''}</span></div>`).join('')}</td>
+      <td class="hint" style="max-width:340px">Chọn 1 trang chính cho "${esc(g.keyword)}" (thường là danh mục hoặc trụ cột). Trang còn lại: đổi sang từ khóa/ý định khác, hoặc gộp nội dung và chuyển hướng 301; thêm link từ trang phụ về trang chính với chữ neo "${esc(g.keyword)}".</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Không phát hiện trùng từ khóa.</div>'}</div>
+  <div class="panel"><div class="phead"><div><h2>Câu hỏi AI chưa có trang trả lời</h2><span class="hint">Từ tab Câu hỏi AI (đang theo dõi). Nên viết bài mới hoặc giao cho một trang có sẵn.</span></div>${k.gaps.length?'<button class="btn sm primary" id="gapAuto">Gửi tất cả sang Autopost</button>':''}</div>
+    ${k.aiq_id?(k.gaps.length?`<div class="list">${k.gaps.map(q=>`<div class="li" style="grid-template-columns:minmax(0,1fr) auto"><span>${esc(q.question)} <span class="hint">· ${esc(q.cluster||'')}</span></span><span class="chip ${q.priority===3?'c-bad':'c-warn'}">${q.priority===3?'Cao':'Vừa'}</span></div>`).join('')}</div>`:'<div class="empty">Mọi câu hỏi đang theo dõi đều đã có trang trả lời.</div>'):'<div class="empty">Chưa có dự án Câu hỏi AI cho website này. <a href="aiq.html">Tạo ở tab Câu hỏi AI</a>.</div>'}</div>
+  <div class="panel"><div class="phead"><div><h2>Bản đồ từ khóa theo nhóm</h2><span class="hint">Mỗi trang một từ khóa chính. Trang trụ cột/danh mục đứng đầu nhóm.</span></div></div>
+    <div class="tablebox"><table style="min-width:760px"><thead><tr><th>Nhóm / từ khóa chính</th><th>Trang</th><th>Ý định</th><th>Vị trí Google</th><th>Top (DataForSEO)</th></tr></thead><tbody>
+    ${Object.entries(byCl).map(([c,xs])=>`<tr><td colspan="5" style="background:var(--sunk);font-weight:700">${esc(c)} <span class="hint">· ${xs.length} trang</span></td></tr>`+xs.map(x=>`<tr><td><b>${esc(x.kw)}</b>${x.secondary.length?`<div class="k-sub">${x.secondary.slice(0,4).map(esc).join(', ')}</div>`:''}</td>
+      <td><button class="link" data-page="${x.id}">${esc(short(x.url))}</button><div class="k-sub">${ROLE[x.role]||''}</div></td><td>${INTENT[x.intent]||''}</td><td class="num">${x.pos?x.pos.toFixed(1):'—'}</td><td class="num">${x.rank?'top '+x.rank:'—'}</td></tr>`).join('')).join('')}</tbody></table></div></div>`;
+  box.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>openPage(+b.dataset.page));
+  const ga=$('#gapAuto');if(ga)ga.onclick=async()=>{const sid=S.site_id||(apSites[0]&&apSites[0].id);if(!sid){toast('Chọn Website Autopost ở Cài đặt');return}
+    const r=await api('api/smap/send-autopost',{method:'POST',body:JSON.stringify({ap_site_id:sid,keywords:k.gaps.map(q=>q.question)})});toast(`Đã gửi ${r.added} câu sang hàng chờ Autopost`)}}
+
+/* ================= Liên kết ================= */
+async function renderLn(){const box=$('#v-ln');box.innerHTML=spinner('Đang tải…');lnData=await api('api/smap/links?site_id='+S.id);drawLn()}
+function drawLn(){const box=$('#v-ln'),d=lnData,sg=d.suggestions,cnt=st=>sg.filter(s=>s.status===st).length,rows=sg.filter(s=>!lnFilter||s.status===lnFilter);
+  box.innerHTML=`<div class="panel"><div class="phead"><div><h2>Gợi ý đặt liên kết nội bộ</h2><span class="hint">Theo cấu trúc: bài con ↔ trang trụ cột/danh mục của nhóm, bài → sản phẩm, cứu trang mồ côi. Chữ neo là từ khóa chính của trang đích. Lần phân tích sau tự đánh dấu "Đã làm" nếu thấy link.</span></div>
+      <div class="row"><button class="btn sm" id="lnCsv">Tải danh sách (CSV)</button></div></div>
+    <div class="toolbar"><div class="tp-filter seg" role="group">${[['todo','Cần làm'],['done','Đã làm'],['skip','Bỏ qua'],['','Tất cả']].map(([k,l])=>`<button type="button" data-lf="${k}" class="${lnFilter===k?'on':''}">${l} (${k?cnt(k):sg.length})</button>`).join('')}</div></div>
+    <div class="tablebox"><table style="min-width:900px"><thead><tr><th>Từ trang</th><th>Thêm link tới</th><th>Chữ neo</th><th>Lý do</th><th>Thao tác</th></tr></thead><tbody>
+    ${rows.length?rows.slice(0,300).map(s=>`<tr><td style="max-width:260px"><button class="link" data-page="${s.from_id}">${esc(short(s.from_url))}</button><div class="k-sub">${esc(s.from_kw||'')}</div></td>
+      <td style="max-width:260px"><button class="link" data-page="${s.to_id}">${esc(short(s.to_url))}</button></td><td><b>${esc(s.anchor)}</b></td>
+      <td style="max-width:300px"><span class="chip">${KIND[s.kind]||esc(s.kind)}</span><div class="k-sub">${esc(s.reason)}</div>${placeHtml(s.place)}</td>
+      <td><div class="acts">${s.status==='todo'?`<button class="btn sm" data-place="${s.id}">AI tìm vị trí</button><button class="btn sm primary" data-st="done" data-id="${s.id}">Đã làm</button><button class="link danger" data-st="skip" data-id="${s.id}">Bỏ qua</button>`:`<span class="chip ${s.status==='done'?'c-ok':''}">${s.status==='done'?'Đã làm':'Bỏ qua'}</span><button class="link" data-st="todo" data-id="${s.id}">Hoàn tác</button>`}</div></td></tr>`).join('')
+      :'<tr><td colspan="5" class="empty">Không có gợi ý.</td></tr>'}</tbody></table></div></div>
+  <div class="two"><div class="panel"><div class="phead"><h2>Trang mồ côi (${d.orphans.length})</h2></div><div class="list">${d.orphans.map(o=>`<div class="li" style="grid-template-columns:minmax(0,1fr) auto"><button class="link t" data-page="${o.id}">${esc(short(o.url))}</button><span class="hint">${esc(o.kw||'')}</span></div>`).join('')||'<div class="empty">Không có</div>'}</div></div>
+    <div class="panel"><div class="phead"><h2>Liên kết nội bộ hỏng (${d.broken.length})</h2></div><div class="list">${d.broken.slice(0,50).map(b=>`<div class="li" style="grid-template-columns:minmax(0,1fr) auto"><span class="t">${esc(short(b.from))} → <b>${esc(short(b.to))}</b></span><span class="chip c-bad">${b.status}</span></div>`).join('')||'<div class="empty">Không có</div>'}</div></div></div>
+  <div class="panel"><div class="phead"><div><h2>Cấu trúc theo nhóm chủ đề</h2><span class="hint">Trang trung tâm của mỗi nhóm và các trang thành viên: đã trỏ về trang trung tâm chưa, nhận bao nhiêu link.</span></div></div><div class="tree">
+    ${d.tree.map(t=>`<div class="cl"><div class="h"><span><b>${esc(t.cluster)}</b> <span class="hint">· trung tâm: ${t.hub?`<button class="link" data-page="${t.hub.id}">${esc(short(t.hub.url))}</button>`:'chưa có'}</span></span><span class="hint">${t.missing} gợi ý link</span></div>
+      <div class="m hint" style="font-weight:600"><span>Trang</span><span>Vai trò</span><span>Về trung tâm</span><span>Link vào</span></div>
+      ${t.pages.slice(0,25).map(m=>`<div class="m"><button class="link u" data-page="${m.id}" style="text-align:left">${esc(m.kw||short(m.url))}</button><span class="hint">${ROLE[m.role]||''}</span><span>${m.to_hub===null?'<span class="hint">trung tâm</span>':m.to_hub?'<span class="chip c-ok">Có</span>':'<span class="chip c-bad">Chưa</span>'}</span><span class="num">${m.inlinks||0}</span></div>`).join('')}</div>`).join('')||'<div class="empty">Chưa có dữ liệu</div>'}</div></div>`;
+  box.querySelectorAll('[data-lf]').forEach(b=>b.onclick=()=>{lnFilter=b.dataset.lf;drawLn()});
+  box.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>openPage(+b.dataset.page));
+  box.querySelectorAll('[data-st]').forEach(b=>b.onclick=async()=>{await api('api/smap/links/'+b.dataset.id,{method:'POST',body:JSON.stringify({status:b.dataset.st})});const s=lnData.suggestions.find(x=>x.id==b.dataset.id);s.status=b.dataset.st;drawLn()});
+  box.querySelectorAll('[data-place]').forEach(b=>b.onclick=()=>place(+b.dataset.place,b,renderLn));
+  $('#lnCsv').onclick=()=>{const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const csv='﻿'+['Từ trang,Thêm link tới,Chữ neo,Lý do,Câu gợi ý,Trạng thái'].concat(rows.map(s=>[s.from_url,s.to_url,s.anchor,s.reason,s.place?s.place.new_html:'',s.status].map(q).join(','))).join('\n');
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='lien-ket-noi-bo-'+S.domain+'.csv';a.click()}}
+
+/* ================= Cài đặt ================= */
+async function renderSet(){try{apSites=(await api('api/ap/sites')).items}catch(e){apSites=[]}
+  const s=S||{domain:'',max_pages:800,psi_mode:'smart',use_labs:1,inspect:1,auto:0,auto_days:30,site_id:null};
+  $('#setTitle').textContent=S?'Website: '+S.domain:'Thêm website';$('#sDel').hidden=!S;$('#sErr').hidden=true;
+  $('#sDomain').value=s.domain;$('#sMax').value=s.max_pages;$('#sPsi').value=s.psi_mode;$('#sLabs').checked=!!s.use_labs;$('#sInspect').checked=!!s.inspect;$('#sAuto').checked=!!s.auto;$('#sDays').value=s.auto_days;
+  $('#sKey').value='';$('#sKey').placeholder=sites.psiKey?'Đã lưu: '+sites.psiKey+' (để trống nếu không đổi)':'AIza…';
+  $('#sAp').innerHTML='<option value="">— Chưa chọn —</option>'+apSites.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');$('#sAp').value=s.site_id||''}
+$('#setForm').addEventListener('submit',async e=>{e.preventDefault();
+  const body={id:S&&S.id,domain:$('#sDomain').value,max_pages:+$('#sMax').value,psi_mode:$('#sPsi').value,psi_api_key:$('#sKey').value.trim(),use_labs:$('#sLabs').checked,inspect:$('#sInspect').checked,auto:$('#sAuto').checked,auto_days:+$('#sDays').value,site_id:$('#sAp').value||null};
+  try{const r=await api('api/smap/sites',{method:'POST',body:JSON.stringify(body)});await loadSites();S=sites.find(x=>x.id===r.id);$('#site').value=S.id;toast('Đã lưu');show('ov')}catch(err){$('#sErr').textContent=err.message;$('#sErr').hidden=false}});
+$('#sDel').addEventListener('click',async e=>{const b=e.target;if(!b.classList.contains('armed')){b.classList.add('armed');b.textContent='Bấm lần nữa để xóa toàn bộ dữ liệu phân tích';setTimeout(()=>{b.classList.remove('armed');b.textContent='Xóa website khỏi Bản đồ'},3500);return}
+  await api('api/smap/sites/'+S.id,{method:'DELETE'});S=null;await loadSites();toast('Đã xóa');show(S?'ov':'set')});
+
+/* ================= Dữ liệu mẫu ================= */
+function H(s){let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))|0;return Math.abs(h)}
+function demoState(){const t=Date.now(),iso=d=>new Date(t-d*864e5).toISOString();
+  const P=[['/','Mr.Vũ - Quạt trần, quạt công nghiệp chính hãng','home','Trang chủ','mr vũ quạt trần','nav'],
+    ['/danh-muc/quat-tran.html','Quạt trần đẹp, chính hãng, giá tốt','category','Quạt trần gia đình','quạt trần','buy'],
+    ['/danh-muc/quat-tran-dc.html','Quạt trần DC tiết kiệm điện','category','Quạt trần gia đình','quạt trần dc','buy'],
+    ['/danh-muc/quat-tran-den.html','Quạt trần đèn LED trang trí','category','Quạt trần gia đình','quạt trần đèn','buy'],
+    ['/danh-muc/quat-tran-cong-nghiep.html','Quạt trần công nghiệp HVLS','category','Quạt công nghiệp & nhà xưởng','quạt trần công nghiệp','buy'],
+    ['/danh-muc/quat-cong-nghiep.html','Quạt công nghiệp treo tường, đứng','category','Quạt công nghiệp & nhà xưởng','quạt công nghiệp','buy'],
+    ['/cam-nang-chon-quat-tran.html','Cẩm nang chọn quạt trần A-Z','pillar','Quạt trần gia đình','cách chọn quạt trần','howto'],
+    ...['quat-tran-dc-5-canh-go-oc-cho','quat-tran-den-led-pha-le','quat-tran-canh-go-tan-co-dien','quat-tran-mini-phong-ngu','quat-tran-dieu-khien-tu-xa','quat-tran-6-canh-am-tran']
+      .map((s,i)=>['/san-pham/'+s+'.html','Quạt trần '+['DC 5 cánh gỗ óc chó','đèn LED pha lê','cánh gỗ tân cổ điển','mini phòng ngủ','điều khiển từ xa','6 cánh âm trần'][i],'product','Quạt trần gia đình','quạt trần '+['dc 5 cánh gỗ','đèn led pha lê','cánh gỗ tân cổ điển','mini phòng ngủ','điều khiển từ xa','6 cánh âm trần'][i],'buy']),
+    ...['quat-hvls-7m3','quat-hvls-5m5','quat-cong-nghiep-treo-tuong-750'].map((s,i)=>['/san-pham/'+s+'.html',['Quạt HVLS 7m3','Quạt HVLS 5m5','Quạt công nghiệp treo tường 750'][i],'product','Quạt công nghiệp & nhà xưởng',['quạt hvls 7m3','quạt hvls 5m5','quạt treo tường công nghiệp 750'][i],'buy']),
+    ['/tin-tuc/quat-tran-co-ton-dien-khong.html','Quạt trần có tốn điện không? Cách tính tiền điện','post','Tiết kiệm điện','quạt trần có tốn điện không','info'],
+    ['/tin-tuc/quat-tran-dc-va-ac.html','Quạt trần DC và AC: nên chọn loại nào?','post','Quạt trần gia đình','quạt trần dc và ac','compare'],
+    ['/tin-tuc/cach-chon-quat-tran-phong-khach.html','Kinh nghiệm chọn quạt','post','Quạt trần gia đình','quạt trần phòng khách','howto'],
+    ['/tin-tuc/lap-quat-tran-tran-thach-cao.html','Lắp quạt trần trần thạch cao an toàn','post','Lắp đặt & sửa chữa','lắp quạt trần trần thạch cao','howto'],
+    ['/tin-tuc/quat-tran-bi-keu.html','Quạt trần bị kêu: nguyên nhân và cách sửa','post','Lắp đặt & sửa chữa','quạt trần bị kêu','problem'],
+    ['/tin-tuc/lam-mat-nha-xuong.html','Giải pháp làm mát nhà xưởng hiệu quả','post','Quạt công nghiệp & nhà xưởng','làm mát nhà xưởng','howto'],
+    ['/tin-tuc/nha-xuong-1000m2-can-may-quat.html','Nhà xưởng 1000m2 cần mấy quạt HVLS?','post','Quạt công nghiệp & nhà xưởng','tính số quạt hvls cho nhà xưởng','buy'],
+    ['/tin-tuc/gia-quat-tran-cong-nghiep.html','Giá quạt trần công nghiệp mới nhất','post','Quạt công nghiệp & nhà xưởng','giá quạt trần công nghiệp','price'],
+    ['/tin-tuc/','Tin tức','support','Trang chủ','tin tức quạt','nav'],['/gioi-thieu.html','Giới thiệu Mr.Vũ','support','Trang chủ','mr vũ','nav'],['/lien-he.html','Liên hệ','support','Trang chủ','liên hệ mr vũ','local']];
+  const pages=P.map(([path,title,role,cl,kw,intent],i)=>{const h=H(path),hi=['category','pillar'].includes(role)||i===0,clicks=role==='support'?h%15:hi?120+h%600:role==='post'?20+h%260:5+h%60,impr=clicks*(12+h%25);
+    const pos=role==='home'?1.2:hi?4+h%9:6+h%18;const perf=role==='product'?35+h%40:role==='category'?45+h%40:70+h%28;
+    return {id:i+1,url:'https://mrvu.vn'+path,title,type:role,role,cluster:cl,intent,status:i===26?404:200,noindex:path==='/lien-he.html',primary_kw:kw,secondary:[kw+' giá',kw+' loại nào tốt'].slice(0,role==='support'?0:2),
+      geo:role==='post'||role==='pillar'?[kw.charAt(0).toUpperCase()+kw.slice(1)+' như thế nào?']:[],locked:i===1?1:0,clicks,clicks_prev:Math.round(clicks*(0.75+(h%60)/100)),impr,pos,pos_prev:pos+((h%7)-3)*0.6,
+      seo:55+h%42,geo_score:role==='post'||role==='pillar'?40+h%55:30+h%40,perf,lcp:(1.6+(100-perf)/18)*1000,inlinks:path==='/tin-tuc/lam-mat-nha-xuong.html'?0:role==='product'?1+h%3:role==='post'?1+h%5:5+h%30,depth:role==='product'?3+(h%2):role==='post'?2:1,
+      index:h%11===0?'NEUTRAL':'PASS',key_events:hi?h%14:h%3,value:+(Math.log10(1+impr)*({buy:1.6,price:1.5,compare:1.4}[intent]||1)*(role==='category'?1.35:1)).toFixed(2),advised:i===1}});
+  pages.forEach(p=>{p.issues=demoIssues(p)});
+  return {pages,links:demoLinks(pages),cycles:[{at:iso(32),clicks:3480,impr:61000,avg_seo:66,avg_geo:52,avg_perf:58,orphans:4,issues:96,key_events:61},{at:iso(2),clicks:pages.reduce((a,p)=>a+p.clicks,0),impr:pages.reduce((a,p)=>a+p.impr,0),avg_seo:71,avg_geo:57,avg_perf:63,orphans:1,issues:78,key_events:74}],at:iso(2),psiKey:'AIza…k9Q2'}}
+function demoIssues(p){const I=[];if(p.status>=400)I.push({kind:'tech',sev:3,text:'Trang lỗi HTTP '+p.status});if(p.noindex)I.push({kind:'tech',sev:3,text:'Trang đang chặn index (noindex)'});
+  if(p.index!=='PASS'&&!p.noindex)I.push({kind:'index',sev:3,text:'Google chưa index: Đã thu thập dữ liệu, hiện chưa được lập chỉ mục'});
+  if(p.perf<50)I.push({kind:'speed',sev:2,text:`Tốc độ di động kém (${p.perf}/100, LCP ${(p.lcp/1000).toFixed(1)}s)`});else if(p.perf<80)I.push({kind:'speed',sev:1,text:`Tốc độ di động trung bình (${p.perf}/100)`});
+  if(p.impr>=100&&p.pos>=4&&p.pos<=20)I.push({kind:'opp',sev:2,text:`Cơ hội lên top: vị trí ${p.pos.toFixed(1)}, ${p.impr.toLocaleString('vi-VN')} hiển thị/28 ngày`});
+  if(p.seo<70)I.push({kind:'seo',sev:2,text:`Điểm SEO on-page ${p.seo}/100: Meta description; Ảnh thiếu alt`});if(p.title==='Kinh nghiệm chọn quạt')I.push({kind:'seo',sev:2,text:'Title chưa chứa từ khóa chính "quạt trần phòng khách"'});
+  if(p.geo.length&&p.geo_score<60)I.push({kind:'geo',sev:2,text:`Cấu trúc GEO ${p.geo_score}/100: Trả lời ngay đầu bài; Heading dạng câu hỏi`});
+  if(p.inlinks===0&&p.role!=='home')I.push({kind:'link',sev:3,text:'Trang mồ côi: không có liên kết nội bộ trỏ tới'});else if(p.inlinks<3&&['category','product'].includes(p.role))I.push({kind:'link',sev:1,text:`Ít liên kết nội bộ trỏ tới (${p.inlinks})`});
+  if(p.depth>3)I.push({kind:'link',sev:1,text:`Nằm sâu ${p.depth} lần bấm từ trang chủ`});if(['quạt trần','quạt trần phòng khách'].includes(p.primary_kw))I.push({kind:'kw',sev:2,text:'Trùng từ khóa với trang khác (tự cạnh tranh trên Google)'});
+  return I.sort((a,b)=>b.sev-a.sev)}
+function demoLinks(pages){const L=[];let id=1;const by=c=>pages.filter(p=>p.cluster===c&&p.status===200&&!p.noindex);
+  [['Quạt trần gia đình',2,7],['Quạt công nghiệp & nhà xưởng',5,5]].forEach(([c,hub,pil])=>{const hubP=pages[hub-1];by(c).filter(p=>p.id!==hub).forEach(p=>{if(H(p.url+'h')%3)L.push({id:id++,from_id:p.id,to_id:hub,anchor:hubP.primary_kw,kind:'lên trụ cột',reason:`Trang thuộc nhóm "${c}" nên trỏ về trang trung tâm của nhóm`,priority:20+H(p.url)%30,status:H(p.url)%5===0?'done':'todo'})});
+    by(c).filter(p=>p.role==='post').forEach(p=>{L.push({id:id++,from_id:hub,to_id:p.id,anchor:p.primary_kw,kind:'xuống bài con',reason:`Trang trung tâm nhóm "${c}" nên liên kết tới các bài con quan trọng`,priority:10+H(p.url)%20,status:'todo'});
+      const pr=by(c).filter(x=>x.role==='product')[H(p.url)%3];if(pr)L.push({id:id++,from_id:p.id,to_id:pr.id,anchor:pr.primary_kw,kind:'bài → sản phẩm',reason:'Bài hướng dẫn dẫn khách sang sản phẩm phù hợp (tăng chuyển đổi)',priority:15+H(pr.url)%20,status:'todo'})})});
+  const orph=pages.find(p=>p.url.endsWith('lam-mat-nha-xuong.html'));L.push({id:id++,from_id:5,to_id:orph.id,anchor:orph.primary_kw,kind:'cứu trang mồ côi',reason:'Trang chưa có liên kết nội bộ nào trỏ tới (Google và AI khó tìm thấy)',priority:60,status:'todo',
+    place:{found:true,original:'Quạt trần công nghiệp HVLS phù hợp nhà xưởng, kho hàng diện tích lớn.',new_html:'Quạt trần công nghiệp HVLS phù hợp nhà xưởng, kho hàng diện tích lớn. Xem thêm <a href="https://mrvu.vn/tin-tuc/lam-mat-nha-xuong.html">giải pháp làm mát nhà xưởng</a>.',where:'Sau đoạn mở đầu, trước bảng sản phẩm',anchor:'giải pháp làm mát nhà xưởng'}});
+  return L.sort((a,b)=>b.priority-a.priority)}
+function dl(){try{const v=JSON.parse(localStorage.getItem('mvs-smap-demo-v1'));if(v&&v.pages)return v}catch(e){}return demoState()}
+function ds(v){try{localStorage.setItem('mvs-smap-demo-v1',JSON.stringify(v))}catch(e){}}
+function demoSummary(D){const ok=D.pages.filter(p=>p.status===200&&!p.noindex),avg=k=>Math.round(ok.reduce((a,p)=>a+(p[k]||0),0)/ok.length);const cl={};ok.forEach(p=>{const e=cl[p.cluster]=cl[p.cluster]||{cluster:p.cluster,pages:0,clicks:0,impr:0};e.pages++;e.clicks+=p.clicks;e.impr+=p.impr});
+  return {pages:D.pages.length,ok:ok.length,errors:D.pages.filter(p=>p.status>=400).length,noindex:D.pages.filter(p=>p.noindex).length,with_kw:ok.length,avg_seo:avg('seo'),avg_geo:avg('geo_score'),avg_perf:avg('perf'),perf_measured:ok.length,slow:ok.filter(p=>p.perf<50).length,
+    orphans:ok.filter(p=>p.inlinks===0&&p.role!=='home').length,deep:ok.filter(p=>p.depth>3).length,not_indexed:ok.filter(p=>p.index!=='PASS').length,cannibal:1,clicks:ok.reduce((a,p)=>a+p.clicks,0),clicks_prev:ok.reduce((a,p)=>a+p.clicks_prev,0),impr:ok.reduce((a,p)=>a+p.impr,0),
+    key_events:ok.reduce((a,p)=>a+p.key_events,0),links_todo:D.links.filter(l=>l.status==='todo').length,links_done:D.links.filter(l=>l.status==='done').length,issues:ok.reduce((a,p)=>a+p.issues.length,0),clusters:Object.values(cl).sort((a,b)=>b.impr-a.impr)}}
+function demoPage(D,p){const h=H(p.url),cur={clicks:p.clicks,impr:p.impr,ctr:p.impr?p.clicks/p.impr:0,pos:p.pos},prev={clicks:p.clicks_prev,impr:Math.round(p.impr*0.9),ctr:0,pos:p.pos_prev};
+  const name=id=>(D.pages.find(x=>x.id===id)||{}).url;
+  return Object.assign({},p,{kw_locked:p.locked,kw_note:p.title==='Kinh nghiệm chọn quạt'?'Title "Kinh nghiệm chọn quạt" không chứa từ khóa; nên đổi thành "Cách chọn quạt trần phòng khách đẹp, mát, tiết kiệm điện".':'',outlinks:8+h%20,
+    gsc:{cur,prev,queries:[[p.primary_kw,Math.round(p.impr*.45),Math.round(p.clicks*.5),+p.pos.toFixed(1)],[p.primary_kw+' giá',Math.round(p.impr*.2),Math.round(p.clicks*.2),+(p.pos+2.3).toFixed(1)],[p.primary_kw+' loại nào tốt',Math.round(p.impr*.12),Math.round(p.clicks*.1),+(p.pos+4.1).toFixed(1)]]},
+    ga:{cur:{sessions:p.clicks*1.4|0,key_events:p.key_events}},ranks:p.role==='support'?[]:[{keyword:p.primary_kw,volume:300+h%5000,pos:Math.max(1,Math.round(p.pos))}],
+    seo_fails:p.seo<85?[{label:'Meta description',fix:'Viết meta 120–160 ký tự có từ khóa và lời kêu gọi.'},{label:'Ảnh thiếu alt',fix:'Thêm alt mô tả ảnh, có từ khóa khi tự nhiên.'},{label:'Thẻ H2',fix:'Chia nội dung bằng H2 theo các ý chính.'}]:[],
+    geo_fails:p.geo_score<80?[{label:'Trả lời ngay đầu bài',fix:'Ngay dưới H1, viết 1 đoạn 40–60 chữ trả lời thẳng câu hỏi chính.'},{label:'Heading dạng câu hỏi',fix:'Đặt H2/H3 theo đúng câu người dùng hỏi.'}]:[],
+    psi:{at:D.at,perf:p.perf,lcp:p.lcp,tbt:200+h%900,cls:(h%20)/100,weight_kb:900+h%3000,field:p.clicks>100?{category:p.perf<50?'SLOW':'AVERAGE',lcp:p.lcp*0.9|0,inp:180+h%200,cls:(h%15)/100,origin:false}:null,
+      opps:[{title:'Dùng ảnh WebP/AVIF',ms:600+h%1500},{title:'Loại bỏ CSS/JS chặn hiển thị',ms:400+h%900},{title:'Giảm JavaScript không dùng',ms:300+h%600}]},
+    links_in:Array.from({length:Math.min(p.inlinks,6)},(_,i)=>({id:(i%20)+1,url:name((i%20)+1),anchor:i%2?p.primary_kw:'Xem thêm'})),
+    sugg_to:D.links.filter(l=>l.to_id===p.id&&l.status==='todo').map(l=>Object.assign({},l,{from_url:name(l.from_id)})),sugg_from:D.links.filter(l=>l.from_id===p.id&&l.status==='todo').map(l=>Object.assign({},l,{to_url:name(l.to_id)})),
+    history:D.cycles.map((c,i)=>({at:c.at,clicks:i?p.clicks:p.clicks_prev,pos:i?p.pos:p.pos_prev,seo:i?p.seo:p.seo-6,geo:i?p.geo_score:p.geo_score-8,perf:i?p.perf:p.perf-5,inlinks:i?p.inlinks:Math.max(0,p.inlinks-1)})),
+    advice:p.advised?{at:D.at,verdict:'Danh mục có nhiều hiển thị nhưng đứng vị trí 5–12; title chưa có lợi ích và thiếu đoạn giới thiệu trả lời câu hỏi chọn mua.',title:'Quạt trần chính hãng, giá tốt, bảo hành 5 năm | Mr.Vũ',
+      meta_description:'Hơn 200 mẫu quạt trần DC, quạt trần đèn chính hãng. Tư vấn chọn theo diện tích, lắp đặt tận nơi TP.HCM, bảo hành động cơ 5 năm. Gọi ngay!',h1:'Quạt trần chính hãng',
+      outline_add:['H2: Cách chọn quạt trần theo diện tích phòng','H2: Quạt trần DC hay AC tiết kiệm hơn?','H2: Bảng giá quạt trần theo phân khúc','H2: Câu hỏi thường gặp'],answer_paragraph:'Quạt trần phù hợp nhất là loại có sải cánh hợp diện tích (120–132 cm cho phòng 15–25 m²), động cơ DC êm và tiết kiệm điện, bảo hành động cơ từ 5 năm. Mr.Vũ có hơn 200 mẫu chính hãng, tư vấn và lắp đặt tận nơi.',
+      conversion:['Nút gọi/Zalo cố định trên di động','Bộ lọc theo diện tích phòng và giá','Hiện đánh giá khách hàng, ảnh lắp đặt thật'],tech:['Nén ảnh sản phẩm sang WebP','Lazy-load ảnh dưới màn hình đầu','Hoãn tải script chat'],priority_actions:['Sửa title, meta','Thêm đoạn giới thiệu + mục chọn theo diện tích','Nén ảnh, sửa LCP','Thêm 5 link từ bài viết về danh mục']}:null})}
+async function mock(path,opts){const m=(opts&&opts.method)||'GET',b=opts&&opts.body?JSON.parse(opts.body):{};await new Promise(r=>setTimeout(r,90));
+  if(path.startsWith('api/ap/sites'))return {items:[{id:1,name:'Blog MrVu'},{id:2,name:'mrvu.vn'}]};
+  const D=dl(),seg=path.split('?')[0].split('/').slice(2);let out;
+  if(seg[0]==='sites'&&m==='GET')out={items:[{id:1,domain:'mrvu.vn',max_pages:800,psi_mode:'smart',use_labs:1,inspect:1,auto:1,auto_days:30,site_id:2,pages:D.pages.length}],psi_key:D.psiKey};
+  else if(seg[0]==='sites'&&m==='POST')out={id:1,domain:'mrvu.vn',max_pages:b.max_pages,psi_mode:b.psi_mode,use_labs:b.use_labs?1:0,inspect:b.inspect?1:0,auto:b.auto?1:0,auto_days:b.auto_days,site_id:b.site_id};
+  else if(seg[0]==='overview'){const sm=demoSummary(D);D.cycles[D.cycles.length-1]=Object.assign(D.cycles[D.cycles.length-1],{clicks:sm.clicks,impr:sm.impr});
+    out={site:{id:1,domain:'mrvu.vn',psi_mode:'smart',auto:1,auto_days:30},running:false,aiq:{visibility:34,at:D.at},aiq_id:1,cycles:D.cycles.map((c,i)=>({id:i+1,at:c.at})),trend:D.cycles,
+      last:{id:D.cycles.length,at:D.at,cost_usd:0.94,notes:['AI đã gán từ khóa cho 3/31 trang mới.','2 trang có liên kết nội bộ nhưng không có trong sitemap (nên bổ sung vào sitemap), ví dụ: https://mrvu.vn/khuyen-mai.html'],summary:sm,
+        diff:{first:false,alerts:[{page_id:2,sev:3,text:'Click giảm 412 → 268 (quạt trần)'},{page_id:27,sev:3,text:'Trang bị lỗi HTTP 404 (trước đây bình thường)'},{page_id:9,sev:2,text:'Tốc độ di động giảm 71 → 44 (https://mrvu.vn/san-pham/quat-tran-den-led-pha-le.html)'},{page_id:18,sev:2,text:'"quạt trần dc và ac" tụt top 6 → 11'},{page_id:17,sev:0,text:'Click tăng 180 → 265 (quạt trần có tốn điện không)'},{page_id:23,sev:0,text:'"tính số quạt hvls cho nhà xưởng" lên top 14 → 7'},{page_id:22,sev:1,text:'Trang mới: https://mrvu.vn/tin-tuc/lam-mat-nha-xuong.html'}]},
+        report:{at:D.at,headline:'Click từ Google tăng nhờ nhóm bài tiết kiệm điện, nhưng danh mục Quạt trần (trang mang khách mua nhiều nhất) đang tụt và bị bài viết tranh từ khóa.',health:'trung bình',
+          wins:['Nhóm Tiết kiệm điện tăng click, AI Overview đã trích bài "Quạt trần có tốn điện không"','Bài nhà xưởng 1000m² lên top 7'],problems:['Danh mục Quạt trần giảm 35% click; bài "Kinh nghiệm chọn quạt" tranh từ khóa "quạt trần"','8 trang sản phẩm tốc độ di động dưới 50 (ảnh nặng)','Trang Làm mát nhà xưởng mồ côi'],
+          actions:[{title:'Tách từ khóa: bài "Kinh nghiệm chọn quạt" chuyển sang "quạt trần phòng khách", thêm link về danh mục Quạt trần',why:'Giải quyết tự cạnh tranh trên trang mang nhiều đơn nhất',pages:['https://mrvu.vn/danh-muc/quat-tran.html','https://mrvu.vn/tin-tuc/cach-chon-quat-tran-phong-khach.html'],impact:'cao',effort:'ít',owner:'nội dung'},
+            {title:'Nén ảnh và lazy-load cho 8 trang sản phẩm chậm',why:'LCP trên 4s làm mất khách di động và giảm thứ hạng',pages:['https://mrvu.vn/san-pham/quat-tran-den-led-pha-le.html'],impact:'cao',effort:'vừa',owner:'kỹ thuật'},
+            {title:'Sửa link hỏng và trang 404 có hiển thị trên Google',why:'Mất khách đang tìm tới',pages:[],impact:'vừa',effort:'ít',owner:'kỹ thuật'},
+            {title:'Làm 24 gợi ý liên kết nội bộ ưu tiên cao (bài → danh mục, bài → sản phẩm)',why:'Dồn sức mạnh về trang bán hàng, đưa bài nhà xưởng tới trang HVLS',pages:[],impact:'cao',effort:'vừa',owner:'liên kết'},
+            {title:'Thêm đoạn trả lời 40–60 chữ và FAQ cho 6 bài đang có câu hỏi AI',why:'Tăng khả năng được ChatGPT/AI Overview trích dẫn',pages:['https://mrvu.vn/tin-tuc/quat-tran-dc-va-ac.html'],impact:'vừa',effort:'vừa',owner:'nội dung'}],
+          next_focus:'Theo dõi danh mục Quạt trần sau khi tách từ khóa; đo lại tốc độ trang sản phẩm.'}}}}
+  else if(seg[0]==='pages')out={items:D.pages};
+  else if(seg[0]==='page'&&seg[2]==='advise'){D.pages.find(p=>p.id===+seg[1]).advised=true;D._job={msgs:['AI đang tư vấn trang…'],result:{}};out={job_id:'d'}}
+  else if(seg[0]==='page'&&seg[2]==='psi'){D._job={msgs:['Đang đo tốc độ…'],result:{}};out={job_id:'d'}}
+  else if(seg[0]==='page'&&m==='POST'){const p=D.pages.find(x=>x.id===+seg[1]);if(b.primary_kw!=null){p.primary_kw=b.primary_kw;p.locked=1}if(b.secondary)p.secondary=b.secondary;if(b.role)p.role=b.role;if(b.cluster!=null)p.cluster=b.cluster;if(b.locked===false)p.locked=0;out={ok:true}}
+  else if(seg[0]==='page'){out=demoPage(D,D.pages.find(x=>x.id===+seg[1]))}
+  else if(seg[0]==='keywords'){const pg=id=>D.pages.find(p=>p.id===id);out={aiq_id:1,cannibal:[{keyword:'quạt trần',source:'gsc',impr:3900,pages:[Object.assign({id:2,impr:3000,clicks:268,pos:9.5},{url:pg(2).url,role:'category'}),Object.assign({id:19,impr:900,clicks:8,pos:14.2},{url:pg(19).url,role:'post'})]}],
+    gaps:[{id:3,question:'Phòng khách 25m2 nên dùng quạt trần sải cánh bao nhiêu?',cluster:'Chọn mua quạt trần',priority:3},{id:12,question:'Giá quạt trần công nghiệp bao nhiêu tiền?',cluster:'Giá & mua ở đâu',priority:3},{id:10,question:'Làm mát nhà xưởng bằng quạt công nghiệp hay quạt hơi nước?',cluster:'Quạt công nghiệp nhà xưởng',priority:3}],
+    map:D.pages.filter(p=>p.status===200&&!p.noindex).map(p=>({id:p.id,kw:p.primary_kw,url:p.url,role:p.role,cluster:p.cluster,intent:p.intent,secondary:p.secondary,pos:p.pos,rank:p.role==='support'?null:Math.max(1,Math.round(p.pos))})).sort((a,b)=>a.cluster.localeCompare(b.cluster)||(a.role==='category'?-1:1))}}
+  else if(seg[0]==='links'&&seg.length===1){const pg=id=>D.pages.find(p=>p.id===id);const cl=demoSummary(D).clusters;
+    out={suggestions:D.links.map(l=>Object.assign({},l,{from_url:pg(l.from_id).url,from_kw:pg(l.from_id).primary_kw,to_url:pg(l.to_id).url,to_kw:pg(l.to_id).primary_kw})),
+      orphans:D.pages.filter(p=>p.inlinks===0&&p.role!=='home'&&p.status===200).map(p=>({id:p.id,url:p.url,kw:p.primary_kw})),broken:[{from:'https://mrvu.vn/tin-tuc/cach-chon-quat-tran-phong-khach.html',to:'https://mrvu.vn/trang-cu.html',status:404},{from:'https://mrvu.vn/san-pham/quat-hvls-5m5.html',to:'https://mrvu.vn/catalogue-2023.pdf',status:404}],
+      tree:cl.map(c=>{const mem=D.pages.filter(p=>p.cluster===c.cluster&&p.status===200);const hub=mem.find(p=>p.role==='category')||mem[0];return {cluster:c.cluster,hub:{id:hub.id,url:hub.url,kw:hub.primary_kw},missing:D.links.filter(l=>l.status==='todo'&&pg(l.to_id).cluster===c.cluster).length,
+        pages:mem.map(p=>({id:p.id,url:p.url,kw:p.primary_kw,role:p.role,inlinks:p.inlinks,depth:p.depth,to_hub:p.id===hub.id?null:H(p.url+'h')%3===0}))}})}}
+  else if(seg[0]==='links'&&seg[2]==='place'){const l=D.links.find(x=>x.id===+seg[1]);const to=D.pages.find(p=>p.id===l.to_id);l.place={found:true,original:'Nếu cần tư vấn thêm, hãy liên hệ Mr.Vũ.',new_html:`Xem các mẫu <a href="${to.url}">${l.anchor}</a> hoặc liên hệ Mr.Vũ để được tư vấn.`,where:'Đoạn kết bài, trước phần liên hệ',anchor:l.anchor};D._job={msgs:['AI đang đọc trang…'],result:l.place};out={job_id:'d'}}
+  else if(seg[0]==='links'){D.links.find(x=>x.id===+seg[1]).status=b.status;out={ok:true}}
+  else if(seg[0]==='cycle'){D.at=new Date().toISOString();D.cycles.push(Object.assign({},D.cycles[D.cycles.length-1],{at:D.at,avg_seo:73,avg_geo:60,avg_perf:66}));D.pages.forEach(p=>{p.clicks_prev=p.clicks;p.clicks=Math.round(p.clicks*(0.95+(H(p.url+D.at)%25)/100))});
+    D._job={msgs:['Đang đọc sitemap mrvu.vn…','Đã đọc 120/312 trang (liên kết nội bộ, tiêu đề)…','AI đang gán từ khóa cho trang 1–30/31…','Đang chấm điểm SEO và GEO 200/312 trang…','Đang đo tốc độ 31/58 trang…','AI đang viết báo cáo và việc cần làm…'],result:{summary:demoSummary(D),alerts:7}};out={job_id:'d'}}
+  else if(seg[0]==='job'){const j=D._job||{msgs:[],result:{}};for(const _ of j.msgs)await new Promise(r=>setTimeout(r,500));out={status:'done',message:'Xong',result:j.result}}
+  else if(seg[0]==='send-rank')out={added:(b.page_ids||[]).length};
+  else if(seg[0]==='send-autopost')out={added:(b.keywords||[]).length};
+  ds(D);return JSON.parse(JSON.stringify(out===undefined?{}:out))}
+
+/* ================= Khởi động ================= */
+(async()=>{
+  try{const c=new AbortController();setTimeout(()=>c.abort(),20000);const j=await (await fetch('api/health',{signal:c.signal})).json();
+    if(j&&j.ok){live=true;const m=$('#mode');m.className='mode live';$('#modeText').textContent=j.ai?'Sẵn sàng':'Thiếu khóa Claude (ANTHROPIC_API_KEY trong biến môi trường)'}}catch(e){}
+  if(!live)$('#modeText').textContent='Bản xem trước — dữ liệu mẫu';
+  try{apSites=(await api('api/ap/sites')).items}catch(e){}
+  try{await loadSites();if(S)try{pages=(await api('api/smap/pages?site_id='+S.id)).items}catch(e){}show(S?'ov':'set')}catch(e){toast(e.message)}
+})();
+})();
+</script>
+</body>
+</html>

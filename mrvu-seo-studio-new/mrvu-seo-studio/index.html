@@ -1,0 +1,407 @@
+<meta charset="utf-8">
+<title>Mr.Vũ SEO Studio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: công cụ hai cột — vùng làm việc bên trái, lịch sử phiên bên phải; xếp một cột trên điện thoại */
+:root{
+  --bg:#f2f4f3; --surface:#ffffff; --sunk:#f7f9f8; --ink:#17221f; --muted:#5b6965; --line:#dce3e0;
+  --accent:#0d6957; --accent-ink:#ffffff; --accent-soft:#e0efea;
+  --hi:#b9441a; --hi-soft:#fbe9e1; --mid:#9a6a12; --mid-soft:#f8efd9; --low:#2c7a4b; --low-soft:#e3f2e8;
+  --bar:#3f7fc8; --bar-dim:#a9c4e6;
+  --f-display:"Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+  --f-data:"Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1412; --surface:#151d1a; --sunk:#111816; --ink:#e4ebe8; --muted:#94a39e; --line:#25302c;
+  --accent:#4dbea6; --accent-ink:#06201a; --accent-soft:#163029;
+  --hi:#f0905f; --hi-soft:#3a2219; --mid:#e2b75a; --mid-soft:#352a14; --low:#6fc690; --low-soft:#16301f;
+  --bar:#6ea3e3; --bar-dim:#2f4866; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1412; --surface:#151d1a; --sunk:#111816; --ink:#e4ebe8; --muted:#94a39e; --line:#25302c;
+  --accent:#4dbea6; --accent-ink:#06201a; --accent-soft:#163029;
+  --hi:#f0905f; --hi-soft:#3a2219; --mid:#e2b75a; --mid-soft:#352a14; --low:#6fc690; --low-soft:#16301f;
+  --bar:#6ea3e3; --bar-dim:#2f4866; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-family:var(--f-display);font-size:24px;font-weight:700;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);margin:2px 0 0;max-width:68ch}
+.mode{font-size:12px;font-weight:600;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);display:inline-flex;gap:6px;align-items:center}
+.mode i{width:8px;height:8px;border-radius:50%;background:var(--mid)}
+.mode.live i{background:var(--low)}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
+@media (max-width:980px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.pad{padding:16px}
+.label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+textarea,input,select{font:inherit;color:var(--ink);background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+textarea{min-height:130px;resize:vertical;font-size:14px}
+textarea:focus,input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.btn{font:inherit;font-weight:600;border-radius:8px;padding:8px 14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn:disabled{opacity:.55;cursor:wait}
+.btn.sm{padding:5px 10px;font-size:13px}
+.counter{font-family:var(--f-data);font-size:12px;color:var(--muted)}
+.counter.over{color:var(--hi);font-weight:600}
+.stats{display:flex;flex-wrap:wrap;gap:10px 28px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.stat b{display:block;font-family:var(--f-data);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--sunk)}
+.filters .wide{grid-column:span 2}
+@media (max-width:520px){.filters .wide{grid-column:span 1}}
+.tbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:12px 16px}
+.tbar .title{font-weight:600}
+.tablebox{overflow:auto;max-height:620px;border-top:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;min-width:720px}
+th,td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{position:sticky;top:0;background:var(--surface);font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;user-select:none;z-index:1}
+th.num,td.num{text-align:right}
+th[data-dir="desc"]::after{content:" ↓"} th[data-dir="asc"]::after{content:" ↑"}
+td.num{font-family:var(--f-data);font-variant-numeric:tabular-nums}
+td.stt{color:var(--muted);font-family:var(--f-data);width:52px}
+td.kw{font-weight:500}
+td.vol{color:var(--bar);font-weight:600}
+tr:hover td{background:var(--sunk)}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;font-family:var(--f-data)}
+.chip.HIGH{background:var(--hi-soft);color:var(--hi)} .chip.MEDIUM{background:var(--mid-soft);color:var(--mid)} .chip.LOW{background:var(--low-soft);color:var(--low)} .chip.NA{background:var(--sunk);color:var(--muted)}
+.spark{display:block}
+.empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.hist h2{font-size:15px;margin:0}
+.hist ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.hist li{border-top:1px solid var(--line);padding:10px 16px;cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.hist li:hover{background:var(--sunk)}
+.hist li.on{background:var(--accent-soft)}
+.hist .when{font-family:var(--f-data);font-size:12px;color:var(--muted)}
+.hist .meta{font-size:13px}
+.del{border:0;background:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 4px;border-radius:4px}
+.del:hover{color:var(--hi)}
+.note{font-size:12px;color:var(--muted);padding:12px 16px;border-top:1px solid var(--line)}
+.err{background:var(--hi-soft);color:var(--hi);border-radius:8px;padding:10px 12px;font-size:13px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;font-size:13px;font-weight:500;z-index:9}
+.demo-flag{white-space:nowrap;font-size:11px;font-weight:600;color:var(--mid);background:var(--mid-soft);padding:2px 8px;border-radius:999px}
+.nav{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:-4px}
+.nav .tab{padding:8px 12px;color:var(--muted);text-decoration:none;font-weight:600;font-size:13px;border-bottom:2px solid transparent;margin-bottom:-1px}
+.nav .tab:hover{color:var(--ink)}
+.nav .tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+  <nav class="nav" aria-label="Công cụ">
+    <span style="font-weight:700;font-size:14px;padding:8px 14px 8px 0;margin-right:6px;border-right:1px solid var(--line);color:var(--ink);white-space:nowrap;align-self:center">Mr.Vũ SEO Studio</span>
+    <a class="tab on" href="./" aria-current="page">Tra cứu Volume</a>
+    <a class="tab" href="rank.html">Rank Tracker</a>
+    <a class="tab" href="audit.html">Audit On-page</a>
+    <a class="tab" href="smap.html">Bản đồ website</a>
+    <a class="tab" href="autopost.html">Autopost</a>
+    <a class="tab" href="geo.html">AI Overview (GEO)</a>
+    <a class="tab" href="aiq.html">Câu hỏi AI</a>
+    <a class="tab" href="backlinks.html">Backlink</a>
+    <a class="tab" href="gsc.html">Search Console &amp; GA4</a>
+  </nav>
+  <header>
+    <div>
+      <h1>Tra cứu Volume</h1>
+      <p class="sub">Tra cứu lượt tìm kiếm hàng tháng, CPC và độ cạnh tranh từ Google Ads. Lọc từ rác, lưu lịch sử, xuất báo cáo.</p>
+    </div>
+    <span class="mode" id="mode"><i></i><span id="modeText">Đang kiểm tra kết nối…</span></span>
+  </header>
+
+  <div class="grid">
+    <main style="display:flex;flex-direction:column;gap:18px;min-width:0">
+      <section class="panel pad" style="display:flex;flex-direction:column;gap:12px">
+        <div class="field">
+          <label class="label" for="kwInput">Danh sách từ khóa (mỗi dòng một từ, tối đa 1.000)</label>
+          <textarea id="kwInput" spellcheck="false" placeholder="sơn chống thấm&#10;chống thấm tường&#10;bột trét tường"></textarea>
+        </div>
+        <div class="row">
+          <div class="field" style="flex:1 1 180px">
+            <label class="label" for="loc">Thị trường</label>
+            <select id="loc">
+              <option value="2704|vi">Việt Nam · Tiếng Việt</option>
+              <option value="2840|en">Hoa Kỳ · English</option>
+              <option value="2036|en">Úc · English</option>
+              <option value="2392|ja">Nhật Bản · 日本語</option>
+            </select>
+          </div>
+          <div class="field" style="flex:0 1 160px">
+            <label class="label" for="rate">Tỷ giá USD → VND</label>
+            <input id="rate" type="number" min="1000" step="100" value="26000">
+          </div>
+          <div style="flex:1 1 auto;display:flex;gap:10px;align-items:center;justify-content:flex-end">
+            <span class="counter" id="counter">0 / 1.000 từ</span>
+            <button class="btn primary" id="runBtn">Tra cứu volume</button>
+          </div>
+        </div>
+        <div class="err" id="err" hidden></div>
+      </section>
+
+      <section class="panel" id="results">
+        <div class="stats" id="stats"></div>
+        <div class="filters">
+          <div class="field"><label class="label" for="fMin">Volume từ</label><input id="fMin" type="number" min="0" placeholder="0"></div>
+          <div class="field"><label class="label" for="fMax">Volume đến</label><input id="fMax" type="number" min="0" placeholder="không giới hạn"></div>
+          <div class="field"><label class="label" for="fComp">Cạnh tranh</label>
+            <select id="fComp"><option value="">Tất cả</option><option value="LOW">Thấp</option><option value="MEDIUM">Trung bình</option><option value="HIGH">Cao</option></select></div>
+          <div class="field wide"><label class="label" for="fEx">Loại trừ từ chứa (phân cách bằng dấu phẩy)</label><input id="fEx" placeholder="ví dụ: giá rẻ, mua ở đâu, pdf"></div>
+          <div class="field"><label class="label" for="fHas">Phải chứa</label><input id="fHas" placeholder="ví dụ: tường"></div>
+        </div>
+        <div class="tbar">
+          <span class="title" id="tTitle">Kết quả</span>
+          <div class="row" style="gap:8px">
+            <button class="btn sm" id="copyBtn">Copy sang Sheets</button>
+            <button class="btn sm" id="csvBtn">Xuất CSV</button>
+          </div>
+        </div>
+        <div class="tablebox">
+          <table>
+            <thead><tr>
+              <th data-k="i" class="num" style="text-align:left">STT</th>
+              <th data-k="keyword">Từ khóa</th>
+              <th data-k="volume" class="num">Search Volume</th>
+              <th data-k="cpc" class="num">CPC (VND)</th>
+              <th data-k="compIndex">Cạnh tranh</th>
+              <th data-k="growth">Xu hướng 12 tháng</th>
+            </tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <aside class="panel hist">
+      <div class="pad" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <h2>Lịch sử kiểm tra</h2>
+        <span class="counter" id="histCount"></span>
+      </div>
+      <ul id="histList"></ul>
+      <div class="note" id="histNote"></div>
+    </aside>
+  </div>
+</div>
+<textarea id="clip" aria-hidden="true" style="position:fixed;left:-9999px;top:0;width:1px;height:1px"></textarea>
+<div class="toast" id="toast" hidden></div>
+
+<script src="costguard.js"></script>
+<script>
+(function(){
+const $ = s => document.querySelector(s);
+const nf = new Intl.NumberFormat('vi-VN');
+const COMP_VI = {HIGH:'Cao', MEDIUM:'TB', LOW:'Thấp', NA:'—'};
+const LOC_NAME = {'2704':'Việt Nam','2840':'Hoa Kỳ','2036':'Úc','2392':'Nhật Bản'};
+const LS_KEY = 'kho-tu-khoa-demo-history';
+let mode = 'demo';               // 'live' khi máy chủ nội bộ đã có tài khoản DataForSEO
+let history = [];                // [{id, created_at, location, count, total_volume, cost}]
+let current = null;              // {id, created_at, location, rows, cost, demo}
+let sort = {k:'volume', dir:'desc'};
+
+/* ---------- tiện ích ---------- */
+function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2400)}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function parseKw(text){
+  const seen=new Set(), out=[];
+  text.split(/\r?\n/).forEach(l=>{const k=l.trim().toLowerCase().replace(/\s+/g,' ');if(k&&!seen.has(k)){seen.add(k);out.push(k)}});
+  return out;
+}
+function fmtTime(iso){const d=new Date(iso);const p=n=>String(n).padStart(2,'0');return `${p(d.getHours())}:${p(d.getMinutes())} · ${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`}
+function rate(){const r=parseFloat($('#rate').value);return r>0?r:26000}
+function lsGet(){try{return JSON.parse(localStorage.getItem(LS_KEY)||'[]')}catch(e){return []}}
+function lsSet(v){try{localStorage.setItem(LS_KEY,JSON.stringify(v))}catch(e){}}
+
+/* ---------- dữ liệu mẫu (chỉ dùng khi chưa có API) ---------- */
+function hash(s){let h=2166136261;for(const c of s){h^=c.codePointAt(0);h=Math.imul(h,16777619)}return h>>>0}
+function rng(seed){return()=>{seed=(seed+0x6D2B79F5)|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const BUCKETS=[10,20,30,40,50,70,90,110,140,170,210,260,320,390,480,590,720,880,1000,1300,1600,1900,2400,2900,3600,4400,5400,6600,8100,9900,12100];
+function demoRow(k){
+  const r=rng(hash(k)); const words=k.split(' ').length;
+  const top=Math.max(4,BUCKETS.length-1-(words-2)*5); let idx=Math.floor(r()*top);
+  const volume=BUCKETS[Math.max(0,idx)];
+  const ci=Math.round(40+r()*60*(words<4?1:.7)); const comp=ci>=67?'HIGH':ci>=34?'MEDIUM':'LOW';
+  const now=new Date(); const months=[];
+  for(let i=12;i>=1;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push({y:d.getFullYear(),m:d.getMonth()+1,v:Math.max(0,Math.round(volume*(.6+r()*.8)))})}
+  return {keyword:k,volume,cpc:+(0.03+r()*0.9).toFixed(2),comp,compIndex:ci,months};
+}
+
+/* ---------- kết nối máy chủ nội bộ ---------- */
+async function api(path,opts){
+  const res=await fetch(path,Object.assign({headers:{'Content-Type':'application/json'}},opts||{}));
+  const j=await res.json().catch(()=>({error:'Phản hồi không hợp lệ từ máy chủ'}));
+  if(!res.ok||j.error)throw new Error(j.error||('Lỗi '+res.status));
+  return j;
+}
+async function detect(){
+  try{
+    const ctl=new AbortController();setTimeout(()=>ctl.abort(),1500);
+    const r=await fetch('api/health',{signal:ctl.signal});const j=await r.json();
+    if(j&&j.ok){
+      if(j.usd_vnd)$('#rate').value=j.usd_vnd;
+      if(j.configured){mode='live';return}
+      setMode('demo','Chưa nhập tài khoản API — đang dùng dữ liệu mẫu');return;
+    }
+  }catch(e){}
+  setMode('demo','Bản xem trước — dữ liệu mẫu');
+}
+function setMode(m,text){mode=m;$('#mode').className='mode'+(m==='live'?' live':'');$('#modeText').textContent=text}
+
+/* ---------- lịch sử ---------- */
+async function loadHistory(){
+  if(mode==='live'){history=(await api('api/history')).items}
+  else{history=lsGet().map(({rows,...m})=>m)}
+  renderHistory();
+}
+async function openSession(id){
+  if(mode==='live'){current=await api('api/history/'+id)}
+  else{current=lsGet().find(s=>s.id===id)||null}
+  render();renderHistory();
+}
+async function delSession(id){
+  if(mode==='live'){await api('api/history/'+id,{method:'DELETE'})}
+  else{lsSet(lsGet().filter(s=>s.id!==id))}
+  if(current&&current.id===id)current=null;
+  await loadHistory();render();toast('Đã xóa phiên');
+}
+function renderHistory(){
+  $('#histCount').textContent=history.length?history.length+' phiên':'';
+  $('#histList').innerHTML=history.map(s=>`<li data-id="${esc(s.id)}" class="${current&&current.id===s.id?'on':''}">
+    <div><div class="when">${fmtTime(s.created_at)}</div>
+    <div class="meta">${nf.format(s.count)} từ · ${nf.format(s.total_volume)} lượt/tháng</div>
+    <div class="when">${esc(LOC_NAME[s.location]||s.location)}${s.cost?` · $${(+s.cost).toFixed(3)}`:''}${s.demo?' · <span class="demo-flag">mẫu</span>':''}</div></div>
+    <button class="del" data-del="${esc(s.id)}" aria-label="Xóa phiên">Xóa</button></li>`).join('');
+  $('#histNote').textContent=mode==='live'
+    ? 'Lịch sử lưu trong file kho-tu-khoa.db trên máy của bạn.'
+    : 'Ở chế độ mẫu, lịch sử chỉ lưu trong trình duyệt này.';
+}
+$('#histList').addEventListener('click',e=>{
+  const d=e.target.closest('[data-del]');if(d){e.stopPropagation();delSession(d.dataset.del);return}
+  const li=e.target.closest('li');if(li)openSession(li.dataset.id).catch(err=>showErr(err.message));
+});
+
+/* ---------- tra cứu ---------- */
+function showErr(msg){const el=$('#err');el.textContent=msg;el.hidden=!msg}
+$('#kwInput').addEventListener('input',()=>{const n=parseKw($('#kwInput').value).length;const c=$('#counter');c.textContent=nf.format(n)+' / 1.000 từ'+(VOL_COST?' · ~'+VOL_COST+' mỗi lần tra':'');c.classList.toggle('over',n>1000)});
+let VOL_COST='';window.CostGuard&&CostGuard.quote('volume',{count:1000}).then(q=>{VOL_COST=CostGuard.vnd(q.vnd);$('#kwInput').dispatchEvent(new Event('input'))}).catch(()=>{});
+$('#runBtn').addEventListener('click',async()=>{
+  showErr('');
+  const kws=parseKw($('#kwInput').value);
+  if(!kws.length){showErr('Hãy nhập ít nhất một từ khóa, mỗi dòng một từ.');return}
+  if(kws.length>1000){showErr(`Bạn đang có ${nf.format(kws.length)} từ. Mỗi lần tra tối đa 1.000 từ, hãy tách thành nhiều lần.`);return}
+  if(window.CostGuard){const g=await CostGuard.check('volume',{count:kws.length});if(!g.ok)return}
+  const [loc,lang]=$('#loc').value.split('|');
+  const btn=$('#runBtn');btn.disabled=true;btn.textContent='Đang tra cứu…';
+  try{
+    if(mode==='live'){
+      current=await api('api/volume',{method:'POST',body:JSON.stringify({keywords:kws,location_code:+loc,language_code:lang})});
+      if(current.skipped&&current.skipped.length)toast(`Bỏ qua ${current.skipped.length} từ quá dài (>80 ký tự hoặc >10 chữ)`);
+    }else{
+      await new Promise(r=>setTimeout(r,450));
+      const rows=kws.map(demoRow);
+      current={id:'d'+Date.now(),created_at:new Date().toISOString(),location:loc,rows,cost:0,demo:true,
+        count:rows.length,total_volume:rows.reduce((a,b)=>a+b.volume,0)};
+      const all=lsGet();all.unshift(current);lsSet(all.slice(0,30));
+    }
+    await loadHistory();render();
+    document.getElementById('results').scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){showErr(e.message)}
+  finally{btn.disabled=false;btn.textContent='Tra cứu volume';window.CostGuard&&CostGuard.after()}
+});
+
+/* ---------- lọc & bảng ---------- */
+function growth(r){const m=r.months||[];if(m.length<6)return 0;const a=m.slice(0,3).reduce((s,x)=>s+x.v,0),b=m.slice(-3).reduce((s,x)=>s+x.v,0);return a?(b-a)/a:0}
+function filtered(){
+  if(!current)return [];
+  const min=parseFloat($('#fMin').value),max=parseFloat($('#fMax').value),comp=$('#fComp').value;
+  const ex=$('#fEx').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  const has=$('#fHas').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  let rows=current.rows.map((r,i)=>Object.assign({i:i+1,growth:growth(r)},r)).filter(r=>
+    (isNaN(min)||(r.volume||0)>=min)&&(isNaN(max)||(r.volume||0)<=max)&&(!comp||r.comp===comp)&&
+    !ex.some(w=>r.keyword.includes(w))&&(!has.length||has.some(w=>r.keyword.includes(w))));
+  const {k,dir}=sort,f=dir==='asc'?1:-1;
+  rows.sort((a,b)=>{const x=a[k]??-1,y=b[k]??-1;return (typeof x==='string'?x.localeCompare(y,'vi'):x-y)*f});
+  return rows;
+}
+function spark(months){
+  if(!months||!months.length)return '<span class="counter">—</span>';
+  const w=84,h=22,n=months.length,bw=w/n,max=Math.max(1,...months.map(m=>m.v));
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Xu hướng 12 tháng">`+
+    months.map((m,i)=>{const bh=Math.max(1.5,m.v/max*h);return `<rect x="${(i*bw+.6).toFixed(1)}" y="${(h-bh).toFixed(1)}" width="${(bw-1.4).toFixed(1)}" height="${bh.toFixed(1)}" rx="1" fill="${i>=n-3?'var(--bar)':'var(--bar-dim)'}"><title>${m.m}/${m.y}: ${nf.format(m.v)}</title></rect>`}).join('')+'</svg>';
+}
+function cpcVnd(r){return r.cpc==null?null:Math.round(r.cpc*rate())}
+function render(){
+  const rows=filtered();
+  document.querySelectorAll('th').forEach(th=>th.dataset.dir=th.dataset.k===sort.k?sort.dir:'');
+  if(!current){
+    $('#stats').innerHTML='';$('#tTitle').textContent='Kết quả';
+    $('#tbody').innerHTML='<tr><td colspan="6" class="empty">Nhập danh sách từ khóa ở trên rồi bấm <b>Tra cứu volume</b>. Kết quả và lịch sử sẽ hiện ở đây.</td></tr>';
+    return;
+  }
+  const tv=current.rows.reduce((a,b)=>a+(b.volume||0),0),fv=rows.reduce((a,b)=>a+(b.volume||0),0);
+  $('#stats').innerHTML=[
+    [nf.format(current.rows.length),'từ đã tra'],
+    [nf.format(tv),'tổng lượt tìm / tháng'],
+    [nf.format(rows.length),'từ sau khi lọc'],
+    [nf.format(fv),'volume sau khi lọc'],
+    [current.demo?'Dữ liệu mẫu':(current.cost?'$'+(+current.cost).toFixed(3):'—'),'chi phí API phiên này']
+  ].map(([b,s])=>`<div class="stat"><b>${b}</b><span>${s}</span></div>`).join('');
+  $('#tTitle').innerHTML=`Phiên ${fmtTime(current.created_at)} · ${esc(LOC_NAME[current.location]||current.location)}${current.demo?' <span class="demo-flag">dữ liệu mẫu</span>':''}`;
+  $('#tbody').innerHTML=rows.length?rows.map(r=>{const c=cpcVnd(r);return `<tr>
+    <td class="stt">${r.i}</td><td class="kw">${esc(r.keyword)}</td>
+    <td class="num vol">${r.volume==null?'—':nf.format(r.volume)}</td>
+    <td class="num">${c==null?'—':nf.format(c)+' ₫'}</td>
+    <td><span class="chip ${r.comp||'NA'}">${COMP_VI[r.comp||'NA']}${r.compIndex!=null?' ('+r.compIndex+')':''}</span></td>
+    <td>${spark(r.months)}</td></tr>`}).join('')
+    :'<tr><td colspan="6" class="empty">Không có từ nào khớp bộ lọc. Thử nới khoảng volume hoặc bớt từ loại trừ.</td></tr>';
+}
+['#fMin','#fMax','#fComp','#fEx','#fHas','#rate'].forEach(s=>$(s).addEventListener('input',render));
+document.querySelector('thead').addEventListener('click',e=>{const th=e.target.closest('th');if(!th)return;const k=th.dataset.k;
+  sort=sort.k===k?{k,dir:sort.dir==='desc'?'asc':'desc'}:{k,dir:k==='keyword'||k==='i'?'asc':'desc'};render()});
+
+/* ---------- xuất ---------- */
+function table(sep){
+  const rows=filtered();if(!rows.length)return null;
+  const mh=(rows[0].months||[]).map(m=>`T${m.m}/${m.y}`);
+  const q=v=>{v=v==null?'':String(v);return sep===','&&/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const head=['Từ khóa','Search Volume','CPC (VND)','CPC (USD)','Cạnh tranh','Chỉ số cạnh tranh',...mh];
+  return [head,...rows.map(r=>[r.keyword,r.volume,cpcVnd(r),r.cpc,COMP_VI[r.comp||'NA'],r.compIndex,...(r.months||[]).map(m=>m.v)])].map(l=>l.map(q).join(sep)).join('\n');
+}
+$('#copyBtn').addEventListener('click',()=>{
+  const t=table('\t');if(!t){toast('Chưa có dữ liệu để copy');return}
+  const n=t.split('\n').length-1;
+  const fallback=()=>{const c=$('#clip');c.value=t;c.select();try{document.execCommand('copy');toast(`Đã copy ${n} dòng — dán vào Google Sheets`)}catch(e){toast('Trình duyệt chặn copy')}};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(()=>toast(`Đã copy ${n} dòng — dán vào Google Sheets`),fallback)}else fallback();
+});
+$('#csvBtn').addEventListener('click',()=>{
+  const t=table(',');if(!t){toast('Chưa có dữ liệu để xuất');return}
+  const blob=new Blob(['﻿'+t],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='tu-khoa-'+new Date(current.created_at).toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);a.click();a.remove();
+  toast(mode==='live'?'Đã xuất file CSV':'Nếu file không tải về, hãy dùng bản chạy trên máy');
+});
+
+/* ---------- khởi động: mở sẵn một phiên mẫu để thấy công cụ hoạt động ---------- */
+const SAMPLE=['sơn chống thấm','sơn chống thấm ngoài trời','chống thấm tường','chống thấm sika','sơn xịt chống thấm','bột trét tường','chống thấm sân thượng','keo chống thấm','chống thấm nhà vệ sinh','giá sơn chống thấm','sơn chống thấm kova','chống thấm mái tôn','màng chống thấm','chống thấm tường nhà cũ','sơn chống thấm pha xi măng'];
+(async()=>{
+  await detect();
+  if(mode==='live')setMode('live','Đã kết nối DataForSEO');
+  await loadHistory().catch(e=>showErr(e.message));
+  if(history.length){await openSession(history[0].id).catch(()=>{})}
+  else if(mode==='demo'){
+    $('#kwInput').value=SAMPLE.join('\n');$('#kwInput').dispatchEvent(new Event('input'));
+    const rows=SAMPLE.map(demoRow);
+    current={id:'sample',created_at:new Date().toISOString(),location:'2704',rows,cost:0,demo:true};
+    render();
+  }else render();
+})();
+render();
+})();
+</script>

@@ -123,10 +123,11 @@ Dùng để viết bài Autopost và các gợi ý AI.
 | `PEXELS_API_KEY`              | Ảnh miễn phí cho Autopost | https://www.pexels.com/api → Your API Key                                                                               |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Tab Search Console + GA4  | Có hướng dẫn từng bước trong tab Search Console → Kết nối. Có thể bỏ trống biến này và tải file JSON lên ngay trong tab |
 | `SEO_ANTHROPIC_MODEL`         | Đổi mô hình Claude        | Để trống = `claude-sonnet-5-5`                                                                                          |
+| `GOOGLE_PSI_API_KEY`          | Tab Bản đồ website (đo tốc độ) | console.cloud.google.com (project của Search Console) → APIs & Services → Library → **PageSpeed Insights API** → Enable → Credentials → Create credentials → API key → Restrict key: chỉ PageSpeed Insights API. Có thể bỏ trống biến này và dán khóa trong Bản đồ website → Cài đặt |
 
 ## Bảng kiểm nhanh
 
-- [ ] `SEO_DATABASE_URL` (đã chạy migration v25)
+- [ ] `SEO_DATABASE_URL` (đã chạy migration v25, rồi v27 cho Bản đồ website + Câu hỏi AI)
 - [ ] `SEO_SECRET_KEY`
 - [ ] `SEO_JOB_SECRET`
 - [ ] `GOOGLE_OAUTH_CLIENT_ID`

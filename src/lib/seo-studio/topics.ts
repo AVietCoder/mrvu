@@ -20,7 +20,7 @@ import { urlParts } from "./web";
 
 const MAX_COMPETITORS = 3;
 const INTENT_W: Record<string, number> = { informational: 1.0, commercial: 1.25, transactional: 0.8, navigational: 0.3 };
-const STOP = new Set(`cach chon co khong nao tot gia bao nhieu loai cua cho va la nhu the gi tai sao voi mot cac nhung nen mua o dau hay
+export const STOP = new Set(`cach chon co khong nao tot gia bao nhieu loai cua cho va la nhu the gi tai sao voi mot cac nhung nen mua o dau hay
 hoac nha tren duoi trong ngoai den tu ra vao duoc bi rat qua nhat hon kieu mau moi cu re dep top review danh gia so sanh
 huong dan kinh nghiem meo khi thi se da dang dung lam ve sau truoc nay kia day do ay ban toi minh chung ta hien nay nam`.split(/\s+/));
 
@@ -31,7 +31,7 @@ export function fold(s: any) {
   return t.replace(/[^a-z0-9]+/g, " ").split(" ").filter(Boolean).join(" ");
 }
 
-function hostOf(u: any) {
+export function hostOf(u: any) {
   u = String(u ?? "").trim().toLowerCase();
   if (!u.includes("://")) u = "https://" + u;
   const h = urlParts(u).netloc.split(":")[0];
@@ -52,7 +52,7 @@ export function slugText(url: string) {
   return words.length >= 3 ? words.join(" ") : "";
 }
 
-function bigrams(text: string): Set<string> {
+export function bigrams(text: string): Set<string> {
   const w = fold(text).split(" ").filter((x) => x && !STOP.has(x) && x.length > 1);
   const out = new Set<string>();
   for (let i = 0; i + 1 < w.length; i++) out.add(w[i] + " " + w[i + 1]);
@@ -126,7 +126,7 @@ function kwRow(kd: any, extra: any = {}) {
   };
 }
 
-async function seedKeywords(cfg: any, seed: string, loc: number, lang: string, notes: string[]) {
+export async function seedKeywords(cfg: any, seed: string, loc: number, lang: string, notes: string[]) {
   const rows: any[] = [];
   try {
     let [t] = await dfsPost(cfg, "/v3/dataforseo_labs/google/keyword_suggestions/live", [{
@@ -144,7 +144,7 @@ async function seedKeywords(cfg: any, seed: string, loc: number, lang: string, n
 }
 
 /** Từ khóa một tên miền đang có thứ hạng Top 20 (Labs), hoặc từ khóa Google Ads gợi ý cho website đó. */
-async function rankedKeywords(cfg: any, domain: string, loc: number, lang: string, limit: number, notes: string[]): Promise<[any[], string]> {
+export async function rankedKeywords(cfg: any, domain: string, loc: number, lang: string, limit: number, notes: string[]): Promise<[any[], string]> {
   try {
     const [t] = await dfsPost(cfg, "/v3/dataforseo_labs/google/ranked_keywords/live", [{
       target: domain, location_code: loc, language_code: lang, limit,
@@ -290,7 +290,7 @@ export function scoreClusters(clusters: any[], candMap: Record<string, any>, min
 }
 
 // ---------------------------------------------------------------- lưu / hàng chờ
-const spentTotal = async () => Number((await one("SELECT COALESCE(SUM(usd),0) s FROM seo_spend"))?.s || 0);
+export const spentTotal = async () => Number((await one("SELECT COALESCE(SUM(usd),0) s FROM seo_spend"))?.s || 0);
 
 export async function loadRun(rid: any) {
   const r = await one("SELECT * FROM seo_tp_runs WHERE id=?", [rid]);

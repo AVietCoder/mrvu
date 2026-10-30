@@ -1,0 +1,24 @@
+[Unit]
+Description=Mr.Vu SEO Studio
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mrvu
+Group=mrvu
+WorkingDirectory=/opt/mrvu-seo-studio
+ExecStart=/usr/bin/python3 /opt/mrvu-seo-studio/app.py --server
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=TZ=Asia/Ho_Chi_Minh
+# Hạn chế quyền: chỉ ghi được vào thư mục công cụ
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/mrvu-seo-studio
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
