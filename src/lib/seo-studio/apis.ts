@@ -65,6 +65,10 @@ export async function claude(cfg: any, prompt: string, maxTokens = 4000, system:
     messages: [{ role: "user", content: prompt }],
   };
   if (system) body.system = system;
+  // Các prompt viết cho mô hình không "suy nghĩ" (bản Python). Mô hình đời 5 mặc định bật suy nghĩ và phần
+  // này tính chung vào max_tokens → JSON bị cắt cụt. Sonnet 5.5: tắt hẳn (between_tools); đời 5 khác: mức thấp.
+  if (body.model === "claude-sonnet-5-5") body.thinking = { type: "between_tools" };
+  else if (/^claude-(opus|sonnet|haiku|fable|mythos)-5/.test(body.model)) body.output_config = { effort: "low" };
   const c = client(key);
   let msg: any;
   try {
@@ -94,5 +98,6 @@ export async function claude(cfg: any, prompt: string, maxTokens = 4000, system:
   await recordClaude(tag, usage);
   if (msg.stop_reason === "refusal") throw new SeoError("Claude từ chối xử lý yêu cầu này. Hãy sửa nội dung rồi thử lại.");
   const text = (msg.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+  if (!text.trim() && msg.stop_reason === "max_tokens") throw new SeoError("Claude dùng hết giới hạn token trước khi kịp trả lời, hãy thử lại.");
   return [text, usage, msg.stop_reason];
 }
