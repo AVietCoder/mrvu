@@ -139,7 +139,7 @@ function Dashboard() {
 <p className="text-xs text-muted-foreground">
   Author •{" "}
   <a
-    href="https://codeforces.com/profile/VietVu"
+    href="https://www.kaggle.com/noahkun"
     target="_blank"
     rel="noopener noreferrer"
     className="font-semibold hover:text-primary transition-colors"
