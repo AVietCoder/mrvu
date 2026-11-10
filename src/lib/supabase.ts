@@ -7,10 +7,19 @@ function requireEnv(name: string, value: string | undefined): string {
   return value;
 }
 
-const supabaseUrl = requireEnv("VITE_SUPABASE_URL", import.meta.env.VITE_SUPABASE_URL as string | undefined);
-const supabaseAnonKey = requireEnv("VITE_SUPABASE_ANON_KEY", import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined);
+const supabaseUrl = requireEnv(
+  "VITE_SUPABASE_URL",
+  (import.meta.env.SSR ? process.env.VITE_SUPABASE_URL : import.meta.env.VITE_SUPABASE_URL) as string | undefined,
+);
+// RLS is bypassed only for server-side requests. Never expose the service role
+// key to the browser bundle; browser requests continue to use the anon key.
+const supabaseKey = import.meta.env.SSR
+  ? requireEnv("SUPABASE_SERVICE_ROLE_KEY", process.env.SUPABASE_SERVICE_ROLE_KEY)
+  : requireEnv("VITE_SUPABASE_ANON_KEY", import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined);
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 export function uid(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
